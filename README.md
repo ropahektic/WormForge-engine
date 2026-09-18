@@ -18,7 +18,7 @@ Custom PNG/GIF colours are nearest-matched onto the **current map palette** (in-
 
 1. Own Worms Armageddon **3.8.1** with WormKit
 2. Build `wkLua.dll` (below) and copy it next to `WA.exe`.
-3. Copy a pack from `mods/examples/` into `Mods/` next to `WA.exe` (so `WA.exe` / `Mods/circle_bazooka/mod.toml` or `Mods/gif_donkey/mod.toml`). First loaded `id` wins a stock slot — do not enable two overlays of the same weapon at once.
+3. Create "Mods" folder in WA Installation Folder (next to WA.exe), additionally copy any mods from the "mods/examples" folder in this repository (Example: "/Worms Armageddon/Mods/wormcraft")
 4. Launch the game. 
 
 ## Build (engine)
