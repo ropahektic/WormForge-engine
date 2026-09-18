@@ -10,9 +10,11 @@ Custom PNG/GIF colours are nearest-matched onto the **current map palette** (in-
 
 ## Two ways to contribute
 
+**Mods (Lua).** A pack is a folder with `mod.toml`, a Lua entry script, and optional assets. You do not need a compiler. Create complex weapons with Lua, translate verbs into GUI ready generalist actions such as (follow, avoid terrain, grab&drag, etc)
+
 **Engine (Rust).** Addresses, hooks, and the Lua bindings live in `crates/`. Target is always `i686-pc-windows-msvc`. 
 
-**Mods (Lua).** A pack is a folder with `mod.toml`, a Lua entry script, and optional assets. You do not need a compiler. 
+
 
 ## Install (player)
 
