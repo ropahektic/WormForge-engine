@@ -1,0 +1,11 @@
+[[global]]
+va = 0x00641C60
+name = "STR_VERSION_381"
+type = "char[6]"
+comment = "\"3.8.1\" literal. Ghidra string listing on stock WA.exe."
+
+[[global]]
+va = 0x007A0884
+name = "G_GAME_SESSION"
+type = "GameSession *"
+comment = "Session pointer. Not required for InitWeaponTable wrap (runtime is the stdcall arg)."

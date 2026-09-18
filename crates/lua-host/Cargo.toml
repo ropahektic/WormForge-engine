@@ -1,0 +1,12 @@
+[package]
+name = "lua-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+game = { path = "../game" }
+gfx = { path = "../gfx" }
+actors = { path = "../actors" }
+mlua = { workspace = true }
+weapons = { path = "../weapons" }

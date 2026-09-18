@@ -1,0 +1,39 @@
+# Build
+/target/
+**/target/
+*.pdb
+*.ilk
+*.obj
+*.lib
+*.exp
+*.dll
+*.exe
+
+# Local RE dumps and third-party trees (not needed to build or run)
+/Resources/
+
+# Built module copies
+/Releases/
+
+# Editor / OS
+.idea/
+.vscode/
+.cursor/
+*.swp
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Secrets and machine-local state
+.env
+.env.*
+*.pem
+credentials.json
+user/
+logs/
+*.log
+
+# Game leftovers
+WA.exe
+gfx.dir
+sprites.dat

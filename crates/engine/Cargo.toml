@@ -1,0 +1,15 @@
+[package]
+name = "engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+game = { path = "../game" }
+gfx = { path = "../gfx" }
+lua-host = { path = "../lua-host" }
+re-catalog = { path = "../re-catalog" }
+minhook = { workspace = true }
+weapons = { path = "../weapons" }
+actors = { path = "../actors" }
+windows-sys = { workspace = true }

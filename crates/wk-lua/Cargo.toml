@@ -1,0 +1,13 @@
+[package]
+name = "wk-lua"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "wkLua"
+crate-type = ["cdylib"]
+
+[dependencies]
+engine = { path = "../engine" }
+windows-sys = { workspace = true }

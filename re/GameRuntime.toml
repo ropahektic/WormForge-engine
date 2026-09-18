@@ -1,0 +1,10 @@
+[[struct]]
+name = "GameRuntime"
+size = 0x4C0
+plate_comment = "Partial. world pointer confirmed via InitWeaponTable: [EBP+0x488] then [world+0x510]."
+
+  [[struct.field]]
+  offset = 0x488
+  name = "world"
+  type = "GameWorld *"
+  comment = "Pointer to GameWorld. Ghidra dword index 0x122."

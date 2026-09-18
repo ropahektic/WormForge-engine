@@ -1,0 +1,69 @@
+[[function]]
+va = 0x0050B400
+name = "MissileEntity__HandleMessage"
+calling_convention = "__thiscall"
+plate_comment = "Ghidra FUN_0050b400. FrameFinish = msg 2. Fuse ticks here; golf freeze/arm runs on this tick for both peers."
+
+  [function.signature]
+  returns = "void"
+
+  [[function.param]]
+  name = "this"
+  type = "MissileEntity *"
+
+  [[function.param]]
+  name = "sender"
+  type = "BaseEntity *"
+
+  [[function.param]]
+  name = "msg_type"
+  type = "uint"
+
+  [[function.param]]
+  name = "size"
+  type = "uint"
+
+  [[function.param]]
+  name = "data"
+  type = "void *"
+
+[[vtable]]
+va = 0x00664438
+name = "MissileEntityVtable"
+comment = "Identity check: entity[0] == rebase(this)."
+
+[[struct]]
+name = "WorldEntityMotion"
+size = 0x98
+plate_comment = "Partial motion slice used by Lua projectile handles."
+
+  [[struct.field]]
+  offset = 0x20
+  name = "class_type"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x5C
+  name = "wind_scale"
+  type = "Fixed"
+  comment = "CM wind: apply_projectile_gravity does speed_x += wind_bias * this. Stock grenade 0, bazooka ~1.0."
+
+  [[struct.field]]
+  offset = 0x84
+  name = "pos_x"
+  type = "Fixed"
+
+  [[struct.field]]
+  offset = 0x88
+  name = "pos_y"
+  type = "Fixed"
+
+  [[struct.field]]
+  offset = 0x90
+  name = "speed_x"
+  type = "Fixed"
+
+  [[struct.field]]
+  offset = 0x94
+  name = "speed_y"
+  type = "Fixed"

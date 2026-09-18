@@ -1,0 +1,789 @@
+//! Per-actor Lua brains. Callbacks run on WorldEntity FRAME_FINISH — the same
+//! lockstep pump wkGolf uses for fuse freeze, idle-arm, and worm teleports.
+//! HUD must not call these verbs.
+
+use game::entity::{read_i32, write_i32};
+use game::offsets::{
+    ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPR_H,
+    ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE, CLASS_MINE, CLASS_MISSILE, CLASS_OIL, CLASS_WORM,
+    ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y, ENT_WORM_TEAM, LUA_ACTOR_MAGIC,
+    WORM_SELECTED_WEAPON,
+};
+use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
+use std::cell::Cell;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
+use weapons::{ActorSpawn, StockWeapon};
+
+use crate::PARKED_LUA;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ActorEvent {
+    pub land: bool,
+    pub left_ground: bool,
+    pub hit_worm: bool,
+    pub in_water: bool,
+}
+
+pub struct SpawnArgs {
+    pub owner: u32,
+    pub x: i32,
+    pub y: i32,
+    pub vx: i32,
+    pub vy: i32,
+    pub sprite: i32,
+    pub delta: u32,
+    pub spawn: ActorSpawn,
+}
+
+pub struct ActorNative {
+    pub explode: fn(handle: u32, damage: i32, explosion_id: i32, below: bool),
+    pub despawn: fn(handle: u32),
+    pub in_water: fn(handle: u32) -> bool,
+    pub on_feet: fn(handle: u32) -> bool,
+    pub gravity: fn(handle: u32),
+    /// bits: 1 terrain, 2 worm, 4 land edge, 8 left ground
+    pub move_body: fn(handle: u32, terrain: bool, worms: bool) -> i32,
+    pub advance: fn(handle: u32),
+    pub spawn: fn(&SpawnArgs) -> Result<u32, String>,
+    pub list_actors: fn() -> Vec<u32>,
+    pub list_worms: fn(from: u32) -> Vec<u32>,
+    pub resolve_sprite: fn(key: &str) -> Option<(i32, u32, i32, i32)>,
+    pub land_solid: fn(x: i32, y: i32) -> bool,
+    pub land_trace: fn(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)>,
+    pub map_size: fn() -> (i32, i32),
+    pub view_cam: fn() -> (i32, i32, i32, i32),
+    pub water_y: fn() -> i32,
+    pub list_kind: fn(class: i32, from: u32) -> Vec<u32>,
+    pub play_sound: fn(handle: u32, id: i32, flags: i32),
+    pub resolve_sound: fn(key: &str) -> i32,
+    /// Screen pointer in world 16.16 plus left-button down.
+    pub pointer: fn() -> (i32, i32, bool),
+    /// Pin a worm at (x,y) after stock HandleMessage this tick.
+    pub carry: fn(handle: u32, x: i32, y: i32),
+    pub drop_carry: fn(handle: u32),
+}
+
+impl Default for ActorNative {
+    fn default() -> Self {
+        Self {
+            explode: |_, _, _, _| {},
+            despawn: |_| {},
+            in_water: |_| false,
+            on_feet: |_| false,
+            gravity: |_| {},
+            move_body: |_, _, _| 0,
+            advance: |_| {},
+            spawn: |_| Err("spawn not bound".into()),
+            list_actors: Vec::new,
+            list_worms: |_| Vec::new(),
+            resolve_sprite: |_| None,
+            land_solid: |_, _| false,
+            land_trace: |_, _, _, _| None,
+            map_size: || (0, 0),
+            view_cam: || (0, 0, 0, 0),
+            water_y: || 0,
+            list_kind: |_, _| Vec::new(),
+            play_sound: |_, _, _| {},
+            resolve_sound: |_| 0,
+            pointer: || (0, 0, false),
+            carry: |_, _, _| {},
+            drop_carry: |_| {},
+        }
+    }
+}
+
+static NEXT_BRAIN: AtomicU32 = AtomicU32::new(1);
+static NATIVE: Mutex<Option<ActorNative>> = Mutex::new(None);
+
+thread_local! {
+    static SPAWN_OWNER: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Firing worm for `wa.actors.spawn` during `on_click` / `on_fire`.
+pub fn spawn_owner() -> u32 {
+    SPAWN_OWNER.with(|c| c.get())
+}
+
+fn with_spawn_owner<T>(owner: u32, f: impl FnOnce() -> T) -> T {
+    SPAWN_OWNER.with(|c| {
+        let prev = c.replace(owner);
+        struct Restore(u32);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                SPAWN_OWNER.with(|c| c.set(self.0));
+            }
+        }
+        let _restore = Restore(prev);
+        f()
+    })
+}
+
+pub fn reset() {
+    NEXT_BRAIN.store(1, Ordering::SeqCst);
+}
+
+pub fn bind_actor_native(native: ActorNative) {
+    if let Ok(mut slot) = NATIVE.lock() {
+        *slot = Some(native);
+    }
+}
+
+pub fn register_brain(
+    lua: &Lua,
+    frame: Option<Function>,
+    land: Option<Function>,
+) -> mlua::Result<u32> {
+    if frame.is_none() && land.is_none() {
+        return Ok(0);
+    }
+    let id = NEXT_BRAIN.fetch_add(1, Ordering::SeqCst).max(1);
+    let wa: Table = lua.globals().get("wa")?;
+    let brains: Table = wa.get("_brains")?;
+    let spec = lua.create_table()?;
+    let wa_mod: String = wa.get("_mod").unwrap_or_default();
+    spec.set("mod", wa_mod)?;
+    if let Some(f) = frame {
+        spec.set("frame", f)?;
+    }
+    if let Some(f) = land {
+        spec.set("land", f)?;
+    }
+    brains.set(id, spec)?;
+    Ok(id)
+}
+
+pub fn register_fire(lua: &Lua, cb: Function) -> mlua::Result<u32> {
+    register_cb(lua, "_fires", cb)
+}
+
+pub fn register_click(lua: &Lua, cb: Function) -> mlua::Result<u32> {
+    register_cb(lua, "_clicks", cb)
+}
+
+pub fn register_select(lua: &Lua, cb: Function) -> mlua::Result<u32> {
+    register_cb(lua, "_selects", cb)
+}
+
+fn register_cb(lua: &Lua, table: &str, cb: Function) -> mlua::Result<u32> {
+    let id = NEXT_BRAIN.fetch_add(1, Ordering::SeqCst).max(1);
+    let wa: Table = lua.globals().get("wa")?;
+    let fires: Table = wa.get(table)?;
+    let spec = lua.create_table()?;
+    let wa_mod: String = wa.get("_mod").unwrap_or_default();
+    spec.set("mod", wa_mod)?;
+    spec.set("on", cb)?;
+    fires.set(id, spec)?;
+    Ok(id)
+}
+
+pub fn weapon_fire(
+    fire_id: u32,
+    worm: u32,
+    slot: i32,
+    x: i32,
+    y: i32,
+    vx: i32,
+    vy: i32,
+) -> Result<(), String> {
+    if fire_id == 0 {
+        return Ok(());
+    }
+    with_lua(|lua| {
+        let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
+        let fires: Table = wa.get("_fires").map_err(|e| e.to_string())?;
+        let spec = match fires.get::<Value>(fire_id).map_err(|e| e.to_string())? {
+            Value::Table(t) => t,
+            _ => return Err(format!("on_fire {fire_id} missing")),
+        };
+        let cb: Function = match spec.get::<Value>("on").map_err(|e| e.to_string())? {
+            Value::Function(f) => f,
+            _ => return Err(format!("on_fire {fire_id} has no function")),
+        };
+        if let Ok(m) = spec.get::<String>("mod") {
+            let _ = wa.set("_mod", m);
+        }
+        let fire = lua.create_table().map_err(|e| e.to_string())?;
+        fire.set("x", x).map_err(|e| e.to_string())?;
+        fire.set("y", y).map_err(|e| e.to_string())?;
+        fire.set("vx", vx).map_err(|e| e.to_string())?;
+        fire.set("vy", vy).map_err(|e| e.to_string())?;
+        fire.set("slot", slot).map_err(|e| e.to_string())?;
+        fire.set("worm", WormHandle(worm))
+            .map_err(|e| e.to_string())?;
+        with_spawn_owner(worm, || cb.call::<()>(fire).map_err(|e| e.to_string()))?;
+        Ok(())
+    })
+}
+
+pub fn weapon_click(
+    click_id: u32,
+    worm: u32,
+    slot: i32,
+    x: i32,
+    y: i32,
+    sky: i32,
+) -> Result<(), String> {
+    if click_id == 0 {
+        return Ok(());
+    }
+    with_lua(|lua| {
+        let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
+        let clicks: Table = wa.get("_clicks").map_err(|e| e.to_string())?;
+        let spec = match clicks.get::<Value>(click_id).map_err(|e| e.to_string())? {
+            Value::Table(t) => t,
+            _ => return Err(format!("on_click {click_id} missing")),
+        };
+        let cb: Function = match spec.get::<Value>("on").map_err(|e| e.to_string())? {
+            Value::Function(f) => f,
+            _ => return Err(format!("on_click {click_id} has no function")),
+        };
+        if let Ok(m) = spec.get::<String>("mod") {
+            let _ = wa.set("_mod", m);
+        }
+        let click = lua.create_table().map_err(|e| e.to_string())?;
+        click.set("x", x).map_err(|e| e.to_string())?;
+        click.set("y", y).map_err(|e| e.to_string())?;
+        click.set("sky", sky).map_err(|e| e.to_string())?;
+        click.set("slot", slot).map_err(|e| e.to_string())?;
+        click
+            .set("worm", WormHandle(worm))
+            .map_err(|e| e.to_string())?;
+        with_spawn_owner(worm, || cb.call::<()>(click).map_err(|e| e.to_string()))?;
+        Ok(())
+    })
+}
+
+pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String> {
+    if select_id == 0 {
+        return Ok(());
+    }
+    let (x, y, _) = native_pointer().map(|f| f()).unwrap_or((0, 0, false));
+    with_lua(|lua| {
+        let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
+        let selects: Table = wa.get("_selects").map_err(|e| e.to_string())?;
+        let spec = match selects.get::<Value>(select_id).map_err(|e| e.to_string())? {
+            Value::Table(t) => t,
+            _ => return Err(format!("on_select {select_id} missing")),
+        };
+        let cb: Function = match spec.get::<Value>("on").map_err(|e| e.to_string())? {
+            Value::Function(f) => f,
+            _ => return Err(format!("on_select {select_id} has no function")),
+        };
+        if let Ok(m) = spec.get::<String>("mod") {
+            let _ = wa.set("_mod", m);
+        }
+        let sel = lua.create_table().map_err(|e| e.to_string())?;
+        sel.set("x", x).map_err(|e| e.to_string())?;
+        sel.set("y", y).map_err(|e| e.to_string())?;
+        sel.set("slot", slot).map_err(|e| e.to_string())?;
+        sel.set("worm", WormHandle(worm))
+            .map_err(|e| e.to_string())?;
+        with_spawn_owner(worm, || cb.call::<()>(sel).map_err(|e| e.to_string()))?;
+        Ok(())
+    })
+}
+
+pub fn actor_spawned(_handle: u32, _brain_id: u32) {}
+
+pub fn actor_freed(_handle: u32) {}
+
+pub fn actor_frame(handle: u32, brain_id: u32, ev: ActorEvent) -> Result<(), String> {
+    if handle == 0 || brain_id == 0 {
+        return Ok(());
+    }
+    with_lua(|lua| {
+        let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
+        let brains: Table = wa.get("_brains").map_err(|e| e.to_string())?;
+        let spec = match brains.get::<Value>(brain_id).map_err(|e| e.to_string())? {
+            Value::Table(t) => t,
+            _ => return Err(format!("LuaActor brain {brain_id} missing")),
+        };
+        if let Ok(m) = spec.get::<String>("mod") {
+            let _ = wa.set("_mod", m);
+        }
+        let frame: Option<Function> = match spec.get::<Value>("frame").map_err(|e| e.to_string())? {
+            Value::Function(f) => Some(f),
+            _ => None,
+        };
+        let land: Option<Function> = match spec.get::<Value>("land").map_err(|e| e.to_string())? {
+            Value::Function(f) => Some(f),
+            _ => None,
+        };
+        let actor = lua
+            .create_userdata(ActorHandle(handle))
+            .map_err(|e| e.to_string())?;
+        let t = event_table(lua, &ev)?;
+        if ev.land {
+            if let Some(f) = land {
+                f.call::<()>((actor.clone(), t.clone()))
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        if let Some(f) = frame {
+            f.call::<()>((actor, t)).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+}
+
+fn event_table(lua: &Lua, ev: &ActorEvent) -> Result<Table, String> {
+    let t = lua.create_table().map_err(|e| e.to_string())?;
+    t.set("land", ev.land).map_err(|e| e.to_string())?;
+    t.set("left_ground", ev.left_ground)
+        .map_err(|e| e.to_string())?;
+    t.set("hit_worm", ev.hit_worm).map_err(|e| e.to_string())?;
+    t.set("in_water", ev.in_water).map_err(|e| e.to_string())?;
+    t.set("msg", 2u32).map_err(|e| e.to_string())?;
+    Ok(t)
+}
+
+fn with_lua<T>(f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
+    PARKED_LUA.with(|slot| {
+        let guard = slot.borrow();
+        let Some(lua) = guard.as_ref() else {
+            return Err("no lua state".into());
+        };
+        f(lua)
+    })
+}
+
+#[derive(Clone, Copy)]
+pub struct ActorHandle(pub u32);
+
+#[derive(Clone, Copy)]
+pub struct WormHandle(pub u32);
+
+impl UserData for ActorHandle {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("id", |_, this| Ok(this.0));
+        fields.add_field_method_get("kind", |_, _| Ok("actor"));
+        bind_pos_fields(fields, |h| h.0);
+        fields.add_field_method_get("owner", |lua, this| {
+            let owner = read_handle(this.0, ACTOR_OWNER);
+            lua.create_userdata(WormHandle(owner as u32))
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("explode", |_, this, opts: Option<Table>| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            let mut damage = read_handle(this.0, ACTOR_DAMAGE);
+            let mut id = read_handle(this.0, ACTOR_BOOM_ID);
+            let mut below = true;
+            if let Some(t) = opts {
+                if let Ok(Some(v)) = opt_i32(&t, "damage") {
+                    damage = v;
+                }
+                if let Ok(Some(v)) = opt_i32(&t, "id") {
+                    id = v;
+                }
+                if let Ok(Some(v)) = opt_bool(&t, "below") {
+                    below = v;
+                }
+                if let Ok(Value::String(s)) = t.get::<Value>("at") {
+                    below = s.to_str()?.as_ref() == "below";
+                }
+            }
+            let explode = native_explode().ok_or_else(|| {
+                mlua::Error::external("explode: CreateExplosion not bound")
+            })?;
+            explode(this.0, damage, id, below);
+            Ok(())
+        });
+        methods.add_method("despawn", |_, this, ()| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            let despawn = native_despawn_fn().ok_or_else(|| {
+                mlua::Error::external("despawn: native free not bound")
+            })?;
+            despawn(this.0);
+            Ok(())
+        });
+        methods.add_method("in_water", |_, this, ()| {
+            if this.0 == 0 {
+                return Ok(false);
+            }
+            Ok(native_in_water_fn().map(|f| f(this.0)).unwrap_or(false))
+        });
+        methods.add_method("on_feet", |_, this, ()| {
+            if this.0 == 0 {
+                return Ok(false);
+            }
+            Ok(native_on_feet_fn().map(|f| f(this.0)).unwrap_or(false))
+        });
+        methods.add_method("gravity", |_, this, ()| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            let gravity = native_gravity().ok_or_else(|| {
+                mlua::Error::external("gravity: stock leaf not bound")
+            })?;
+            gravity(this.0);
+            Ok(())
+        });
+        methods.add_method("move", |lua, this, opts: Option<Table>| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return empty_hit(lua);
+            }
+            let mut terrain = true;
+            let mut worms = true;
+            if let Some(t) = opts {
+                if let Ok(Some(v)) = opt_bool(&t, "terrain") {
+                    terrain = v;
+                }
+                if let Ok(Some(v)) = opt_bool(&t, "worms") {
+                    worms = v;
+                }
+                if let Ok(Some(v)) = opt_bool(&t, "collide_terrain") {
+                    terrain = v;
+                }
+                if let Ok(Some(v)) = opt_bool(&t, "collide_worms") {
+                    worms = v;
+                }
+            }
+            let move_body = native_move().ok_or_else(|| {
+                mlua::Error::external("move: native step not bound")
+            })?;
+            hit_table(lua, move_body(this.0, terrain, worms))
+        });
+        methods.add_method("advance", |_, this, ()| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            let advance = native_advance().ok_or_else(|| {
+                mlua::Error::external("advance: sprite loop not bound")
+            })?;
+            advance(this.0);
+            Ok(())
+        });
+        methods.add_method("spawn", |lua, this, spec: Table| {
+            crate::spawn::runtime_spawn(lua, spec, Some(this.0))
+        });
+        methods.add_method("sound", |_, this, (slot, flags): (Value, Option<i32>)| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            let id = sound_slot(slot)?;
+            if id == 0 {
+                return Ok(());
+            }
+            let play = native_play_sound().ok_or_else(|| {
+                mlua::Error::external("sound: PlaySoundLocal not bound")
+            })?;
+            play(this.0, id, flags.unwrap_or(8));
+            Ok(())
+        });
+    }
+}
+
+impl UserData for WormHandle {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("id", |_, this| Ok(this.0));
+        fields.add_field_method_get("team", |_, this| {
+            if this.0 == 0 {
+                return Ok(0i32);
+            }
+            Ok(unsafe { read_i32(this.0 as *mut u8, ENT_WORM_TEAM) })
+        });
+        fields.add_field_method_get("slot", |_, this| {
+            if this.0 == 0 {
+                return Ok(0i32);
+            }
+            Ok(unsafe { read_i32(this.0 as *mut u8, WORM_SELECTED_WEAPON) })
+        });
+        fields.add_field_method_get("weapon", |_, this| {
+            if this.0 == 0 {
+                return Ok(None);
+            }
+            let slot = unsafe { read_i32(this.0 as *mut u8, WORM_SELECTED_WEAPON) };
+            Ok(StockWeapon::from_index(slot as u32).map(|s| s.name().to_string()))
+        });
+        fields.add_field_method_get("kind", |_, _| Ok("worm"));
+        bind_pos_fields(fields, |h| h.0);
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("carry", |_, this, (x, y): (i32, i32)| {
+            if this.0 == 0 {
+                return Ok(());
+            }
+            if let Some(carry) = native_carry() {
+                carry(this.0, x, y);
+            }
+            Ok(())
+        });
+        methods.add_method("drop", |_, this, ()| {
+            if this.0 == 0 {
+                return Ok(());
+            }
+            if let Some(drop) = native_drop_carry() {
+                drop(this.0);
+            }
+            Ok(())
+        });
+    }
+}
+
+/// Stock world object (crate / mine / missile / oil). Pos only — no CTask offsets.
+#[derive(Clone, Copy)]
+pub struct WorldHandle(pub u32);
+
+impl UserData for WorldHandle {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("id", |_, this| Ok(this.0));
+        fields.add_field_method_get("kind", |_, this| Ok(kind_name(this.0)));
+        bind_pos_fields(fields, |h| h.0);
+    }
+}
+
+fn kind_name(handle: u32) -> &'static str {
+    if handle == 0 {
+        return "none";
+    }
+    match unsafe { read_i32(handle as *mut u8, ENT_CLASS_TYPE) } {
+        CLASS_MINE => "mine",
+        CLASS_MISSILE => "missile",
+        CLASS_CRATE => "crate",
+        CLASS_WORM => "worm",
+        CLASS_OIL => "oil",
+        _ => "object",
+    }
+}
+
+fn bind_pos_fields<T, F>(fields: &mut F, handle: fn(&T) -> u32)
+where
+    T: Copy + 'static,
+    F: UserDataFields<T>,
+{
+    fields.add_field_method_get("x", move |_, this| Ok(read_handle(handle(this), ENT_POS_X)));
+    fields.add_field_method_set("x", move |_, this, v: i32| {
+        write_handle(handle(this), ENT_POS_X, v);
+        Ok(())
+    });
+    fields.add_field_method_get("y", move |_, this| Ok(read_handle(handle(this), ENT_POS_Y)));
+    fields.add_field_method_set("y", move |_, this, v: i32| {
+        write_handle(handle(this), ENT_POS_Y, v);
+        Ok(())
+    });
+    fields.add_field_method_get("vx", move |_, this| {
+        Ok(read_handle(handle(this), ENT_SPEED_X))
+    });
+    fields.add_field_method_set("vx", move |_, this, v: i32| {
+        write_handle(handle(this), ENT_SPEED_X, v);
+        Ok(())
+    });
+    fields.add_field_method_get("vy", move |_, this| {
+        Ok(read_handle(handle(this), ENT_SPEED_Y))
+    });
+    fields.add_field_method_set("vy", move |_, this, v: i32| {
+        write_handle(handle(this), ENT_SPEED_Y, v);
+        Ok(())
+    });
+}
+
+fn native_explode() -> Option<fn(u32, i32, i32, bool)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.explode)
+}
+
+fn native_despawn_fn() -> Option<fn(u32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.despawn)
+}
+
+fn native_in_water_fn() -> Option<fn(u32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.in_water)
+}
+
+fn native_on_feet_fn() -> Option<fn(u32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.on_feet)
+}
+
+fn native_gravity() -> Option<fn(u32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.gravity)
+}
+
+fn native_move() -> Option<fn(u32, bool, bool) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.move_body)
+}
+
+fn native_advance() -> Option<fn(u32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.advance)
+}
+
+pub fn native_spawn() -> Option<fn(&SpawnArgs) -> Result<u32, String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.spawn)
+}
+
+pub fn native_list_actors() -> Vec<u32> {
+    NATIVE
+        .lock()
+        .ok()
+        .and_then(|n| n.as_ref().map(|n| (n.list_actors)()))
+        .unwrap_or_default()
+}
+
+pub fn native_list_worms(from: u32) -> Vec<u32> {
+    NATIVE
+        .lock()
+        .ok()
+        .and_then(|n| n.as_ref().map(|n| (n.list_worms)(from)))
+        .unwrap_or_default()
+}
+
+pub fn native_resolve_sprite() -> Option<fn(&str) -> Option<(i32, u32, i32, i32)>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.resolve_sprite)
+}
+
+pub fn native_land_solid() -> Option<fn(i32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.land_solid)
+}
+
+pub fn native_land_trace() -> Option<fn(i32, i32, i32, i32) -> Option<(i32, i32)>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.land_trace)
+}
+
+pub fn native_map_size() -> Option<fn() -> (i32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.map_size)
+}
+
+pub fn native_view_cam() -> Option<fn() -> (i32, i32, i32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.view_cam)
+}
+
+pub fn native_water_y() -> Option<fn() -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.water_y)
+}
+
+pub fn native_list_kind(class: i32, from: u32) -> Vec<u32> {
+    NATIVE
+        .lock()
+        .ok()
+        .and_then(|n| n.as_ref().map(|n| (n.list_kind)(class, from)))
+        .unwrap_or_default()
+}
+
+pub fn native_play_sound() -> Option<fn(u32, i32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.play_sound)
+}
+
+pub fn native_resolve_sound() -> Option<fn(&str) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.resolve_sound)
+}
+
+pub fn native_pointer() -> Option<fn() -> (i32, i32, bool)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.pointer)
+}
+
+pub fn native_carry() -> Option<fn(u32, i32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.carry)
+}
+
+pub fn native_drop_carry() -> Option<fn(u32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.drop_carry)
+}
+
+pub(crate) fn sound_slot(slot: Value) -> mlua::Result<i32> {
+    match slot {
+        Value::Integer(n) => Ok(n as i32),
+        Value::Number(n) => Ok(n as i32),
+        Value::String(s) => {
+            let key = s.to_str()?.to_string();
+            Ok(native_resolve_sound().map(|f| f(&key)).unwrap_or(0))
+        }
+        Value::Nil => Ok(0),
+        other => Err(mlua::Error::external(format!(
+            "sound id must be a number or pack WAV path, got {other:?}"
+        ))),
+    }
+}
+
+pub fn actor_owner(handle: u32) -> u32 {
+    if handle == 0 {
+        return 0;
+    }
+    read_handle(handle, ACTOR_OWNER) as u32
+}
+
+pub fn pos_tuple(handle: u32) -> (i32, i32, i32, i32) {
+    (
+        read_handle(handle, ENT_POS_X),
+        read_handle(handle, ENT_POS_Y),
+        read_handle(handle, ENT_SPEED_X),
+        read_handle(handle, ENT_SPEED_Y),
+    )
+}
+
+pub fn sprite_tuple(handle: u32) -> (i32, u32, i32, i32) {
+    (
+        read_handle(handle, ACTOR_SPRITE),
+        read_handle(handle, ACTOR_DELTA) as u32,
+        read_handle(handle, ACTOR_SPR_W),
+        read_handle(handle, ACTOR_SPR_H),
+    )
+}
+
+fn hit_table(lua: &Lua, bits: i32) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set("terrain", bits & 1 != 0)?;
+    t.set("worm", bits & 2 != 0)?;
+    t.set("land", bits & 4 != 0)?;
+    t.set("left_ground", bits & 8 != 0)?;
+    Ok(t)
+}
+
+fn empty_hit(lua: &Lua) -> mlua::Result<Table> {
+    hit_table(lua, 0)
+}
+
+fn actor_dead(handle: u32) -> bool {
+    if handle == 0 {
+        return true;
+    }
+    unsafe {
+        read_i32(handle as *mut u8, ACTOR_MAGIC) as u32 != LUA_ACTOR_MAGIC
+            || read_i32(handle as *mut u8, ACTOR_DEAD) != 0
+    }
+}
+
+fn read_handle(handle: u32, off: usize) -> i32 {
+    if handle == 0 {
+        return 0;
+    }
+    unsafe { read_i32(handle as *mut u8, off) }
+}
+
+fn write_handle(handle: u32, off: usize, v: i32) {
+    if handle == 0 {
+        return;
+    }
+    unsafe { write_i32(handle as *mut u8, off, v) }
+}
+
+fn opt_i32(t: &Table, key: &str) -> mlua::Result<Option<i32>> {
+    match t.get::<Value>(key)? {
+        Value::Nil => Ok(None),
+        Value::Integer(i) => Ok(Some(i as i32)),
+        Value::Number(n) => Ok(Some(n as i32)),
+        other => Err(mlua::Error::external(format!(
+            "{key} must be an integer, got {other:?}"
+        ))),
+    }
+}
+
+fn opt_bool(t: &Table, key: &str) -> mlua::Result<Option<bool>> {
+    match t.get::<Value>(key)? {
+        Value::Nil => Ok(None),
+        Value::Boolean(b) => Ok(Some(b)),
+        other => Err(mlua::Error::external(format!(
+            "{key} must be a boolean, got {other:?}"
+        ))),
+    }
+}
+
+pub fn worm_userdata(lua: &Lua, handle: u32) -> Result<mlua::AnyUserData, String> {
+    lua.create_userdata(WormHandle(handle))
+        .map_err(|e| e.to_string())
+}

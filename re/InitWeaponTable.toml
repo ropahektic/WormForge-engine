@@ -1,0 +1,17 @@
+# Verified against openWA re/_bootstrap_00530000.toml, then Ghidra on stock WA 3.8.1:
+# FUN_0053cab0, body 0053cab0-0053cfa6, RET 0x4 (stdcall, one stack arg).
+# param_1 is GameRuntime*; world = *(runtime + 0x488); table = *(world + 0x510);
+# memset(table, 0, 0x80b0) with stride 0x1d0 = 71 * WeaponEntry.
+
+[[function]]
+va = 0x0053CAB0
+name = "InitWeaponTable"
+calling_convention = "__stdcall"
+plate_comment = "stdcall GameRuntime*, RET 0x4. Wrap after return; do not trap/replace."
+
+  [function.signature]
+  returns = "void"
+
+  [[function.param]]
+  name = "runtime"
+  type = "GameRuntime *"

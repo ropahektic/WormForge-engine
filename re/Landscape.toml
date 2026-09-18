@@ -1,0 +1,74 @@
+# Landscape + PlaySoundLocal (3.8.1)
+
+Wraps, not traps. Lua sees `wa.land` / `wa.sound`, not CTask offsets.
+
+[[function]]
+va = 0x004FDFE0
+name = "PlaySoundLocal"
+calling_convention = "__stdcall"
+plate_comment = "Usercall EAX=pitch ECX=volume EDI=entity; stack sound_id + flags; RET 8. Jelly playSoundLocal. openWA re/_bootstrap_004f0000.toml."
+
+[[struct]]
+name = "Landscape"
+size = 0xB40
+plate_comment = "Solid collision grid used by Blas / wkGolf. GameWorld+0x20."
+
+  [[struct.field]]
+  offset = 0x910
+  name = "solid_grid"
+  type = "BitGrid *"
+  comment = "Byte plane (bpp>=8, PNG maps) or bit plane. Non-zero = dirt."
+
+[[struct]]
+name = "BitGrid"
+
+  [[struct.field]]
+  offset = 0x08
+  name = "bits"
+  type = "uint8_t *"
+
+  [[struct.field]]
+  offset = 0x0C
+  name = "bpp"
+  type = "uint"
+
+  [[struct.field]]
+  offset = 0x10
+  name = "stride"
+  type = "uint"
+
+  [[struct.field]]
+  offset = 0x14
+  name = "width"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x18
+  name = "height"
+  type = "int"
+
+[[struct]]
+name = "BaseEntity"
+size = 0x30
+plate_comment = "Jelly CTask / openWA BaseEntity. Tree walk for crates/mines/missiles."
+
+  [[struct.field]]
+  offset = 0x04
+  name = "parent"
+  type = "BaseEntity *"
+
+  [[struct.field]]
+  offset = 0x10
+  name = "children_watermark"
+  type = "uint"
+
+  [[struct.field]]
+  offset = 0x14
+  name = "children_data"
+  type = "BaseEntity **"
+
+  [[struct.field]]
+  offset = 0x20
+  name = "class_type"
+  type = "int"
+  comment = "Mine=8 Missile=11 Crate=15 Worm=18 Oil=30 (Jelly Constants.h / openWA ClassType)."

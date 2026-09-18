@@ -1,0 +1,6 @@
+[package]
+name = "actors"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Namespaced LuaActor kinds (one native type, Lua brains)"

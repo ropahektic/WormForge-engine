@@ -1,0 +1,27 @@
+# Fire path — planned wrap (do not trap).
+# VAs exist in Ghidra 3.8.1 as FUN_*. Names from openWA. Confirm RET imm16
+# before installing MinHook. Dispatcher: tag spawned missile with owning weapon.
+
+[[function]]
+va = 0x0051B2B0
+name = "WormEntity__TryFireWeapon"
+calling_convention = "__stdcall"
+plate_comment = "Planned wrap_after for per-weapon on_fire. Ghidra FUN_0051b2b0. Confirm convention before hook."
+
+[[function]]
+va = 0x0051DFB0
+name = "FireWeapon__ProjectileFire"
+calling_convention = "__stdcall"
+plate_comment = "Ghidra FUN_0051dfb0. Multi-shot projectile fire. Wrap, do not replace."
+
+[[function]]
+va = 0x0051E0F0
+name = "FireWeapon__CreateWeaponProjectile"
+calling_convention = "__thiscall"
+plate_comment = "Ghidra FUN_0051e0f0. Spawn one missile. Wrap_after to bind entity id → slot owner."
+
+[[function]]
+va = 0x0051E2C0
+name = "FireWeapon__StrikeFire"
+calling_convention = "__stdcall"
+plate_comment = "Strike weapons (AirStrike, Donkey, …). Wrap installed: Lua on_click skips AirStrikeEntity."

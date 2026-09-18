@@ -1,0 +1,91 @@
+# Layout and leaf physics from local Resources/collision_manager.rs (openWA port).
+# CollisionManager sits at GameWorld+0x528. Size 0x264. Vtable 0x664194.
+#
+# apply_projectile_gravity is gravity + wind + damp, not the bounce integrator.
+# Bounce/move is CollisionManager__rope (0x004FBDC0) from update_0 (0x004FCDF0).
+
+[[struct]]
+name = "CollisionManager"
+size = 0x264
+plate_comment = "Entity registry + 32 collision layers. GameWorld+0x528."
+
+  [[struct.field]]
+  offset = 0x000
+  name = "vtable"
+  type = "void *"
+  comment = "0x664194"
+
+  [[struct.field]]
+  offset = 0x018
+  name = "entities"
+  type = "DwordList"
+  comment = "Global all-entities list. DwordList is 0x10 (capacity, dirty, count, data)."
+
+  [[struct.field]]
+  offset = 0x028
+  name = "layers"
+  type = "DwordList[32]"
+  comment = "Indexed by WorldEntity.collision_layer (+0x30)."
+
+  [[struct.field]]
+  offset = 0x22C
+  name = "particle_gravity_y"
+  type = "Fixed"
+  comment = "Multiplied by entity+0x60 into speed_y."
+
+  [[struct.field]]
+  offset = 0x230
+  name = "wind_bias"
+  type = "Fixed"
+  comment = "Multiplied by entity+0x5C into speed_x when the wind probe is clear."
+
+  [[struct.field]]
+  offset = 0x240
+  name = "world"
+  type = "GameWorld *"
+
+[[function]]
+va = 0x004FCB30
+name = "CollisionManager__apply_projectile_gravity"
+calling_convention = "__thiscall"
+plate_comment = "thiscall(cm, entity), RET 0x4. dy = particle_gravity_y * entity+0x60; if dy==0 return. Rest probe via try_mask. speed_y += dy. Wind: wind_bias * entity+0x5C, CheckMoveCollision 1px, maybe speed_x += dx. Damp vx/vy by entity+0x58. Sets entity+0xB8=1. Wrap: Lua gravity_before (scales) then stock then gravity_after (velocity)."
+
+  [function.signature]
+  returns = "void"
+
+  [[function.param]]
+  name = "this"
+  type = "CollisionManager *"
+
+  [[function.param]]
+  name = "entity"
+  type = "WorldEntity *"
+
+[[function]]
+va = 0x004FC280
+name = "CollisionManager__apply_gravity"
+calling_convention = "__usercall"
+plate_comment = "Dispatches to apply_projectile_gravity / apply_rope_gravity. Not hooked; the leaf is."
+
+[[function]]
+va = 0x004FCDF0
+name = "CollisionManager__update_0"
+calling_convention = "__stdcall"
+plate_comment = "Per-entity tick: sea, gravity, then rope/projectile sweep (bounce lives here)."
+
+[[function]]
+va = 0x004FBDC0
+name = "CollisionManager__rope"
+calling_convention = "__usercall"
+plate_comment = "Pixel-step move + CheckMoveCollision. Hits are the bounce/land events. Not hooked in v1."
+
+[[function]]
+va = 0x004FB9A0
+name = "CollisionManager__try_mask"
+calling_convention = "__usercall"
+plate_comment = "Rest/wind probe used by apply_projectile_gravity."
+
+[[global]]
+va = 0x00664194
+name = "CollisionManagerVtable"
+type = "void *"

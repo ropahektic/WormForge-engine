@@ -1,0 +1,37 @@
+[[function]]
+va = 0x00510B40
+name = "WormEntity__HandleMessage"
+calling_convention = "__thiscall"
+plate_comment = "Ghidra FUN_00510b40. Jump=0x24, JumpUp=0x25, StartTurn=0x34. These msgs already ride the lockstep stream."
+
+  [function.signature]
+  returns = "void"
+
+  [[function.param]]
+  name = "this"
+  type = "WormEntity *"
+
+  [[function.param]]
+  name = "sender"
+  type = "BaseEntity *"
+
+  [[function.param]]
+  name = "msg_type"
+  type = "uint"
+
+  [[function.param]]
+  name = "size"
+  type = "uint"
+
+  [[function.param]]
+  name = "data"
+  type = "void *"
+
+[[struct]]
+name = "WormEntity"
+plate_comment = "Partial. HandleMessage Jump/JumpUp already replicate. Team at +0xFC."
+
+  [[struct.field]]
+  offset = 0xFC
+  name = "team"
+  type = "uint"

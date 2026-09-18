@@ -1,0 +1,22 @@
+[[struct]]
+name = "GameWorld"
+size = 0x98D8
+plate_comment = "Partial. weapon_table confirmed: InitWeaponTable memset *(world+0x510) for 0x80b0 bytes."
+
+  [[struct.field]]
+  offset = 0x20
+  name = "landscape"
+  type = "Landscape *"
+  comment = "Solid BitGrid at Landscape+0x910. Map size at +0x77C0/+0x77C4."
+
+  [[struct.field]]
+  offset = 0x510
+  name = "weapon_table"
+  type = "WeaponTable *"
+  comment = "Pointer to 71 WeaponEntry (no header). 71 * 0x1D0 = 0x80B0."
+
+  [[struct.field]]
+  offset = 0x528
+  name = "collision_manager"
+  type = "CollisionManager *"
+  comment = "Entity registry + collision layers. Size 0x264, vtable 0x664194."

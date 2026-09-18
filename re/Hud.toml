@@ -1,0 +1,15 @@
+[[function]]
+va = 0x004FB070
+name = "SetTextboxText"
+calling_convention = "__stdcall"
+plate_comment = "Bakes a HUD bitmap. Presentation only."
+
+[[function]]
+va = 0x00534F20
+name = "GameRuntime__RenderWaitingForPeersTextbox"
+calling_convention = "__usercall"
+plate_comment = "EAX=runtime. Stock CALL from GameRender at 0x0053448B; HUD blit after that CALL is presentation-only."
+
+[[label]]
+va = 0x0053448B
+name = "GameRender_Call_RenderWaitingForPeersTextbox"

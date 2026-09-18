@@ -1,0 +1,120 @@
+[[struct]]
+name = "WeaponEntry"
+size = 0x1D0
+plate_comment = "Per-weapon table entry. Indices 0..70. Fire params are embedded at +0x3C (0x194 bytes)."
+
+  [[struct.field]]
+  offset = 0x0
+  name = "name1"
+  type = "char *"
+
+  [[struct.field]]
+  offset = 0x4
+  name = "name2"
+  type = "char *"
+
+  [[struct.field]]
+  offset = 0x8
+  name = "panel_state"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0xC
+  name = "requires_aiming"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x10
+  name = "defined"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x14
+  name = "shot_count"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x1C
+  name = "retreat_time"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x20
+  name = "creates_projectile"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x24
+  name = "availability"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x28
+  name = "enabled"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x30
+  name = "fire_type"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x34
+  name = "special_subtype"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x38
+  name = "fire_method"
+  type = "int"
+
+  [[struct.field]]
+  offset = 0x3C
+  name = "fire_params"
+  type = "WeaponFireParams"
+  size = 0x194
+
+[[struct]]
+name = "WeaponFireParams"
+size = 0x194
+plate_comment = "Embedded at WeaponEntry+0x3C. Missile damage +0x50; sprite_id +0x60 (Bazooka=48, Grenade=50); gravity_pct +0x70; wind_pct +0x74; bounce_pct +0x78. Confirmed openWA WeaponFireParams and Ghidra FUN_00537320."
+
+  [[struct.field]]
+  offset = 0x14
+  name = "damage"
+  type = "int"
+  comment = "Missile explosion damage (Bazooka=100). Absolute entry offset 0x50."
+
+  [[struct.field]]
+  offset = 0x24
+  name = "sprite_id"
+  type = "int"
+  comment = "Missile sprite (Bazooka=48, Grenade=50). Absolute entry offset 0x60."
+
+  [[struct.field]]
+  offset = 0x34
+  name = "gravity_pct"
+  type = "int"
+  comment = "Absolute entry offset 0x70."
+
+  [[struct.field]]
+  offset = 0x38
+  name = "wind_pct"
+  type = "int"
+  comment = "Wind influence (Bazooka=50). Absolute entry offset 0x74. Was previously mislabeled bounce."
+
+  [[struct.field]]
+  offset = 0x3C
+  name = "bounce_pct"
+  type = "int"
+  comment = "Bounce percentage (Bazooka=100). Absolute entry offset 0x78."
+
+[[struct]]
+name = "WeaponTable"
+size = 0x80B0
+plate_comment = "Flat array, no header. Confirmed by InitWeaponTable memset size 0x80b0."
+
+  [[struct.field]]
+  offset = 0x0
+  name = "entries"
+  type = "WeaponEntry[71]"

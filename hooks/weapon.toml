@@ -1,0 +1,43 @@
+# Wrap stock functions and dispatch to Lua by owner id.
+# Never trap/replace FireWeapon or InitWeaponTable. Never stack VFTs.
+# LuaActor: one native vtable + CollisionManager::register_entity. `drop` wraps StrikeFire.
+
+[[hook]]
+wa_function = "InitWeaponTable"
+action = "wrap_after"
+comment = "Call original, then overlay Lua weapon claims onto the 71-slot table."
+
+[[hook]]
+wa_function = "GfxHandler__LoadSprites"
+action = "wrap_after"
+comment = "PX InitGraphic: after sprites.dat, ProcessSprite PNGs while MapColor still has free slots. Stock SetLayerVisibility(3,1) later commits the palette."
+
+[[hook]]
+wa_function = "CollisionManager__apply_projectile_gravity"
+action = "wrap"
+comment = "Lua gravity_before writes wind/gravity/damp scales; stock applies gravity+wind+damp; Lua gravity_after edits velocity. Bounce itself is in CollisionManager__rope (not this leaf)."
+
+[[hook]]
+wa_function = "MissileEntity__HandleMessage"
+action = "wrap"
+comment = "Lua missile_frame around FrameFinish (msg 2). Do not arm/detonate from wall-clock."
+
+[[hook]]
+wa_function = "WormEntity__HandleMessage"
+action = "wrap"
+comment = "Observe lockstep worm messages (Jump, StartTurn, …). Do not swallow unless Lua returns eat."
+
+[[hook]]
+wa_function = "GameRuntime__RenderWaitingForPeersTextbox"
+action = "call_site_after"
+comment = "Presentation-only HUD blit after the stock CALL in GameRender. Must not write physics."
+
+[[hook]]
+wa_function = "FireWeapon__StrikeFire"
+action = "wrap"
+comment = "If the slot owns a click actor, spawn LuaActor at the click instead of AirStrikeEntity."
+
+[[hook]]
+wa_function = "FireWeapon__CreateWeaponProjectile"
+action = "wrap"
+comment = "If the slot owns on_fire / fire spawn, create a LuaActor at launch instead of MissileEntity. Otherwise call original (tag later)."
