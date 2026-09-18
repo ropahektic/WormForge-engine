@@ -1,4 +1,4 @@
-# WormForge
+# WormCraft
 
 A WormKit module (`wkLua.dll`) that lets people mod **Worms Armageddon 3.8.1** with Lua.
 
