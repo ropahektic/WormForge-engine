@@ -20,7 +20,7 @@ mods/examples/my_thing/
   sounds/…
 ```
 
-v1 overlays a stock panel slot. It cannot add a 72nd icon. Several packs may overlay the same slot: they all load; **first loaded `id` keeps the slot**, later claims for that slot are skipped. `gif_donkey` and `gif_donkey_lua` both overlay grenade on purpose — statuses vs a Lua brain — and that skip is the system working.
+v1 overlays a stock panel slot. It cannot add a 72nd icon. Several packs may overlay the same slot: they all load; **first loaded `id` keeps the slot**, later claims for that slot are skipped. `gif_donkey` and `gif_donkey_lua` both overlay grenade on purpose — statuses vs a Lua brain — and that skip is the system working. You can also call weapons arbitrarily without them existing at all in panel/scheme, see q_bazooka example in /mods.
 
 The engine (`crates/`, `wkLua.dll`) is only for verbs Lua cannot call yet. Prefer a pack.
 
