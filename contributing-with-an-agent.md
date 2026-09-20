@@ -35,6 +35,7 @@ Needs: WA **3.8.1** + WormKit, this repo, `wkLua.dll` next to `WA.exe`. Test in 
 | Click a worm, drag, throw | `worm_toss` |
 | Selecting the slot *is* a mini-game | `pooz` |
 | Hotkey that stock-selects an existing gun | `q_bazooka` |
+| Hurt layer (`worm:hurt` + `wa.on.hurt`) | `hurt_lab` |
 
 ## Pack contract
 
@@ -50,6 +51,8 @@ A weapon is usually a **LuaActor**: `wa.weapons.replace` then `on_click` / `on_f
 
 `register` does not add a panel row; it still occupies `based_on`.
 
+`wa.on.hurt` runs on blast / hit / percent / nonlethal / poison (both peers). `percent` is axe-style: `amount` is 50 meaning half current HP. `pre` may write `amount` or return `"eat"`. `post` has `lost` (HP that actually left). `worm:hurt(10)` posts stock hit (0x4B) with no knockback; pending HP still waits until momentum ends. `worm:ammo("mine")` reads team ammo; `worm:ammo("mine", 1)` adds. Infinite stays `-1`.
+
 ## Verbs (engine)
 
 If the current `wa.*` surface cannot do it: wrap stock 3.8.1, bind a handle API, show it in one example. Target `i686-pc-windows-msvc`. Wrap, then original — never trap `FireWeapon` / `InitWeaponTable`, never stack VFTs, never grow the 71-slot table. Details: README.
@@ -60,11 +63,11 @@ Draw primitives belong in the DLL. Named FX (lightning, fire) belong in Lua. No 
 
 - `wa.log`, `wa.weapons.replace` / `register`, `wa.actors.spawn` / `all` / `kind`
 - Actor: `x y vx vy facing owner kind`, `a:gravity` `a:move` `a:advance` `a:look` `a:explode` `a:despawn` `a:spawn` `a:sound` `a:in_water` `a:on_feet`
-- Worm: `id team slot weapon kind visible turn x y vx vy`, `worm:carry` `worm:drop` `worm:equip`
+- Worm: `id team alliance slot weapon kind visible turn hp x y vx vy`, `worm:carry` `worm:drop` `worm:equip` `worm:ammo` `worm:hurt`
 - `wa.worms.all` / `nearest`, `wa.crates` / `mines` / `missiles` / `oil` `.all()` (pos + `kind`)
 - `wa.land.solid` `trace`, `wa.world.sky` `water` `size` `view` `pointer` `keys`
-- `wa.sound.play`, `wa.on.gravity_before` / `gravity_after` / `missile_frame` / `worm_message` / `hud`, `wa.hud.line`
-- `wa.msg.FRAME_FINISH` `EXPLOSION` `JUMP` `JUMP_UP` `FIRE_WEAPON` `RELEASE_WEAPON` `START_TURN`
+- `wa.sound.play`, `wa.on.gravity_before` / `gravity_after` / `missile_frame` / `worm_message` / `hurt` / `hud`, `wa.hud.line`
+- `wa.msg.FRAME_FINISH` `EXPLOSION` `IMPACT` `HIT` `NONLETHAL` `POISON` `JUMP` `JUMP_UP` `FIRE_WEAPON` `RELEASE_WEAPON` `START_TURN`
 
 Sprites: pack PNG strip (`sprite_columns`), GIF, frame folder, or stock names (`grenade`, `bazooka`, `mine`, `holy`, `cursor` …). Map palette applies. Sounds: pack WAV on the overlay, or a stock index.
 

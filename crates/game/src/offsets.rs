@@ -174,7 +174,19 @@ pub const MSG_FIRE_WEAPON: u32 = 0x26;
 /// Space up — `ReleaseWeapon`, the shot leaves.
 pub const MSG_RELEASE_WEAPON: u32 = 0x27;
 pub const MSG_START_TURN: u32 = 0x34;
+/// `DamageWorms` — subtract HP, never kills (floors at 1).
+pub const MSG_NONLETHAL: u32 = 0x3B;
+/// `ApplyPoison` tick.
+pub const MSG_POISON: u32 = 0x3E;
 pub const MSG_ENABLE_WEAPONS: u32 = 0x45;
+/// Bat / prod / drill box (`SpecialImpact`).
+pub const MSG_HIT: u32 = 0x4B;
+/// `CommitPendingHealth` — floating HP numbers after momentum ends.
+pub const MSG_COMMIT_HEALTH: u32 = 0x44;
+/// Bazooka-style blast (`Explosion`).
+pub const MSG_EXPLOSION: u32 = 0x1C;
+/// Shot contact (`ProjectileImpact`) — same payload as explosion.
+pub const MSG_IMPACT: u32 = 0x76;
 
 pub const GAME_WORLD_DISPLAY: usize = 0x004;
 /// `GameWorld.sound` — DSSound* (Jelly LoadWav / PlaySoundLocal).
@@ -194,7 +206,19 @@ pub const CTX_CURSOR_Y: usize = 0x1C;
 pub const SHARED_FILTER_PHYSICS: u32 = 0x19;
 pub const SHARED_KEY_WORM: u32 = 0x02;
 pub const WORM_INDEX: usize = 0x100;
+/// Per-tick poison amount. ApplyPoison (msg 0x3E) subtracts this, floor 1 HP.
+pub const WORM_POISON: usize = 0x148;
 pub const ARENA_WORM_HP: usize = 0x40EC;
+/// Team alliance id. Index `world + 0x462C + team * 0x51C`.
+pub const WORLD_TEAM_ALLIANCE: usize = 0x462C;
+/// ExplosionMessage / SpecialImpactMessage.damage
+pub const BLAST_AMOUNT: usize = 0x10;
+pub const BLAST_TEAM: usize = 0x18;
+pub const HIT_AMOUNT: usize = 0x14;
+pub const HIT_TEAM: usize = 0x18;
+/// SpecialImpact `flag`. `10` = percent of current HP (battle axe).
+pub const HIT_FLAG: usize = 0x00;
+pub const HIT_PERCENT: i32 = 10;
 pub const WORLD_TEAM_STRIDE: usize = 0x51C;
 pub const ARENA_WORM_STRIDE: usize = 0x9C;
 pub const MAX_TEAMS: u32 = 6;
@@ -264,8 +288,14 @@ pub const WORLD_ROOT_CURRENT_TEAM: usize = 0x12C;
 pub const SPRITE_CURSOR_R: i32 = 32;
 pub const SPRITE_MARKER_R: i32 = 38;
 pub const GAME_WORLD_MAP_H: usize = 0x77C4;
-/// Landscape solid BitGrid (Landscape+0x910). Blas / wkGolf.
-pub const LANDSCAPE_SOLID_GRID: usize = 0x910;
+/// Plot scratch BitGrid (Landscape+0x0D0). Not walk collision. See FUN_0057d040.
+pub const LANDSCAPE_PLOT_SCRATCH: usize = 0x0D0;
+/// Locomotion collision BitGrid (Landscape+0x914). Walk/jump. Ghidra FUN_0057cc90.
+pub const LANDSCAPE_COLLISION: usize = 0x914;
+/// 8bpp fill / picture. Soil-coloured mass can remain after a blast. Not walk.
+pub const LANDSCAPE_TERRAIN_IMAGE: usize = 0x910;
+/// Destruct / soil overlay paint. Walk in front of it.
+pub const LANDSCAPE_SOIL: usize = 0x91C;
 pub const BITGRID_BITS: usize = 0x08;
 pub const BITGRID_BPP: usize = 0x0C;
 pub const BITGRID_STRIDE: usize = 0x10;
@@ -286,7 +316,6 @@ pub const CLASS_MISSILE: i32 = 11;
 pub const CLASS_CRATE: i32 = 15;
 pub const CLASS_WORM: i32 = 18;
 pub const CLASS_OIL: i32 = 30;
-pub const MSG_EXPLOSION: u32 = 28;
 pub const GAME_WORLD_TEXTBOX: usize = 0x544;
 pub const GAME_SESSION_RUNTIME: usize = 0xA0;
 
@@ -374,7 +403,9 @@ mod tests {
         assert_eq!(PALETTE_COMMIT, 0x0056CD20);
         assert_eq!(MISSILE_RENDER_SPRITE, 0x2EC);
         assert_eq!(MISSILE_ANIM_PHASE, 0x3E8);
-        assert_eq!(LANDSCAPE_SOLID_GRID, 0x910);
+        assert_eq!(LANDSCAPE_PLOT_SCRATCH, 0x0D0);
+        assert_eq!(LANDSCAPE_COLLISION, 0x914);
+        assert_eq!(LANDSCAPE_SOIL, 0x91C);
         assert_eq!(GAME_WORLD_MAP_W, 0x77C0);
         assert_eq!(GAME_WORLD_VIEWPORT_W, 0x77AC);
         assert_eq!(GAME_WORLD_VIEW_CX, 0x8CEC);
@@ -385,6 +416,14 @@ mod tests {
         assert_eq!(WORM_ACTIVE_WEAPON, 0x36C);
         assert_eq!(MSG_FIRE_WEAPON, 0x26);
         assert_eq!(MSG_RELEASE_WEAPON, 0x27);
+        assert_eq!(MSG_EXPLOSION, 0x1C);
+        assert_eq!(MSG_IMPACT, 0x76);
+        assert_eq!(MSG_NONLETHAL, 0x3B);
+        assert_eq!(MSG_POISON, 0x3E);
+        assert_eq!(MSG_HIT, 0x4B);
+        assert_eq!(HIT_FLAG, 0x00);
+        assert_eq!(HIT_PERCENT, 10);
+        assert_eq!(WORM_POISON, 0x148);
         assert_eq!(TEAM_ARENA_AMMO, 0x1EB4);
         assert_eq!(TEAM_ARENA_DELAY, 0x1FD0);
         assert_eq!(PLAY_SOUND_LOCAL, 0x004FDFE0);

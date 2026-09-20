@@ -4,17 +4,17 @@
 
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
-    ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAG_MIRROR_X, ACTOR_FLAGS,
-    ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE, CLASS_MINE,
+    ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAGS, ACTOR_FLAG_MIRROR_X,
+    ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPRITE, ACTOR_SPR_H, ACTOR_SPR_W, CLASS_CRATE, CLASS_MINE,
     CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
-    ENT_SPEED_Y, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORM_FACING, WORM_SELECTED_WEAPON,
-    WORM_TURN_ACTIVE,
+    ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
+    WORM_FACING, WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
-use weapons::{ActorSpawn, StockWeapon, parse_stock_weapon};
+use std::sync::Mutex;
+use weapons::{parse_stock_weapon, ActorSpawn, StockWeapon};
 
 use crate::PARKED_LUA;
 
@@ -75,6 +75,11 @@ pub struct ActorNative {
     pub worm_hidden: fn(handle: u32) -> bool,
     /// Stock SelectWeapon (F1 path). Returns ammo after equip, 0 if not this worm's turn.
     pub equip: fn(handle: u32, slot: u32) -> i32,
+    pub hp: fn(handle: u32) -> i32,
+    /// Team ammo. `delta = None` reads. Infinite stays -1.
+    pub ammo: fn(handle: u32, slot: u32, delta: Option<i32>) -> i32,
+    /// Stock SpecialImpact (msg 0x4B). No explosion. Pose restored so the worm does not move.
+    pub hurt: fn(target: u32, from: u32, amount: i32),
 }
 
 impl Default for ActorNative {
@@ -108,6 +113,9 @@ impl Default for ActorNative {
             hide_worm: |_, _| {},
             worm_hidden: |_| false,
             equip: |_, _| 0,
+            hp: |_| 0,
+            ammo: |_, _, _| 0,
+            hurt: |_, _, _| {},
         }
     }
 }
@@ -539,7 +547,11 @@ impl UserData for WormHandle {
                 1
             } else {
                 let direction = unsafe { read_i32(this.0 as *mut u8, WORM_FACING) };
-                if direction < 0 { -1 } else { 1 }
+                if direction < 0 {
+                    -1
+                } else {
+                    1
+                }
             })
         });
         fields.add_field_method_get("team", |_, this| {
@@ -580,6 +592,29 @@ impl UserData for WormHandle {
             }
             Ok(unsafe { read_i32(this.0 as *mut u8, WORM_TURN_ACTIVE) } != 0)
         });
+        fields.add_field_method_get("hp", |_, this| {
+            Ok(native_hp().map(|f| f(this.0)).unwrap_or(0))
+        });
+        fields.add_field_method_get("alliance", |_, this| {
+            if this.0 == 0 {
+                return Ok(0i32);
+            }
+            unsafe {
+                let worm = this.0 as *mut u8;
+                let world = read_i32(worm, ENT_WORLD) as *mut u8;
+                if world.is_null() {
+                    return Ok(0);
+                }
+                let team = read_i32(worm, ENT_WORM_TEAM);
+                if team < 0 {
+                    return Ok(0);
+                }
+                Ok(read_i32(
+                    world,
+                    WORLD_TEAM_ALLIANCE + (team as usize) * WORLD_TEAM_STRIDE,
+                ))
+            }
+        });
         bind_pos_fields(fields, |h| h.0);
     }
 
@@ -609,6 +644,37 @@ impl UserData for WormHandle {
             let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
             let ammo = native_equip().map(|f| f(this.0, slot as u32)).unwrap_or(0);
             Ok(ammo)
+        });
+        methods.add_method("ammo", |_, this, (name, delta): (String, Option<i32>)| {
+            if this.0 == 0 {
+                return Ok(0i32);
+            }
+            let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
+            Ok(native_ammo()
+                .map(|f| f(this.0, slot as u32, delta))
+                .unwrap_or(0))
+        });
+        methods.add_method("hurt", |_, this, arg: Value| {
+            if this.0 == 0 {
+                return Ok(());
+            }
+            let amount = match arg {
+                Value::Integer(n) => n as i32,
+                Value::Number(n) => n as i32,
+                Value::Table(t) => t.get::<Option<i32>>("amount")?.unwrap_or(0),
+                other => {
+                    return Err(mlua::Error::external(format!(
+                        "hurt expects a number or {{ amount = n }}, got {other:?}"
+                    )))
+                }
+            };
+            if amount <= 0 {
+                return Ok(());
+            }
+            if let Some(hurt) = native_hurt() {
+                hurt(this.0, spawn_owner(), amount);
+            }
+            Ok(())
         });
     }
 }
@@ -792,6 +858,18 @@ pub fn native_worm_hidden() -> Option<fn(u32) -> bool> {
 
 pub fn native_equip() -> Option<fn(u32, u32) -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.equip)
+}
+
+pub fn native_hp() -> Option<fn(u32) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.hp)
+}
+
+pub fn native_ammo() -> Option<fn(u32, u32, Option<i32>) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.ammo)
+}
+
+fn native_hurt() -> Option<fn(u32, u32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.hurt)
 }
 
 pub(crate) fn sound_slot(slot: Value) -> mlua::Result<i32> {

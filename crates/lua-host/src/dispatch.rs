@@ -57,9 +57,11 @@ fn call_each(list: &Table, args: impl Clone + mlua::IntoLuaMulti) -> Result<(), 
 pub fn motion_to_table(lua: &Lua, m: &Motion) -> Result<Table, String> {
     let t = lua.create_table().map_err(|e| e.to_string())?;
     t.set("id", m.id).map_err(|e| e.to_string())?;
-    t.set("class_type", m.class_type).map_err(|e| e.to_string())?;
+    t.set("class_type", m.class_type)
+        .map_err(|e| e.to_string())?;
     t.set("damp", m.damp).map_err(|e| e.to_string())?;
-    t.set("wind_scale", m.wind_scale).map_err(|e| e.to_string())?;
+    t.set("wind_scale", m.wind_scale)
+        .map_err(|e| e.to_string())?;
     t.set("gravity_scale", m.gravity_scale)
         .map_err(|e| e.to_string())?;
     t.set("moved", m.moved).map_err(|e| e.to_string())?;
@@ -164,4 +166,56 @@ pub fn run_hud() -> Result<Vec<HudLine>, String> {
         Ok(())
     });
     Ok(take_hud_lines())
+}
+
+#[derive(Clone, Debug)]
+pub struct Hurt {
+    pub worm: u32,
+    pub from: u32,
+    pub by: Option<i32>,
+    pub kind: &'static str,
+    pub amount: i32,
+    pub lost: i32,
+    pub hp: i32,
+    pub phase: &'static str,
+}
+
+/// Blast / hit / percent / nonlethal / poison. `pre` may `eat` or rewrite `amount`. `post` has `lost`.
+pub fn hurt(hit: Hurt) -> Result<(bool, i32), String> {
+    with_lua(|lua| {
+        let list = hook_list(lua, "hurt")?;
+        let n = list.len().map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Ok((false, hit.amount));
+        }
+        let t = lua.create_table().map_err(|e| e.to_string())?;
+        t.set("worm", crate::actor::worm_userdata(lua, hit.worm)?)
+            .map_err(|e| e.to_string())?;
+        if hit.from != 0 {
+            t.set("from", crate::actor::worm_userdata(lua, hit.from)?)
+                .map_err(|e| e.to_string())?;
+        }
+        if let Some(by) = hit.by {
+            t.set("by", by).map_err(|e| e.to_string())?;
+        }
+        t.set("kind", hit.kind).map_err(|e| e.to_string())?;
+        t.set("amount", hit.amount).map_err(|e| e.to_string())?;
+        t.set("lost", hit.lost).map_err(|e| e.to_string())?;
+        t.set("hp", hit.hp).map_err(|e| e.to_string())?;
+        t.set("phase", hit.phase).map_err(|e| e.to_string())?;
+        let mut eat = false;
+        for i in 1..=n {
+            let f: Function = list.get(i).map_err(|e| e.to_string())?;
+            let ret: Value = f.call(t.clone()).map_err(|e| e.to_string())?;
+            if hit.phase == "pre" {
+                if let Value::String(s) = ret {
+                    if s.to_str().map_err(|e| e.to_string())? == "eat" {
+                        eat = true;
+                    }
+                }
+            }
+        }
+        let amount = t.get("amount").unwrap_or(hit.amount);
+        Ok((eat, amount))
+    })
 }

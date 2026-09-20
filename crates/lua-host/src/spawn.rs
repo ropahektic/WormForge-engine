@@ -2,13 +2,13 @@
 
 use crate::actor::{
     native_land_solid, native_land_trace, native_list_actors, native_list_kind, native_list_worms,
-    native_map_size, native_resolve_sprite, native_spawn, native_view_cam, native_water_y, ActorHandle, SpawnArgs,
-    WorldHandle, WormHandle,
+    native_map_size, native_resolve_sprite, native_spawn, native_view_cam, native_water_y,
+    ActorHandle, SpawnArgs, WorldHandle, WormHandle,
 };
 use game::offsets::{CLASS_CRATE, CLASS_MINE, CLASS_MISSILE, CLASS_OIL};
 use gfx::{is_sheet_path, sprite_key, stock_sprite_id};
 use mlua::{Function, Lua, Table, Value};
-use weapons::{ActorSpawn, SpawnExplode, SpawnFrom, ScreenBlit, SpriteOrigin};
+use weapons::{ActorSpawn, ScreenBlit, SpawnExplode, SpawnFrom, SpriteOrigin};
 
 pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
     let mut spawn = ActorSpawn::default();
@@ -226,7 +226,7 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
             Ok(t)
         })
         .map_err(|e| e.to_string())?;
-        world.set("size", size).map_err(|e| e.to_string())?;
+    world.set("size", size).map_err(|e| e.to_string())?;
     let view = lua
         .create_function(|lua, ()| {
             let (cx, cy, w, h) = native_view_cam().map(|f| f()).unwrap_or((0, 0, 0, 0));
@@ -295,11 +295,7 @@ fn bind_sound(lua: &Lua, wa: &Table) -> Result<(), String> {
     Ok(())
 }
 
-pub fn runtime_spawn(
-    lua: &Lua,
-    spec: Table,
-    inherit: Option<u32>,
-) -> mlua::Result<ActorHandle> {
+pub fn runtime_spawn(lua: &Lua, spec: Table, inherit: Option<u32>) -> mlua::Result<ActorHandle> {
     let spawn = parse_spawn(lua, &spec)?;
     let inherit_owner = inherit
         .map(|h| crate::actor::actor_owner(h))

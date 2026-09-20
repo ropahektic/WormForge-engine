@@ -111,6 +111,9 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         hide_worm: crate::physics::hide_worm,
         worm_hidden: crate::physics::worm_hidden,
         equip: crate::world::equip_weapon,
+        hp: crate::world::worm_hp,
+        ammo: crate::world::ammo,
+        hurt: crate::physics::hit_worm,
     });
     log_line("LuaActor: StrikeFire + CreateWeaponProjectile wrap; land/objects/sound");
     Ok(())
@@ -1141,14 +1144,10 @@ unsafe extern "thiscall" fn actor_free(this: *mut u8, flags: u32) -> *mut u8 {
     unsafe { f(this, flags) }
 }
 
-/// Dirt under the sprite's bottom opaque row (the donkey-style platform).
+/// Solid collision under the sprite's bottom opaque row.
 unsafe fn terrain_under_feet(this: *mut u8) -> bool {
     let world = read_i32(this, ENT_WORLD) as *mut u8;
     if world.is_null() {
-        return false;
-    }
-    let land = *(world.add(GAME_WORLD_LANDSCAPE) as *const *mut u8);
-    if land.is_null() {
         return false;
     }
     let x = read_i32(this, ENT_POS_X);
@@ -1156,38 +1155,16 @@ unsafe fn terrain_under_feet(this: *mut u8) -> bool {
     let x0 = read_i32(this, ACTOR_FEET_X0);
     let x1 = read_i32(this, ACTOR_FEET_X1);
     if x1 < x0 {
-        return landscape_hit(land, x, y);
+        return crate::world::solid_fixed(x, y);
     }
     let cx = (x0 + x1) / 2;
     for px in x0..=x1 {
         let wx = x.wrapping_add((px - cx) << 16);
-        if landscape_hit(land, wx, y) {
+        if crate::world::solid_fixed(wx, y) {
             return true;
         }
     }
     false
-}
-
-unsafe fn landscape_hit(land: *mut u8, x: i32, y: i32) -> bool {
-    let f = rb(LANDSCAPE_RAY_COLLISION) as u32;
-    let args = [land as u32, x as u32, y as u32, 0u32, 0x10000u32, 2u32, f];
-    let ret: i32;
-    core::arch::asm!(
-        "push esi",
-        "mov ecx, dword ptr [ebx]",
-        "push dword ptr [ebx + 20]",
-        "push dword ptr [ebx + 16]",
-        "push dword ptr [ebx + 12]",
-        "push dword ptr [ebx + 8]",
-        "push dword ptr [ebx + 4]",
-        "call dword ptr [ebx + 24]",
-        "pop esi",
-        in("ebx") args.as_ptr(),
-        lateout("eax") ret,
-        out("ecx") _,
-        out("edx") _,
-    );
-    ret >= 0
 }
 
 unsafe fn try_move(this: *mut u8, x: i32, y: i32) -> u32 {

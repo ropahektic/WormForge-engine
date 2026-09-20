@@ -7,7 +7,7 @@ plate_comment = "Partial. weapon_table confirmed: InitWeaponTable memset *(world
   offset = 0x20
   name = "landscape"
   type = "Landscape *"
-  comment = "Solid BitGrid at Landscape+0x910. Map size at +0x77C0/+0x77C4."
+  comment = "Walk mask at Landscape+0x914. +0x910/+0x91C are paint. Map size at +0x77C0/+0x77C4."
 
   [[struct.field]]
   offset = 0x510
