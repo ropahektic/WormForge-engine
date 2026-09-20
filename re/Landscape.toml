@@ -11,13 +11,31 @@ plate_comment = "Usercall EAX=pitch ECX=volume EDI=entity; stack sound_id + flag
 [[struct]]
 name = "Landscape"
 size = 0xB40
-plate_comment = "Solid collision grid used by Blas / wkGolf. GameWorld+0x20."
+plate_comment = "Walk mask at +0x914. +0x910 fill picture, +0x91C soil overlay, +0x0D0 plot scratch. GameWorld+0x20."
+
+  [[struct.field]]
+  offset = 0x0D0
+  name = "plot_scratch"
+  type = "BitGrid *"
+  comment = "WriteLandRaw row scratch. FUN_0057d040 allocates this. Not locomotion."
 
   [[struct.field]]
   offset = 0x910
-  name = "solid_grid"
+  name = "terrain_image"
   type = "BitGrid *"
-  comment = "Byte plane (bpp>=8, PNG maps) or bit plane. Non-zero = dirt."
+  comment = "8bpp fill. Soil colour can remain after a blast."
+
+  [[struct.field]]
+  offset = 0x914
+  name = "collision"
+  type = "BitGrid *"
+  comment = "Walk/jump mask. FUN_0057cc90 tests this first."
+
+  [[struct.field]]
+  offset = 0x91C
+  name = "soil"
+  type = "BitGrid *"
+  comment = "Cave-in / soil paint. Walk in front of it."
 
 [[struct]]
 name = "BitGrid"

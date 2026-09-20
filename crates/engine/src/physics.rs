@@ -15,12 +15,12 @@ use crate::rebase::rb;
 use game::entity::{is_missile, read_cm_forces, read_i32, read_motion, write_i32, write_motion, write_scales};
 use game::offsets::{
     APPLY_PROJECTILE_GRAVITY, ENT_MOVED, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y,
-    ENT_WORM_TEAM, MISSILE_HANDLE_MESSAGE, MISSILE_VTABLE, MSG_FRAME_FINISH, MSG_RENDER_SCENE,
-    WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW, WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR,
-    WORM_DRAW_HEALTH, WORM_DRAW_HUD, WORM_DRAW_NAME, WORM_DRAW_OFFMAP, WORM_DRAW_SPRITE,
-    WORM_DRAW_TURN, WORM_SHOW_CURSOR,
-    WORM_FACING, WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_STATE_AIRBORNE,
-    WORLD_ROOT_HANDLE_MESSAGE, WORLD_ROOT_TURN_ENDED,
+    ENT_WORM_TEAM, HIT_AMOUNT, HIT_TEAM, MISSILE_HANDLE_MESSAGE, MISSILE_VTABLE, MSG_COMMIT_HEALTH,
+    MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE, WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW,
+    WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR, WORM_DRAW_HEALTH, WORM_DRAW_HUD, WORM_DRAW_NAME,
+    WORM_DRAW_OFFMAP, WORM_DRAW_SPRITE, WORM_DRAW_TURN, WORM_SHOW_CURSOR, WORM_FACING,
+    WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_STATE, WORM_STATE_AIRBORNE, WORLD_ROOT_HANDLE_MESSAGE,
+    WORLD_ROOT_TURN_ENDED,
 };
 use minhook::MinHook;
 use re_catalog::Catalog;
@@ -346,7 +346,13 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     } else {
         unsafe { game::entity::read_i32(this, ENT_WORM_TEAM) as u32 }
     };
-    let eat = lua_host::worm_message(this as u32, team, msg).unwrap_or(false);
+    let hp_before = crate::world::worm_hp(this as u32);
+    let hurt = crate::hurt::is_hurt(msg);
+    let mut eat = false;
+    if hurt {
+        eat = crate::hurt::before(this, a, msg, b, c);
+    }
+    eat = eat || lua_host::worm_message(this as u32, team, msg).unwrap_or(false);
     if eat {
         return;
     }
@@ -355,10 +361,54 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
     }
+    if hurt {
+        crate::hurt::after(this, a, msg, b, c, hp_before);
+    }
     if msg == MSG_FRAME_FINISH {
         crate::actor::on_weapon_slot(this);
         crate::world::pump_space_fire(this);
         apply_carry(this);
+    }
+}
+
+/// Stock SpecialImpact (0x4B) through the hurt wrap. Knockback is undone so
+/// pending HP still queues; a standing worm commits the floating number now,
+/// a moving one waits until stock ends its momentum.
+pub fn hit_worm(target: u32, from: u32, amount: i32) {
+    if target == 0 || amount <= 0 {
+        return;
+    }
+    let this = target as *mut u8;
+    unsafe {
+        let x = read_i32(this, ENT_POS_X);
+        let y = read_i32(this, ENT_POS_Y);
+        let vx = read_i32(this, ENT_SPEED_X);
+        let vy = read_i32(this, ENT_SPEED_Y);
+        let state = read_i32(this, WORM_STATE);
+        let airborne = vx != 0 || vy != 0;
+        let hp0 = crate::world::worm_hp(target);
+        let by = if from == 0 {
+            0
+        } else {
+            read_i32(from as *mut u8, ENT_WORM_TEAM)
+        };
+        let mut data = [0i32; 8];
+        data[1] = x;
+        data[2] = y;
+        data[HIT_AMOUNT / 4] = amount;
+        data[HIT_TEAM / 4] = by;
+        worm_hook(this, from, MSG_HIT, 0, data.as_mut_ptr() as *mut u8);
+        write_i32(this, ENT_POS_X, x);
+        write_i32(this, ENT_POS_Y, y);
+        write_i32(this, ENT_SPEED_X, vx);
+        write_i32(this, ENT_SPEED_Y, vy);
+        let hp = crate::world::worm_hp(target);
+        if hp > 0 {
+            write_i32(this, WORM_STATE, state);
+        }
+        if !airborne && hp < hp0 {
+            worm_hook(this, from, MSG_COMMIT_HEALTH, 0, std::ptr::null_mut());
+        }
     }
 }
 

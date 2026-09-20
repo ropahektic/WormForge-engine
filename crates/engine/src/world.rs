@@ -1,4 +1,4 @@
-//! Live world queries: landscape solid (Blas Landscape+0x910), entity tree
+//! Live world queries: landscape walk mask (Landscape+0x914), entity tree
 //! (Jelly CTask children), PlaySoundLocal, stock SelectWeapon / StartFiring.
 
 use crate::log::{log_error, log_line};
@@ -487,6 +487,58 @@ unsafe fn take_team_ammo(worm: *mut u8, slot: u32) {
     log_line(&format!("ammo spent slot={slot} team={team} left={left}"));
 }
 
+pub fn worm_hp(handle: u32) -> i32 {
+    if handle == 0 {
+        return 0;
+    }
+    unsafe {
+        let worm = handle as *mut u8;
+        let world = read_i32(worm, ENT_WORLD) as *mut u8;
+        if world.is_null() {
+            return 0;
+        }
+        let team = read_i32(worm, ENT_WORM_TEAM);
+        let idx = read_i32(worm, WORM_INDEX);
+        if team < 0 || idx < 0 {
+            return 0;
+        }
+        let off = ARENA_WORM_HP
+            + (team as usize) * WORLD_TEAM_STRIDE
+            + (idx as usize) * ARENA_WORM_STRIDE;
+        read_i32(world, off)
+    }
+}
+
+/// Team ammo for `slot`. `delta = None` is a read. Infinite stays `-1`.
+pub fn ammo(handle: u32, slot: u32, delta: Option<i32>) -> i32 {
+    if handle == 0 || slot == 0 || slot >= STOCK_WEAPON_COUNT as u32 {
+        return 0;
+    }
+    unsafe {
+        let worm = handle as *mut u8;
+        let world = read_i32(worm, ENT_WORLD) as *mut u8;
+        if world.is_null() {
+            return 0;
+        }
+        let arena = world.add(GAME_WORLD_TEAM_ARENA);
+        let team = read_i32(worm, ENT_WORM_TEAM) as u32;
+        let cur = get_ammo(arena, team, slot);
+        let Some(d) = delta else {
+            return cur;
+        };
+        if cur < 0 {
+            return cur;
+        }
+        let next = cur.saturating_add(d).max(0);
+        if next > 0 {
+            enable_slot(world, slot);
+            clear_delay(arena, team, slot);
+        }
+        write_ammo(arena, team, slot, next);
+        get_ammo(arena, team, slot)
+    }
+}
+
 unsafe fn ammo_index(arena: *mut u8, team: u32, slot: u32) -> Option<usize> {
     if arena.is_null() || team >= MAX_TEAMS {
         return None;
@@ -736,7 +788,7 @@ unsafe fn read_grid() -> Option<GridView> {
     if land.is_null() {
         return None;
     }
-    let grid = *(land.add(LANDSCAPE_SOLID_GRID) as *const *mut u8);
+    let grid = *(land.add(LANDSCAPE_COLLISION) as *const *mut u8);
     if grid.is_null() {
         return None;
     }
@@ -751,13 +803,13 @@ unsafe fn read_grid() -> Option<GridView> {
     if bits.is_null() || stride == 0 || w <= 0 || h <= 0 || w > 4096 || h > 4096 {
         return None;
     }
-    let bpp = read_i32(grid, BITGRID_BPP) as u32;
+    // +0x914 is the walk mask (FUN_0057cc90). +0x910/+0x91C are paint. +0x0D0 is plot scratch.
     Some(GridView {
         bits,
         stride,
         width: w as usize,
         height: h as usize,
-        bpp,
+        bpp: 1,
     })
 }
 

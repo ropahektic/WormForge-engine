@@ -25,7 +25,7 @@ comment = "Lua missile_frame around FrameFinish (msg 2). Do not arm/detonate fro
 [[hook]]
 wa_function = "WormEntity__HandleMessage"
 action = "wrap"
-comment = "Observe lockstep worm messages (Jump, StartTurn, …). Do not swallow unless Lua returns eat."
+comment = "Lockstep worm messages. Jump/StartTurn observed. Blast 0x1C, hit 0x4B (flag 10 = percent), nonlethal 0x3B, poison 0x3E dispatch wa.on.hurt then original. worm:hurt posts 0x4B (no knockback). 0x44 commits floating HP. 0x76 does not write HP. Do not swallow unless Lua returns eat."
 
 [[hook]]
 wa_function = "GameRuntime__RenderWaitingForPeersTextbox"

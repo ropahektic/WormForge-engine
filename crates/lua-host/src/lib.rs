@@ -14,7 +14,7 @@ pub use actor::{
     actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_fire,
     weapon_select, ActorEvent, ActorNative, SpawnArgs,
 };
-pub use dispatch::{gravity_after, gravity_before, missile_frame, run_hud, worm_message};
+pub use dispatch::{gravity_after, gravity_before, hurt, missile_frame, run_hud, worm_message, Hurt};
 
 use crate::api::BindContext;
 use mlua::Lua;
@@ -269,6 +269,61 @@ end)
         park_lua(scripts.lua);
         assert!(worm_message(1, 0, 0x24).unwrap());
         assert!(!worm_message(1, 0, 0x34).unwrap());
+    }
+
+    #[test]
+    fn hurt_pre_scales_and_can_eat() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-hurt");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("h"),
+            "h.hurt",
+            r#"
+id = "h.hurt"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = []
+"#,
+            r#"
+wa.on.hurt(function(hit)
+  if hit.phase == "pre" then
+    hit.amount = 4
+    if hit.kind == "blast" then
+      return "eat"
+    end
+  end
+end)
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        park_lua(scripts.lua);
+        let (eat, amt) = hurt(Hurt {
+            worm: 1,
+            from: 0,
+            by: Some(0),
+            kind: "blast",
+            amount: 50,
+            lost: 0,
+            hp: 100,
+            phase: "pre",
+        })
+        .unwrap();
+        assert!(eat);
+        assert_eq!(amt, 4);
+        let (eat_post, _) = hurt(Hurt {
+            worm: 1,
+            from: 0,
+            by: Some(0),
+            kind: "blast",
+            amount: 50,
+            lost: 12,
+            hp: 88,
+            phase: "post",
+        })
+        .unwrap();
+        assert!(!eat_post);
     }
 
     #[test]

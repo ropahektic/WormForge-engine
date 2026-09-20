@@ -1,0 +1,14 @@
+# Hurt layer. HP is subtracted inside WormEntity__HandleMessage (openWA).
+# Wrap those messages, then original. Do not wrap ApplyDamage (AdvanceWorm only).
+
+[[function]]
+va = 0x0050F580
+name = "WormEntity__ApplyDamage"
+calling_convention = "__stdcall"
+plate_comment = "ESI=worm, two stack ints, RET 8. Only AdvanceWorm in 3.8.1. Blast HP is HandleMessage 0x1C/0x76."
+
+[[function]]
+va = 0x00510830
+name = "WormEntity__CommitPendingHealth"
+calling_convention = "__stdcall"
+plate_comment = "ESI=worm. Msg 0x44. Copies sim HP (0x40ec) onto the display counter and clears pending 0x188. Sent when a standing worm is hit, or later when a moving one loses momentum."

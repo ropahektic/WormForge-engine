@@ -7,6 +7,7 @@ mod actor;
 mod apply;
 mod hook;
 mod hud;
+mod hurt;
 mod overlay;
 mod log;
 mod physics;

@@ -107,6 +107,10 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     msg.set("FIRE_WEAPON", 0x26).map_err(|e| e.to_string())?;
     msg.set("RELEASE_WEAPON", 0x27).map_err(|e| e.to_string())?;
     msg.set("START_TURN", 0x34).map_err(|e| e.to_string())?;
+    msg.set("NONLETHAL", 0x3B).map_err(|e| e.to_string())?;
+    msg.set("POISON", 0x3E).map_err(|e| e.to_string())?;
+    msg.set("HIT", 0x4B).map_err(|e| e.to_string())?;
+    msg.set("IMPACT", 0x76).map_err(|e| e.to_string())?;
     wa.set("msg", msg).map_err(|e| e.to_string())?;
 
     let hooks = lua.create_table().map_err(|e| e.to_string())?;
@@ -115,6 +119,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "gravity_after",
         "missile_frame",
         "worm_message",
+        "hurt",
         "hud",
     ] {
         hooks
@@ -136,6 +141,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     bind_on(lua, &on, "gravity_after")?;
     bind_on(lua, &on, "missile_frame")?;
     bind_on(lua, &on, "worm_message")?;
+    bind_on(lua, &on, "hurt")?;
     bind_on(lua, &on, "hud")?;
     wa.set("on", on).map_err(|e| e.to_string())?;
 
