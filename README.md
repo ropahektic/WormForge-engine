@@ -44,7 +44,7 @@ PRs that only rename for consistency are useful. PRs that expose a new C++ layou
 
 ## Please
 
-- DO NOT vendor wa.engine, collisionmanager, wkaimb or the "re" folder (`Resources/` is gitignored on purpose).
+- DO NOT vendor wa.engine, collisionmanager, wkaim or the "re" folder (`Resources/` is gitignored on purpose).
 - DO NOT add OpenGL or a second renderer because FX is hard. Wrap stock blit first.
 
 
