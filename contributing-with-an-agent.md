@@ -1,6 +1,6 @@
 # Contributing with a coding agent
 
->>> Feed this document to your coding agent <<<<
+FEED THIS DOCUMENT TO YOUR CODING AGENT
 
 Open this repo in the agent, point it at this file and [README.md](README.md), then describe the weapon or behaviour you want. You do not need to paste the rules into chat — the agent should read them here.
 
