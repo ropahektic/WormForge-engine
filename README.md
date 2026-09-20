@@ -2,6 +2,8 @@
 
 # Contributing
 
+Not a Programmer? [a relative link](contributing-with-an-agent.md)
+
 WormForge is meant to stay compact. New power is either a **Lua pack** or one **verb**. It is not a dump of `WA.exe` into scripts.
 
 The Lua names are a first cut. Help curating them is welcome. Changing a name is a breaking change: bump `api_version` in `mod.toml` and say so in the PR.
