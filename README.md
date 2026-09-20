@@ -57,6 +57,17 @@ PRs that only rename for consistency are useful. PRs that expose a new C++ layou
 - `crates/game` — 32-bit layouts
 - `crates/re-catalog` — `re/*.toml` + `hooks/*.toml`
 
+## Build (engine)
+
+```
+rustup target add i686-pc-windows-msvc
+cargo test --workspace
+cargo build --release -p wk-lua --target i686-pc-windows-msvc
+```
+
+The cdylib is `target/i686-pc-windows-msvc/release/wkLua.dll`.
+
+
 
 ## License
 
