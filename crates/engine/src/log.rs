@@ -16,19 +16,19 @@ static ERR: Mutex<Vec<std::fs::File>> = Mutex::new(Vec::new());
 static CONSOLE: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
 
 pub fn log_path() -> PathBuf {
-    newpx_dir().join("wkLua.log")
+    wormforge_dir().join("wkLua.log")
 }
 
-/// Same folder as `wkLua.log` (`%LOCALAPPDATA%\NewPX\wkluaerror.txt`).
+/// Same folder as `wkLua.log` (`%LOCALAPPDATA%\WormForge\wkluaerror.txt`).
 pub fn error_log_path() -> PathBuf {
-    newpx_dir().join("wkluaerror.txt")
+    wormforge_dir().join("wkluaerror.txt")
 }
 
-fn newpx_dir() -> PathBuf {
+fn wormforge_dir() -> PathBuf {
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("NewPX")
+    base.join("WormForge")
 }
 
 pub(crate) fn wa_directory() -> PathBuf {
