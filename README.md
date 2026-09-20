@@ -48,7 +48,7 @@ PRs that only rename for consistency are useful. PRs that expose a new C++ layou
 
 ## Please
 
-- DO NOT vendor wa.engine.js , collisionmanager.rs, wkaim.dll or the "re" folder (if you have access to `REsources/` please gitignore).
+- DO NOT vendor wa-engine.js , collisionmanager.rs, wkaim.dll or the "re" folder (if you have access to `REsources/` please gitignore).
 - DO NOT add OpenGL or a second renderer because FX is hard. Wrap stock blit first.
 
 
