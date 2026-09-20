@@ -2,7 +2,7 @@
 
 # Contributing
 
-Not a Programmer? [CLICK HERE](contributing-with-an-agent.md)
+Not a Programmer? Are you a coding agent? [CLICK HERE](contributing-with-an-agent.md)
 
 WormForge is meant to stay compact. New power is either a **Lua pack** or one **verb**. It is not a dump of `WA.exe` into scripts.
 
