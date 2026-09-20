@@ -1,42 +1,55 @@
-# WormCraft
+# Contributing
 
-A WormKit module (`wkLua.dll`) that lets people mod **Worms Armageddon 3.8.1** with Lua.
+WormForge is meant to stay compact. New power is either a **Lua pack** or one **verb**. It is not a dump of `WA.exe` into scripts.
 
-Native code wraps a few stock functions and **dispatches** to the pack that owns a weapon or actor. Mods are text folders (manifest + Lua + PNG/GIF).
+The Lua names are a first cut. Help curating them is welcome. Changing a name is a breaking change: bump `api_version` in `mod.toml` and say so in the PR.
 
-PX-level power (custom fire, physics, sprites, later extra panel entries) is the goal. A weapon is a **LuaActor** you spawn and tick; overlaying a stock missile is only for packs that still want stock flight and for later GUI mode. Extra weapon pages later.
+## Two lanes
 
-Custom PNG/GIF colours are nearest-matched onto the **current map palette** (in-match `PaletteContext`, not frontend `Graphics/*.pal`).
+### Pack (no compiler)
 
-## Two ways to contribute
+Folder in `mods/examples/` or a player’s `Mods/`. `mod.toml` + Lua + PNG/GIF/WAV. Copy the closest example. First loaded `id` wins a stock slot
 
-**Mods (Lua).** A pack is a folder with `mod.toml`, a Lua entry script, and optional assets. You do not need a compiler. Create complex weapons with Lua, translate verbs into GUI ready generalist actions such as (follow, avoid terrain, grab&drag, etc)
+### Engine (Rust, `i686-pc-windows-msvc`)
 
-**Engine (Rust).** Addresses, hooks, and the Lua bindings live in `crates/`. Target is always `i686-pc-windows-msvc`. 
+Wrap a stock function, bind it, document it, show it in one example. Addresses live in `re/`.
 
+If Lua can already do it with actors + `wa.land` + sprites, do not add a native “library.”
 
+## Adding a verb
 
-## Install (player)
+1. Confirm the site in Ghidra on stock **3.8.1**. Write `re/*.toml`.
+2. **Wrap, then call original.** Never trap `FireWeapon` / `InitWeaponTable`. Never stack a vtable on a stock class.
+3. Bind a **handle + table** API in `crates/lua-host`. No raw pointers, no `unknownC`, no `CWorm*` fields in Lua.
+4. Lockstep: if it moves or damages, it runs on messages both peers already see.
+   - HUD must not write physics.
+   - No `math.random`, no clock, no `GetAsyncKeyState` as sim.
+   - `wa.world.keys()` / `pointer()` are local until extra packets exist.
+5. `cargo test --workspace` and a 3.8.1 launch that logs `wkLua build …`.
 
-1. Own Worms Armageddon **3.8.1** with WormKit
-2. Build `wkLua.dll` (below) and copy it next to `WA.exe`.
-3. Create "Mods" folder in WA Installation Folder (next to WA.exe), additionally copy any mods from the "mods/examples" folder in this repository (Example: "/Worms Armageddon/Mods/wormcraft")
-4. Launch the game. 
+Draw primitives (line, blit-without-actor) belong in the DLL. Named effects (lightning, fire) belong in Lua that call those primitives.
 
-## Build (engine)
+## Lua names (until someone curates better)
 
-```
-rustup target add i686-pc-windows-msvc
-cargo test --workspace
-cargo build --release -p wk-lua --target i686-pc-windows-msvc
-```
+- Everything user-facing is under `wa` or a handle (`a`, `worm`).
+- Methods are short English verbs: `a:move`, `a:look`, `worm:equip`. Not `HandleMessage`, not `TryMove`.
+- Reads that can fail return `nil` or a table (`wa.land.trace`), not thrown C++.
+- Positions and speeds are WA **16.16** integers. Do not silently switch to floats.
+- Stock messages are `wa.msg.JUMP`, not magic numbers in packs.
+- `wa.weapons.register` does **not** add a 72nd panel slot in v1. It still occupies `based_on`. Do not “fix” that by growing the table in a drive-by PR.
 
-The cdylib is `target/i686-pc-windows-msvc/release/wkLua.dll`.
+PRs that only rename for consistency are useful. PRs that expose a new C++ layout “for completeness” are not.
+
+## Please
+
+- DO NOT vendor wa.engine, collisionmanager, wkaimbot or the "re" folder (`Resources/` is gitignored on purpose).
+- DO NOT add OpenGL or a second renderer because FX is hard. Wrap stock blit first.
+
 
 ## Layout
 
 - `crates/wk-lua` — DllMain
-- `crates/engine` — ASLR rebase, 3.8.1 check, wraps (never trap FireWeapon / InitWeaponTable)
+- `crates/engine` — ASLR rebase, 3.8.1 check, wraps 
 - `crates/lua-host` — Lua 5.4 sandbox, `wa.*` dispatcher
 - `crates/weapons` — stock slots, first-loaded overlay ownership
 - `crates/actors` — namespaced LuaActor kinds (`mod_id.kind`); spawn steps come from Lua
