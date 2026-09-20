@@ -1,3 +1,5 @@
+![description](https://imgur.com/1ef65a0f-c945-43ff-8a2c-9c8ec983dc69)
+
 # Contributing
 
 WormForge is meant to stay compact. New power is either a **Lua pack** or one **verb**. It is not a dump of `WA.exe` into scripts.
