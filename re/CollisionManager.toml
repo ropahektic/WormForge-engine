@@ -1,4 +1,4 @@
-# Layout and leaf physics from local Resources/collision_manager.rs (openWA port).
+# Layout and leaf physics from local Resources/collision_manager.rs
 # CollisionManager sits at GameWorld+0x528. Size 0x264. Vtable 0x664194.
 #
 # apply_projectile_gravity is gravity + wind + damp, not the bounce integrator.
