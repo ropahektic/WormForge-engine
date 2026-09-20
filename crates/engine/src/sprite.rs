@@ -13,7 +13,7 @@
 //! FindNearestCached 0x541340) and put that slot in the cache so MapColor
 //! hits instead of returning 0xFFFFFFFF (white).
 
-use crate::log_line;
+use crate::{log_error, log_line};
 use crate::rebase::rb;
 use game::offsets::{
     CONSTRUCT_SPRITE, CUSTOM_SPRITE_SLOT_MAX, CUSTOM_SPRITE_SLOT_MIN, DISPLAY_GAME_LAYER,
@@ -30,6 +30,7 @@ struct SpriteObj([u8; 0x70]);
 struct LoadedSpr {
     display: *mut u8,
     id: i32,
+    layer: u32,
     _sprite: Box<SpriteObj>,
     _spr: Box<[u8]>,
 }
@@ -69,6 +70,7 @@ const PAL_CACHE_COUNT: usize = 0x606;
 const PAL_CACHE: usize = 0x608;
 
 pub fn clear() {
+    PALETTE_DUMPED.store(false, std::sync::atomic::Ordering::SeqCst);
     if let Ok(mut g) = LOADED.lock() {
         for s in g.drain(..) {
             if s.display.is_null() {
@@ -94,6 +96,43 @@ pub fn clear() {
     if let Ok(mut r) = RGBA_SHEETS.lock() {
         r.clear();
     }
+    // The map's PaletteContext is rebuilt per match, so the slots go with it.
+    // Only the bookkeeping has to be dropped, and doing it without touching the
+    // old context avoids dereferencing one that has already been torn down.
+    if let Ok(mut r) = RESERVED.lock() {
+        r.clear();
+    }
+}
+
+/// Put installed sprites back into the display's sprite table.
+///
+/// Sprites are installed once per match, but WA repopulates its sprite pointer
+/// table when a round begins, which drops every custom slot: the turret stops
+/// drawing, and a worm sprite override then names an empty slot, so the worm
+/// itself disappears. The sprite objects are still alive in LOADED for the
+/// whole match, so this only has to put the pointers back.
+///
+/// Returns how many slots had been lost, which is 0 when nothing cleared them.
+pub fn reassert() -> usize {
+    let mut restored = 0;
+    if let Ok(g) = LOADED.lock() {
+        for s in g.iter() {
+            if s.display.is_null() {
+                continue;
+            }
+            unsafe {
+                let ptrs = (s.display as usize + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
+                let slot = ptrs.add(s.id as usize);
+                if (*slot).is_null() {
+                    *slot = s._sprite.0.as_ptr() as *mut u8;
+                    let layers = (s.display as usize + DISPLAY_SPRITE_LAYERS) as *mut u32;
+                    *layers.add(s.id as usize) = s.layer;
+                    restored += 1;
+                }
+            }
+        }
+    }
+    restored
 }
 
 /// Stock missile render uses `animation_phase` as blit anim_value. Donkey's
@@ -145,6 +184,159 @@ pub fn advance_loop_id(entity: *mut u8, sid: i32, phase_off: usize) {
     }
 }
 
+/// Display layer for sheets installed next, when set.
+///
+/// Sprites normally land on DISPLAY_GAME_LAYER (3), which draws over terrain.
+/// Layers 1 and 2 also carry a PaletteContext, so a sheet can be installed
+/// below the game layer to sit behind the landscape.
+static FORCE_LAYER: Mutex<Option<u32>> = Mutex::new(None);
+/// When set, sheets installed next take exact palette slots instead of snapping.
+static FORCE_RESERVE: Mutex<bool> = Mutex::new(false);
+
+pub fn set_reserve_colours(on: bool) {
+    if let Ok(mut g) = FORCE_RESERVE.lock() {
+        *g = on;
+    }
+}
+static PALETTE_DUMPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Palette slots this pack owns: (rgb, index).
+///
+/// A pack whose art the map palette cannot express -- a saturated team colour
+/// against an earth-toned map -- puts its colours in unused slots instead of
+/// snapping to whatever is nearest, which for pure blue is black.
+///
+/// The earlier attempt at this corrupted every pack that loaded later. Marking
+/// a slot in use makes it a CANDIDATE for the nearest-colour search, so
+/// wormcraft and worm_toss (alphabetically after sentry_gun) began snapping
+/// their art onto our team colours. Reserved slots are therefore excluded from
+/// that search: ours by exact match, invisible to everyone else.
+static RESERVED: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+/// Ceiling on reserved slots, leaving the map most of its palette.
+const RESERVE_BUDGET: usize = 64;
+/// Weighted distance below which the map's own colour is good enough.
+///
+/// A slot spent on a colour the palette already has is a slot the map loses for
+/// nothing. The tripod's greys sit among 24 greys and match closely; a
+/// saturated team colour scores in the hundreds against an earth-toned palette,
+/// and that is what deserves a slot.
+const RESERVE_KEEP: i32 = 90;
+
+/// Snapshot of reserved slots as a lookup table.
+///
+/// Taken once per nearest-colour search: testing the mutex per candidate would
+/// take it roughly a million times over a pack's sheets.
+fn reserved_mask() -> [bool; 256] {
+    let mut mask = [false; 256];
+    if let Ok(g) = RESERVED.lock() {
+        for (_, slot) in g.iter() {
+            if (*slot as usize) < mask.len() {
+                mask[*slot as usize] = true;
+            }
+        }
+    }
+    mask
+}
+
+/// Give a sheet's own colours exact palette slots.
+///
+/// Called instead of quantize_to_map_palette for opted-in sheets. Writes each
+/// colour into an unused slot so ProcessSprite's MapColor finds it exactly,
+/// leaving the .spr palette untouched. Colours past the budget fall back to
+/// snapping, so a pack cannot exhaust the palette.
+unsafe fn reserve_palette_for(ctx: *mut u8, spr: &mut [u8]) -> Result<(u32, u32), String> {
+    if spr.len() < 12 {
+        return Err("truncated .spr".into());
+    }
+    let pal_n = u16::from_le_bytes([spr[10], spr[11]]) as usize;
+    let mut exact = 0u32;
+    let mut snapped = 0u32;
+    for i in 0..pal_n {
+        let o = 12 + i * 3;
+        if o + 2 >= spr.len() {
+            break;
+        }
+        let rgb = spr[o] as u32 | ((spr[o + 1] as u32) << 8) | ((spr[o + 2] as u32) << 16);
+        let near = unsafe { nearest_with_cost(ctx, rgb) };
+        let good_enough = near.is_some_and(|(_, cost)| cost <= RESERVE_KEEP);
+        if !good_enough && unsafe { reserve_slot(ctx, rgb) }.is_some() {
+            exact += 1;
+            continue;
+        }
+        // Close enough already, or budget spent: snap, never onto a reserved slot.
+        if let Some((slot, _)) = near {
+            let [r, g, b] = unsafe { rgb_at(ctx, slot) };
+            spr[o] = r;
+            spr[o + 1] = g;
+            spr[o + 2] = b;
+            snapped += 1;
+        }
+    }
+    Ok((exact, snapped))
+}
+
+/// Find or create the reserved slot holding `rgb`.
+unsafe fn reserve_slot(ctx: *mut u8, rgb: u32) -> Option<u32> {
+    let Ok(mut reserved) = RESERVED.lock() else {
+        return None;
+    };
+    if let Some((_, slot)) = reserved.iter().find(|(c, _)| *c == rgb) {
+        return Some(*slot);
+    }
+    if reserved.len() >= RESERVE_BUDGET {
+        return None;
+    }
+    unsafe {
+        let in_use = ctx.add(PAL_IN_USE);
+        for i in 1..=255u32 {
+            if *in_use.add(i as usize) != 0 {
+                continue;
+            }
+            let p = ctx.add(PAL_RGB + i as usize * 4);
+            *p = (rgb & 0xff) as u8;
+            *p.add(1) = ((rgb >> 8) & 0xff) as u8;
+            *p.add(2) = ((rgb >> 16) & 0xff) as u8;
+            *in_use.add(i as usize) = 1;
+            // MapColor exact-matches the CACHE, not the rgb table, and returns
+            // 0xFFFFFFFF -- white -- when it misses with free_count at 0. A
+            // reserved slot that is not cached is therefore an invisible slot:
+            // the first attempt at this turned the blue turret white.
+            ensure_cached(ctx, i);
+            reserved.push((rgb, i));
+            return Some(i);
+        }
+    }
+    None
+}
+
+
+// A map palette holds only what the map needed -- one measured live had 106
+// colours in use and exactly two blues, both desaturated slate -- so a
+// saturated tint has no neighbour and snaps to whatever the weighted metric
+// calls closest, which for pure blue is black.
+//
+// Writing colours into unreferenced slots to fix that was wrong: `free` (6) is
+// WA's allocatable pool, not a count of spare indices, and the ~149 slots that
+// looked free were merely unreferenced. Overwriting their RGB changed what
+// those indices mean for every other sprite drawn from this PaletteContext.
+//
+// Colour for our own sheets is instead resolved on the GPU, where WA already
+// uploads the frame as indices plus a palette texture. See crates/engine/src/
+// shader.rs and the plan in .claude/plans/.
+
+unsafe fn dump_palette_once(ctx: *mut u8) {
+    if PALETTE_DUMPED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    unsafe { dump_palette(ctx) };
+}
+
+pub fn set_force_layer(layer: Option<u32>) {
+    if let Ok(mut g) = FORCE_LAYER.lock() {
+        *g = layer;
+    }
+}
+
 pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, String> {
     if display.is_null() {
         return Err("display is null".into());
@@ -153,7 +345,20 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
     spr.resize(spr.len() + 16, 0);
 
     let id = unsafe { free_slot(display) }.ok_or("no free sprite slot in 800..=1022")?;
-    let (pal_ctx, layer) = unsafe { palette_ctx(display) };
+    let forced = FORCE_LAYER.lock().ok().and_then(|g| *g);
+    let (pal_ctx, layer) = match forced {
+        Some(want) => {
+            let base = display as usize + DISPLAY_LAYER_CONTEXTS;
+            let ctx = unsafe { *((base + (want as usize) * 4) as *const usize) };
+            if ctx != 0 {
+                (ctx as *mut u8, want)
+            } else {
+                log_error(&format!("layer {want} has no PaletteContext; using default"));
+                unsafe { palette_ctx(display) }
+            }
+        }
+        None => unsafe { palette_ctx(display) },
+    };
     if pal_ctx.is_null() {
         return Err("no PaletteContext on display layers 1-3".into());
     }
@@ -168,10 +373,20 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
     let mut sprite = Box::new(SpriteObj([0u8; 0x70]));
     let mut spr = spr.into_boxed_slice();
     unsafe {
-        let snapped = quantize_to_map_palette(pal_ctx, &mut spr)?;
-        log_line(&format!(
-            "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} quantized={snapped}"
-        ));
+        dump_palette_once(pal_ctx);
+        let reserve = FORCE_RESERVE.lock().map(|g| *g).unwrap_or(false);
+        if reserve {
+            let (exact, snapped) = reserve_palette_for(pal_ctx, &mut spr)?;
+            let held = RESERVED.lock().map(|g| g.len()).unwrap_or(0);
+            log_line(&format!(
+                "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} exact={exact} snapped={snapped} reserved_total={held}"
+            ));
+        } else {
+            let snapped = quantize_to_map_palette(pal_ctx, &mut spr)?;
+            log_line(&format!(
+                "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} quantized={snapped}"
+            ));
+        }
         construct_sprite(sprite.0.as_mut_ptr(), cache);
         let ok = process_sprite(sprite.0.as_mut_ptr(), pal_ctx, spr.as_mut_ptr());
         if ok == 0 {
@@ -197,6 +412,7 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
         g.push(LoadedSpr {
             display,
             id,
+            layer,
             _sprite: sprite,
             _spr: spr,
         });
@@ -341,6 +557,12 @@ fn punch_letterbox(bgra: &mut [u8], w: u32, h: u32) {
     }
 }
 
+/// Frames in an installed sheet, for turning a frame index into an anim phase.
+pub fn frame_count(id: i32) -> Option<usize> {
+    let g = RGBA_SHEETS.lock().ok()?;
+    g.iter().find(|s| s.id == id).map(|s| s.frames.len())
+}
+
 pub fn overlay_frame(id: i32, phase: u32) -> Option<(u32, u32, Vec<u8>)> {
     let g = RGBA_SHEETS.lock().ok()?;
     let sheet = g.iter().find(|s| s.id == id)?;
@@ -363,6 +585,24 @@ unsafe fn free_slot(display: *mut u8) -> Option<i32> {
         }
         None
     }
+}
+
+/// Which display layers carry a PaletteContext.
+///
+/// Sprites install on the first one found, which is always the game layer (3).
+/// Drawing behind terrain would mean installing on a lower layer instead, so
+/// this records which are even present before that can be attempted.
+pub fn report_layers(display: *mut u8) {
+    if display.is_null() {
+        return;
+    }
+    let base = display as usize + DISPLAY_LAYER_CONTEXTS;
+    let mut found = Vec::new();
+    for layer in 0..4u32 {
+        let ctx = unsafe { *((base + (layer as usize) * 4) as *const usize) };
+        found.push(format!("{layer}={}", if ctx != 0 { "ctx" } else { "none" }));
+    }
+    log_line(&format!("display layer contexts: {}", found.join(" ")));
 }
 
 unsafe fn palette_ctx(display: *mut u8) -> (*mut u8, u32) {
@@ -476,7 +716,61 @@ unsafe fn rgb_at(ctx: *mut u8, slot: u32) -> [u8; 3] {
     }
 }
 
+/// Log the map palette's in-use colours, grouped by hue family.
+///
+/// Sprites are snapped to this set, so a tint with no neighbour here cannot
+/// survive: a saturated blue in an earth-toned palette lands on whatever is
+/// closest, which was black. Knowing what the palette actually holds is the
+/// difference between choosing team colours and guessing them.
+pub unsafe fn dump_palette(ctx: *mut u8) {
+    if ctx.is_null() {
+        return;
+    }
+    let mut families = [0u32; 8];
+    let mut blues: Vec<String> = Vec::new();
+    let mut n = 0;
+    unsafe {
+        let in_use = ctx.add(PAL_IN_USE);
+        for i in 1..=255u32 {
+            if *in_use.add(i as usize) == 0 {
+                continue;
+            }
+            n += 1;
+            let [r, g, b] = rgb_at(ctx, i);
+            let (r, g, b) = (r as i32, g as i32, b as i32);
+            let mx = r.max(g).max(b);
+            let mn = r.min(g).min(b);
+            let idx = if mx - mn < 24 {
+                0 // grey
+            } else if r >= g && r >= b {
+                if g > b { 1 } else { 2 } // red/orange, red/magenta
+            } else if g >= r && g >= b {
+                if r > b { 3 } else { 4 } // yellow/green, green/cyan
+            } else if r > g {
+                5 // magenta/violet
+            } else {
+                6 // blue/cyan
+            };
+            families[idx] += 1;
+            if idx == 6 && blues.len() < 12 {
+                blues.push(format!("{r},{g},{b}"));
+            }
+        }
+    }
+    log_line(&format!(
+        "map palette: {n} in use -- grey {} red {} redmag {} yelgrn {} grncyn {} magvio {} blue {}",
+        families[0], families[1], families[2], families[3], families[4], families[5], families[6]
+    ));
+    log_line(&format!("map palette blues: {}", blues.join("  ")));
+}
+
 unsafe fn nearest_in_use(ctx: *mut u8, rgb: u32) -> Option<u32> {
+    unsafe { nearest_with_cost(ctx, rgb) }.map(|(slot, _)| slot)
+}
+
+/// Nearest in-use slot and how poor the match is.
+unsafe fn nearest_with_cost(ctx: *mut u8, rgb: u32) -> Option<(u32, i32)> {
+    let reserved = reserved_mask();
     let tr = (rgb & 0xff) as i32;
     let tg = ((rgb >> 8) & 0xff) as i32;
     let tb = ((rgb >> 16) & 0xff) as i32;
@@ -485,7 +779,7 @@ unsafe fn nearest_in_use(ctx: *mut u8, rgb: u32) -> Option<u32> {
     unsafe {
         let in_use = ctx.add(PAL_IN_USE);
         for i in 1..=255u32 {
-            if *in_use.add(i as usize) == 0 {
+            if *in_use.add(i as usize) == 0 || reserved[i as usize] {
                 continue;
             }
             let [r, g, b] = rgb_at(ctx, i);
@@ -500,7 +794,7 @@ unsafe fn nearest_in_use(ctx: *mut u8, rgb: u32) -> Option<u32> {
     if slot == 0 {
         None
     } else {
-        Some(slot)
+        Some((slot, best))
     }
 }
 

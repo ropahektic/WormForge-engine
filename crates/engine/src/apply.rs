@@ -40,9 +40,12 @@ pub fn on_gfx_ready(display: *mut u8) {
     }
 
     log_line("InitGraphic: installing custom sprites after LoadSprites");
+    sprite::report_layers(display);
     sprite::clear();
     world::clear_sounds();
     actor::clear_claims();
+    crate::worm_sprite::clear();
+    crate::render_queue::clear_depths();
 
     let mods_dir = mods_root_from(&wa_directory());
     log_line(&format!("loading mods from {}", mods_dir.display()));
@@ -80,7 +83,18 @@ pub fn on_gfx_ready(display: *mut u8) {
 
     let mut sprite_ids = HashMap::new();
     for claim in &scripts.resolved.applied {
+        // A pack may ask for a lower display layer so its sprites draw behind
+        // the landscape instead of over it.
+        sprite::set_force_layer(claim.params.layer);
         let mut install = |path: Option<String>, sheet: &gfx::SpriteStrip, as_weapon: bool| {
+            // Exact palette slots are per sheet, not per pack: the turret needs
+            // them, the worm animation is ordinary worm art the palette already
+            // holds, and every slot taken is one the map no longer has.
+            let reserve = match (&claim.params.reserve_prefix, path.as_ref()) {
+                (Some(prefix), Some(p)) => p.starts_with(prefix.as_str()),
+                _ => false,
+            };
+            sprite::set_reserve_colours(reserve);
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 sprite::install_sheet(display, sheet)
             })) {
@@ -88,6 +102,16 @@ pub fn on_gfx_ready(display: *mut u8) {
                     log_line(&format!("{} sprite slot {id}", claim.mod_id));
                     if as_weapon {
                         sprite_ids.insert(claim.slot.index(), id);
+                    }
+                    if let (Some(depth), Some(p)) = (claim.params.depth, path.as_ref()) {
+                        let matches = claim
+                            .params
+                            .depth_prefix
+                            .as_ref()
+                            .is_none_or(|prefix| p.starts_with(prefix.as_str()));
+                        if matches {
+                            crate::render_queue::set_depth(id as u32, depth);
+                        }
                     }
                     if let Some(path) = path {
                         let (w, h) = sheet
@@ -166,6 +190,13 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
         }
     }
 
+    // Runs per round. Sprites are installed once per match, so this only puts
+    // back any slots the round change cleared rather than rebuilding them.
+    let restored = sprite::reassert();
+    if restored > 0 {
+        log_line(&format!("re-registered {restored} custom sprite slots for this round"));
+    }
+
     let snapshot = unsafe { snapshot_table(table) };
     let pass = match GFX.lock() {
         Ok(g) => g.clone(),
@@ -186,6 +217,7 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             }
         }
         apply_params(&mut entry, &claim.params);
+        crate::worm_sprite::claim(idx, &claim.mod_id, &claim.params.worm_sprites);
         if let Some(spawn) = spawn {
             let id = pass
                 .sprite_ids

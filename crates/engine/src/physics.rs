@@ -326,6 +326,14 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
     }
+    // Before the holding() gate: that is the worm-carry state, which is false
+    // in ordinary play, so anything behind it never runs during a normal turn.
+    if msg == MSG_RENDER_SCENE {
+        if let Some(world) = crate::hud::resolve_world_pub() {
+            crate::render_queue::dump_once(world);
+            crate::render_queue::apply_depths(world);
+        }
+    }
     if !holding() {
         return;
     }
@@ -359,6 +367,10 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         crate::actor::on_weapon_slot(this);
         crate::world::pump_space_fire(this);
         apply_carry(this);
+        // Custom pose sheets advance here, not in the draw hook: the sprite
+        // calc runs several times per frame, so advancing there ran the
+        // animation at several times its intended speed.
+        crate::worm_sprite::tick(this as usize);
     }
 }
 

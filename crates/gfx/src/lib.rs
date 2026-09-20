@@ -33,6 +33,39 @@ pub fn sprite_key(mod_id: &str, relative: &str) -> String {
     format!("{mod_id}:{relative}")
 }
 
+/// Stock and custom-weapon worm poses, including slope variants. Used only by
+/// slot-scoped `worm_sprites`, never to replace global stock sheets.
+pub fn stock_worm_sprite_id(name: &str) -> Option<i32> {
+    match name {
+        // Custom-weapon link animation. WA returns sprite 0 while the
+        // non-aimed weapon selection state owns the worm; the renderer hook
+        // selects the slope variant from WormEntity+0x1AC.
+        "weaponlnk" => Some(-1),
+        "weaponlnku" => Some(-2),
+        "weaponlnkd" => Some(-3),
+        "wbazlnk" => Some(436),
+        "wbazlnku" => Some(437),
+        "wbazlnkd" => Some(438),
+        "wbaz" => Some(525),
+        "wbazu" => Some(526),
+        "wbazd" => Some(527),
+        "wthrow" => Some(591),
+        "wthrowu" => Some(592),
+        "wthrowd" => Some(593),
+        _ => None,
+    }
+}
+
+/// Inverse of WA's floor(phase * frame_count / 65536). Round UP so an
+/// explicit frame does not accidentally select its predecessor.
+pub fn frame_phase(frame: i32, count: usize) -> Option<u32> {
+    if count == 0 || count > 0x10000 {
+        return None;
+    }
+    let index = frame.rem_euclid(count as i32) as u64;
+    Some((index * 0x10000).div_ceil(count as u64) as u32)
+}
+
 /// One RGBA8888 frame (row-major, 4 bytes per pixel).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RgbaFrame {
@@ -219,7 +252,12 @@ fn to_rgba(
     }
 }
 
-pub fn slice_strip(width: u32, height: u32, rgba: &[u8], columns: u32) -> Result<SpriteStrip, String> {
+pub fn slice_strip(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    columns: u32,
+) -> Result<SpriteStrip, String> {
     if columns == 0 {
         return Err("sprite_columns must be > 0".into());
     }
@@ -371,7 +409,8 @@ pub fn encode_spr(strip: &SpriteStrip) -> Result<Vec<u8>, String> {
     }
 
     let mut palette: Vec<[u8; 3]> = Vec::new();
-    let mut index_of: std::collections::HashMap<(u8, u8, u8), u8> = std::collections::HashMap::new();
+    let mut index_of: std::collections::HashMap<(u8, u8, u8), u8> =
+        std::collections::HashMap::new();
     let mut bitmaps: Vec<Vec<u8>> = Vec::with_capacity(strip.frames.len());
 
     for frame in &strip.frames {
@@ -468,6 +507,30 @@ fn nearest_palette(palette: &[[u8; 3]], r: u8, g: u8, b: u8) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_weapon_pose_names_resolve() {
+        assert_eq!(stock_worm_sprite_id("weaponlnk"), Some(-1));
+        assert_eq!(stock_worm_sprite_id("weaponlnku"), Some(-2));
+        assert_eq!(stock_worm_sprite_id("weaponlnkd"), Some(-3));
+        assert_eq!(stock_worm_sprite_id("wthrow"), Some(591));
+        assert_eq!(stock_worm_sprite_id("wthrowu"), Some(592));
+        assert_eq!(stock_worm_sprite_id("wthrowd"), Some(593));
+    }
+
+    #[test]
+    fn explicit_frames_round_trip_through_stock_phase_mapping() {
+        for count in [1, 2, 10, 120, 360, 65536] {
+            for index in 0..count {
+                let phase = frame_phase(index as i32, count).unwrap();
+                assert_eq!((phase as u64 * count as u64) >> 16, index as u64);
+            }
+            assert_eq!(frame_phase(-1, count), frame_phase(count as i32 - 1, count));
+            assert_eq!(frame_phase(count as i32, count), Some(0));
+        }
+        assert_eq!(frame_phase(0, 0), None);
+        assert_eq!(frame_phase(0, 65537), None);
+    }
 
     fn encode_rgba_png(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
@@ -588,7 +651,11 @@ mod tests {
         assert_eq!(spr[bitmap + 1], 1);
         let end_x = u16::from_le_bytes([spr[meta + 8], spr[meta + 9]]);
         let end_y = u16::from_le_bytes([spr[meta + 10], spr[meta + 11]]);
-        assert_eq!((end_x, end_y), (2, 1), "GetSpriteFrameForBlit skips empty bbox");
+        assert_eq!(
+            (end_x, end_y),
+            (2, 1),
+            "GetSpriteFrameForBlit skips empty bbox"
+        );
     }
 
     fn encode_two_frame_gif(w: u16, h: u16, mut a: Vec<u8>, mut b: Vec<u8>, delay: u16) -> Vec<u8> {
@@ -608,8 +675,12 @@ mod tests {
 
     #[test]
     fn gif_composites_and_loops() {
-        let red = vec![255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255];
-        let blue = vec![0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255];
+        let red = vec![
+            255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255,
+        ];
+        let blue = vec![
+            0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255,
+        ];
         let bytes = encode_two_frame_gif(2, 2, red, blue, 10);
         let strip = load_gif_bytes(&bytes).unwrap();
         assert!(strip.looping);

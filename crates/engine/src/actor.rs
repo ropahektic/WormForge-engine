@@ -61,7 +61,9 @@ static LIVE: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 pub fn install(catalog: &Catalog) -> Result<(), String> {
     build_vtable();
-    let va = catalog.function_va("FireWeapon__StrikeFire").unwrap_or(STRIKE_FIRE);
+    let va = catalog
+        .function_va("FireWeapon__StrikeFire")
+        .unwrap_or(STRIKE_FIRE);
     let trampoline = unsafe {
         MinHook::create_hook(rb(va) as *mut c_void, strike_fire_hook as *mut c_void)
             .map_err(|e| format!("StrikeFire hook: {e:?}"))?
@@ -88,6 +90,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         gravity: native_gravity,
         move_body: native_move,
         advance: native_advance,
+        set_frame: native_set_frame,
         spawn: native_spawn,
         list_actors: native_list_actors,
         list_worms: native_list_worms,
@@ -113,13 +116,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
     Ok(())
 }
 
-pub fn claim_drop(
-    slot: usize,
-    sprite: i32,
-    delta: u32,
-    spawn: Option<ActorSpawn>,
-    click_id: u32,
-) {
+pub fn claim_drop(slot: usize, sprite: i32, delta: u32, spawn: Option<ActorSpawn>, click_id: u32) {
     if let Ok(mut g) = DROPS.lock() {
         g.retain(|c| c.slot != slot);
         g.push(DropClaim {
@@ -132,13 +129,7 @@ pub fn claim_drop(
     }
 }
 
-pub fn claim_fire(
-    slot: usize,
-    sprite: i32,
-    delta: u32,
-    spawn: Option<ActorSpawn>,
-    fire_id: u32,
-) {
+pub fn claim_fire(slot: usize, sprite: i32, delta: u32, spawn: Option<ActorSpawn>, fire_id: u32) {
     if let Ok(mut g) = FIRES.lock() {
         g.retain(|c| c.slot != slot);
         g.push(FireClaim {
@@ -273,11 +264,7 @@ unsafe extern "system" fn strike_fire_hook(worm: *mut u8, fire_params: *mut u8, 
     }
 }
 
-unsafe extern "thiscall" fn create_proj_hook(
-    worm: *mut u8,
-    fire_params: *mut u8,
-    ctx: *mut u8,
-) {
+unsafe extern "thiscall" fn create_proj_hook(worm: *mut u8, fire_params: *mut u8, ctx: *mut u8) {
     let spawned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         try_lua_projectile(worm, ctx)
     }));
@@ -417,10 +404,9 @@ fn cursor_xy(worm: *mut u8, ctx: *mut u8) -> (i32, i32) {
     if (wx != 0 || wy != 0) || ctx.is_null() {
         (wx, wy)
     } else {
-        (
-            unsafe { read_i32(ctx, CTX_CURSOR_X) },
-            unsafe { read_i32(ctx, CTX_CURSOR_Y) },
-        )
+        (unsafe { read_i32(ctx, CTX_CURSOR_X) }, unsafe {
+            read_i32(ctx, CTX_CURSOR_Y)
+        })
     }
 }
 
@@ -493,10 +479,7 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     );
     write_i32(this, ACTOR_DEAD, 0);
     write_i32(this, ACTOR_OWNER, owner as i32);
-    let (dmg, boom) = spawn
-        .explode
-        .map(|e| (e.damage, e.id))
-        .unwrap_or((0, 0));
+    let (dmg, boom) = spawn.explode.map(|e| (e.damage, e.id)).unwrap_or((0, 0));
     write_i32(this, ACTOR_DAMAGE, dmg);
     write_i32(this, ACTOR_BOOM_ID, boom);
     write_i32(
@@ -668,9 +651,8 @@ unsafe fn tick(this: *mut u8) {
         return;
     }
     let flags = read_i32(this, ACTOR_FLAGS);
-    let auto_phys = (flags
-        & (ACTOR_FLAG_GRAVITY | ACTOR_FLAG_COLLIDE_TERRAIN | ACTOR_FLAG_COLLIDE_WORMS))
-        != 0;
+    let auto_phys =
+        (flags & (ACTOR_FLAG_GRAVITY | ACTOR_FLAG_COLLIDE_TERRAIN | ACTOR_FLAG_COLLIDE_WORMS)) != 0;
     if (flags & ACTOR_FLAG_GRAVITY) != 0 {
         apply_gravity(this);
     }
@@ -689,11 +671,14 @@ unsafe fn tick(this: *mut u8) {
     }
     let brain = read_i32(this, ACTOR_BRAIN) as u32;
     if brain != 0 {
+        let damage = read_i32(this, ENT_DAMAGE_ACCUM).max(0);
+        write_i32(this, ENT_DAMAGE_ACCUM, 0);
         let ev = lua_host::ActorEvent {
             land: land_now,
             left_ground,
             hit_worm: worm_hit,
             in_water: drowned(this, world),
+            damage,
         };
         if let Err(e) = lua_host::actor_frame(this as u32, brain, ev) {
             log_error(&format!("LuaActor brain: {e}"));
@@ -778,13 +763,7 @@ unsafe fn blit(this: *mut u8) {
 }
 
 #[allow(dead_code)]
-pub(crate) unsafe fn enqueue_sprite(
-    world: *mut u8,
-    x: i32,
-    y: i32,
-    sprite: u32,
-    anim: u32,
-) {
+pub(crate) unsafe fn enqueue_sprite(world: *mut u8, x: i32, y: i32, sprite: u32, anim: u32) {
     if world.is_null() {
         return;
     }
@@ -903,6 +882,31 @@ fn native_look(handle: u32, id: i32, delta: u32, w: i32, h: i32) {
             write_i32(this, ACTOR_FEET_X0, feet.x0);
             write_i32(this, ACTOR_FEET_X1, feet.x1);
             write_i32(this, ACTOR_FEET_Y, feet.y);
+        }
+    }
+}
+
+/// Hold an actor on one frame of its sheet.
+///
+/// Disable the actor's phase delta so even frame folders hold their pose.
+/// GetSpriteFrameForBlit reads anim_value as
+/// `(phase * frames) >> 16`, which is the mapping overlay_frame uses, so this
+/// inverts it. Lets one multi-frame sheet stand in for many sprites -- baked
+/// rotations cost a slot each, frames of one sheet cost nothing.
+fn native_set_frame(handle: u32, frame: i32) {
+    let this = handle as *mut u8;
+    unsafe {
+        if !is_actor(this) || read_i32(this, ACTOR_DEAD) != 0 {
+            return;
+        }
+        let id = read_i32(this, ACTOR_SPRITE);
+        let Some(n) = sprite::frame_count(id) else {
+            return;
+        };
+        if let Some(phase) = gfx::frame_phase(frame, n) {
+            write_i32(this, ACTOR_PHASE, phase as i32);
+            // Explicit selection holds even when the loaded folder loops.
+            write_i32(this, ACTOR_DELTA, 0);
         }
     }
 }

@@ -1,0 +1,368 @@
+#!/usr/bin/env python3
+"""Bake the standalone sentry pack from an extracted weapon_sentry_gun library.
+
+Each team has one sheet: 120 idle rotations followed by 120 rotations for
+each of the two firing frames. Layer order is base, barrel/muzzle, housing.
+Worm equip and put-away sheets use the source wsgnlnk/wsgnbak sequences.
+Rotations use nearest-neighbour pixel sampling.
+
+Usage: bake_sentry.py <extracted-lib-dir> <out-dir> [--steps 120]
+Requires Pillow. No source scripts or game binaries are copied into the pack.
+"""
+import argparse
+import math
+import os
+import sys
+
+from PIL import Image
+
+# team index -> RGB multiplier, in WA's colour order. The original multiplied
+# by muted factors (0.65/0.15) which render dark; these are the pure channels,
+# so a greyscale housing recolours to full-brightness team colour.
+HIGHLIGHT_KNEE = 0.72   # luminance above which shading rolls toward white
+
+# Sprites are snapped to the map's palette, which holds only ~106 colours in a
+# live match and is mostly earth tones. A smooth ramp produced ~254 colours per
+# sheet and every one was remapped (quantized=254 in the log); a dark saturated
+# blue has no neighbour there and its nearest match is black, which is why the
+# blue turret came out almost unlit.
+#
+# So: keep the ramp short, and keep it off the floor. SHADES posterises each
+# housing to a handful of steps, and FLOOR stops the darkest step from sitting
+# where black is the closest match.
+SHADES = 8
+FLOOR = 0.34
+
+TEAM_TINTS = {
+    1: (1.0, 0.0, 0.0),   # red
+    2: (0.0, 0.0, 1.0),   # blue
+    3: (0.0, 1.0, 0.0),   # green
+    4: (1.0, 1.0, 0.0),   # yellow
+    5: (1.0, 0.0, 1.0),   # magenta
+    6: (0.0, 1.0, 1.0),   # cyan
+}
+
+
+def glow_alpha(im):
+    """Approximate PX's additive muzzle blend with an alpha ramp.
+
+    The flash was drawn additively (AddSpriteQ with q.blend = 1), so its black
+    surround added nothing to the scene. A baked sprite cannot blend
+    additively, and hard-keying only true black leaves the dark glow opaque --
+    a visible box around the flash. Luminance becomes alpha instead, so the
+    halo fades out the way the additive draw did.
+    """
+    im = im.convert('RGBA')
+    px = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, _ = px[x, y]
+            px[x, y] = (r, g, b, max(r, g, b))
+    return im
+
+
+def grey_ramp(shades=SHADES, floor=FLOOR):
+    """The greys posterize() produces, as an explicit set."""
+    out = []
+    for k in range(shades):
+        lum = floor + (k / (shades - 1)) * (1.0 - floor)
+        v = min(255, int(round(255.0 * lum)))
+        out.append((v, v, v))
+    return out
+
+
+def snap_to(im, allowed):
+    """Force a composed frame back onto its allowed colours.
+
+    Compositing blends: the art's anti-aliased edges mix with what is beneath
+    them, so a housing built from 8 tints came out with 42. Every distinct
+    colour asks the engine for a palette slot, so the frame is snapped back to
+    the ramp once it is assembled.
+    """
+    px = im.load()
+    cache = {}
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, a = px[x, y]
+            if a < 16:
+                px[x, y] = (0, 0, 0, 0)
+                continue
+            key = (r, g, b)
+            hit = cache.get(key)
+            if hit is None:
+                hit = min(allowed, key=lambda c:
+                          3 * abs(c[0] - r) + 5 * abs(c[1] - g) + 2 * abs(c[2] - b))
+                cache[key] = hit
+            px[x, y] = hit + (a,)
+    return im
+
+
+def posterize(im, shades=SHADES, floor=FLOOR):
+    """Shorten a greyscale part's ramp the same way tint() shortens the body.
+
+    The tripod and barrel are untinted, so they skipped the tint path and kept
+    their full ramp -- around a hundred greys per sheet, all of them remapped
+    against a ~106 colour map palette. Fewer, better separated steps survive
+    that far more predictably.
+    """
+    im = im.convert('RGBA')
+    px = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, a = px[x, y]
+            if not a:
+                continue
+            lum = (r + g + b) / 765.0
+            lum = round(lum * (shades - 1)) / (shades - 1)
+            lum = floor + lum * (1.0 - floor)
+            v = min(255, int(round(255.0 * lum)))
+            px[x, y] = (v, v, v, a)
+    return im
+
+
+def key_black(im, thresh=12):
+    """Make near-black transparent: these sprites key on black, not alpha."""
+    im = im.convert('RGBA')
+    px = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, a = px[x, y]
+            if r <= thresh and g <= thresh and b <= thresh:
+                px[x, y] = (r, g, b, 0)
+    return im
+
+
+def team_ramp(factor):
+    """The exact colours a team's housing may use: SHADES of them, no more.
+
+    Every distinct colour in an opted-in sheet asks the engine for a palette
+    slot, and the map only has so many to give. A smooth ramp produced dozens
+    of near-identical tints per team; a fixed ramp costs SHADES slots and is
+    reused by every frame, pose and sheet of that team.
+    """
+    fr, fg, fb = factor
+    ramp = []
+    for k in range(SHADES):
+        t = k / (SHADES - 1)
+        lum = FLOOR + t * (1.0 - FLOOR)
+        hi = max(0.0, (t - HIGHLIGHT_KNEE) / (1.0 - HIGHLIGHT_KNEE))
+        ramp.append(tuple(
+            min(255, int(round(255.0 * lum * (f + (1.0 - f) * hi))))
+            for f in (fr, fg, fb)
+        ))
+    return ramp
+
+
+def tint(im, factor):
+    """Recolour a greyscale part to a team colour, keeping its shading.
+
+    A flat multiply (grey * pure channel) produces a ramp that lives on one
+    axis of colour space. Sprites are snapped to the map's 256-entry palette
+    (quantize_to_map_palette), which holds few such colours, so the shades
+    collapse onto one entry and the housing reads as a solid block.
+
+    Instead the midtones carry the team hue while the highlights roll toward
+    white, which spans a region the palette actually covers and keeps the
+    distinct shades distinct after quantization.
+    """
+    ramp = team_ramp(factor)
+    im = im.convert('RGBA')
+    px = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, a = px[x, y]
+            if not a:
+                continue
+            lum = (r + g + b) / 765.0
+            px[x, y] = ramp[min(SHADES - 1, int(round(lum * (SHADES - 1))))] + (a,)
+    return im
+
+
+# Draw offsets taken from the original's Draw(): base sits slightly low, the
+# turret pivots above it, and the barrel and muzzle ride out along the bore.
+TURRET_SCALE = 0.8
+BASE_OFFSET = (0, 2)
+PIVOT = (0, 2 + int(round(TURRET_SCALE * -15)))
+BARREL_OFFSET = (TURRET_SCALE * 17, 0)
+MUZZLE_OFFSET = (TURRET_SCALE * 14, 0)
+
+
+def scale(im, f=TURRET_SCALE):
+    return im.resize((max(1, int(round(im.width * f))),
+                      max(1, int(round(im.height * f)))), Image.NEAREST)
+
+
+def over(canvas, img, dx, dy):
+    """Composite img onto canvas at an offset, centring same-size layers."""
+    layer = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
+    ox = (canvas.width - img.width) // 2 + int(round(dx))
+    oy = (canvas.height - img.height) // 2 + int(round(dy))
+    layer.paste(img, (ox, oy))
+    return Image.alpha_composite(canvas, layer)
+
+
+def swing(offset, angle):
+    """Rotate a bore-relative offset into world space for a turret angle."""
+    ox, oy = offset
+    r = math.radians(angle - 90.0)
+    return (ox * math.cos(r) + oy * math.sin(r),
+            -ox * math.sin(r) + oy * math.cos(r))
+
+
+def rot(im, angle):
+    """Rotate to a turret angle. Art faces right, which is the 90 reference."""
+    return im.rotate(angle - 90.0, resample=Image.NEAREST, expand=False)
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('source')
+    parser.add_argument('output')
+    parser.add_argument('--steps', type=int, default=120)
+    # WA's ProcessSprite crashed constructing a single 360-frame (~1.5MB)
+    # sheet. The largest that load cleanly here are around 110KB (pooz's
+    # 14 x 96x84). Slots are cheap now that angles are frames, so sheets are
+    # split to stay in that range.
+    parser.add_argument('--per-sheet', type=int, default=30)
+    args = parser.parse_args(argv[1:])
+    src, dst, steps = args.source, args.output, args.steps
+    per_sheet = args.per_sheet
+    if steps != 120:
+        parser.error('the Lua pack expects 120 rotation steps')
+
+    files = os.path.join(src, 'files')
+    def load(n):
+        return Image.open(os.path.join(files, n)).convert('RGBA')
+
+    base = posterize(load('sentry_base.png'))
+    body = load('sentry_body.png')
+    barrel = posterize(load('sentry_gun.png'))
+    muzzle = glow_alpha(load('sentry_muzzle.png'))
+    firing = posterize(load('sentry_gun_firing.png'))
+    barrels = [barrel] + [firing.crop((0, y, 64, y + 64)) for y in (0, 64)]
+
+    # The anchor is the lowest opaque row (origin="bottom"). The muzzle glow
+    # hangs below the tripod, so a firing pose would anchor ~12px lower than an
+    # idle one and the turret visibly jumps each time the barrel animates.
+    # Clipping every frame at the tripod's footline keeps that row constant;
+    # the clipped glow would have been under the ground anyway.
+    footline = Image.new('RGBA', base.size, (0, 0, 0, 0))
+    footline = over(footline, base, *BASE_OFFSET)
+    floor_y = footline.getbbox()[3] - 1
+
+    # The contact row's x-extent matters as much as its y. WA derives the
+    # platform from the lowest opaque row (x0, x1, y), so if a downward-
+    # pointing barrel or the glow lands on that row it widens x0..x1 and the
+    # turret shifts sideways between frames -- the horizontal counterpart of
+    # the vertical jump. Forcing that row to be exactly the tripod's own feet
+    # makes the platform identical in every frame of every pose.
+    feet_row = {}
+    for x in range(footline.width):
+        px = footline.getpixel((x, floor_y))
+        if px[3]:
+            feet_row[x] = px
+
+    def clip_below_feet(img):
+        px = img.load()
+        for y in range(floor_y + 1, img.height):
+            for x in range(img.width):
+                r, g, b, a = px[x, y]
+                if a:
+                    px[x, y] = (r, g, b, 0)
+        for x in range(img.width):
+            if x in feet_row:
+                px[x, floor_y] = feet_row[x]
+            else:
+                r, g, b, a = px[x, floor_y]
+                if a:
+                    px[x, floor_y] = (r, g, b, 0)
+        return img
+
+    sprites = os.path.join(dst, 'sprites')
+    os.makedirs(sprites, exist_ok=True)
+    made = 0
+
+    # One frame folder per team: a multi-frame sheet costs a single sprite
+    # slot however many frames it holds, and a:frame() holds the actor on one
+    # of them. Baked rotations used to cost a slot each, which capped the
+    # turret at 28 angles; as frames they are practically free.
+    for team in range(1, 7):
+        tinted = tint(body, TEAM_TINTS[team])
+        for pose, barrel_frame in enumerate(barrels):
+            for i in range(steps):
+                chunk = i // per_sheet
+                folder = os.path.join(
+                    sprites, 'turret_t%d_p%d_s%d' % (team, pose, chunk))
+                os.makedirs(folder, exist_ok=True)
+                angle = i * 360.0 / steps
+                frame = Image.new('RGBA', base.size, (0, 0, 0, 0))
+                frame = over(frame, base, *BASE_OFFSET)
+                bx, by = swing(BARREL_OFFSET, angle)
+                frame = over(frame, rot(scale(barrel_frame), angle),
+                             PIVOT[0] + bx, PIVOT[1] + by)
+                # PX shows the separate additive muzzle during the first
+                # half of its two-frame firing cycle, at the end of the bore.
+                if pose == 1:
+                    mx, my = swing((BARREL_OFFSET[0] + MUZZLE_OFFSET[0], 0), angle)
+                    frame = over(frame, rot(scale(muzzle), angle),
+                                 PIVOT[0] + mx, PIVOT[1] + my)
+                # Mirror in the housing's LOCAL coordinates before rotating.
+                # Mirroring the rotated result reverses its aim on diagonals.
+                housing = scale(tinted)
+                if angle < 180.0:
+                    housing = rot(housing.transpose(Image.FLIP_LEFT_RIGHT),
+                                  angle + 180.0)
+                else:
+                    housing = rot(housing, angle)
+                frame = over(frame, housing, *PIVOT)
+                snap_to(frame, team_ramp(TEAM_TINTS[team]) + grey_ramp())
+                clip_below_feet(frame)
+                frame.save(os.path.join(folder, 'frame%03d.png' % (i % per_sheet)))
+    made += 6 * len(barrels) * ((steps + per_sheet - 1) // per_sheet)
+
+    # The damage carrier should not be seen -- the muzzle belongs at the
+    # barrel, and drawing it at the ray impact was the old implementation's
+    # bug. It cannot be blank, though: a fully transparent 1x1 sprite gave
+    # encode_spr an empty palette (it falls back to one colour) and crashed
+    # WA's ProcessSprite on load. One nearly-black pixel in an 8x8 frame keeps
+    # the sprite well-formed and is invisible at game scale for the single
+    # frame it lives.
+    carrier = Image.new('RGBA', (8, 8), (0, 0, 0, 0))
+    carrier.putpixel((4, 4), (16, 16, 16, 255))
+    carrier.save(os.path.join(sprites, 'impact.png'))
+    made += 1
+
+    for suffix in ('', 'u', 'd'):
+        for action, source in (('equip', 'wsgnlnk'), ('unequip', 'wsgnbak')):
+            strip = load(source + suffix + '.png')
+            frames = [strip.crop((0, y * 60, 60, y * 60 + 60)) for y in range(10)]
+            folder = os.path.join(sprites, action + suffix)
+            os.makedirs(folder, exist_ok=True)
+            for i, frame in enumerate(frames):
+                frame.save(os.path.join(folder, 'frame%03d.png' % i))
+        made += 2
+
+    # sounds the brain actually plays, copied verbatim into the pack
+    snd_out = os.path.join(dst, 'sounds')
+    os.makedirs(snd_out, exist_ok=True)
+    for wav in ('sentryplace.wav', 'sentrybeeps2.wav',
+                'sentryfireloop.wav', 'sentryfireend.wav',
+                'sentryservostart.wav', 'sentryservoloop.wav',
+                'sentryservoend.wav'):
+        src_wav = os.path.join(files, wav)
+        if os.path.exists(src_wav):
+            with open(src_wav, 'rb') as f_in, open(os.path.join(snd_out, wav), 'wb') as f_out:
+                f_out.write(f_in.read())
+    print('baked into %s' % sprites)
+    print('  turret 6 folders x %d frames = 6 slots (%.2f deg step)'
+          % (steps * 3, 360.0 / steps))
+    chunks = (steps + per_sheet - 1) // per_sheet
+    print('  split into 6 teams x 3 poses x %d sheets of <=%d frames = %d slots'
+          % (chunks, per_sheet, 6 * 3 * chunks))
+    print('  invisible impact carrier    = 1 slot')
+    print('  total %d of 223 custom sprite slots' % made)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))

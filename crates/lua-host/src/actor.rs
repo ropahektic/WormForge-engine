@@ -7,13 +7,14 @@ use game::offsets::{
     ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAG_MIRROR_X, ACTOR_FLAGS,
     ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE, CLASS_MINE,
     CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
-    ENT_SPEED_Y, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE,
+    ENT_SPEED_Y, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORM_FACING, WORM_SELECTED_WEAPON,
+    WORM_TURN_ACTIVE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
-use weapons::{parse_stock_weapon, ActorSpawn, StockWeapon};
+use std::sync::atomic::{AtomicU32, Ordering};
+use weapons::{ActorSpawn, StockWeapon, parse_stock_weapon};
 
 use crate::PARKED_LUA;
 
@@ -23,6 +24,8 @@ pub struct ActorEvent {
     pub left_ground: bool,
     pub hit_worm: bool,
     pub in_water: bool,
+    /// Falloff-adjusted blast damage accumulated by stock WorldEntity logic.
+    pub damage: i32,
 }
 
 pub struct SpawnArgs {
@@ -38,6 +41,8 @@ pub struct SpawnArgs {
 
 pub struct ActorNative {
     pub explode: fn(handle: u32, damage: i32, explosion_id: i32, below: bool),
+    /// Hold the actor on one frame of its current sheet.
+    pub set_frame: fn(handle: u32, frame: i32),
     pub despawn: fn(handle: u32),
     pub in_water: fn(handle: u32) -> bool,
     pub on_feet: fn(handle: u32) -> bool,
@@ -82,6 +87,7 @@ impl Default for ActorNative {
             gravity: |_| {},
             move_body: |_, _, _| 0,
             advance: |_| {},
+            set_frame: |_, _| {},
             spawn: |_| Err("spawn not bound".into()),
             list_actors: Vec::new,
             list_worms: |_| Vec::new(),
@@ -347,6 +353,7 @@ fn event_table(lua: &Lua, ev: &ActorEvent) -> Result<Table, String> {
         .map_err(|e| e.to_string())?;
     t.set("hit_worm", ev.hit_worm).map_err(|e| e.to_string())?;
     t.set("in_water", ev.in_water).map_err(|e| e.to_string())?;
+    t.set("damage", ev.damage).map_err(|e| e.to_string())?;
     t.set("msg", 2u32).map_err(|e| e.to_string())?;
     Ok(t)
 }
@@ -418,9 +425,8 @@ impl UserData for ActorHandle {
                     below = s.to_str()?.as_ref() == "below";
                 }
             }
-            let explode = native_explode().ok_or_else(|| {
-                mlua::Error::external("explode: CreateExplosion not bound")
-            })?;
+            let explode = native_explode()
+                .ok_or_else(|| mlua::Error::external("explode: CreateExplosion not bound"))?;
             explode(this.0, damage, id, below);
             Ok(())
         });
@@ -428,9 +434,8 @@ impl UserData for ActorHandle {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
             }
-            let despawn = native_despawn_fn().ok_or_else(|| {
-                mlua::Error::external("despawn: native free not bound")
-            })?;
+            let despawn = native_despawn_fn()
+                .ok_or_else(|| mlua::Error::external("despawn: native free not bound"))?;
             despawn(this.0);
             Ok(())
         });
@@ -450,9 +455,8 @@ impl UserData for ActorHandle {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
             }
-            let gravity = native_gravity().ok_or_else(|| {
-                mlua::Error::external("gravity: stock leaf not bound")
-            })?;
+            let gravity = native_gravity()
+                .ok_or_else(|| mlua::Error::external("gravity: stock leaf not bound"))?;
             gravity(this.0);
             Ok(())
         });
@@ -476,19 +480,26 @@ impl UserData for ActorHandle {
                     worms = v;
                 }
             }
-            let move_body = native_move().ok_or_else(|| {
-                mlua::Error::external("move: native step not bound")
-            })?;
+            let move_body = native_move()
+                .ok_or_else(|| mlua::Error::external("move: native step not bound"))?;
             hit_table(lua, move_body(this.0, terrain, worms))
         });
         methods.add_method("advance", |_, this, ()| {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
             }
-            let advance = native_advance().ok_or_else(|| {
-                mlua::Error::external("advance: sprite loop not bound")
-            })?;
+            let advance = native_advance()
+                .ok_or_else(|| mlua::Error::external("advance: sprite loop not bound"))?;
             advance(this.0);
+            Ok(())
+        });
+        methods.add_method("frame", |_, this, frame: i32| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            if let Some(set) = native_set_frame() {
+                set(this.0, frame);
+            }
             Ok(())
         });
         methods.add_method("look", |lua, this, name: String| {
@@ -512,9 +523,8 @@ impl UserData for ActorHandle {
             if id == 0 {
                 return Ok(());
             }
-            let play = native_play_sound().ok_or_else(|| {
-                mlua::Error::external("sound: PlaySoundLocal not bound")
-            })?;
+            let play = native_play_sound()
+                .ok_or_else(|| mlua::Error::external("sound: PlaySoundLocal not bound"))?;
             play(this.0, id, flags.unwrap_or(8));
             Ok(())
         });
@@ -524,6 +534,14 @@ impl UserData for ActorHandle {
 impl UserData for WormHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, this| Ok(this.0));
+        fields.add_field_method_get("facing", |_, this| {
+            Ok(if this.0 == 0 {
+                1
+            } else {
+                let direction = unsafe { read_i32(this.0 as *mut u8, WORM_FACING) };
+                if direction < 0 { -1 } else { 1 }
+            })
+        });
         fields.add_field_method_get("team", |_, this| {
             if this.0 == 0 {
                 return Ok(0i32);
@@ -545,9 +563,7 @@ impl UserData for WormHandle {
         });
         fields.add_field_method_get("kind", |_, _| Ok("worm"));
         fields.add_field_method_get("visible", |_, this| {
-            Ok(!native_worm_hidden()
-                .map(|f| f(this.0))
-                .unwrap_or(false))
+            Ok(!native_worm_hidden().map(|f| f(this.0)).unwrap_or(false))
         });
         fields.add_field_method_set("visible", |_, this, v: bool| {
             if this.0 == 0 {
@@ -591,9 +607,7 @@ impl UserData for WormHandle {
                 return Ok(0i32);
             }
             let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
-            let ammo = native_equip()
-                .map(|f| f(this.0, slot as u32))
-                .unwrap_or(0);
+            let ammo = native_equip().map(|f| f(this.0, slot as u32)).unwrap_or(0);
             Ok(ammo)
         });
     }
@@ -710,6 +724,10 @@ pub fn native_resolve_sprite() -> Option<fn(&str) -> Option<(i32, u32, i32, i32)
 
 pub fn native_land_solid() -> Option<fn(i32, i32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_solid)
+}
+
+pub fn native_set_frame() -> Option<fn(u32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.set_frame)
 }
 
 pub fn native_land_trace() -> Option<fn(i32, i32, i32, i32) -> Option<(i32, i32)>> {

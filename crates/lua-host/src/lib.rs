@@ -11,12 +11,13 @@ mod sandbox;
 mod spawn;
 
 pub use actor::{
-    actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_fire,
-    weapon_select, ActorEvent, ActorNative, SpawnArgs,
+    ActorEvent, ActorNative, SpawnArgs, actor_frame, actor_freed, actor_spawned, bind_actor_native,
+    weapon_click, weapon_fire, weapon_select,
 };
 pub use dispatch::{gravity_after, gravity_before, missile_frame, run_hud, worm_message};
 
 use crate::api::BindContext;
+use gfx::SpriteStrip;
 use mlua::Lua;
 use std::cell::RefCell;
 use std::path::Path;
@@ -25,7 +26,6 @@ use weapons::{
     LoadedMod, OverlayClaim, OverlayParams, ResolveResult, StockWeapon, parse_stock_weapon,
     resolve_claims,
 };
-use gfx::SpriteStrip;
 
 thread_local! {
     pub(crate) static PARKED_LUA: RefCell<Option<Lua>> = const { RefCell::new(None) };
@@ -53,12 +53,7 @@ pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
         let ctx = BindContext {
             mod_id: pack.manifest.id.clone(),
             root: pack.root.clone(),
-            allowed_slots: pack
-                .manifest
-                .weapons
-                .allowed_slots()?
-                .into_iter()
-                .collect(),
+            allowed_slots: pack.manifest.weapons.allowed_slots()?.into_iter().collect(),
             allowed_register: pack.manifest.weapons.register.iter().cloned().collect(),
             claims: Rc::clone(&claims),
             logs: Rc::clone(&logs),
@@ -128,6 +123,75 @@ mod tests {
     use weapons::{LoadedMod, parse_manifest};
 
     static HOST: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn land_trace_returns_a_hit_table_or_nil() {
+        let _guard = lock_host();
+        crate::bind_actor_native(crate::ActorNative {
+            land_trace: |_, _, x, y| (x > 0).then_some((x, y)),
+            ..Default::default()
+        });
+        let lua = Lua::new();
+        let wa = lua.create_table().unwrap();
+        let actors = lua.create_table().unwrap();
+        spawn::bind_world(&lua, &actors, &wa).unwrap();
+        lua.globals().set("wa", wa).unwrap();
+        let result = lua
+            .load(
+                r#"
+            local hit = wa.land.trace(0, 0, 300 * 0x10000, 75 * 0x10000)
+            assert(type(hit) == "table" and hit.hit)
+            assert(hit.x == 300 * 0x10000 and hit.y == 75 * 0x10000)
+            assert(wa.land.trace(0, 0, 0, 0) == nil)
+        "#,
+            )
+            .exec();
+        crate::bind_actor_native(crate::ActorNative::default());
+        result.unwrap();
+    }
+
+    #[test]
+    fn sentry_placement_firing_and_reload_are_deterministic() {
+        let lua = Lua::new();
+        let test: mlua::Function = lua
+            .load(include_str!("../../../tools/test_sentry.lua"))
+            .eval()
+            .unwrap();
+        let pack = lua
+            .load(include_str!(
+                "../../../mods/examples/sentry_gun/weapons.lua"
+            ))
+            .into_function()
+            .unwrap();
+        test.call::<()>(pack).unwrap();
+    }
+
+    #[test]
+    fn sentry_pack_loads_all_rotations_and_slot_scoped_worm_poses() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/sentry_gun");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::Bazooka);
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::Mine));
+        assert_ne!(claim.params.on_fire_id, 0);
+        assert_eq!(claim.params.extra_sheets.len(), 13);
+        assert_eq!(claim.params.worm_sprites.len(), 6);
+        for (path, sheet) in &claim.params.extra_sheets {
+            if path.contains("turret_t") {
+                assert_eq!(sheet.frames.len(), 360);
+            } else if path.contains("equip") {
+                assert_eq!(sheet.frames.len(), 10);
+                assert!(!sheet.looping);
+            }
+        }
+    }
 
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
@@ -474,6 +538,7 @@ wa.weapons.replace({
                 left_ground: false,
                 hit_worm: false,
                 in_water: false,
+                damage: 0,
             },
         )
         .unwrap();
@@ -730,12 +795,7 @@ wa.weapons.replace({
             write_i32(body.as_mut_ptr(), ENT_POS_X, 3);
             write_i32(body.as_mut_ptr(), ENT_POS_Y, 4);
         }
-        crate::actor_frame(
-            handle,
-            spawn.brain_id,
-            crate::ActorEvent::default(),
-        )
-        .unwrap();
+        crate::actor_frame(handle, spawn.brain_id, crate::ActorEvent::default()).unwrap();
         assert_eq!(SPAWNED.with(|c| c.get()), 0x11);
     }
 }

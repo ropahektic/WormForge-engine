@@ -1,0 +1,33 @@
+# D3D9 shader renderer — detection only, no wraps installed beyond logging.
+#
+# WA 3.8.1 ships two renderers. The shader one uploads the frame as palette
+# INDICES plus a palette texture and resolves colour on the GPU; its software
+# sibling dispatches to 0x59CB30 instead and has none of this. That index +
+# palette split is what lets a pack own colour for its own sprites without
+# touching the map palette, which is shared with every other pack.
+#
+# Addresses and layout confirmed against wkFOW's ShaderRenderer, which hooks the
+# same three sites for its fog composite.
+
+[[function]]
+va = 0x0059CDE0
+name = "Display__D3D9ShaderPresent"
+calling_convention = "__fastcall"
+plate_comment = "Shader renderer present. ECX=renderer, EDX=result buffer, [ESP+4]=framebuffer. Wrap before the original; a third argument rides EAX so the thunk must preserve everything."
+
+[[function]]
+va = 0x0059CD70
+name = "Display__D3D9ShaderResourcesCleanup"
+calling_convention = "__thiscall"
+plate_comment = "Releases the renderer's D3DPOOL_DEFAULT textures. ECX=renderer, no stack args. Anything we own on that device must be released here too, before WA resets."
+
+[[function]]
+va = 0x0059CF9D
+name = "Display__D3D9ShaderFogDraw"
+calling_convention = "__usercall"
+plate_comment = "Inside D3D9ShaderPresent, after WA binds its palette texture and built-in shader and immediately before the fullscreen draw. EDI=renderer. The injection point for resolving our own palette indices."
+
+[[global]]
+va = 0x0000001C
+name = "D3D9Renderer_width"
+plate_comment = "Offsets from the shader renderer object, not absolute VAs: width 0x1C, height 0x20, device 0x40, frame texture 0x7C, pixel shader 0x84, palette texture 0x88."

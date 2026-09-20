@@ -37,6 +37,9 @@ pub const WORM_SELECTED_AMMO: usize = 0x174;
 pub const WORM_ACTIVE_WEAPON: usize = 0x36C;
 /// WorldEntity.state (+0x44).
 pub const WORM_STATE: usize = 0x44;
+/// Ground slope selector used by `WormEntity__calc_sprite`: negative adds the
+/// uphill (+1) pose, positive adds the downhill (+2) pose.
+pub const WORM_SLOPE_DIR: usize = 0x1AC;
 /// WeaponCharging — power bar live.
 pub const WORM_STATE_CHARGING: u32 = 0x73;
 /// AimingAngle — crosshair up, ready for Space.
@@ -157,6 +160,8 @@ pub const ENT_SPEED_X: usize = 0x90;
 pub const ENT_SPEED_Y: usize = 0x94;
 pub const ENT_SETTLE: usize = 0xAC;
 pub const ENT_MOVED: usize = 0xB8;
+/// WorldEntity explosion-damage accumulator; subclasses consume and clear it.
+pub const ENT_DAMAGE_ACCUM: usize = 0xD4;
 pub const ENT_HELPER: usize = 0xDC;
 pub const ENT_WORM_TEAM: usize = 0xFC;
 

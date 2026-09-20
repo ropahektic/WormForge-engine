@@ -1,7 +1,7 @@
 use crate::dispatch::{self, HudLine};
 use crate::spawn::{self, get_bool, get_i32, get_string};
 use actors::kind_id;
-use gfx::{is_sheet_path, load_sprite_path, sprite_key, stock_sprite_id, SpriteStrip};
+use gfx::{SpriteStrip, is_sheet_path, load_sprite_path, sprite_key, stock_sprite_id};
 use mlua::{Function, Lua, Table, Value};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -20,7 +20,8 @@ pub struct BindContext {
 
 pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     let wa = ensure_wa(lua)?;
-    wa.set("_mod", ctx.mod_id.clone()).map_err(|e| e.to_string())?;
+    wa.set("_mod", ctx.mod_id.clone())
+        .map_err(|e| e.to_string())?;
 
     let logs = Rc::clone(&ctx.logs);
     let mod_id_log = ctx.mod_id.clone();
@@ -173,9 +174,7 @@ fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
     on.set(name, f).map_err(|e| e.to_string())
 }
 
-fn make_push(
-    ctx: &BindContext,
-) -> Rc<dyn Fn(OverlayClaim, &str) -> mlua::Result<()>> {
+fn make_push(ctx: &BindContext) -> Rc<dyn Fn(OverlayClaim, &str) -> mlua::Result<()>> {
     let allowed_slots = ctx.allowed_slots.clone();
     let allowed_register = ctx.allowed_register.clone();
     let claims = Rc::clone(&ctx.claims);
@@ -237,6 +236,10 @@ fn table_to_claim(
     let mut sprite_id = None;
     let mut sprite_sheet: Option<SpriteStrip> = None;
     let mut sprite_columns = 8i32;
+    let mut layer: Option<u32> = None;
+    let mut depth: Option<u32> = None;
+    let mut depth_prefix: Option<String> = None;
+    let mut reserve_prefix: Option<String> = None;
 
     if let Some(p) = spec.get::<Option<Table>>("params")? {
         damage = get_i32(&p, "damage")?;
@@ -244,6 +247,10 @@ fn table_to_claim(
         gravity_pct = get_i32(&p, "gravity_pct")?;
         wind_pct = get_i32(&p, "wind_pct")?;
         sprite_columns = get_i32(&p, "sprite_columns")?.unwrap_or(8).max(1);
+        layer = get_i32(&p, "layer")?.map(|v| v.clamp(1, 3) as u32);
+        depth = get_i32(&p, "depth")?.map(|v| v as u32);
+        depth_prefix = get_string(&p, "depth_prefix")?;
+        reserve_prefix = get_string(&p, "reserve_prefix")?;
         load_sprite_field(
             root,
             &p,
@@ -275,7 +282,7 @@ fn table_to_claim(
         other => {
             return Err(mlua::Error::external(format!(
                 "on_click must be a function or table, got {other:?}"
-            )))
+            )));
         }
     }
 
@@ -302,7 +309,25 @@ fn table_to_claim(
         other => {
             return Err(mlua::Error::external(format!(
                 "sprites must be a list of pack paths, got {other:?}"
-            )))
+            )));
+        }
+    }
+
+    let mut worm_sprites = Vec::new();
+    if let Some(poses) = spec.get::<Option<Table>>("worm_sprites")? {
+        for pair in poses.pairs::<String, String>() {
+            let (name, path) = pair?;
+            let id = gfx::stock_worm_sprite_id(&name).ok_or_else(|| {
+                mlua::Error::external(format!("unknown stock worm sprite '{name}'"))
+            })?;
+            worm_sprites.push((id, path.replace('\\', "/")));
+        }
+        // Lua hash iteration must not change custom sprite slot allocation.
+        worm_sprites.sort_by_key(|(id, _)| *id);
+        for (_, path) in &worm_sprites {
+            let (path, mut sheet) = load_pack_sheet(root, path, 1)?;
+            sheet.looping = false; // stock worm animator owns the phase
+            extra_sheets.push((path, sheet));
         }
     }
 
@@ -319,7 +344,7 @@ fn table_to_claim(
         other => {
             return Err(mlua::Error::external(format!(
                 "sounds must be a list of pack WAV paths, got {other:?}"
-            )))
+            )));
         }
     }
 
@@ -361,6 +386,11 @@ fn table_to_claim(
             fire_spawn,
             sprite_path,
             extra_sheets,
+            worm_sprites,
+            layer,
+            depth,
+            depth_prefix,
+            reserve_prefix,
             extra_sounds,
         },
     })
@@ -372,7 +402,9 @@ fn load_pack_sheet(
     _columns: u32,
 ) -> mlua::Result<(String, SpriteStrip)> {
     if relative.contains("..") {
-        return Err(mlua::Error::external("sprite path must stay inside the pack"));
+        return Err(mlua::Error::external(
+            "sprite path must stay inside the pack",
+        ));
     }
     if !is_sheet_path(relative) && !root.join(relative).is_dir() {
         return Err(mlua::Error::external(format!(
@@ -389,7 +421,9 @@ fn load_pack_sound(
     relative: &str,
 ) -> mlua::Result<(String, std::path::PathBuf)> {
     if relative.contains("..") {
-        return Err(mlua::Error::external("sound path must stay inside the pack"));
+        return Err(mlua::Error::external(
+            "sound path must stay inside the pack",
+        ));
     }
     let rel = relative.replace('\\', "/");
     let lower = rel.to_ascii_lowercase();
@@ -421,7 +455,9 @@ fn load_sprite_field(
     };
     if is_sheet_path(&sprite) {
         if sprite.contains("..") {
-            return Err(mlua::Error::external("sprite path must stay inside the pack"));
+            return Err(mlua::Error::external(
+                "sprite path must stay inside the pack",
+            ));
         }
         let path = root.join(&sprite);
         *sprite_sheet = Some(load_sprite_path(&path, columns).map_err(mlua::Error::external)?);
@@ -435,4 +471,3 @@ fn load_sprite_field(
     }
     Ok(())
 }
-
