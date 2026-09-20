@@ -1,5 +1,5 @@
 //! Live world queries: landscape solid (Blas Landscape+0x910), entity tree
-//! (Jelly CTask children), PlaySoundLocal. Read-only except sound.
+//! (Jelly CTask children), PlaySoundLocal, stock SelectWeapon / StartFiring.
 
 use crate::log::{log_error, log_line};
 use crate::rebase::rb;
@@ -22,6 +22,16 @@ struct CustomWav {
 
 static WAVS: Mutex<Vec<(String, CustomWav)>> = Mutex::new(Vec::new());
 static NEXT_WAV: AtomicI32 = AtomicI32::new(CUSTOM_SOUND_SLOT_MIN);
+
+struct SpaceLatch {
+    handle: u32,
+    held: bool,
+    slot: u32,
+    gifted: bool,
+    spent: bool,
+}
+
+static SPACE_FIRE: Mutex<Vec<SpaceLatch>> = Mutex::new(Vec::new());
 
 pub fn clear_sounds() {
     if let Ok(mut g) = WAVS.lock() {
@@ -249,10 +259,364 @@ pub fn hold_turn_timer() {
 }
 
 fn mouse_down() -> bool {
+    key_down(0x01)
+}
+
+fn key_down(vk: i32) -> bool {
     unsafe {
-        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x01) as u16 & 0x8000
+        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000
             != 0
     }
+}
+
+/// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint (shift), 64 Q, 128 Space (shoot).
+pub fn keys() -> u32 {
+    let mut m = 0u32;
+    if key_down(0x25) || key_down(0x41) {
+        m |= 1;
+    }
+    if key_down(0x27) || key_down(0x44) {
+        m |= 2;
+    }
+    if key_down(0x26) {
+        m |= 4;
+    }
+    if key_down(0x28) || key_down(0x53) {
+        m |= 8;
+    }
+    if key_down(0x57) {
+        m |= 16;
+    }
+    if key_down(0x10) {
+        m |= 32;
+    }
+    if key_down(0x51) {
+        m |= 64;
+    }
+    if key_down(0x20) {
+        m |= 128;
+    }
+    m
+}
+
+/// Give this worm's team a shot of `slot` if empty, then stock-select it
+/// (`WormEntity__SelectWeapon`, same body as F1's SelectWeapon message).
+/// Space after this is stock charge / fire (`StartFiring` / `ReleaseWeapon`).
+pub fn equip_weapon(handle: u32, slot: u32) -> i32 {
+    if handle == 0 || slot == 0 || slot >= STOCK_WEAPON_COUNT as u32 {
+        return 0;
+    }
+    let worm = handle as *mut u8;
+    unsafe {
+        if read_i32(worm, WORM_TURN_ACTIVE) == 0 {
+            return 0;
+        }
+        let world = read_i32(worm, ENT_WORLD) as *mut u8;
+        if world.is_null() {
+            return 0;
+        }
+        enable_slot(world, slot);
+        let arena = world.add(GAME_WORLD_TEAM_ARENA);
+        let team = read_i32(worm, ENT_WORM_TEAM) as u32;
+        clear_delay(arena, team, slot);
+        let mut ammo = get_ammo(arena, team, slot);
+        let mut gifted = false;
+        if ammo == 0 {
+            add_ammo(arena, team, slot, 1);
+            ammo = get_ammo(arena, team, slot);
+            if ammo != 0 {
+                gifted = true;
+            }
+        }
+        if ammo == 0 {
+            write_ammo(arena, team, slot, 1);
+            ammo = get_ammo(arena, team, slot);
+            if ammo == 0 {
+                ammo = 1;
+            }
+            gifted = true;
+        }
+        select_weapon(worm, slot, ammo);
+        arm_stock_fire(worm, slot, ammo, gifted);
+        ammo
+    }
+}
+
+/// After `worm:equip`, Space-down starts the stock power bar and Space-up shoots.
+pub fn pump_space_fire(worm: *mut u8) {
+    if worm.is_null() {
+        return;
+    }
+    let handle = worm as u32;
+    unsafe {
+        if read_i32(worm, WORM_TURN_ACTIVE) == 0 {
+            reclaim_gift(worm, handle);
+            drop_space_latch(handle);
+            return;
+        }
+        if read_i32(worm, WORM_SELECTED_WEAPON) == 0 {
+            drop_space_latch(handle);
+            return;
+        }
+    }
+    let watching = SPACE_FIRE
+        .lock()
+        .ok()
+        .map(|g| g.iter().any(|s| s.handle == handle))
+        .unwrap_or(false);
+    if !watching {
+        return;
+    }
+    unsafe {
+        keep_stock_fire_armed(worm);
+    }
+    let down = key_down(0x20);
+    let mut was = false;
+    if let Ok(mut g) = SPACE_FIRE.lock() {
+        if let Some(s) = g.iter_mut().find(|s| s.handle == handle) {
+            was = s.held;
+            s.held = down;
+        }
+    }
+    if down && !was {
+        unsafe {
+            start_firing(worm);
+        }
+        log_line(&format!("space charge worm={handle:#x}"));
+    } else if !down && was {
+        unsafe {
+            release_shot(worm);
+            spend_gift(worm, handle);
+        }
+        log_line(&format!("space shoot worm={handle:#x}"));
+    }
+}
+
+unsafe fn arm_stock_fire(worm: *mut u8, slot: u32, ammo: i32, gifted: bool) {
+    write_i32(worm, WORM_WEAPONS_ENABLED, 1);
+    write_i32(worm, WORM_SELECTED_AMMO, ammo);
+    let world = read_i32(worm, ENT_WORLD) as *mut u8;
+    if !world.is_null() {
+        let table = *(world.add(GAME_WORLD_WEAPON_TABLE) as *const *mut u8);
+        if !table.is_null() {
+            let entry = table.add(slot as usize * WEAPON_ENTRY_SIZE);
+            write_i32(worm, WORM_ACTIVE_WEAPON, entry as i32);
+        }
+    }
+    let handle = worm as u32;
+    if let Ok(mut g) = SPACE_FIRE.lock() {
+        if let Some(s) = g.iter_mut().find(|s| s.handle == handle) {
+            s.held = false;
+            s.slot = slot;
+            s.gifted = gifted;
+            s.spent = false;
+        } else {
+            g.push(SpaceLatch {
+                handle,
+                held: false,
+                slot,
+                gifted,
+                spent: false,
+            });
+        }
+    }
+    log_line(&format!(
+        "equip fire-ready slot={slot} ammo={ammo} gifted={gifted} worm={handle:#x}"
+    ));
+}
+
+unsafe fn keep_stock_fire_armed(worm: *mut u8) {
+    write_i32(worm, WORM_WEAPONS_ENABLED, 1);
+    let slot = read_i32(worm, WORM_SELECTED_WEAPON) as u32;
+    if slot == 0 {
+        return;
+    }
+    let world = read_i32(worm, ENT_WORLD) as *mut u8;
+    if world.is_null() {
+        return;
+    }
+    let table = *(world.add(GAME_WORLD_WEAPON_TABLE) as *const *mut u8);
+    if table.is_null() {
+        return;
+    }
+    let entry = table.add(slot as usize * WEAPON_ENTRY_SIZE);
+    write_i32(worm, WORM_ACTIVE_WEAPON, entry as i32);
+}
+
+fn drop_space_latch(handle: u32) {
+    if let Ok(mut g) = SPACE_FIRE.lock() {
+        g.retain(|s| s.handle != handle);
+    }
+}
+
+unsafe fn spend_gift(worm: *mut u8, handle: u32) {
+    let (slot, gifted, spent) = match SPACE_FIRE.lock().ok().and_then(|g| {
+        g.iter()
+            .find(|s| s.handle == handle)
+            .map(|s| (s.slot, s.gifted, s.spent))
+    }) {
+        Some(v) => v,
+        None => return,
+    };
+    if !gifted || spent || slot == 0 {
+        return;
+    }
+    take_team_ammo(worm, slot);
+    write_i32(worm, WORM_SELECTED_AMMO, 0);
+    if let Ok(mut g) = SPACE_FIRE.lock() {
+        if let Some(s) = g.iter_mut().find(|s| s.handle == handle) {
+            s.spent = true;
+            s.gifted = false;
+        }
+    }
+}
+
+unsafe fn reclaim_gift(worm: *mut u8, handle: u32) {
+    spend_gift(worm, handle);
+}
+
+unsafe fn take_team_ammo(worm: *mut u8, slot: u32) {
+    let world = read_i32(worm, ENT_WORLD) as *mut u8;
+    if world.is_null() {
+        return;
+    }
+    let arena = world.add(GAME_WORLD_TEAM_ARENA);
+    let team = read_i32(worm, ENT_WORM_TEAM) as u32;
+    write_ammo(arena, team, slot, 0);
+    let left = get_ammo(arena, team, slot);
+    log_line(&format!("ammo spent slot={slot} team={team} left={left}"));
+}
+
+unsafe fn ammo_index(arena: *mut u8, team: u32, slot: u32) -> Option<usize> {
+    if arena.is_null() || team >= MAX_TEAMS {
+        return None;
+    }
+    let rec = arena.add(8 + team as usize * 0x51C);
+    let alliance = read_i32(rec, 0x508);
+    if alliance < 0 || alliance >= MAX_TEAMS as i32 {
+        return None;
+    }
+    Some(alliance as usize * TEAM_AMMO_STRIDE + slot as usize)
+}
+
+unsafe fn write_ammo(arena: *mut u8, team: u32, slot: u32, ammo: i32) {
+    if let Some(idx) = ammo_index(arena, team, slot) {
+        write_i32(arena, TEAM_ARENA_AMMO + idx * 4, ammo);
+    }
+}
+
+/// `WormEntity__StartFiring` — EAX=this. Power bar starts at 0 and grows while held.
+unsafe fn start_firing(worm: *mut u8) {
+    write_i32(worm, WORM_WEAPONS_ENABLED, 1);
+    let f = rb(WORM_START_FIRING) as u32;
+    let args = [worm as u32, f];
+    core::arch::asm!(
+        "push esi",
+        "push edi",
+        "mov eax, dword ptr [ebx]",
+        "call dword ptr [ebx + 4]",
+        "pop edi",
+        "pop esi",
+        in("ebx") args.as_ptr(),
+        out("eax") _,
+        out("ecx") _,
+        out("edx") _,
+    );
+}
+
+/// Space-up: stock `ReleaseWeapon` (msg 0x27) then `StartFiring`'s sibling launch.
+unsafe fn release_shot(worm: *mut u8) {
+    write_i32(worm, WORM_WEAPONS_ENABLED, 1);
+    type MsgFn = unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut u8);
+    let f: MsgFn = std::mem::transmute(rb(WORM_HANDLE_MESSAGE) as usize);
+    f(
+        worm,
+        worm as u32,
+        MSG_RELEASE_WEAPON,
+        0,
+        core::ptr::null_mut(),
+    );
+}
+
+unsafe fn enable_slot(world: *mut u8, slot: u32) {
+    let table = *(world.add(GAME_WORLD_WEAPON_TABLE) as *const *mut u8);
+    if table.is_null() {
+        return;
+    }
+    let entry = table.add(slot as usize * WEAPON_ENTRY_SIZE);
+    write_i32(entry, WEAPON_DEFINED, 1);
+    write_i32(entry, WEAPON_ENABLED, 1);
+    write_i32(entry, WEAPON_AVAILABILITY, 1);
+    write_i32(entry, WEAPON_PANEL_STATE, 1);
+}
+
+unsafe fn clear_delay(arena: *mut u8, team: u32, slot: u32) {
+    if arena.is_null() || team >= MAX_TEAMS {
+        return;
+    }
+    let rec = arena.add(8 + team as usize * 0x51C);
+    let alliance = read_i32(rec, 0x508);
+    if alliance < 0 || alliance >= MAX_TEAMS as i32 {
+        return;
+    }
+    let idx = alliance as usize * TEAM_AMMO_STRIDE + slot as usize;
+    write_i32(arena, TEAM_ARENA_DELAY + idx * 4, 0);
+}
+
+unsafe fn get_ammo(arena: *mut u8, team: u32, slot: u32) -> i32 {
+    let f = rb(TEAM_GET_AMMO) as u32;
+    let args = [team, arena as u32, slot, f];
+    let ret: i32;
+    core::arch::asm!(
+        "push esi",
+        "mov eax, dword ptr [ebx]",
+        "mov esi, dword ptr [ebx + 4]",
+        "mov edx, dword ptr [ebx + 8]",
+        "call dword ptr [ebx + 12]",
+        "pop esi",
+        in("ebx") args.as_ptr(),
+        lateout("eax") ret,
+        out("ecx") _,
+        out("edx") _,
+    );
+    ret
+}
+
+unsafe fn add_ammo(arena: *mut u8, team: u32, slot: u32, amount: i32) {
+    let f = rb(TEAM_ADD_AMMO) as u32;
+    let args = [team, amount as u32, slot, arena as u32, f];
+    core::arch::asm!(
+        "push esi",
+        "mov eax, dword ptr [ebx]",
+        "mov edx, dword ptr [ebx + 4]",
+        "push dword ptr [ebx + 8]",
+        "push dword ptr [ebx + 12]",
+        "call dword ptr [ebx + 16]",
+        "pop esi",
+        in("ebx") args.as_ptr(),
+        out("eax") _,
+        out("ecx") _,
+        out("edx") _,
+    );
+}
+
+unsafe fn select_weapon(worm: *mut u8, slot: u32, ammo: i32) {
+    let f = rb(WORM_SELECT_WEAPON) as u32;
+    let args = [worm as u32, ammo as u32, slot, f];
+    core::arch::asm!(
+        "push esi",
+        "push edi",
+        "mov edi, dword ptr [ebx]",
+        "push dword ptr [ebx + 4]",
+        "push dword ptr [ebx + 8]",
+        "call dword ptr [ebx + 12]",
+        "pop edi",
+        "pop esi",
+        in("ebx") args.as_ptr(),
+        out("eax") _,
+        out("ecx") _,
+        out("edx") _,
+    );
 }
 
 fn client_mouse() -> Option<(i32, i32, i32, i32)> {

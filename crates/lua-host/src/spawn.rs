@@ -252,6 +252,22 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     world.set("pointer", pointer).map_err(|e| e.to_string())?;
+    let keys = lua
+        .create_function(|lua, ()| {
+            let m = crate::actor::native_keys().map(|f| f()).unwrap_or(0);
+            let t = lua.create_table()?;
+            t.set("left", m & 1 != 0)?;
+            t.set("right", m & 2 != 0)?;
+            t.set("up", m & 4 != 0)?;
+            t.set("down", m & 8 != 0)?;
+            t.set("jump", m & 16 != 0)?;
+            t.set("sprint", m & 32 != 0)?;
+            t.set("q", m & 64 != 0)?;
+            t.set("space", m & 128 != 0)?;
+            Ok(t)
+        })
+        .map_err(|e| e.to_string())?;
+    world.set("keys", keys).map_err(|e| e.to_string())?;
     wa.set("world", world).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -333,7 +349,7 @@ pub fn runtime_spawn(
     Ok(ActorHandle(handle))
 }
 
-fn resolve_sprite_name(lua: &Lua, name: &str) -> mlua::Result<(i32, u32, i32, i32)> {
+pub(crate) fn resolve_sprite_name(lua: &Lua, name: &str) -> mlua::Result<(i32, u32, i32, i32)> {
     if let Some(id) = stock_sprite_id(name) {
         return Ok((id, 0, 0, 0));
     }

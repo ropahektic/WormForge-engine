@@ -104,6 +104,8 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     msg.set("EXPLOSION", 28).map_err(|e| e.to_string())?;
     msg.set("JUMP", 0x24).map_err(|e| e.to_string())?;
     msg.set("JUMP_UP", 0x25).map_err(|e| e.to_string())?;
+    msg.set("FIRE_WEAPON", 0x26).map_err(|e| e.to_string())?;
+    msg.set("RELEASE_WEAPON", 0x27).map_err(|e| e.to_string())?;
     msg.set("START_TURN", 0x34).map_err(|e| e.to_string())?;
     wa.set("msg", msg).map_err(|e| e.to_string())?;
 

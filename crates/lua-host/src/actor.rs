@@ -4,16 +4,16 @@
 
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
-    ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPR_H,
-    ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE, CLASS_MINE, CLASS_MISSILE, CLASS_OIL, CLASS_WORM,
-    ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y, ENT_WORM_TEAM, LUA_ACTOR_MAGIC,
-    WORM_SELECTED_WEAPON,
+    ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAG_MIRROR_X, ACTOR_FLAGS,
+    ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE, CLASS_MINE,
+    CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
+    ENT_SPEED_Y, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
-use weapons::{ActorSpawn, StockWeapon};
+use weapons::{parse_stock_weapon, ActorSpawn, StockWeapon};
 
 use crate::PARKED_LUA;
 
@@ -62,6 +62,14 @@ pub struct ActorNative {
     /// Pin a worm at (x,y) after stock HandleMessage this tick.
     pub carry: fn(handle: u32, x: i32, y: i32),
     pub drop_carry: fn(handle: u32),
+    /// Switch this actor's installed sheet and reset the animation phase.
+    pub look: fn(handle: u32, sprite: i32, delta: u32, w: i32, h: i32),
+    /// Keyboard bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint, 64 Q, 128 Space.
+    pub keys: fn() -> u32,
+    pub hide_worm: fn(handle: u32, hide: bool),
+    pub worm_hidden: fn(handle: u32) -> bool,
+    /// Stock SelectWeapon (F1 path). Returns ammo after equip, 0 if not this worm's turn.
+    pub equip: fn(handle: u32, slot: u32) -> i32,
 }
 
 impl Default for ActorNative {
@@ -89,6 +97,11 @@ impl Default for ActorNative {
             pointer: || (0, 0, false),
             carry: |_, _, _| {},
             drop_carry: |_| {},
+            look: |_, _, _, _, _| {},
+            keys: || 0,
+            hide_worm: |_, _| {},
+            worm_hidden: |_| false,
+            equip: |_, _| 0,
         }
     }
 }
@@ -363,6 +376,24 @@ impl UserData for ActorHandle {
             let owner = read_handle(this.0, ACTOR_OWNER);
             lua.create_userdata(WormHandle(owner as u32))
         });
+        fields.add_field_method_get("facing", |_, this| {
+            let flags = read_handle(this.0, ACTOR_FLAGS);
+            Ok(if flags & ACTOR_FLAG_MIRROR_X != 0 {
+                -1i32
+            } else {
+                1i32
+            })
+        });
+        fields.add_field_method_set("facing", |_, this, v: i32| {
+            let mut flags = read_handle(this.0, ACTOR_FLAGS);
+            if v < 0 {
+                flags |= ACTOR_FLAG_MIRROR_X;
+            } else {
+                flags &= !ACTOR_FLAG_MIRROR_X;
+            }
+            write_handle(this.0, ACTOR_FLAGS, flags);
+            Ok(())
+        });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
@@ -460,6 +491,16 @@ impl UserData for ActorHandle {
             advance(this.0);
             Ok(())
         });
+        methods.add_method("look", |lua, this, name: String| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            let (id, delta, w, h) = crate::spawn::resolve_sprite_name(lua, &name)?;
+            if let Some(look) = native_look() {
+                look(this.0, id, delta, w, h);
+            }
+            Ok(())
+        });
         methods.add_method("spawn", |lua, this, spec: Table| {
             crate::spawn::runtime_spawn(lua, spec, Some(this.0))
         });
@@ -503,6 +544,26 @@ impl UserData for WormHandle {
             Ok(StockWeapon::from_index(slot as u32).map(|s| s.name().to_string()))
         });
         fields.add_field_method_get("kind", |_, _| Ok("worm"));
+        fields.add_field_method_get("visible", |_, this| {
+            Ok(!native_worm_hidden()
+                .map(|f| f(this.0))
+                .unwrap_or(false))
+        });
+        fields.add_field_method_set("visible", |_, this, v: bool| {
+            if this.0 == 0 {
+                return Ok(());
+            }
+            if let Some(hide) = native_hide_worm() {
+                hide(this.0, !v);
+            }
+            Ok(())
+        });
+        fields.add_field_method_get("turn", |_, this| {
+            if this.0 == 0 {
+                return Ok(false);
+            }
+            Ok(unsafe { read_i32(this.0 as *mut u8, WORM_TURN_ACTIVE) } != 0)
+        });
         bind_pos_fields(fields, |h| h.0);
     }
 
@@ -524,6 +585,16 @@ impl UserData for WormHandle {
                 drop(this.0);
             }
             Ok(())
+        });
+        methods.add_method("equip", |_, this, name: String| {
+            if this.0 == 0 {
+                return Ok(0i32);
+            }
+            let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
+            let ammo = native_equip()
+                .map(|f| f(this.0, slot as u32))
+                .unwrap_or(0);
+            Ok(ammo)
         });
     }
 }
@@ -683,6 +754,26 @@ pub fn native_carry() -> Option<fn(u32, i32, i32)> {
 
 pub fn native_drop_carry() -> Option<fn(u32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.drop_carry)
+}
+
+pub fn native_look() -> Option<fn(u32, i32, u32, i32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.look)
+}
+
+pub fn native_keys() -> Option<fn() -> u32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.keys)
+}
+
+pub fn native_hide_worm() -> Option<fn(u32, bool)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.hide_worm)
+}
+
+pub fn native_worm_hidden() -> Option<fn(u32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.worm_hidden)
+}
+
+pub fn native_equip() -> Option<fn(u32, u32) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.equip)
 }
 
 pub(crate) fn sound_slot(slot: Value) -> mlua::Result<i32> {

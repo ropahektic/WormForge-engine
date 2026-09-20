@@ -16,8 +16,11 @@ use game::entity::{is_missile, read_cm_forces, read_i32, read_motion, write_i32,
 use game::offsets::{
     APPLY_PROJECTILE_GRAVITY, ENT_MOVED, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y,
     ENT_WORM_TEAM, MISSILE_HANDLE_MESSAGE, MISSILE_VTABLE, MSG_FRAME_FINISH, MSG_RENDER_SCENE,
-    WORM_FACING, WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_STATE_AIRBORNE, WORLD_ROOT_HANDLE_MESSAGE,
-    WORLD_ROOT_TURN_ENDED,
+    WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW, WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR,
+    WORM_DRAW_HEALTH, WORM_DRAW_HUD, WORM_DRAW_NAME, WORM_DRAW_OFFMAP, WORM_DRAW_SPRITE,
+    WORM_DRAW_TURN, WORM_SHOW_CURSOR,
+    WORM_FACING, WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_STATE_AIRBORNE,
+    WORLD_ROOT_HANDLE_MESSAGE, WORLD_ROOT_TURN_ENDED,
 };
 use minhook::MinHook;
 use re_catalog::Catalog;
@@ -32,6 +35,16 @@ static ORIG_GRAVITY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_MISSILE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_WORM: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_ROOT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_DRAW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_NAME: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_HUD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_HEALTH: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_CURSOR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_OFFMAP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_TURN: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_ARROW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_AIM_CURSOR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_CROSSHAIR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 struct Carry {
     handle: u32,
@@ -41,6 +54,7 @@ struct Carry {
 }
 
 static CARRY: Mutex<Vec<Carry>> = Mutex::new(Vec::new());
+static HIDDEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 fn holding() -> bool {
     CARRY
@@ -86,6 +100,7 @@ pub fn carry(handle: u32, x: i32, y: i32) {
 }
 
 pub fn drop_carry(handle: u32) {
+    hide_worm(handle, false);
     if handle != 0 {
         unsafe {
             write_i32(handle as *mut u8, ENT_MOVED, 1);
@@ -99,6 +114,34 @@ pub fn drop_carry(handle: u32) {
             crate::world::thaw_turn();
         }
     }
+}
+
+pub fn hide_worm(handle: u32, hide: bool) {
+    if handle == 0 {
+        return;
+    }
+    if let Ok(mut g) = HIDDEN.lock() {
+        if hide {
+            if !g.contains(&handle) {
+                g.push(handle);
+            }
+        } else {
+            g.retain(|h| *h != handle);
+        }
+    }
+    if hide {
+        unsafe {
+            write_i32(handle as *mut u8, WORM_SHOW_CURSOR, 0);
+        }
+    }
+}
+
+pub fn worm_hidden(handle: u32) -> bool {
+    HIDDEN
+        .lock()
+        .ok()
+        .map(|g| g.contains(&handle))
+        .unwrap_or(false)
 }
 
 pub fn install(catalog: &Catalog) -> Result<(), String> {
@@ -136,8 +179,79 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
                 .map_err(|e| format!("world-root hook: {e:?}"))?,
             Ordering::SeqCst,
         );
+        ORIG_DRAW.store(
+            MinHook::create_hook(
+                rb(WORM_DRAW_SPRITE) as *mut c_void,
+                draw_hook as *mut c_void,
+            )
+            .map_err(|e| format!("draw-sprite hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_NAME.store(
+            MinHook::create_hook(rb(WORM_DRAW_NAME) as *mut c_void, name_hook as *mut c_void)
+                .map_err(|e| format!("draw-name hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_HUD.store(
+            MinHook::create_hook(rb(WORM_DRAW_HUD) as *mut c_void, hud_hook as *mut c_void)
+                .map_err(|e| format!("draw-hud hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_HEALTH.store(
+            MinHook::create_hook(
+                rb(WORM_DRAW_HEALTH) as *mut c_void,
+                health_hook as *mut c_void,
+            )
+            .map_err(|e| format!("draw-health hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_CURSOR.store(
+            MinHook::create_hook(
+                rb(WORM_DRAW_CURSOR) as *mut c_void,
+                cursor_hook as *mut c_void,
+            )
+            .map_err(|e| format!("draw-cursor hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_OFFMAP.store(
+            MinHook::create_hook(
+                rb(WORM_DRAW_OFFMAP) as *mut c_void,
+                offmap_hook as *mut c_void,
+            )
+            .map_err(|e| format!("draw-offmap hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_TURN.store(
+            MinHook::create_hook(rb(WORM_DRAW_TURN) as *mut c_void, turn_hook as *mut c_void)
+                .map_err(|e| format!("draw-turn hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_ARROW.store(
+            MinHook::create_hook(
+                rb(WORM_DRAW_ARROW) as *mut c_void,
+                arrow_hook as *mut c_void,
+            )
+            .map_err(|e| format!("draw-arrow hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_AIM_CURSOR.store(
+            MinHook::create_hook(
+                rb(WORM_DRAW_AIM_CURSOR) as *mut c_void,
+                aim_cursor_hook as *mut c_void,
+            )
+            .map_err(|e| format!("draw-aim-cursor hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_CROSSHAIR.store(
+            MinHook::create_hook(
+                rb(WORM_DRAW_CROSSHAIR) as *mut c_void,
+                crosshair_hook as *mut c_void,
+            )
+            .map_err(|e| format!("draw-crosshair hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
     }
-    log_line("physics wraps: gravity leaf, missile HM, worm HM, world root");
+    log_line("physics wraps: gravity leaf, missile HM, worm HM, world root, draw skip");
     Ok(())
 }
 
@@ -243,6 +357,7 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     }
     if msg == MSG_FRAME_FINISH {
         crate::actor::on_weapon_slot(this);
+        crate::world::pump_space_fire(this);
         apply_carry(this);
     }
 }
@@ -265,6 +380,274 @@ fn apply_carry(this: *mut u8) {
         write_i32(this, ENT_SPEED_X, 0);
         write_i32(this, ENT_SPEED_Y, 0);
         write_i32(this, WORM_FACING, facing);
+        if worm_hidden(handle) {
+            write_i32(this, WORM_SHOW_CURSOR, 0);
+        }
         crate::world::hold_turn_timer();
     }
+}
+
+/// `WormEntity__DrawSprite_Maybe` is usercall EAX=this. Skip stock blit when hidden.
+/// Must stay naked: an `extern "C"` trampoline clobbers EAX (prior match-start AV).
+unsafe extern "C" fn draw_hidden(this: *mut u8) -> u8 {
+    if this.is_null() {
+        return 0;
+    }
+    worm_hidden(this as u32) as u8
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn draw_hook() {
+    core::arch::naked_asm!(
+        "push eax",
+        "push ecx",
+        "push edx",
+        "push eax",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "xor eax, eax",
+        "ret",
+        check = sym draw_hidden,
+        orig = sym ORIG_DRAW,
+    );
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn cursor_hook() {
+    core::arch::naked_asm!(
+        "push eax",
+        "push ecx",
+        "push edx",
+        "push eax",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "xor eax, eax",
+        "ret",
+        check = sym draw_hidden,
+        orig = sym ORIG_CURSOR,
+    );
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn name_hook() {
+    core::arch::naked_asm!(
+        "push eax",
+        "push ecx",
+        "push edx",
+        "push esi",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "xor eax, eax",
+        "ret",
+        check = sym draw_hidden,
+        orig = sym ORIG_NAME,
+    );
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn hud_hook() {
+    core::arch::naked_asm!(
+        "push eax",
+        "push ecx",
+        "push edx",
+        "push esi",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "xor eax, eax",
+        "ret",
+        check = sym draw_hidden,
+        orig = sym ORIG_HUD,
+    );
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn health_hook() {
+    core::arch::naked_asm!(
+        "push eax",
+        "push ecx",
+        "push edx",
+        "push esi",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "xor eax, eax",
+        "ret",
+        check = sym draw_hidden,
+        orig = sym ORIG_HEALTH,
+    );
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn offmap_hook() {
+    core::arch::naked_asm!(
+        "push ecx",
+        "push edx",
+        "push dword ptr [esp+12]",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "ret 4",
+        check = sym draw_hidden,
+        orig = sym ORIG_OFFMAP,
+    );
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn turn_hook() {
+    core::arch::naked_asm!(
+        "push eax",
+        "push ecx",
+        "push edx",
+        "push ecx",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "xor eax, eax",
+        "ret",
+        check = sym draw_hidden,
+        orig = sym ORIG_TURN,
+    );
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn arrow_hook() {
+    core::arch::naked_asm!(
+        "push eax",
+        "push ecx",
+        "push edx",
+        "push esi",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "xor eax, eax",
+        "ret",
+        check = sym draw_hidden,
+        orig = sym ORIG_ARROW,
+    );
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn aim_cursor_hook() {
+    core::arch::naked_asm!(
+        "push eax",
+        "push ecx",
+        "push edx",
+        "push esi",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "xor eax, eax",
+        "ret",
+        check = sym draw_hidden,
+        orig = sym ORIG_AIM_CURSOR,
+    );
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn crosshair_hook() {
+    core::arch::naked_asm!(
+        "push eax",
+        "push ecx",
+        "push edx",
+        "push edi",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "jnz 2f",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "xor eax, eax",
+        "ret",
+        check = sym draw_hidden,
+        orig = sym ORIG_CROSSHAIR,
+    );
 }

@@ -103,6 +103,11 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         pointer: crate::world::pointer,
         carry: crate::physics::carry,
         drop_carry: crate::physics::drop_carry,
+        look: native_look,
+        keys: crate::world::keys,
+        hide_worm: crate::physics::hide_worm,
+        worm_hidden: crate::physics::worm_hidden,
+        equip: crate::world::equip_weapon,
     });
     log_line("LuaActor: StrikeFire + CreateWeaponProjectile wrap; land/objects/sound");
     Ok(())
@@ -762,7 +767,12 @@ unsafe fn blit(this: *mut u8) {
     } else {
         (x, y)
     };
-    let sprite = read_i32(this, ACTOR_SPRITE) as u32;
+    let sprite = read_i32(this, ACTOR_SPRITE) as u32
+        | if (flags & ACTOR_FLAG_MIRROR_X) != 0 {
+            SPRITE_MIRROR_X
+        } else {
+            0
+        };
     let anim = read_i32(this, ACTOR_PHASE) as u32;
     draw_sprite_local(rq, 0x0005_0001, blit_x, blit_y, sprite, anim);
 }
@@ -874,6 +884,25 @@ fn native_advance(handle: u32) {
     unsafe {
         if is_actor(this) {
             advance_anim(this);
+        }
+    }
+}
+
+fn native_look(handle: u32, id: i32, delta: u32, w: i32, h: i32) {
+    let this = handle as *mut u8;
+    unsafe {
+        if !is_actor(this) || read_i32(this, ACTOR_DEAD) != 0 {
+            return;
+        }
+        write_i32(this, ACTOR_SPRITE, id);
+        write_i32(this, ACTOR_DELTA, delta as i32);
+        write_i32(this, ACTOR_SPR_W, w);
+        write_i32(this, ACTOR_SPR_H, h);
+        write_i32(this, ACTOR_PHASE, 0);
+        if let Some(feet) = sprite::feet_for_id(id) {
+            write_i32(this, ACTOR_FEET_X0, feet.x0);
+            write_i32(this, ACTOR_FEET_X1, feet.x1);
+            write_i32(this, ACTOR_FEET_Y, feet.y);
         }
     }
 }

@@ -12,6 +12,35 @@ pub const GAME_RUNTIME_WORLD: usize = 0x488;
 pub const GAME_RUNTIME_DISPLAY: usize = 0x4D0;
 /// `GameWorld.weapon_table` — pointer to 71 entries, memset size 0x80B0.
 pub const GAME_WORLD_WEAPON_TABLE: usize = 0x510;
+/// TeamArena at GameWorld+0x4628 (GetAmmo / AddAmmo).
+pub const GAME_WORLD_TEAM_ARENA: usize = 0x4628;
+pub const TEAM_GET_AMMO: u32 = 0x0052_25E0;
+pub const TEAM_ADD_AMMO: u32 = 0x0052_2640;
+/// TeamArena ammo dword table. Index `alliance * 142 + weapon`.
+pub const TEAM_ARENA_AMMO: usize = 0x1EB4;
+/// TeamArena delay dword table. Same index as ammo.
+pub const TEAM_ARENA_DELAY: usize = 0x1FD0;
+pub const TEAM_AMMO_STRIDE: usize = 142;
+/// WormEntity__SelectWeapon — usercall EDI=this, stdcall (weapon, ammo) RET 8.
+pub const WORM_SELECT_WEAPON: u32 = 0x0051_AE50;
+/// WormEntity__StartFiring — usercall EAX=this. Space-down: zeros power bar, enters charge.
+pub const WORM_START_FIRING: u32 = 0x0051_B7F0;
+/// WormEntity__ReleaseWeapon — Space-up: launches the charged shot.
+pub const WORM_RELEASE_WEAPON: u32 = 0x0051_C010;
+/// WormEntity.turn_active — StartTurn 1, FinishTurn 0.
+pub const WORM_TURN_ACTIVE: usize = 0x104;
+/// WormEntity.weapons_enabled (+0x28C). ReleaseWeapon no-ops if 0.
+pub const WORM_WEAPONS_ENABLED: usize = 0x28C;
+/// WormEntity.selected_weapon_ammo (+0x174).
+pub const WORM_SELECTED_AMMO: usize = 0x174;
+/// WormEntity.active_weapon_entry (+0x36C) — `&WeaponTable[selected]`.
+pub const WORM_ACTIVE_WEAPON: usize = 0x36C;
+/// WorldEntity.state (+0x44).
+pub const WORM_STATE: usize = 0x44;
+/// WeaponCharging — power bar live.
+pub const WORM_STATE_CHARGING: u32 = 0x73;
+/// AimingAngle — crosshair up, ready for Space.
+pub const WORM_STATE_AIMING: u32 = 0x7B;
 
 pub const WEAPON_ENTRY_SIZE: usize = 0x1D0;
 pub const STOCK_WEAPON_COUNT: usize = 71;
@@ -24,6 +53,7 @@ pub const WEAPON_DEFINED: usize = 0x10;
 pub const WEAPON_UNKNOWN_18: usize = 0x18;
 pub const WEAPON_CREATES_PROJECTILE: usize = 0x20;
 pub const WEAPON_AVAILABILITY: usize = 0x24;
+pub const WEAPON_ENABLED: usize = 0x28;
 pub const WEAPON_FIRE_TYPE: usize = 0x30;
 pub const WEAPON_SPECIAL_SUBTYPE: usize = 0x34;
 pub const WEAPON_FIRE_METHOD: usize = 0x38;
@@ -54,6 +84,24 @@ pub const WORM_SET_STATE: u32 = 0x0050_E850;
 pub const WORM_STATE_AIRBORNE: u32 = 0x7E;
 /// WormEntity__DrawSprite_Maybe — usercall EAX=this. Body sprite blit.
 pub const WORM_DRAW_SPRITE: u32 = 0x0050_FCD0;
+/// WormEntity__DrawWormName_Maybe — usercall ESI=this.
+pub const WORM_DRAW_NAME: u32 = 0x0050_FB50;
+/// WormEntity__DrawHudLabels_Maybe — usercall ESI=this (HP / banners).
+pub const WORM_DRAW_HUD: u32 = 0x0050_FDC0;
+/// WormEntity__DrawHealthLabel_Maybe — usercall ESI=this.
+pub const WORM_DRAW_HEALTH: u32 = 0x0051_0260;
+/// WormEntity__DrawCursorMarker_Maybe — usercall EAX=this (aim arrow / crosshair).
+pub const WORM_DRAW_CURSOR: u32 = 0x0051_03A0;
+/// WormEntity__DrawOffMapMarker_Maybe — stdcall this on the stack.
+pub const WORM_DRAW_OFFMAP: u32 = 0x0050_F900;
+/// WormEntity__DrawTurnIndicator — thiscall ECX=this.
+pub const WORM_DRAW_TURN: u32 = 0x0050_F810;
+/// WormEntity__DrawAimingArrow_Maybe — usercall ESI=this.
+pub const WORM_DRAW_ARROW: u32 = 0x0051_3A90;
+/// WormEntity__DrawAimCursor_Maybe — usercall ESI=this.
+pub const WORM_DRAW_AIM_CURSOR: u32 = 0x0051_D680;
+/// DrawCrosshairLine — usercall EDI=this (shotgun / bazooka line).
+pub const WORM_DRAW_CROSSHAIR: u32 = 0x0051_97D0;
 /// Stock `wflylnk.spr` — jump hang, ping-pong in the .spr flags.
 pub const SPRITE_WFLY_LNK: u32 = 278;
 pub const WORM_FACING: usize = 0x3DC;
@@ -116,7 +164,12 @@ pub const MSG_FRAME_FINISH: u32 = 0x2;
 pub const MSG_RENDER_SCENE: u32 = 0x3;
 pub const MSG_JUMP: u32 = 0x24;
 pub const MSG_JUMP_UP: u32 = 0x25;
+/// Space down — `StartFiring`, power bar.
+pub const MSG_FIRE_WEAPON: u32 = 0x26;
+/// Space up — `ReleaseWeapon`, the shot leaves.
+pub const MSG_RELEASE_WEAPON: u32 = 0x27;
 pub const MSG_START_TURN: u32 = 0x34;
+pub const MSG_ENABLE_WEAPONS: u32 = 0x45;
 
 pub const GAME_WORLD_DISPLAY: usize = 0x004;
 /// `GameWorld.sound` — DSSound* (Jelly LoadWav / PlaySoundLocal).
@@ -174,6 +227,10 @@ pub const ACTOR_FLAG_EXPLODE_BELOW: i32 = 512;
 pub const ACTOR_FLAG_SCREEN_FILL: i32 = 1024;
 /// Draw this actor's sheet centered on top of fill overlays.
 pub const ACTOR_FLAG_SCREEN_FRONT: i32 = 2048;
+/// Mirror the actor sprite on X (art faces right). OR'd into the blit id.
+pub const ACTOR_FLAG_MIRROR_X: i32 = 4096;
+/// `RQ_DrawSpriteLocal` sprite-id flag: flip X.
+pub const SPRITE_MIRROR_X: u32 = 0x0004_0000;
 pub const ACTOR_FEET_X0: usize = 0x12C;
 pub const ACTOR_FEET_X1: usize = 0x130;
 pub const ACTOR_FEET_Y: usize = 0x134;
@@ -317,6 +374,14 @@ mod tests {
         assert_eq!(GAME_WORLD_VIEWPORT_W, 0x77AC);
         assert_eq!(GAME_WORLD_VIEW_CX, 0x8CEC);
         assert_eq!(GAME_WORLD_LAND_CURSOR_X, 0x7380);
+        assert_eq!(WORM_START_FIRING, 0x0051B7F0);
+        assert_eq!(WORM_RELEASE_WEAPON, 0x0051C010);
+        assert_eq!(WORM_WEAPONS_ENABLED, 0x28C);
+        assert_eq!(WORM_ACTIVE_WEAPON, 0x36C);
+        assert_eq!(MSG_FIRE_WEAPON, 0x26);
+        assert_eq!(MSG_RELEASE_WEAPON, 0x27);
+        assert_eq!(TEAM_ARENA_AMMO, 0x1EB4);
+        assert_eq!(TEAM_ARENA_DELAY, 0x1FD0);
         assert_eq!(PLAY_SOUND_LOCAL, 0x004FDFE0);
         assert_eq!(DS_SOUND_LOAD_WAV, 0x00573FF0);
         assert_eq!(CUSTOM_SOUND_SLOT_MIN, 451);
