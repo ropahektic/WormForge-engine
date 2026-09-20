@@ -1,4 +1,4 @@
-![description](https://imgur.com/1ef65a0f-c945-43ff-8a2c-9c8ec983dc69)
+![description](https://i.imgur.com/2oYJ4yQ.png)
 
 # Contributing
 
