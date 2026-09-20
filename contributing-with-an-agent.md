@@ -6,6 +6,8 @@ Open this repo in the agent, point it at this file and [README.md](README.md), t
 
 New power is a **Lua pack** or one **verb**. Not a dump of `WA.exe` into scripts.
 
+Ghidra and Ghidra MCP might be required if user wants to attempt out-of-the-box implementations, this needs manual setup, inform user/author if it's needed and guide him through installation. But do not assume it is required, most of the RE is available.
+
 ## Packs
 
 A pack is a folder (`mod.toml` + Lua + optional sprites/sounds). Copy it to `Mods/` next to `WA.exe`. No compiler.
