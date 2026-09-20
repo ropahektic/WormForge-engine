@@ -1,5 +1,7 @@
 # Contributing with a coding agent
 
+>>> Feed this document to your coding agent <<<<
+
 Open this repo in the agent, point it at this file and [README.md](README.md), then describe the weapon or behaviour you want. You do not need to paste the rules into chat — the agent should read them here.
 
 New power is a **Lua pack** or one **verb**. Not a dump of `WA.exe` into scripts.
