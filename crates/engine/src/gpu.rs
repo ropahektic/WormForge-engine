@@ -57,6 +57,7 @@ pub static DREW: AtomicBool = AtomicBool::new(false);
 static ANNOUNCED: AtomicBool = AtomicBool::new(false);
 static RESOLVED_IDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static CAPTURE_LOGGED: AtomicBool = AtomicBool::new(false);
+static NO_SHADER_LOGGED: AtomicBool = AtomicBool::new(false);
 static WARNED: AtomicBool = AtomicBool::new(false);
 
 static FRAME: Mutex<Option<Frame>> = Mutex::new(None);
@@ -145,6 +146,7 @@ pub fn clear() {
         seen.clear();
     }
     CAPTURE_LOGGED.store(false, Ordering::SeqCst);
+    NO_SHADER_LOGGED.store(false, Ordering::SeqCst);
     if let Ok(mut pending) = PENDING.lock() {
         pending.clear();
     }
@@ -186,6 +188,24 @@ pub fn shutdown() {
 /// Returns true when it performed the stock drawing itself.
 pub unsafe fn capture(q: &Queue, display: usize, clip: usize, cut_depth: u32) -> bool {
     if !is_active() || clip == 0 {
+        return false;
+    }
+    // Without the D3D9 shader renderer there is nowhere to draw, and a GPU
+    // sheet has no palette version to fall back to -- so the sprites are
+    // simply absent. That is the worst failure this design can have, because
+    // it looks like a pack bug rather than a missing capability, so say it
+    // loudly and exactly once. Happens on the software renderer, or when
+    // another module already owns the three D3D9 hook sites.
+    if !crate::shader::is_ready() {
+        if !NO_SHADER_LOGGED.swap(true, Ordering::SeqCst) {
+            log_error(
+                "gpu renderer: WA's D3D9 shader renderer is unavailable, so GPU \
+                 sprites cannot be drawn at all and packs using gpu_prefix will \
+                 be invisible. This is a missing capability, not a pack fault: \
+                 either the software renderer is in use, or another module owns \
+                 the D3D9 hook sites.",
+            );
+        }
         return false;
     }
     let Ok(mut state) = FRAME.lock() else {
