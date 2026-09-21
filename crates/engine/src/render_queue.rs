@@ -17,7 +17,6 @@ const PTRS: usize = 0x10008;
 const MAX: usize = 0x800;
 static ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static DEPTHS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
-static SEEN: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
 
 pub fn set_depth(sprite: u32, depth: u32) {
     if let Ok(mut g) = DEPTHS.lock() {
@@ -27,12 +26,6 @@ pub fn set_depth(sprite: u32, depth: u32) {
 }
 pub fn clear_depths() {
     if let Ok(mut g) = DEPTHS.lock() {
-        g.clear();
-    }
-    reset();
-}
-pub fn reset() {
-    if let Ok(mut g) = SEEN.lock() {
         g.clear();
     }
 }

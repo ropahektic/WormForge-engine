@@ -14,7 +14,6 @@ local BEEP_FRAMES   = 60    -- minimum gap between alert beeps
 local ROT_IDLE      = 0.5   -- degrees per frame while sweeping
 local ROT_ACTIVE    = 1.5   -- PX tracking speed, degrees per frame
 local SWEEP         = 10    -- PX idle sweep amplitude, degrees
-local SWEEP_FRAMES  = 120   -- frames per idle sweep half-cycle
 local AIM_TOLERANCE = 1.5   -- PX fires only after rotation reaches the target
 local HIT_PX        = 10    -- how near a ray passes a worm to count as a hit
 local SELF_BLAST_PX = 24    -- never detonate a round closer than this
@@ -321,15 +320,30 @@ local function think(a, s)
     end
   else
     s.had_target = false
-    -- Deterministic sweep: no clock, just the turret's own frame counter.
-    local dir = ((s.frames // SWEEP_FRAMES) % 2 == 0) and 1 or -1
-    want = s.idle + dir * SWEEP
+    -- PX carries no timer here: it sweeps toward one extreme and reverses
+    -- the instant the turret reaches it (turn_toward snaps exactly onto
+    -- `want` on the step that closes the gap). A fixed-period timer instead
+    -- left the turret motionless for most of each cycle once it arrived at
+    -- the extreme early -- a hold phase PX's own idle does not have.
+    want = s.idle + s.sweep_dir * SWEEP
     s.angle = turn_toward(s.angle, want, ROT_IDLE)
+    if s.angle == want then
+      s.sweep_dir = -s.sweep_dir
+    end
+  end
+
+  -- PX: "turret rotated over itself, change the sentry's idle target angle
+  -- so it faces the other way when it goes back to idle." Tracking a target
+  -- can carry s.angle past the turret's own facing side; without this the
+  -- turret would sweep all the way back to its spawn-time idle angle
+  -- afterwards instead of idling on whichever side it now faces.
+  if (180 - s.angle) * s.side < 0 then
+    s.side = -s.side
+    s.idle = 180 - 90 * s.side
   end
 
   if not s.active then
-    local side = s.idle == 90 and 1 or -1
-    want = s.idle - 45 * side
+    want = s.idle - 45 * s.side
     s.angle = turn_toward(s.angle, want, ROT_IDLE)
     stop_firing(a, s)
   end
@@ -397,12 +411,14 @@ local function brain(a, ev)
     update_servo(a, s, false)
     if s.health <= 0 then
       state[a.id] = nil
-      a:explode({ damage = 50, id = 100 })
+      -- PX explodes at PosY-20 -- the turret's body, not its feet. explode()
+      -- defaults to `below` the actor, which for a bottom-anchored sprite
+      -- centres the blast underground instead of on the visible housing.
+      a:explode({ damage = 50, id = 100, below = false })
       a:despawn()
       return
     end
   end
-  s.frames = s.frames + 1
   if s.firing then s.anim = s.anim + 1 end
 
   if not s.planted then
@@ -510,7 +526,8 @@ wa.weapons.replace({
       health = 50,
       angle = idle,
       idle = idle,
-      frames = 0,
+      side = facing < 0 and -1 or 1,
+      sweep_dir = 1,
       shots = 0,
       firing = false,
       anim = 0,

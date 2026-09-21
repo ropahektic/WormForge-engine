@@ -237,12 +237,32 @@ TURRET_SCALE = 0.8
 BASE_OFFSET = (0, 2)
 PIVOT = (0, 2 + int(round(TURRET_SCALE * -15)))
 BARREL_OFFSET = (TURRET_SCALE * 17, 0)
-MUZZLE_OFFSET = (TURRET_SCALE * 14, 0)
+# PX's flash is a dramatic tongue of flame well beyond the barrel; scaling it
+# down with the housing (TURRET_SCALE) left it smaller than the source art.
+MUZZLE_SCALE = 1.15
+# sentry_muzzle.png is not just the bright taper: it carries a soft round
+# halo trailing back from its own centre (out to roughly -24px at
+# MUZZLE_SCALE, versus the bright core starting around -14px). The old
+# TURRET_SCALE*14 offset placed that centre almost on the barrel's tip, so
+# the halo washed back over the entire visible barrel instead of starting
+# there. This places the core's leading edge at the tip (BARREL_OFFSET plus
+# the barrel art's own ~10.4px half-length) and lets the halo trail onto the
+# barrel from there, the way PX's does.
+MUZZLE_OFFSET = (24.0, 0)
+
+# A 64x64 canvas only has ~32px of headroom from its own centre, but the
+# flare reaches roughly BARREL_OFFSET + MUZZLE_OFFSET (~25px) plus its own
+# scaled half-width (~20px) beyond a pivot that already sits 10px off centre
+# -- around 55px in the worst-case direction. That clipped the flare's own
+# tip off the top of the sprite. Firing frames get a bigger canvas; the
+# other poses have no flare and keep the compact one.
+FRAME_SIZE = (64, 64)
+FIRE_FRAME_SIZE = (144, 144)
 
 
-def scale(im, f=TURRET_SCALE):
+def scale(im, f=TURRET_SCALE, resample=Image.NEAREST):
     return im.resize((max(1, int(round(im.width * f))),
-                      max(1, int(round(im.height * f)))), Image.NEAREST)
+                      max(1, int(round(im.height * f)))), resample)
 
 
 def over(canvas, img, dx, dy):
@@ -262,9 +282,9 @@ def swing(offset, angle):
             -ox * math.sin(r) + oy * math.cos(r))
 
 
-def rot(im, angle):
+def rot(im, angle, resample=Image.NEAREST):
     """Rotate to a turret angle. Art faces right, which is the 90 reference."""
-    return im.rotate(angle - 90.0, resample=Image.NEAREST, expand=False)
+    return im.rotate(angle - 90.0, resample=resample, expand=False)
 
 
 def main(argv):
@@ -302,23 +322,31 @@ def main(argv):
     # idle one and the turret visibly jumps each time the barrel animates.
     # Clipping every frame at the tripod's footline keeps that row constant;
     # the clipped glow would have been under the ground anyway.
-    footline = Image.new('RGBA', base.size, (0, 0, 0, 0))
-    footline = over(footline, base, *BASE_OFFSET)
-    floor_y = footline.getbbox()[3] - 1
+    #
+    # over() centres a part using the CANVAS's own size, so the same
+    # BASE_OFFSET lands on a different absolute row once firing frames get a
+    # bigger canvas (FIRE_FRAME_SIZE) than idle ones (FRAME_SIZE). The
+    # footline has to be recomputed per canvas size rather than shared.
+    def build_footline(size):
+        footline = Image.new('RGBA', size, (0, 0, 0, 0))
+        footline = over(footline, base, *BASE_OFFSET)
+        floor_y = footline.getbbox()[3] - 1
+        # The contact row's x-extent matters as much as its y. WA derives the
+        # platform from the lowest opaque row (x0, x1, y), so if a downward-
+        # pointing barrel or the glow lands on that row it widens x0..x1 and
+        # the turret shifts sideways between frames -- the horizontal
+        # counterpart of the vertical jump. Forcing that row to be exactly
+        # the tripod's own feet makes the platform identical in every frame.
+        feet_row = {}
+        for x in range(footline.width):
+            px = footline.getpixel((x, floor_y))
+            if px[3]:
+                feet_row[x] = px
+        return floor_y, feet_row
 
-    # The contact row's x-extent matters as much as its y. WA derives the
-    # platform from the lowest opaque row (x0, x1, y), so if a downward-
-    # pointing barrel or the glow lands on that row it widens x0..x1 and the
-    # turret shifts sideways between frames -- the horizontal counterpart of
-    # the vertical jump. Forcing that row to be exactly the tripod's own feet
-    # makes the platform identical in every frame of every pose.
-    feet_row = {}
-    for x in range(footline.width):
-        px = footline.getpixel((x, floor_y))
-        if px[3]:
-            feet_row[x] = px
+    footlines = {size: build_footline(size) for size in (FRAME_SIZE, FIRE_FRAME_SIZE)}
 
-    def clip_below_feet(img):
+    def clip_below_feet(img, floor_y, feet_row):
         px = img.load()
         for y in range(floor_y + 1, img.height):
             for x in range(img.width):
@@ -351,17 +379,13 @@ def main(argv):
                     sprites, 'turret_t%d_p%d_s%d' % (team, pose, chunk))
                 os.makedirs(folder, exist_ok=True)
                 angle = i * 360.0 / steps
-                frame = Image.new('RGBA', base.size, (0, 0, 0, 0))
+                canvas_size = FIRE_FRAME_SIZE if pose == 1 else FRAME_SIZE
+                floor_y, feet_row = footlines[canvas_size]
+                frame = Image.new('RGBA', canvas_size, (0, 0, 0, 0))
                 frame = over(frame, base, *BASE_OFFSET)
                 bx, by = swing(BARREL_OFFSET, angle)
                 frame = over(frame, rot(scale(barrel_frame), angle),
                              PIVOT[0] + bx, PIVOT[1] + by)
-                # PX shows the separate additive muzzle during the first
-                # half of its two-frame firing cycle, at the end of the bore.
-                if pose == 1:
-                    mx, my = swing((BARREL_OFFSET[0] + MUZZLE_OFFSET[0], 0), angle)
-                    frame = over(frame, rot(scale(muzzle), angle),
-                                 PIVOT[0] + mx, PIVOT[1] + my)
                 # Mirror in the housing's LOCAL coordinates before rotating.
                 # Mirroring the rotated result reverses its aim on diagonals.
                 housing = scale(tinted)
@@ -371,9 +395,23 @@ def main(argv):
                 else:
                     housing = rot(housing, angle)
                 frame = over(frame, housing, *PIVOT)
+                # PX shows the separate additive muzzle during the first half
+                # of its two-frame firing cycle, at the end of the bore, drawn
+                # on top of the housing -- drawing it before left the housing
+                # painted back over most of the flare, hiding all but the
+                # sliver that poked out past its silhouette. It is also soft,
+                # blurred art rather than pixel art, so it is scaled and
+                # rotated with bicubic resampling instead of the nearest-
+                # neighbour used everywhere else -- nearest turned its smooth
+                # gradient into visible blocky rings.
+                if pose == 1:
+                    mx, my = swing((BARREL_OFFSET[0] + MUZZLE_OFFSET[0], 0), angle)
+                    flare = rot(scale(muzzle, MUZZLE_SCALE, resample=Image.BICUBIC),
+                                angle, resample=Image.BICUBIC)
+                    frame = over(frame, flare, PIVOT[0] + mx, PIVOT[1] + my)
                 if args.palette_art:
                     snap_to(frame, team_ramp(TEAM_TINTS[team]) + grey_ramp())
-                clip_below_feet(frame)
+                clip_below_feet(frame, floor_y, feet_row)
                 frame.save(os.path.join(folder, 'frame%03d.png' % (i % per_sheet)))
     made += 6 * len(barrels) * ((steps + per_sheet - 1) // per_sheet)
 
