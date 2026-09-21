@@ -1,0 +1,69 @@
+void CMine::Scared()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+           if(obj->ClType == OC_Worm || obj->ClType == OC_Missile)
+           {
+             if(obj->ClType == OC_Worm)
+             {
+               if(GetCurrentWorm() != NullObj)
+               {
+                 if(GetCurrentWorm() == obj)
+                 {
+                 RunAwayCheck(obj); 
+                 }
+               }
+             }
+             else
+             {
+             RunAwayCheck(obj);
+             }        
+           }
+  }
+}
+
+void CMine::RunAwayCheck(CGObject *obje)
+{
+     if(DistBetweenObjs(this, obje) <= 150)
+     {
+               if(obje->PosX < PosX){SpX = SpX + 0.5;}else{SpX = SpX - 0.5;}
+               if(obje->PosY < PosY){SpY = SpY + 0.5;}else{SpY = SpY - 0.5;}
+     }
+}
+
+void COilDrum::Scared()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+           if(obj->ClType == OC_Worm || obj->ClType == OC_Missile)
+           {
+             if(obj->ClType == OC_Worm)
+             {
+               if(GetCurrentWorm() != NullObj)
+               {
+                 if(GetCurrentWorm() == obj)
+                 {
+                 RunAwayCheck(obj); 
+                 }
+               }
+             }
+             else
+             {
+             RunAwayCheck(obj);
+             }            
+           }
+  }
+}
+
+void COilDrum::RunAwayCheck(CGObject *obje)
+{
+     if(DistBetweenObjs(this, obje) <= 150)
+     {
+               if(obje->PosX < PosX){SpX = SpX + 0.5;}else{SpX = SpX - 0.5;}
+               if(obje->PosY < PosY){SpY = SpY + 0.5;}else{SpY = SpY - 0.5;}
+     }
+}

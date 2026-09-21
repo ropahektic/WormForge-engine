@@ -1,0 +1,88 @@
+require utils, utils_steps;
+
+bool swat;
+bool swatsd;
+int swat_control;
+
+CSoundFile* engage;
+
+void swat_select::Init()
+{
+   swat = false;
+   swatsd = false;
+   keySync->AddKey(9); // Tab
+}
+
+void swat_select::FirstFrame()
+{
+f = GetAttachment("engage.wav");	 engage = new CSoundFile(f);
+}
+
+// swat
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+
+  if(Type == M_FRAME && this == GetCurrentWorm())
+  {
+    if(swat_control == 1) swat_control = 2;
+  }
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(Type == M_SETTEAM && swat)
+  {
+    if(!SuddenDeath || swatsd)
+    {
+      local w = GetCurrentWorm();
+      if(w != NullObj && w->Sinking == 0) swat_control = 1;
+    }
+  }
+  super;
+}
+
+override void CTeam::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{ 
+  if(Type == M_SETTEAM && swat_control == 1)
+  {
+    return;
+  }
+  
+  super;
+  
+  if(Type == M_FRAME && swat_control == 2)  
+  {
+    swat_control = 0;
+
+    if(DisableControl || !CanSelectWeapons || !Active) return;
+    local n = GetNextWorm();
+    SetCurrentWorm( n);
+
+    Root->CurWorm = n; 
+  }
+  
+  if(Type == M_TURNEND)
+  {
+  swat = false;
+  swatsd = false;
+     if(swat == true || swatsd == true)
+     {
+     ShowMessage("SWAT Select Disabled");
+     }
+  }
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+  if(Weap->CheckName("SWAT Select"))
+  {
+  swat = true;
+  swatsd = true;
+  vol = CalculateSoundVolume(PosX,PosY);
+  pan = CalculateSoundPan(PosX,PosY);
+  engage->Play(vol, pan, false);
+  ShowMessage("SWAT Select Enabled");
+  }
+super;
+}  

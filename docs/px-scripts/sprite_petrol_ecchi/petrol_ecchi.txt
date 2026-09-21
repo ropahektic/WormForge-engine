@@ -1,0 +1,77 @@
+CSprite* firehit;
+CSprite* kamismk;
+CSprite* flame1;
+CSprite* flame2;
+
+CSprite* uzihit;
+CSprite* shothit;
+
+CSprite* flarge;
+CSprite* fmed;
+CSprite* fsmall;
+
+CSprite* exhaust;
+CSprite* hexhaust;
+CSprite* mexhaust;
+
+void petrol_ecchi::InitGraphic()
+{
+   CFile *f;
+   
+   f = GetAttachment("firehit.png");
+   firehit = LoadSprite(f, 10, 0);
+   SetSpriteOverride(79, firehit);
+   
+   f = GetAttachment("kamismk.png");
+   kamismk = LoadSprite(f, 10, 1);
+   SetSpriteOverride(80, kamismk);
+
+   f = GetAttachment("flame1.png");
+   flame1 = LoadSprite(f, 32, 1);
+   SetSpriteOverride(84, flame1);
+
+   f = GetAttachment("flame2.png");
+   flame2 = LoadSprite(f, 32, 1);
+   SetSpriteOverride(85, flame2);
+    
+   
+   
+   f = GetAttachment("uzihit.png");
+   uzihit = LoadSprite(f, 20, 0);
+   SetSpriteOverride(114, uzihit);
+
+   f = GetAttachment("shothit.png");
+   shothit = LoadSprite(f, 12, 0);
+   SetSpriteOverride(116, shothit);
+   
+   
+   
+   f = GetAttachment("flame_large.png");
+   flarge = LoadSprite(f, 12, 0);
+   SetSpriteOverride(124, flarge);
+   SetSpriteOverride(125, flarge);
+   SetSpriteOverride(126, flarge);
+
+   f = GetAttachment("flame_med.png");
+   fmed = LoadSprite(f, 12, 0);
+   SetSpriteOverride(127, fmed);
+   SetSpriteOverride(128, fmed);
+
+   f = GetAttachment("flame_small.png");
+   fsmall = LoadSprite(f, 12, 0);
+   SetSpriteOverride(129, fsmall);
+   
+   
+   
+   //f = GetAttachment("exhaust.png");
+   //exhaust = LoadSprite(f, 12, 0);
+   //SetSpriteOverride(130, exhaust);
+   
+   f = GetAttachment("hexhaust.png");
+   hexhaust = LoadSprite(f, 10, 0);
+   SetSpriteOverride(131, hexhaust);
+   
+   f = GetAttachment("mexhaust.png");
+   mexhaust = LoadSprite(f, 30, 1);
+   SetSpriteOverride(135, mexhaust);
+}

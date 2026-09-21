@@ -1,0 +1,13 @@
+require utils;
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Real Shotgun"))
+    {
+        super;
+        super;
+        super;
+        super;                           // 5 shots.
+    }
+    super;
+}

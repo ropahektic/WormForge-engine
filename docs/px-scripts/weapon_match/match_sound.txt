@@ -1,0 +1,27 @@
+require utils;
+
+CSoundFile* match1;
+CSoundFile* match2;
+CSoundFile* match3;
+CSoundFile* match4;
+
+void match_sound::Init()
+{
+    match1 = new CSoundFile(GetAttachment("match1.wav"));
+    match2 = new CSoundFile(GetAttachment("match2.wav"));
+    match3 = new CSoundFile(GetAttachment("match3.wav"));
+    match4 = new CSoundFile(GetAttachment("match4.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+     if(Weap->CheckName("Match"))
+     {
+         local i = RandomInt(1, 4);
+               if      (i == 1) match1->Play(1.0, 0.0, false);
+               else if (i == 2) match2->Play(1.0, 0.0, false);
+               else if (i == 3) match3->Play(1.0, 0.0, false);
+               else if (i == 4) match4->Play(1.0, 0.0, false);
+     }
+super;
+}

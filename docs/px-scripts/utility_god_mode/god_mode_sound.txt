@@ -1,0 +1,15 @@
+CSoundFile* comingintogodhood;
+ 
+void god_mode_sound::Init()
+{
+	comingintogodhood       = new CSoundFile(GetAttachment("The Gates of Heaven.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("God Mode") || Weap->CheckName("Holiest Hand-Grenade"))
+  {  
+             comingintogodhood->Play(1.5, 0.0, false);
+  }
+  super;
+}

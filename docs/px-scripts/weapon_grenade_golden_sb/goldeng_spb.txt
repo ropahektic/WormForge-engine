@@ -1,0 +1,63 @@
+require utils, p_sprite_builder, p_animation;
+
+CSprite* goldg_aim;
+
+void goldeng_spb::InitGraphic()
+{
+CFile *f;
+f = GetAttachment("goldg.png");
+goldg_aim = LoadSprite(f, 1, 0);
+}
+
+//---------------------------SPRITE-BUILDER-------------------------------------
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+super;
+if (Type == M_FRAME) {
+if (gframe == 1) {
+
+local weapName = "Golden Grenade";
+local sprite = goldg_aim->Index;
+CWormAnimParams* Params = new CWormAnimParams;
+
+//-------------------------AIMING-ANIMATIONS------------------------------------
+
+//------GOLDEN-GRENADE----------------------------------------------------------
+Params->hand_type = 1;
+Params->hand_scale = 1.2;
+Params->hand_radius = -9.8;
+Params->hand_rotation = -0.05;
+Params->hand_radial_rotation = 0.09;
+Params->weap_radial_rotation = 0.0;
+Params->weap_rotation = 0.5;
+Params->weap_radius = -10.0;
+Params->animate = true;
+Params->anim_speed = 1.00;
+//------------------------------------------------------------------------------
+local WA = new WormSprite(weapName, sprite, Params);
+}
+}
+}
+//-------------------------BULLET-ANIMATIONS------------------------------------
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+if (Type == M_FRAME){
+
+
+if (weap->CheckName("Golden Grenade")){
+if (goldg_anim) {
+local sprite = goldg_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+goldg_anim = false;
+}
+}
+}
+}
+//------------------------------------------------------------------------------
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+
+goldg_anim = true;
+}

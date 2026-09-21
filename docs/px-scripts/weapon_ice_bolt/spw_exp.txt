@@ -1,0 +1,30 @@
+require p_animation, utils;
+
+CAnimationParams* exp_icyaw;
+
+void spw_exp::FirstFrame()
+{
+exp_icyaw = new CAnimationParams;
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+super;
+if (weap->CheckName("Ice Bolt"))
+	{
+	exp_icyaw->turns = 1;
+	exp_icyaw->sprite = lglow_tr->Index;
+	exp_icyaw->speed = 100;
+	exp_icyaw->scale = 0.50;
+	exp_icyaw->duration = 0.5;
+	exp_icyaw->ZPlane = 1;
+	exp_icyaw->backwards = true;
+	exp_icyaw->once = true;
+	exp_icyaw->color = ARGB(60,15,105,225);
+	exp_icyaw->blend_type = 4;
+
+	new CAnimation(Root, x, y, NullObj, exp_icyaw);
+	}
+iforce = false;
+iarrow = false;
+}

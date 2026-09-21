@@ -1,0 +1,160 @@
+
+require utils;
+
+$editor
+ $object ForceField
+  $origin -15 -15
+  $image "forcefield.png"
+  $func SpawnForceField
+  $radius 17
+  $param ForceX int 0
+  $param ForceY int 200
+  $param ExplodeObjects bool false       
+  $param UseLandscape bool false
+  $param AffectStandingWorms bool false
+  $param EachNFrame int 5
+  $param ExplosionDmg int 10
+  $param ExplosionPush int 100
+  $param Size area 100 100
+ $object_end 
+$end
+
+CForceField : CObject;
+
+CForceField::CForceField(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  pr_x1 = aobj->PosX;
+  pr_x2 = aobj->PosX + aobj->GetInt("Size");
+  pr_y1 = aobj->PosY;
+  pr_y2 = aobj->PosY + aobj->GetInt2("Size");  
+
+  
+  frcx = aobj->GetInt("ForceX") / 100.0;
+  frcy = aobj->GetInt("ForceY") / 100.0;
+  explosions = aobj->GetBool("ExplodeObjects");
+  fps = aobj->GetInt("EachNFrame");
+  e_dmg = aobj->GetInt("ExplosionDmg");   
+  e_push = aobj->GetInt("ExplosionPush");   
+  landZone = aobj->GetBool("UseLandscape");
+  AffectStandingWorms = aobj->GetBool("AffectStandingWorms");
+  
+  timer = 0;
+  timerToDisable = 60;
+  timerToEnable = 0;  
+  explosionTimer = 0;
+  
+  if (landZone)
+  {
+    sensor = new CTouchSensor(this, pr_x1, pr_y1, pr_x2 - pr_x1, pr_y2 - pr_y1);
+  }
+}
+
+void CForceField::AdjustPosition(fixed x, fixed y)
+{
+  ExpX = x;
+  ExpY = y;
+  
+  if (ExpY < pr_y1) ExpY = pr_y1;
+  if (ExpY > pr_y2) ExpY = pr_y2;
+  if (ExpX < pr_x1) ExpX = pr_x1;
+  if (ExpX > pr_x2) ExpX = pr_x2;
+}
+
+void CForceField::HandleObject(CGObject* obj)
+{                              
+        if (obj->ClType == OC_Cross) return; 
+        if (obj->ClType == OC_Mine) return;
+        
+        if (obj->ClType == OC_Worm && !AffectStandingWorms)
+        {
+           if (obj->ObjState == WS_WALKING) return;     
+           if (obj->ObjState == WS_AIMING) return;           
+           if (obj->ObjState == WS_SETPOWER) return;
+           if (obj->ObjState == WS_FIRED) return;
+           if (obj->ObjState == WS_FIRECONT) return; 
+           if (obj->ObjState == WS_JUMPPREPARE) return; 
+           if (obj->ObjState == WS_SHOOTINGROPE) return;
+        }
+        
+        obj->SpX = obj->SpX + frcx;
+        obj->SpY = obj->SpY + frcy;
+        
+        if (#WEAPON_GLIDER)
+        {
+           if (obj is CWorm)
+           {
+              local worm = CWorm(obj);
+              worm->Glider->ParaSpX += frcx;  
+              worm->Glider->ParaSpY += frcy;
+           }
+        }
+        
+        if (explosions && (explosionTimer <= 0) && (obj->ClType == OC_Worm))
+        {
+          local worm = CWorm(obj);
+          if (GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber) > 0)
+          {
+           explosionTimer = 6;
+           local offx = srandom_b() * 3.0;   
+           local offy = srandom_b() * 3.0;
+           AdjustPosition( obj->PosX + offx, obj->PosY + offy );
+           Root->DoExplosion( ExpX, ExpY, e_push, e_dmg, 1, 0);
+          }
+        }
+}
+
+void CForceField::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{             
+  if (Type == M_TOUCHSENSOR)
+  {                   
+    if (timerToDisable <= 0) return;  
+    if (timerToEnable > 0) return;
+    local activator = CTouchSensor(sender)->activator;
+    HandleObject(activator);
+  }
+  if (Type != M_FRAME) return;
+  if (Root->IsTimerActive() == false)
+  {
+    if (timerToDisable <= 0)
+    {
+      timerToEnable = 13;
+      return;
+    } else { 
+      timerToDisable -= 1;
+    }
+  } else {
+    timerToDisable = 60;
+  }
+  timer += 1; 
+  if (timerToEnable > 0) 
+  {
+    timerToEnable -= 1;
+    return;
+  }
+  
+  if (explosionTimer > 0) explosionTimer -= 1;        
+  if (landZone) return;
+  if (timer % fps) return;        //performance
+  
+  for (local i = 1; i < Env->Objs.Count; i += 1)
+  {
+    local obj = CGObject(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    if (obj->ClType == OC_Cross) continue; 
+    if (obj->ClType == OC_Mine) continue;
+    
+    if (pr_x1 < obj->PosX && pr_x2 > obj->PosX)
+    {
+      if (pr_y1 < obj->PosY && pr_y2 > obj->PosY)
+      {
+        HandleObject(obj);
+      }
+    }
+  }
+}
+
+void SpawnForceField(CEditorObject* eobj)
+{
+  field = new CForceField(eobj);
+};

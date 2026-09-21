@@ -1,0 +1,189 @@
+require utils, utils_steps;
+
+CGUIText* GUIMinesTimer;
+CMine* objmine;
+CMine* oldobjmine;
+CSoundFile* beep;
+
+int mineFuse;
+int innn;
+int MineCooldown;
+bool ShowTimer;
+bool ShowFuse;
+
+void mine_reveal::Init()
+{
+    beep = new CSoundFile(GetAttachment("beep.wav"));
+}
+
+void mine_reveal::InitGraphic()
+{
+GUIMinesTimer = new CGUIText(GS->Disp, 16, 1);
+}
+
+void mine_reveal::FirstFrame(){mineFuse=0;innn = 0;}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  	super;
+  	MineCooldown = 0;
+  	objminefuse = "Null";
+  	ShowTimer = false;
+  	ShowFuse = false;
+  	acting = false;
+  	alreadyShooted = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (ShowTimer == true)
+	{
+	if(Type == M_DRAWQUEUE)
+    	{
+        DrawMineGUITimer();
+    	}
+    if(Type == M_FRAME)
+        {
+        if(acting)
+			{
+			nShoots = 1;
+			nShooted=0;
+			}
+        if(MineCooldown > 0)
+			{
+			MineCooldown = MineCooldown - 1;
+			ShowFuse = true;
+			}
+		else
+			{
+			ShowFuse = false;
+			}
+        }  
+    if(Type == M_TURNEND)
+    	{
+    	ShowTimer = false;
+    	}
+	}
+super;
+}
+
+void CWorm::DrawMineGUITimer()
+{
+	local outX = 1;
+  	local outY = 1;
+
+	if (oldobjmine != NullObj)
+	    {
+	    if (oldobjmine->Fuse == 0)
+	      {
+	      objminefuse = "Dud";
+	      }
+        else
+	    	{
+	        if (ShowFuse)
+                {
+				oldobjmine->Fuse = mineFuse;
+	           	}
+	           
+                objminefuse = ftoaEx(oldobjmine->Fuse/1000, 1);
+	        }
+	        
+        CBitmap * mineinfo = GUIMinesTimer->SetText(objminefuse, 7, RGB(0, 0, 0), RGB(127, 127, 127), &outX, &outY, 0);
+	    AddBitmap(1, oldobjmine->PosX, oldobjmine->PosY-20, mineinfo, outX, outY, 1);
+	    }
+	else return;
+}
+
+CGObject * CWorm::SCFindMine(int l, int r, int t, int b)     // left, right, top, bottom
+{
+      for(int i = 0; i < Env->Objs.Count; i++)
+      {
+          local obj = CGObject(Env->Objs.Objs[i]);
+          if(obj == NullObj) continue;
+          if(obj == this) continue;
+          if(obj->ClType != OC_Mine) continue;
+          if(obj->ClType == OC_Mine)
+             {
+             if(obj->IsInBox( l, t, r, b))                    // left, top, right, bottom
+             return obj;
+             }
+      }
+      return CGObject(NullObj);
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+CWorm *w = GetCurrentWorm();
+if(Weap->CheckName("Mine Reveal"))
+	{
+	ShowTimer = false;
+    local x = SelectX/65536;
+    local y = SelectY/65536;
+    local obj = SCFindMine(x-10, x+10, y-10, y+10);
+		
+	if(obj != NullObj)                  
+    	{
+        if (!alreadyShooted)
+			{
+		    if (innn==0)
+            	{
+        	    MineCooldown = 40;
+        	    oldobjmine = CMine(obj);
+    		    oldobjmine->Fuse = GS->GetRandom()%3000;
+    		    mineFuse = oldobjmine->Fuse;
+                oldobjmine->SpY = -1.1;
+			
+        	    ShowFuse = true;
+                ShowTimer = true;
+
+				for (int curin = innn; innn==curin; innn++)
+  	            acting=true;
+                return;
+                }
+
+			if (innn==1)
+                {
+        	    MineCooldown = 40;
+        	    oldobjmine = CMine(obj);
+    		    oldobjmine->Fuse = GS->GetRandom()%3000;
+    		    mineFuse = oldobjmine->Fuse;
+                oldobjmine->SpY = -1.1;
+			
+                beep->Play(1.0, 0.0, false);
+        	    ShowFuse = true;
+                ShowTimer = true;
+  	            acting=false;
+  	            alreadyShooted=true;
+  	            nShoots--;
+                }
+			}
+
+		if (alreadyShooted)
+			{
+            MineCooldown = 40;
+        	oldobjmine = CMine(obj);
+    		oldobjmine->Fuse = GS->GetRandom()%3000;
+    		mineFuse = oldobjmine->Fuse;
+            oldobjmine->SpY = -1.1;
+			
+            beep->Play(1.0, 0.0, false); 
+        	ShowFuse = true;
+            ShowTimer = true;
+            }       
+        }
+        
+    if (obj==NullObj)
+		{
+       	ShowTimer = false;
+        local wepMR = GS->GetWeaponByName("Mine Reveal");
+        GS->Info.AddWeapon(WormTeam, wepMR->GetWeaponIndex(), 1);   // adding one weapon back
+        ShowMessage("Nothing found!");
+        PlayLocalSound(120, 3, 1.0, 1.0);
+        acting=false;
+        return;
+        }
+    }
+    
+else super;
+}

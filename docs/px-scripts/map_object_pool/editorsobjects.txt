@@ -1,0 +1,52 @@
+
+require utils;
+
+$editor
+ $object SpawnPoint
+  $origin -13 -15
+  $image "edworm.png"
+  $func DoSpawnPoint
+  $radius 17
+  $param FromWorm int 1
+  $param ToWorm int 8
+  $param OffsetPerWorm int 20
+  $param Team int 0;
+ $object_end   
+$end
+
+void DoSpawnPoint(CEditorObject* obj)
+{
+  x = obj->PosX;
+  y = obj->PosY;
+  offx = obj->GetInt("OffsetPerWorm");
+  fw = obj->GetInt("FromWorm");
+  tw = obj->GetInt("ToWorm");
+  team = obj->GetInt("Team");
+  
+  if (fw < 1) fw = 1; if (fw > 8) fw = 8;  
+  if (tw < 1) tw = 1; if (tw > 8) tw = 8;
+  if (team < 0) team = 0; if (team > 6) team = 6;
+  if (tw < fw) return;
+  
+  generateTColorInd();
+
+  for (j = 6; j >= 1; j-=1)
+  {
+    for (i = tw; i >= fw; i-=1)
+    {
+      if (team == 0 || (g_tColorInd[GetTeamColor(j)]) == team)
+      {
+        local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+        if (Worm)
+        {
+          local wtf = MakeNumberString("Ball " , i, "");
+          Worm->PosX = x;
+          Worm->PosY = y;
+//          Worm->OrigColMask = 50;
+          Worm->SetName(wtf);  
+          x += offx;
+        };
+      };
+    };
+  };
+};

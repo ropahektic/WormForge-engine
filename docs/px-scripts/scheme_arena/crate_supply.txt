@@ -1,0 +1,69 @@
+
+
+
+$editor
+ $object CrateSupply
+  $origin -15 -15
+  $image "edcrate.png"
+  $func SpawnCrateSupply
+  $radius 17
+  $param SpWeapon enum 3 Minigun Rocket Dynamite 
+  $param WaveNum int 1
+  $param AmountNum int 1
+ $object_end      
+$end
+
+
+CCrateSupply : CObject;
+
+void CCrateSupply::Spawn()
+{
+  CCrateDesc cDesc;
+  zero(&cDesc);
+  cDesc.X = PosX;
+  cDesc.Y = PosY;
+  cDesc.type = CT_WEAPON;
+  cDesc.wType = WCT_RANDOM;
+  
+  local wep1 = GS->GetWeaponByName(Weap);
+  
+  local t = new CCrate(Root, &cDesc, DT_NONE);
+  t->desc.weapon = 100 * wep1->GetPageIndex() + wep1->GetWeaponIndex();
+  t->desc.wType = WCT_DEFINED;
+  t->desc.amount = Amount;
+}
+
+CCrateSupply::CCrateSupply(CEditorObject* obj)
+{
+   super(Root, GS);
+   
+   PosX = obj->PosX;
+   PosY = obj->PosY;
+   
+   CrateSpawned = false;
+   
+   Wave = obj->GetInt("WaveNum");
+   Amount = obj->GetInt("AmountNum");
+
+ 
+   if (StrCmp(obj->GetString("SpWeapon"), "Minigun")) Weap = "Minigun";    
+   if (StrCmp(obj->GetString("SpWeapon"), "Rocket")) Weap = "Rocket"; 
+   if (StrCmp(obj->GetString("SpWeapon"), "Dynamite")) Weap = "Dynamite";     
+}
+
+void CCrateSupply::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+   {
+      if(Wave == GlobalWave && CrateSpawned == false)
+      {
+         Spawn();
+         CrateSpawned = true;
+      }
+   }
+}
+
+void SpawnCrateSupply(CEditorObject* obj)
+{
+  cs = new CCrateSupply(obj);
+};

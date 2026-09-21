@@ -1,0 +1,302 @@
+// made by 0rang3
+
+require utils;
+
+// loading sprites
+CSprite*i_piece;
+CSprite*j_piece;
+CSprite*j2_piece;
+CSprite*l_piece;
+CSprite*l2_piece;
+CSprite*o_piece;
+CSprite*s_piece;
+CSprite*t_piece;
+CSprite*t2_piece;
+CSprite*z_piece;
+
+// loading bitmaps
+CBitmap* i_piece_bitmap;
+CBitmap* j_piece_bitmap;
+CBitmap* j2_piece_bitmap;
+CBitmap* l_piece_bitmap;
+CBitmap* l2_piece_bitmap;
+CBitmap* o_piece_bitmap;
+CBitmap* s_piece_bitmap;
+CBitmap* t_piece_bitmap;
+CBitmap* t2_piece_bitmap;
+CBitmap* z_piece_bitmap;
+
+// loading sounds
+CSoundFile* piece_landed_1;
+CSoundFile* piece_landed_2;
+CSoundFile* tetris_theme;
+
+bool TetrisBuilder_Informer;
+
+void tetris_builder_script::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("i_piece.png");			i_piece = LoadSprite(f, 1, 0);
+	f = GetAttachment("j_piece.png");			j_piece = LoadSprite(f, 1, 0);
+	f = GetAttachment("j2_piece.png");			j2_piece = LoadSprite(f, 1, 0);
+	f = GetAttachment("l_piece.png");			l_piece = LoadSprite(f, 1, 0);
+	f = GetAttachment("l2_piece.png");			l2_piece = LoadSprite(f, 1, 0);
+	f = GetAttachment("o_piece.png");			o_piece = LoadSprite(f, 1, 0);
+	f = GetAttachment("s_piece.png");			s_piece = LoadSprite(f, 1, 0);
+	f = GetAttachment("t_piece.png");			t_piece = LoadSprite(f, 1, 0);
+	f = GetAttachment("t2_piece.png");			t2_piece = LoadSprite(f, 1, 0);
+	f = GetAttachment("z_piece.png");			z_piece = LoadSprite(f, 1, 0);
+
+    local spr = GetAttachment("i_piece.png");              i_piece_bitmap = LoadImage(spr);
+    local spr = GetAttachment("j_piece.png");              j_piece_bitmap = LoadImage(spr);
+    local spr = GetAttachment("j2_piece.png");             j2_piece_bitmap = LoadImage(spr);
+    local spr = GetAttachment("l_piece.png");              l_piece_bitmap = LoadImage(spr);
+    local spr = GetAttachment("l2_piece.png");             l2_piece_bitmap = LoadImage(spr);
+    local spr = GetAttachment("o_piece.png");              o_piece_bitmap = LoadImage(spr);
+    local spr = GetAttachment("s_piece.png");              s_piece_bitmap = LoadImage(spr);
+    local spr = GetAttachment("t_piece.png");              t_piece_bitmap = LoadImage(spr);
+	local spr = GetAttachment("t2_piece.png");              t2_piece_bitmap = LoadImage(spr);
+	local spr = GetAttachment("z_piece.png");              z_piece_bitmap = LoadImage(spr);
+}
+
+void tetris_builder_script::FirstFrame()
+{
+   keySync->AddKey(49); // 1 button
+   keySync->AddKey(50); // 2 button
+   keySync->AddKey(51); // 3 button
+   keySync->AddKey(52); // 4 button
+   keySync->AddKey(53); // 5 button
+   keySync->AddKey(54); // 6 button
+   keySync->AddKey(55); // 7 button
+   keySync->AddKey(56); // 8 button
+   keySync->AddKey(57); // 9 button
+   keySync->AddKey(48); // 0 button
+
+   f = GetAttachment("piece_landed_1.wav");	 piece_landed_1 = new CSoundFile(f);
+   f = GetAttachment("piece_landed_2.wav");	 piece_landed_2 = new CSoundFile(f);
+   f = GetAttachment("tetris_theme.wav");	 tetris_theme = new CSoundFile(f);
+   
+   TetrisBuilder_Informer = false;
+}
+
+// NOTE! The game draws land with left top corner of the coordinates
+// But draws sprites placing it's center on the coordinates
+// This is why we need offsets
+// offsetX is always half of width
+// offsetY is always half of height
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+if(Type == M_FRAME)
+   	{
+    if(CurWeapon->CheckName("Tetris Builder (x4)") || CurWeapon->CheckName("Tetris Builder (x5)"))
+      	{
+        if(TetrisBuilder_Informer == true)
+         	{
+            ShowTeamMessage(7,"Choose a piece from 1-0 and click to draw",WormTeam);
+            PlayLocalSound(1, 1.0, 1.0, 1.0);
+            TetrisBuilder_Informer = false;
+         	}
+
+        if(keySync->KeyPressedNow(49))
+         	{
+         	bmp = i_piece_bitmap;
+         	sprite = i_piece->Index;
+         	offsetX = 30;
+         	offsetY = 120;
+            ShowTeamMessage(6,"I",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(50))
+         	{
+         	bmp = j_piece_bitmap;
+         	sprite = j_piece->Index;
+         	offsetX = 60;
+         	offsetY = 90;
+            ShowTeamMessage(2,"J",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(51))
+         	{
+         	bmp = j2_piece_bitmap;
+         	sprite = j2_piece->Index;
+         	offsetX = 90;
+         	offsetY = 60;
+            ShowTeamMessage(2,"J",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(52))
+         	{
+         	bmp = l2_piece_bitmap;
+         	sprite = l2_piece->Index;
+         	offsetX = 60;
+         	offsetY = 90;
+            ShowTeamMessage(1,"L",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(53))
+         	{
+         	bmp = l_piece_bitmap;
+         	sprite = l_piece->Index;
+         	offsetX = 90;
+         	offsetY = 60;
+            ShowTeamMessage(1,"L",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(54))
+         	{
+         	bmp = o_piece_bitmap;
+         	sprite = o_piece->Index;
+         	offsetX = 60;
+         	offsetY = 60;
+            ShowTeamMessage(4,"O",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(55))
+         	{
+         	bmp = s_piece_bitmap;
+         	sprite = s_piece->Index;
+         	offsetX = 90;
+         	offsetY = 60;
+            ShowTeamMessage(3,"S",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(56))
+         	{
+         	bmp = t_piece_bitmap;
+         	sprite = t_piece->Index;
+         	offsetX = 90;
+         	offsetY = 60;
+            ShowTeamMessage(5,"T",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(57))
+         	{
+         	bmp = t2_piece_bitmap;
+         	sprite = t2_piece->Index;
+         	offsetX = 90;
+         	offsetY = 60;
+            ShowTeamMessage(5,"T",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+            }
+        else if(keySync->KeyPressedNow(48))
+         	{
+         	bmp = z_piece_bitmap;
+         	sprite = z_piece->Index;
+         	offsetX = 90;
+         	offsetY = 60;
+            ShowTeamMessage(1,"Z",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        
+        LimitCursorMovement();
+      	}
+   	}
+
+if(Type == M_SETWEAPON)
+   	{
+    if(TetrisBuilder_Informer == false)
+      	{
+      	// force first shape to be selected before any button was pressed
+       	bmp = i_piece_bitmap;
+        sprite = i_piece->Index;
+        offsetX = 30;
+    	offsetY = 120;
+    	ReadyForMusic = true;
+        TetrisBuilder_Informer = true;
+      	}
+   	}
+   	
+if(Type == M_DRAWQUEUE)
+   	{
+    if(CurWeapon->CheckName("Tetris Builder (x4)") || CurWeapon->CheckName("Tetris Builder (x5)"))
+      	{
+      	SetColorMod(RGB(80, 80, 80), 1);
+      	// No offset is needed here, draw the shape with it's center on the cursor
+        AddSpriteEx(5, GS->landSelectX, GS->landSelectY, sprite, 0.0, 0, 1);
+        ClearColorMod();
+        }
+	}
+
+if(Type == M_TURNEND || Type == M_TURNBEGIN || Root->Timer == 0)
+   	{
+   	// force first shape to be selected before any button was pressed
+   	bmp = i_piece_bitmap;
+    sprite = i_piece->Index;
+    offsetX = 30;
+    offsetY = 120;
+   	ReadyForMusic = true;
+   	TetrisBuilder_Informer = false;
+   	}
+   	
+if(Type == M_SPACE)
+   	{
+    if(CurWeapon->CheckName("Tetris Builder (x4)") || CurWeapon->CheckName("Tetris Builder (x5)"))
+      	{
+      	Root->Timer = 10000;
+        if(ObjState == WS_ROPING || ObjState == WS_BUNGEE || ObjState == WS_PARACHUTE || ObjState == WS_JETPACK)
+         	{
+         	// Multishot weapons might not work if they end turn, let's prevent using from rope/parachute/jetpack
+			ShowTeamMessage(7,"USE MAP BULIDER FROM THE GROUND!",WormTeam);
+			return;
+			}
+		}
+	}
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+CWorm *w = GetCurrentWorm();
+
+if (w != NullObj)
+    {
+    if(Weap->CheckName("Tetris Builder (x4)") || Weap->CheckName("Tetris Builder (x5)"))
+		{
+	    local x = SelectX/65536;
+        local y = SelectY/65536;
+        // Offset is needed here to move bitmap's center to the cursor
+        GG->land->Draw(bmp, x - offsetX, y - offsetY);
+        vol = CalculateSoundVolume(PosX,PosY);
+     	pan = CalculateSoundPan(PosX,PosY);
+        local i = RandomInt(1, 2);
+        if      (i == 1) piece_landed_1->Play(vol, pan, false);
+        else if (i == 2) piece_landed_2->Play(vol, pan, false);
+        
+        if(ReadyForMusic == true)
+            {
+            tetris_theme->Play(vol, pan, false);
+            ReadyForMusic = false;
+            }
+
+		// Makes a hole for anything inside of the drawn shape to prevent falling through terrain abuse
+        for(i = 0; i < Env->Objs.Count; i++)
+      		{
+          	local obj = CGObject(Env->Objs.Objs[i]);
+          	if(obj == NullObj) continue;
+          	if(obj != NullObj)
+             	{
+             	if(obj->IsInBox(x - offsetX, y - offsetY, x + offsetX, y + offsetY))                  // left, top, right, bottom
+             		{
+		            GG->land->ApplyMask(4, obj->PosX-5, obj->PosY+5);
+		            GG->land->ApplyMask(4, obj->PosX-5, obj->PosY-5);
+		            GG->land->ApplyMask(4, obj->PosX+5, obj->PosY+5);
+		            GG->land->ApplyMask(4, obj->PosX+5, obj->PosY-5);
+					}
+				}
+			}
+		}
+	}
+super;
+}
+
+void CWorm::LimitCursorMovement()
+{
+// Crude way to deal with coordinate mismatch
+
+if(GS->landSelectX >= GS->LevelSX - offsetX && GS->landSelectX < 32000) GS->landSelectX = GS->LevelSX - offsetX;
+if(GS->landSelectY >= GS->LevelSY - offsetY && GS->landSelectY < 32000) GS->landSelectY = GS->LevelSY - offsetY;
+
+if(GS->landSelectX <= offsetX || GS->landSelectX > 32000) GS->landSelectX = offsetX;
+if(GS->landSelectY <= offsetY || GS->landSelectY > 32000) GS->landSelectY = offsetY;
+}

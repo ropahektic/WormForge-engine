@@ -1,0 +1,159 @@
+require utils;
+
+$editor
+ $object Mine
+  $origin -10 -10
+  $image "edmine.png"
+  $func SpawnMine
+  $radius 11
+  $param damage int 50
+  $param fuse int 1000
+  $param radius int 60
+  $param Floating bool false
+  $param RespawnTime int 0
+ $object_end
+$end
+
+CFilter* gRMinesParent;
+
+void editormines::InitSMap()
+{  //50 and 22 are random numbers. Don't see for meaning of life here.
+  filter = new CFilter(Root, 56);
+  filter->ForbidAll();
+  filter->Allow(M_FRAME);
+  gRMinesParent = filter;
+};
+
+CMineSpawner : CObject;
+
+CMineSpawner::CMineSpawner(CEditorObject* obj)
+{
+  super(gRMinesParent, GS);
+  MParams = new CMineParams;
+  SDesc = new CShootDesc;
+  zero(MParams); 
+  zero(SDesc);
+  MParams->Prefuse = 0;  //time before ability to activate
+  MParams->Flags = 60;    //flags of objects to react on
+  MParams->Bias = 0;     //Y shift of explosion
+  MParams->Damage = obj->GetInt("damage");  //damage
+  MParams->BlastPower = 100;
+  MParams->Fuse = obj->GetInt("fuse");
+  MParams->Radius = obj->GetInt("radius");
+  SDesc->X = obj->PosX; 
+  SDesc->Y = obj->PosY;
+  respawnTime = obj->GetInt("RespawnTime");
+  timer = 0;
+  isFloat = obj->GetBool("Floating");
+  mineObj = Spawn();
+};
+
+
+override CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
+{
+  super;
+  parentSpawner = CMineSpawner(NullObj);
+  isFloating = false;
+};
+
+override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) 
+  {
+    super;
+    return;
+  };
+  if (isFloating)
+  {                                        //for preventing mine stucking in the air
+    if (SpX != 0 || SpY != 0)
+    {
+      SpX = SpX * 0.955; 
+      SpY = SpY * 0.955;
+      if (SpX < 0.1 && SpY < 0.1)
+      {
+        SpX = 0;
+        SpY = 0;
+      };
+    };
+  };
+  super;
+};
+
+override void CMine::Free(bool FreeMem)
+{
+  if (parentSpawner)
+  {
+    parentSpawner->mineObj = CMine(NullObj);
+  };
+  super;
+};
+
+CMine* CMineSpawner::Spawn()
+{
+  local nmine = new CMine(Root->GetObject(25, 0), MParams, SDesc, false, 0);
+  if (isFloat) nmine->GravityFactor = 0;
+  nmine->parentSpawner = this;
+  nmine->isFloating = isFloat;
+  return nmine; 
+};
+
+void CMineSpawner::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  if (Root->IsTimerActive() == false) return;
+  
+  if (mineObj == NullObj)
+  {
+    timer += 1;
+    if (timer >= respawnTime)
+    {
+      mineObj = Spawn();
+    };
+  } else {
+    timer = 0;
+  };
+};
+
+void SpawnMine(CEditorObject* obj)
+{
+  if (obj->GetInt("RespawnTime") > 0)
+  {
+    local mspawner = new CMineSpawner(obj);
+    return;
+  };
+  CMineParams MParams;
+  CShootDesc SDesc;
+  zero(&MParams); 
+  zero(&SDesc);
+  MParams.Prefuse = 0;  //time before ability to activate
+  MParams.Flags = 60;    //flags of objects to react on
+  MParams.Bias = 0;     //Y shift of explosion
+  MParams.Damage = obj->GetInt("damage");  //damage
+  MParams.BlastPower = 100;
+  MParams.Fuse = obj->GetInt("fuse");
+  MParams.Radius = obj->GetInt("radius");
+  SDesc.X = obj->PosX; 
+  SDesc.Y = obj->PosY;
+  local Mine = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+  Mine->mineName = obj->GetName();
+  if (obj->GetBool("Floating"))
+  {
+    Mine->GravityFactor = 0;
+  };
+};
+
+CMine* getMineByName(string name)
+{
+  for (local i = 0; i < Env->Objs.Count; i+=1)
+  {
+    local mine = CMine(Env->Objs.Objs[i]);
+    if ( mine is CMine)
+    {
+      if (StrCmp(mine->mineName, name))
+      {
+        return mine;
+      } 
+    }
+  }
+  return NullObj;
+}

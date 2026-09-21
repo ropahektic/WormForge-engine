@@ -1,0 +1,56 @@
+require utils, p_sprite_builder, sprite_curtis_251, sprite_curtis_252;
+
+CSprite* thumpern_aiming;
+
+void thumper_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("thumpern.png");
+    thumpern_aiming = LoadSprite(f, 6, 0);
+}
+
+//---------------------------------THUMPER NADE-------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Thumper Nade";
+     sprite = thumpern_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.3;
+     Params->hand_radius = -14.0;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -12.5;
+     Params->animate = true;
+     Params->anim_speed = 1.65;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Thumper Nade")) {
+         if (thumpern_anim) {
+              local sprite = thumpern_aiming->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.65;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              thumpern_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  thumpern_anim = true;
+}

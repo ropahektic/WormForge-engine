@@ -1,0 +1,90 @@
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+      if(Type == M_FRAME)
+      {
+        if(GetCurrentWorm() != NullObj)
+        {
+          if(GetCurrentWorm()->WormTeam == 2)
+          {
+           local wormy = Root->GetObject(2, 16 * 1 + 1);
+           if(DoIKnowHim(wormy))
+           {
+           GS->CameraX = 0;
+           GS->CameraY = 0;
+           }
+          }
+        }
+      }
+}
+
+bool IsColorVisible(int clr)
+{                 
+   if (IsReplay()) return true;    
+   if (IsMultiplayer())
+   {                
+        if (GG->machColors[GetLocalMachine()] & (1 << clr))
+        {
+           return true;
+        }
+   
+   } else {  
+        if (clr == GetTeamColor(Root->CurTeam))
+        {
+           return true;
+        }
+   }
+   return false;
+}
+
+bool IsTeamVisible(int team)
+{
+  return IsColorVisible(GetTeamColor(team));
+}
+
+bool DoIKnowHim(CWorm* worm)
+{
+   if (IsReplay()) return true;
+   return IsTeamVisible(worm->WormTeam);
+}
+
+override void CObject::ForceFocus(fixed x,fixed y)
+{
+   if (!IsMultiplayer())
+   {
+     super;
+   } else {
+     if (ClType == OC_Team)
+     {          
+        local tm = CTeam(this);
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(tm->Index)))
+        {
+           super;
+        }    
+     }
+     if (ClType == OC_Worm)
+     {
+        local wm = CWorm(this);  
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(wm->WormTeam)))
+        {
+           super;
+        }
+     } 
+   }
+}
+override void CGObject::LookAtMe(fixed x,fixed y,int priority)
+{
+   if (!IsMultiplayer())
+   {
+     super;
+   } else {
+     if (ClType == OC_Worm)
+     {
+        local wm = CWorm(this);
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(wm->WormTeam)))
+        {
+           super;
+        }
+     } 
+   }
+}

@@ -1,0 +1,26 @@
+CSprite* militaryplane;
+CSoundFile* marching;
+
+void salvation_nation_script::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("Military Plane.png"); 
+   militaryplane = LoadSprite(f, 1, 0);
+   
+   SetSpriteOverride(711, militaryplane);
+}
+
+void salvation_nation_script::Init()
+{
+	marching       = new CSoundFile(GetAttachment("Soldiers Marching.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Salvation Nation"))
+  {
+             PlayLocalSound(45, 5, 1.0, 1.0);
+             marching->Play(0.9, 0.0, false);
+  }
+  super;
+}

@@ -1,0 +1,176 @@
+require utils;
+
+int mapsizeX;
+int mapsizeY;
+int mapwater;
+int ncrateCounter;
+int ncrateNextSpawn;
+int turnCounter;
+
+void constant_crates::Init()
+{
+   mapsizeX = 0;
+   mapsizeY = 0;
+   mapwater = 0;
+   ncrateCounter = 1;
+   ncrateNextSpawn = 0;
+}
+
+void constant_crates::FirstFrame()
+{
+   mapsizeX = GS->LevelSX;
+   mapsizeY = GS->LevelSY;
+   mapwater = Env->Water;
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+   local CurrWorm = GetCurrentWorm();
+   isCurrentWorm = (CurrWorm != NullObj && CurrWorm == this);
+   if (isCurrentWorm== true)
+    {
+      if (Type == M_FRAME)
+      {
+         // 60 frames per second, 3600 frames = 1 minute
+         if (ncrateNextSpawn == 0)
+            {
+            ncrateNextSpawn = 240 + (GS->GetRandom() % 120); //random number between 4 and 6 seconds
+         }
+
+            if (ncrateCounter == ncrateNextSpawn)
+            {
+            ncrateNextSpawn = 0;
+            ncrateCounter = 0;
+            spawnNikolaCrate();
+         }
+
+         ncrateCounter = ncrateCounter + 1;
+
+         if (ncrateCounter <= 0)
+            {
+            ncrateCounter = 1;
+         }
+
+      }
+
+   }
+
+   super;
+}
+
+bool spawnNikolaCrate()
+{
+   string wWeps[100];
+
+   wWeps[0] = "RubberWorm Launcher";
+   wWeps[1] = "Burning Sheep Launcher";
+   wWeps[2] = "Mole Rocket";
+   wWeps[3] = "Pigeon Cannon";
+   wWeps[4] = "Blaster Worm";
+
+   wWeps[5] = "Bee Hive";
+   wWeps[6] = "Queen Bee";
+   wWeps[7] = "Super Queen Bee";
+   wWeps[8] = "Fiery Wisps";
+   wWeps[9] = "Mummy Scarabs";
+
+   wWeps[10] = "Baseball Bomb";
+   wWeps[11] = "Tennis Ball Blaster";
+
+   wWeps[12] = "Cloned Sheep";
+   wWeps[13] = "Crazy Chicken";
+   wWeps[14] = "Squawks";
+   wWeps[15] = "Pogo Sheep";
+   wWeps[16] = "Rodeo Sheep";
+
+   wWeps[17] = "Worm Strike";
+   wWeps[18] = "Pigeon Strike";
+   wWeps[19] = "Bovine Blitz";
+   wWeps[20] = "K.Kazi Gliderer";
+   wWeps[21] = "Mole Shower";
+
+   wWeps[22] = "Mole Herd Launcher";
+   wWeps[23] = "Cow Launcher";
+   wWeps[24] = "Old Woman Launcher";
+   wWeps[25] = "Drilling Crew";
+   wWeps[26] = "Skipper";
+
+   wWeps[27] = "Sonic";
+   wWeps[28] = "Tails";
+   wWeps[29] = "Evil Santa";
+   wWeps[30] = "Elephant Beetle";
+   wWeps[31] = "Mr. Bean";
+
+   wWeps[32] = "Buffalo of Lies";
+   wWeps[33] = "Bomb-omb";
+   wWeps[34] = "Ferret";
+   wWeps[35] = "Wormy Army";
+   wWeps[36] = "Zombie Apocalypse";
+
+   int wWepsCount = 36; // Moved this down here for visiblity
+
+   if (mapsizeX < 100 || mapsizeY < 100)// stupid thing might not be set because stupid PX
+    {
+      mapsizeX = GS->LevelSX;
+      mapsizeY = GS->LevelSY;
+   }
+
+   CCrateDesc cDesc;
+   zero(&cDesc);
+   cDesc.X = -1000;
+   cDesc.Y = -1000;
+   cDesc.type = CT_WEAPON; // CT_WEAPON CT_UTILITY CT_HEALTH
+
+   int rwWep = GS->GetRandom() % (wWepsCount + 1); // pick a random weapon index
+   if (wWeps[rwWep] == "NORMAL")
+    {
+      cDesc.wType = WCT_RANDOM;
+   }
+   else
+    {
+      cDesc.wType = WCT_DEFINED;
+      cDesc.amount = 1;
+      local wwep1 = GS->GetWeaponByName(wWeps[rwWep]);
+      if (wwep1 != NullObj)
+        {
+         cDesc.weapon = 100 * wwep1->GetPageIndex() + wwep1->GetWeaponIndex();
+      }
+   }
+
+   local nwC = new CCrate(Root->GetObject(25, 0), &cDesc, DT_CHUTE); // creates the crate but it does not have a spawn point yet
+   // the crate is created because we need to access its collision mask
+
+   int trywX = mapsizeX / 5;
+   int trywY = mapsizeY / 5;
+   int startwX = GS->GetRandom() % trywX;
+   int startwY = GS->GetRandom() % trywY;
+
+    for (int n = 0; n < (trywX * trywY); n++)
+   {
+      int nwX = ((startwX + (n % trywX)) % trywX) * 5;
+      int nwY = ((startwY + (n / trywY)) % trywY) * 5;
+      CGObject * ow = Env->CheckCollision(nwC, nwX, nwY);
+      if (ow == NullObj)
+      {
+            int hitX = 0;
+         int hitY = 0;
+         if (TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY) != NullObj && TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY)->ClType != OC_Worm && TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY)->ClType != OC_Crate && TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY)->ClType != OC_OilDrum && TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY)->ClType != OC_Mine)
+            {
+            nwC->PosX = nwX;
+            nwC->PosY = nwY;
+            nwC->X = nwX;
+            nwC->Y = nwY;
+            return true; // found a spawn point, return. This means exit this entire function.
+         }
+      }
+   }
+
+   nwC->Free(true); // we did not find a spawn point, lets destroy the crate we have created
+   return false;
+}
+
+override void CTurnGame::FinishTurn(int reason)
+{
+   turnCounter += 1;
+   super;
+}

@@ -1,0 +1,15 @@
+CSoundFile* demoniclaugh;
+ 
+void demon_sound::Init()
+{
+	demoniclaugh       = new CSoundFile(GetAttachment("Demonic Laugh.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Demon"))
+  {  
+             demoniclaugh->Play(1.25, 0.0, false);
+  }
+  super;
+}

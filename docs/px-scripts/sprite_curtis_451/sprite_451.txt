@@ -1,0 +1,12 @@
+CSprite* multib_tr;
+
+void sprite_451::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("multibt.png");
+    multib_tr = LoadSprite(f, 8, 0);
+    //f = GetAttachment("multibt_old.png");
+    //multibt = LoadSprite(f, 22, 0);
+
+    SetSpriteOverride(451, multib_tr);
+}

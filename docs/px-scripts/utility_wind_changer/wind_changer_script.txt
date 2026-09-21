@@ -1,0 +1,177 @@
+//WindChanger by ravander, improved by 0rang3
+
+require utils;
+
+CSoundFile* breeze;
+CSoundFile* calm_wind;
+CSoundFile* strong_wind;
+
+void wind_changer_script::FirstFrame()
+{
+   WindChanger_Informer = true;
+   
+   keySync->AddKey(48); // 0 button
+   keySync->AddKey(49); // 1 button
+   keySync->AddKey(50); // 2 button
+   keySync->AddKey(51); // 3 button
+   keySync->AddKey(52); // 4 button
+   keySync->AddKey(53); // 5 button
+   keySync->AddKey(54); // 6 button
+   keySync->AddKey(55); // 7 button
+   keySync->AddKey(56); // 8 button
+   keySync->AddKey(57); // 9 button
+
+   f = GetAttachment("breeze.wav");		        breeze = new CSoundFile(f);
+   f = GetAttachment("calm_wind.wav");		        calm_wind = new CSoundFile(f);
+   f = GetAttachment("strong_wind.wav");		strong_wind = new CSoundFile(f);    
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+   if(Type == M_FRAME)
+    {
+      if(CurWeapon != NullObj)
+      {  
+        if(CurWeapon->CheckName("Wind Changer"))
+          {
+             local cw = GetCurrentWorm();
+             
+             if(WindChanger_Informer == true)         
+              {
+                 local cw = GetCurrentWorm();         
+                 ShowTeamMessage(8,"Choose wind force from 0 to 9 and press space",cw->WormTeam);
+                 PlayLocalSound(1, 1.0, 1.0, 1.0);
+                 WindChanger_Informer = false;
+              }
+              
+             if(keySync->KeyPressedNow(48))
+             {
+                wf = 0; 
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 0",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             }
+             else if(keySync->KeyPressedNow(49))
+             {
+                wf = 1; 
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 1",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             }
+             else if(keySync->KeyPressedNow(50))
+             {
+                wf = 2;
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 3",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             } 
+             else if(keySync->KeyPressedNow(51))
+             {
+                wf = 3;
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 3",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             }
+             else if(keySync->KeyPressedNow(52))
+             {
+                wf = 4;
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 4",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             }
+             else if(keySync->KeyPressedNow(53))
+             {
+                wf = 5;
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 5",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             }
+             else if(keySync->KeyPressedNow(54))
+             {
+                wf = 6;
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 6",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             }
+             else if(keySync->KeyPressedNow(55))
+             {
+                wf = 7;
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 7",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             }
+             else if(keySync->KeyPressedNow(56))
+             {
+                wf = 8;
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 8",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             }
+             else if(keySync->KeyPressedNow(57))
+             {
+                wf = 9;
+                local cw = GetCurrentWorm();
+                ShowTeamMessage(8, "Wind power 9",cw->WormTeam);
+                PlayLocalSound(107, 1.0, 1.0, 1.0);
+             }
+          }
+        }
+      }
+      
+   if(Type == M_SETWEAPON)
+   {
+      if(WindChanger_Informer == false)
+      {
+         WindChanger_Informer = true;
+      }
+   }
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+   if(Weap->CheckName("Wind Changer"))
+   {
+         if (TurnSide < 0 && wf > 0 && wf < 6)          
+         {                                               
+            calm_wind->Play(wf*0.2+1, wf*(-0.2), false);
+            CMessageData* mdata = new CMessageData;
+            mdata->fparams[0] = wf*(-0.0317);
+            Root->Message(Root, M_UPDATEWIND,4,mdata);
+            delete mdata;
+         }
+         else if (TurnSide < 0 && wf >= 6)          
+         {  
+            strong_wind->Play(wf*0.2, wf*(-0.2)+1, false);                                    
+            CMessageData* mdata = new CMessageData;
+            mdata->fparams[0] = wf*(-0.0317);
+            Root->Message(Root, M_UPDATEWIND,4,mdata);
+            delete mdata;
+         }   
+         else if (TurnSide > 0  && wf > 0 && wf < 6) 
+         {
+            calm_wind->Play(wf*0.2+1, wf*0.2, false);         
+            CMessageData* mdata = new CMessageData;
+            mdata->fparams[0] = wf*(0.0317);
+            Root->Message(Root, M_UPDATEWIND,4,mdata);
+            delete mdata;
+         }
+         else if (TurnSide > 0  && wf >= 6) 
+         {
+            strong_wind->Play(wf*0.2, wf*0.2+1, false);         
+            CMessageData* mdata = new CMessageData;
+            mdata->fparams[0] = wf*(0.0317);
+            Root->Message(Root, M_UPDATEWIND,4,mdata);
+            delete mdata;
+         }
+         else if(wf == 0)
+         {
+            breeze->Play(1.5, 0.0, false);                                    
+            CMessageData* mdata = new CMessageData;
+            mdata->fparams[0] = 0;
+            Root->Message(Root, M_UPDATEWIND,4,mdata);
+            delete mdata;
+         }    
+   }
+  super;              
+}

@@ -1,0 +1,562 @@
+
+require utils, pxparticles, pxtexbeam;
+
+//////////////////////////
+// Global variables
+
+CSprite *laserBeamTex;
+CSprite *laserGlowSprite;
+CColMask *laserColMask;
+
+CSoundFile *laserStartSound;
+CSoundFile *laserLoopSound;
+CSoundFile *laserEndSound;
+
+///////////////////////////////////////////////////
+// Initialization
+
+void lasergun::FirstFrame()
+{
+	CBitmap1 *msk = new CBitmap1(11, 11);
+	msk->Rect(0, 0, 11, 11, 1);
+	laserColMask = new CColMask(5, 5, msk);
+	
+	CFile *f;
+	f = GetAttachment("laser_start.wav");
+	laserStartSound = new CSoundFile(f);
+	
+	f = GetAttachment("laser_loop.wav");
+	laserLoopSound = new CSoundFile(f);
+	
+	f = GetAttachment("laser_end.wav");
+	laserEndSound = new CSoundFile(f);
+}
+
+void lasergun::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("laser_beam.png"); laserBeamTex = LoadSprite(f, 1, 0);
+	f = GetAttachment("laser_glow.png"); laserGlowSprite = LoadSprite(f, 1, 0);
+}
+
+///////////////////////////////////////////////////
+// CLaserRay
+
+CLaserRay : CObject;
+
+CLaserRay::CLaserRay(CObject *parent, CWorm *owner)
+{
+	super(parent, GS);
+	ClType = OC_AirStrike;
+	Owner = owner;
+	
+	PRegister(&Owner);
+	LifeTime = 250; // 5 seconds
+	
+	Dead = false;
+	Removed = false;
+	
+	UpdatePosDir();
+	
+	ShouldDrawBeam = false;
+	Hit = false;
+	HitX = PosX;
+	HitY = PosY;
+	
+	FramesBetweenShots = 3;
+	FrameCounter = 0;
+	
+	BeamSize = float(1.0);
+	BeamMaxSize = float(1.0);
+	BeamMinSize = float(0.5);
+	BeamFadeSpeed = float(0.07);
+	
+	LastFireAngle = fixed(1000.0);
+	
+	FirstBurst = true;
+	LastDirX = DirX;
+	LastDirY = DirY;
+	
+	DamageColMask =   CMASK_WORM_ON_TERRAIN
+					| CMASK_WORM_USING_WEAPON
+					| CMASK_WORM_IN_MIDAIR
+					| CMASK_WORM_ON_ROPE
+					| CMASK_WORM_FROZEN
+					| CMASK_MINE
+					| CMASK_CRATE
+					| CMASK_DONORCARD
+					| CMASK_OILDRUM
+					| CMASK_SKIMMING;
+	
+	SoundObj = PlaySoundAtPos(laserLoopSound, PosX, PosY, 0.8, true);
+	PlaySoundAtPos(laserStartSound, PosX, PosY, 0.8, false);
+	
+	for(local i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = Env->Objs.Objs[i];
+		
+		if(obj == NullObj) continue;
+		if(obj->ClType == OC_Worm)
+		{
+			// Reset laser damage counter on all worms
+			CWorm *w = CWorm(obj);
+			w->LaserDamageTaken = 0;
+		}
+	}
+}
+
+void CLaserRay::FX_HitTerrain(int x, int y)
+{
+	PxParticle *p = new PxParticle(laserGlowSprite->Index, x, y);
+	float s;
+	
+	p->SetLifeTime(60);
+	p->GravityFactor(-0.4);
+	p->SetAirResistance(0.2);
+	p->SetAlpha(255);
+	s = RandomFloat(0.6,0.9);
+	p->SetStartSize(s, s);
+	p->SetEndSize(0.01, 0.01);
+	p->SetBlendMode(1);
+	p->SetColor(255,0,0);
+	p->SetMotionRandomness(0.6);
+	
+	p = new PxParticle(laserGlowSprite->Index, x, y);
+	p->SetLifeTime(80);
+	p->GravityFactor(0);
+	p->SetAirResistance(0);
+	p->SetAlpha(255);
+	p->SetStartSize(0.6, 0.6);
+	p->SetEndSize(0.1, 0.1);
+	p->SetBlendMode(1);
+	p->SetStartColor(200,0,0);
+	p->SetEndColor(0,0,0);
+}
+
+void CLaserRay::FX_HitObject(int x, int y)
+{
+	PxParticle *p;
+	float s;
+	
+	// yellow flash
+	p = new PxParticle(laserGlowSprite->Index, x, y);
+	
+	p->SetLifeTime(10);
+	p->GravityFactor(0);
+	p->SetAlpha(255);
+	s = RandomFloat(0.4,0.8);
+	p->SetStartSize(s, s);
+	p->SetEndSize(0.01, 0.01);
+	p->SetBlendMode(1);
+	
+	s = RandomInt(0, 50);
+	p->SetStartColor(210,210 - s,0);
+	p->SetEndColor(210,50 - s,0);
+	
+	// sparks
+	for(int i=0 ; i<2 ; i += 1)
+	{
+		p = new PxParticle(laserGlowSprite->Index, x, y);
+		
+		p->SetLifeTime(30);
+		p->GravityFactor(1);
+		p->SetRandomVelocity(0.5, 1.8);
+		p->SetAirResistance(0.05);
+		p->SetAlpha(255);
+		s = RandomFloat(0.2,0.4);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.01, 0.01);
+		p->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		p->SetStartColor(255,255 - s,0);
+		p->SetEndColor(255,80 - s,0);
+		
+		p->SetMotionRandomness(0.2);
+	}
+}
+
+void CLaserRay::FX_MuzzleSparks()
+{
+	PxParticle *p;
+	float s;
+	
+	p = new PxParticle(laserGlowSprite->Index, GlowX, GlowY);
+	
+	p->SetLifeTime(30);
+	p->SetAirResistance(0.3);
+	p->GravityFactor(0.8);
+	p->SetAlpha(255);
+	s = RandomFloat(0.2,0.5);
+	p->SetStartSize(s, s);
+	p->SetEndSize(0.01, 0.01);
+	p->SetBlendMode(1);
+	p->SetStartColor(255,0,0);
+	p->SetEndColor(80,0,0);
+	
+	float spark_ang = (1.0 - Owner->FireAngle) * MATH_PI;
+	if(Owner->TurnSide < 0) 
+	{
+		spark_ang = MATH_TWO_PI - spark_ang;
+	}
+	spark_ang += RandomFloat(-0.8, 0.8);
+	
+	float spark_vel = RandomFloat(2.0, 5.0);
+	
+	p->SetVelocity(spark_vel * sin(spark_ang), -spark_vel * cos(spark_ang));
+	p->SetMotionRandomness(0.8);
+}
+
+void CLaserRay::FX_InitialBurst()
+{
+	PxParticle *p;
+	float s;
+	int i;
+	
+	for(i=0 ; i<8 ; i+=1)
+	{
+		p = new PxParticle(laserGlowSprite->Index, GlowX, GlowY);
+		
+		p->SetLifeTime(30);
+		p->SetAirResistance(0.3);
+		p->GravityFactor(0.8);
+		p->SetAlpha(255);
+		s = RandomFloat(0.4,0.7);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.01, 0.01);
+		p->SetBlendMode(1);
+		p->SetStartColor(255,0,0);
+		p->SetEndColor(80,0,0);
+		
+		float spark_ang = (1.0 - Owner->FireAngle) * MATH_PI;
+		if(Owner->TurnSide < 0) 
+		{
+			spark_ang = MATH_TWO_PI - spark_ang;
+		}
+		spark_ang += RandomFloat(-0.8, 0.8);
+		
+		float spark_vel = RandomFloat(5.0, 9.0);
+		
+		p->SetVelocity(spark_vel * sin(spark_ang), -spark_vel * cos(spark_ang));
+		p->SetMotionRandomness(0.8);
+	}
+}
+
+void CLaserRay::UpdatePosDir()
+{
+	if(Owner == CWorm(NullObj)) return;
+	
+	float ang = (1.0 - Owner->FireAngle) * MATH_PI;
+	if(Owner->TurnSide < 0) 
+	{
+		ang = MATH_TWO_PI - ang;
+	}
+	
+	DirX = sin(ang);
+	DirY = -cos(ang);
+	
+	PosX = Owner->PosX + 2 * Owner->TurnSide * DirY - DirX;
+	PosY = Owner->PosY - 2 - DirY;
+	
+	GlowX = PosX + 24.0 * DirX;
+	GlowY = PosY + 24.0 * DirY;
+}
+
+void CLaserRay::Free(bool heap)
+{
+	if(Owner != CWorm(NullObj))
+	{
+		Owner->LaserRayObj = CLaserRay(NullObj);
+	}
+	
+	PUnregister(&Owner);
+	Removed = true;
+	
+	super;
+}
+
+void CLaserRay::DoLaserDamage(CGObject *obj, int x, int y, float dirX, float dirY)
+{
+	bool shouldEmitSparks = false;
+	
+	if(
+		obj->Layer == LAYER_MINE ||
+		obj->Layer == LAYER_OILDRUM ||
+		obj->Layer == LAYER_CRATE ||
+		obj->Layer == LAYER_DONORCARD)
+	{
+		CMessageData msg;
+		
+		msg.params[0]	= 1; // fire damage
+		msg.fparams[1]	= x;
+		msg.fparams[2]	= y;
+		msg.fparams[3]	= dirX;
+		msg.fparams[4]	= dirY;
+		
+		if(obj->ClType == OC_OilDrum)
+			msg.params[5] = 4; // Oil drums should take more damage
+		else
+			msg.params[5] = 1;
+		
+		msg.params[6]	= Owner->WormTeam;
+		obj->Message(this, M_GUNEXP, 1032, &msg);
+		
+		shouldEmitSparks = true;
+	}
+	else if(obj->ClType == OC_Worm)
+	{
+		CWorm *w = CWorm(obj);
+		CMessageData msg;
+		msg.params[0]	= 1; // fire damage
+		msg.fparams[1]	= x;
+		msg.fparams[2]	= y;
+		msg.fparams[3]	= dirX;
+		msg.fparams[4]	= dirY;
+		
+		if(w->LaserDamageTaken >= 45)
+		{
+			// Can't do more than 45 damage to a single worm
+			msg.params[5]	= 0;
+		}
+		else if(w->LaserDamageTaken >= 10)
+		{
+			msg.params[5]	= 1;
+		}
+		else
+		{
+			msg.params[5]	= 2;
+		}
+		w->LaserDamageTaken += msg.params[5];
+		
+		msg.params[6]	= Owner->WormTeam;
+		obj->Message(this, M_GUNEXP, 1032, &msg);
+		
+		shouldEmitSparks = true;
+	}
+	
+	if(shouldEmitSparks)
+	{
+		FX_HitObject(x + 3*dirX, y + 3*dirY);
+	}
+}
+
+void CLaserRay::PerformTrace(bool damage, bool update, float dirX, float dirY)
+{
+	CGObject *lastObject = this;
+	
+	int x = PosX;
+	int y = PosY;
+	int endX = PosX + 2048.0 * dirX;
+	int endY = PosY + 2048.0 * dirY;
+	
+	int terrainHitX;
+	int terrainHitY;
+	
+	// Perform a terrain-only trace
+	lastObject = TraceLine(this, x, y, endX, endY, CMASK_TERRAIN, &terrainHitX, &terrainHitY);
+	
+	if(damage && lastObject != CGObject(NullObj))
+	{
+		// If the laser should deal damage and if we hit anything
+		if(Hit && (DirX == LastDirX) && (DirY == LastDirY))
+		{
+			// Use the line tracer module to cut into terrain (this makes sure we have nice smooth cuts)
+			int xt;
+			int yt;
+			
+			LineTracer->Start(HitX, HitY, terrainHitX, terrainHitY);
+			
+			while(LineTracer->Finished() == false)
+			{
+				LineTracer->NextPoint(&xt, &yt);
+				GG->land->MakeHole(4, xt, yt);
+			}
+		}
+		else
+		{
+			// If we changed our aim in the meantime, don't perform clean cuts
+			// (it looks nice at close range but tends to cut way too much terrain at long range)
+			GG->land->MakeHole(4, terrainHitX, terrainHitY);
+		}
+		
+		// Particle effects!
+		FX_HitTerrain(terrainHitX, terrainHitY);
+	}
+	
+	// Update the hit position (they will be used for rendering the beam)
+	if(update)
+	{
+		HitX = terrainHitX;
+		HitY = terrainHitY;
+		float dx = HitX - PosX;
+		float dy = HitY - PosY;
+		
+		if(lastObject != CGObject(NullObj))
+			Hit = true;
+		else
+			Hit = false;
+		
+		// Don't render the beam if the impact point is too close
+		if((dx*dx+dy*dy) > (24*24))
+			ShouldDrawBeam = true;
+		else
+			ShouldDrawBeam = false;
+	}
+	
+	// Don't do further processing if this is a no-damage trace
+	if(damage == false) return;
+	
+	// Find entities which are touching the beam and damage them
+	lastObject = this;
+	
+	while(lastObject != CGObject(NullObj))
+	{
+		lastObject = TraceMask(lastObject, laserColMask, x, y, terrainHitX, terrainHitY, DamageColMask, &x, &y);
+		
+		if(lastObject != CGObject(NullObj))
+		{
+			DoLaserDamage(lastObject, x, y, dirX, dirY);
+		}
+	}
+}
+
+void CLaserRay::Stop()
+{
+	Dead = true;
+	SoundObj->Update(0.0, 0.0);
+	SoundObj->Stop();
+	SoundObj = CSound(NullObj);
+	
+	PlaySoundAtPos(laserEndSound, PosX, PosY, 0.8, false);
+}
+
+void CLaserRay::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Dead) return;
+		
+		if(SoundObj != CSound(NullObj))
+		{
+			UpdateSoundPos(SoundObj, PosX, PosY, 0.8);
+		}
+		
+		float width = 8.0 * BeamSize;
+		float glowsize = 0.5 * BeamSize;
+		
+		int col = RGB(255, 0, 0);
+		//if(LifeTime < 100) col = RGB(0,150,255);
+		
+		CQuad q;
+		int i;
+		FillSpriteQuad(&q, laserGlowSprite->Index, 0, 0);
+		TransformQuad(&q, 0, glowsize, glowsize, GlowX, GlowY);
+		q.blend = 1;
+		for(i=0 ; i<4 ; i+=1) q.v[i].color = col;
+		AddSpriteQ(10, &q, laserGlowSprite->Index, 0, 64);
+		
+		if(ShouldDrawBeam)
+		{
+			StartTexturedBeam(this, 10, laserBeamTex->Index, 0.0, 1);
+			TexturedBeamPoint(GlowX, GlowY, width, 0.0, col);
+			TexturedBeamPoint(HitX, HitY, width, 1.0, col);
+			EndTexturedBeam();
+		}
+		
+		if(Hit)
+		{
+			glowsize = 0.75 * BeamSize;
+			FillSpriteQuad(&q, laserGlowSprite->Index, 0, 0);
+			TransformQuad(&q, 0, glowsize, glowsize, HitX, HitY);
+			AddSpriteQ(10, &q, laserGlowSprite->Index, 0, 64);
+		}
+		
+		return;
+	}
+	
+	super;
+	
+	if(Type == M_FRAME)
+	{
+		if(Removed) return;
+		
+		LifeTime = LifeTime - 1;
+		
+		if(Dead)
+		{
+			if(LifeTime <= -10) Free(true);
+			return;
+		}
+		
+		if(Owner == CWorm(NullObj) || LifeTime <= 0)
+		{
+			Stop();
+			return;
+		}
+		
+		if(Owner->ObjState != WS_REPEATFIRE && Owner->ObjState != WS_FIRECONT && Owner->ObjState != WS_AIMING && Owner->ObjState != WS_FIRED)
+		{
+			Stop();
+			return;
+		}
+		
+		Owner->nShoots = 1;
+		Owner->nShooted = 0;
+		
+		BeamSize = BeamSize - BeamFadeSpeed;
+		if(BeamSize < BeamMinSize)
+		{
+			BeamSize = BeamMaxSize;
+		}
+		
+		UpdatePosDir();
+		
+		if(FirstBurst)
+		{
+			FirstBurst = false;
+			FX_InitialBurst();
+		}
+		
+		if(FrameCounter <= 0)
+		{
+			FrameCounter = FramesBetweenShots;
+			PerformTrace(true, true, DirX, DirY);
+			
+			// Spew a few red sparks out of the "barrel"
+			FX_MuzzleSparks();
+		}
+		else
+		{
+			FrameCounter = FrameCounter - 1;
+			PerformTrace(false, false, DirX, DirY);
+		}
+		
+		LastDirX = DirX;
+		LastDirY = DirY;
+	}
+}
+
+///////////////////////////
+// CWorm overrides
+
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	super;
+	LaserRayObj = CLaserRay(NullObj);
+	LaserDamageTaken = 0;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Laser Gun"))
+	{
+		if(LaserRayObj == CLaserRay(NullObj))
+		{
+			LaserRayObj = new CLaserRay(GetObject(25, 0), this);
+		}
+	}
+	else
+	{
+		super;
+	}
+}

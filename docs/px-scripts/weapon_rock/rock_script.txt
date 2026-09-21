@@ -1,0 +1,149 @@
+//script by StepS, improved by 0rang3
+
+require utils;
+
+#ROCK
+
+CRock : CMine;
+CGObject* poorobj;
+CWorm* poorworm;
+CSprite* rockspr;
+
+float zplpG;
+    
+void rock_script::FirstFrame(){}
+
+void rock_script::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("rockspr.png");
+    rockspr = LoadSprite(f, 1, 0);
+}
+
+void CRock::CRock(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
+{
+	fixed zplpM;
+    zplpG = 15.1;
+    super;
+}
+
+void CRock::Render()
+{
+}
+
+void CRock::Collide(CGObject* Obj,int type)
+{
+        
+			if (Obj is CWorm || Obj is COilDrum || Obj is CCrate)
+        	{
+            	poorobj = Obj;
+            	FSpX = SpX;
+            	FSpY = SpY;
+            	CSpX = SpX;
+            	CSpY = SpY;
+            	if (CSpX < 0) CSpX = CSpX*(-1);
+            	if (CSpY < 0) CSpY = CSpY*(-1);
+            	killhim = true;
+            }
+
+
+super;
+}
+
+void CRock::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+
+CWorm* w = GetCurrentWorm();
+
+    if (Type == M_FRAME)
+    {
+        
+		if (killhim)
+        {
+        CMessageData msg;
+	    msg.params[0]	= 0;
+	    msg.fparams[1]	= PosX;
+	    msg.fparams[2]	= PosY;
+	    msg.fparams[3]	= FSpX/2;
+	    msg.fparams[4]	= FSpY/3;
+	    msg.params[5]	= CSpX+CSpY;
+	    msg.params[6]	= 0;
+
+		CSpX = CSpX * 0.5;
+		CSpY = CSpY * 0.5;
+	
+            if (poorobj is CWorm && w != NullObj)
+            {
+                poorworm = poorobj;
+                
+                if (w != poorobj)
+                {
+                    poorworm->Message(this, M_GUNEXP, 1032, &msg);
+                }
+            }
+               				
+	    else if (poorobj != NullObj) poorobj->Message(this, M_GUNEXP, 1032, &msg);
+	    
+	    killhim = false;
+        }
+        
+        if (zplpG >= 15.9) zplpG = 15.1;
+    }
+    
+    if (Type == M_DRAWQUEUE)
+    {
+            if(Sinking)	SetColorMod(RGB(90, 90, 240), 6);
+			AddSpriteEx(zplpM,PosX,PosY,rockspr->Index,1,0,1);
+        	if(Sinking) ClearColorMod();
+    }
+    super;
+}
+                                                                         
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+CWorm* w = GetCurrentWorm();
+
+     if (w != NullObj)
+     {
+        if (Weap->CheckName("Rock"))
+        {       
+        local team = w->WormTeam;
+                
+        local ang = (1 - FireAngle) * 3.14159;
+        if (TurnSide < 0) ang = 6.28318 - ang;
+                
+        CShootDesc SDesc;
+		zero(&SDesc);
+		
+		float ForceInit = FirePower * 17.0;        //20.0
+		
+		SDesc.SpX = SpX + sin(ang) * ForceInit;
+		SDesc.SpY = SpY - cos(ang) * ForceInit;
+		SDesc.X = w->PosX;
+		SDesc.Y = w->PosY;
+		SDesc.Team = team;
+		
+		CMineParams MParams;
+		zero(&MParams);
+		
+		MParams.Prefuse = 0;
+		MParams.Flags = 0;
+		MParams.Bias = 0;
+		MParams.Damage = 0;
+        MParams.BlastPower = 0;
+		MParams.Fuse = 1;
+	    MParams.Radius = 0;
+		
+		mrock = new CRock(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+		
+		mrock->DumpingA = 0.3;
+        mrock->DumpingB = 0.3;
+        mrock->DumpingC = 0.96;
+                
+        mrock->zplpM = zplpG;
+        zplpG = zplpG + 0.01;
+		}
+	else super;
+    }
+else super;
+}

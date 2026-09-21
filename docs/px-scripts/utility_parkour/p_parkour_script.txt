@@ -1,0 +1,161 @@
+// Original parkour script by Zed. 
+// Modifications by PyroMan & 0rang3
+
+require utils;
+
+CSoundFile* parkour;
+
+void p_parkour_script::Init()
+{
+}
+
+void p_parkour_script::FirstFrame()
+{
+f = GetAttachment("parkour_snd.wav");	 parkour = new CSoundFile(f);
+}
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+WallJumpMultiplier = 3;
+BhopMultiplier = 3;
+WallJumpDelay = 0;
+BhopDelay = 0;
+parkouring = false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    super;
+    if (Weap->CheckName("Parkour"))
+    {
+        if (!parkouring)
+           {
+           	parkouring = true;
+        	vol = CalculateSoundVolume(PosX,PosY);
+     		pan = CalculateSoundPan(PosX,PosY);
+           	parkour->Play(vol, pan, false);
+           	ShowMessage("Parkour mode: ON");
+           }
+        else
+           {
+           parkouring = false;
+           ShowMessage("Parkour mode: OFF");
+           }
+    
+    }
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+
+if(parkouring)
+{
+	if(GetCurrentWorm() != NullObj)
+  	{
+    	if(GetCurrentWorm() == this)
+    	{
+      		if(Type == M_FRAME)
+      		{
+              	if(WallJumpDelay >= 1) {WallJumpDelay = WallJumpDelay - 1;}
+              	if(BhopDelay >= 1) {BhopDelay = BhopDelay - 1;}
+              	if(ObjState == WS_JUMPPREPARE){BhopDelay = 25;}
+              	if(ObjState == WS_PARACHUTE){WallJumpDelay = 10;}
+      		}
+      
+		    if(Type == M_ENTER)
+			{
+              	if(WallJumpDelay < 1)
+              	{
+                   	WallJump();
+                   	WallJumpDelay = 15;
+              	}
+      		}
+      
+      		if(Type == M_BACKSPACE)
+      		{
+      			if(BhopDelay == 0){BhopJump();}
+      		}
+         
+      		if (Type == M_TURNEND)
+      		{
+      			parkouring = false;
+      		}
+   		}
+   	}
+}
+}
+
+
+void CWorm::WallJump()
+{
+     if(ObjState == WS_JUMP || ObjState == WS_SLIDING || ObjState == WS_FLYING2)
+     {
+       //wall to the right
+       int hit2x;
+       int hit2y;
+       CGObject *hit2 = TraceLine(this, PosX, PosY, PosX+20, PosY, 2, &hit2x, &hit2y);   
+              
+       //wall to the left
+       int hit3x;
+       int hit3y;
+       CGObject *hit3 = TraceLine(this, PosX, PosY, PosX-20, PosY, 2, &hit3x, &hit3y); 
+       
+                if(hit2 != NullObj && hit3 != NullObj)
+		{   
+		   local x2 = sqrt((hit2x - PosX)*(hit2x - PosX));
+		   local x3 = sqrt((hit3x - PosX)*(hit3x - PosX));
+		   local side = 0;
+		   if(x2 < x3){ side = -1;}
+		   else{ side = 1;}
+		   
+		   
+                       if(SpY > 0){SpY = 0;}         			
+                       SpY = SpY - WallJumpMultiplier;
+                       SpX = (WallJumpMultiplier-1) * side;
+                       TurnSide = side;
+                       if(ObjState != WS_JUMP){ SetState(WS_JUMP);}
+		}
+		else
+		{
+		    if(hit2 != NullObj)
+		    {
+		       if(SpY > 0){SpY = 0;}
+                       SpY = SpY - WallJumpMultiplier;
+                       SpX = -1*(WallJumpMultiplier-1);
+                       TurnSide = -1;
+                       if(ObjState != WS_JUMP){ SetState(WS_JUMP);}
+		    }
+		    
+		    if(hit3 != NullObj)
+		    {
+		       if(SpY > 0){SpY = 0;}
+                       SpY = SpY - WallJumpMultiplier;
+                       SpX = (WallJumpMultiplier-1);
+                       TurnSide = 1;
+                       if(ObjState != WS_JUMP){ SetState(WS_JUMP);}
+		    }
+		}
+     }
+}
+
+
+
+void CWorm::BhopJump()
+{
+     if(ObjState == WS_FLYING2 || ObjState == WS_FLYING || ObjState == WS_POWERFLY || ObjState == WS_JUMP || ObjState == WS_SLIDING)
+     {
+       int hitx1;
+       int hity1;
+       CGObject *hit1 = TraceLine(this, PosX, PosY, PosX, PosY+30, 2, &hitx1, &hity1);
+                if(hit1 != NullObj)
+		{     
+                       if(SpY > 0){SpY = 0;}       			
+                       SpY = SpY - BhopMultiplier;
+                       SpX = SpX + (BhopMultiplier-1)*TurnSide;
+                       if(ObjState != WS_JUMP){ SetState(WS_JUMP);}
+		}
+     }
+}

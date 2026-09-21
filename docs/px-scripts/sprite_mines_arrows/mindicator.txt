@@ -1,0 +1,11 @@
+
+CSprite* mineon;
+
+void mindicator::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("mineon2.png");
+   mineon = LoadSprite(f, 32, 1);
+   
+   SetSpriteOverride(45, mineon);
+}

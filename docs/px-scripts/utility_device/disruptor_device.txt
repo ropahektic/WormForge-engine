@@ -1,0 +1,173 @@
+require utils;
+
+
+CDisruptor : CDevice;
+CDisruptor* SDisr[501];
+
+
+CSoundFile* DisrZ;
+CSoundFile* DisrOff;
+
+
+void disruptor_device::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("disruptor_zap.wav");	DisrZ = new CSoundFile(f);
+	f = GetAttachment("tu_spindown.wav");	DisrOff = new CSoundFile(f);
+}
+
+
+void disruptor_device::InitGraphic()
+{
+}
+
+
+void disruptor_device::Init()
+{
+     for(local t = 0; t<501; t++)
+     {
+     SDisr[t] = NullObj;
+     }
+}
+
+
+CDisruptor::CDisruptor(CObject* parent, fixed x, fixed y)
+{
+
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+    ColMask = new CColMask(8,15,MakeRectMask(16,30));
+    Team = 1;
+    WorkTimer = 5;
+
+    local t = FindEmptySlotDisr();
+    SDisr[t] = this;
+}
+
+void CDisruptor::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)            // Root->GetObject(2, 16 * Team + Number);
+{
+   super;
+   if (Type == M_FRAME)
+   {
+      DisrThink();
+   }
+}
+
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+Disrupted = false;
+DisruptionTimer = 60;
+Team = 0;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+ if(Weap->CheckName("Bazooka") || Weap->CheckName("Grenade") || Weap->CheckName("TeleNade"))
+ {
+    	CGObject *sobj;
+        CMissile *smis;
+		sobj = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+	     if(sobj != NullObj)
+	     {
+	             if(sobj->ClType == OC_Missile)
+                     {
+                     smis = sobj;
+                     smis->Team = WormTeam;
+                     }
+             }
+ }
+}
+
+
+void CDisruptor::DisrThink()
+{
+     CGObject *obj;
+     	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(obj->IsMaterial == false) continue;
+			if(obj->ClType == OC_Missile)
+			{
+				local msl = CMissile(obj);
+                                local dx = PosX - msl->PosX;
+                                local dy = PosY - msl->PosY;
+                                local dist = sqrt(dx*dx+dy*dy);
+                                if(dist < 150)
+                                {
+				        if(GetTeamNumber(msl->Team) != Team)
+				        {
+				                     if(msl->Disrupted == false)
+				                     {
+                                                     msl->Disrupted = true;
+                                                     DisrZ->Play(1.0,0.0,false);
+                                                     }
+                                        }
+                                }
+			}
+	}
+}
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+                 if(Disrupted == true)
+                 {
+                              if(DisruptionTimer > 0)
+                              {
+                              DisruptionTimer = DisruptionTimer - 1;
+                              GravityFactor = 0;
+                              if(SpX != 0)SpX = 0;
+                              if(SpY != 0)SpY = 0;
+                              }
+                              if(DisruptionTimer < 1)
+                              {
+                              Free(true);
+                              return;
+                              }
+                 }
+         }
+super;
+}
+
+
+int FindEmptySlotDisr()
+{
+ for(local i = 0; i < 501; i++)
+ {
+  if(SDisr[i] == NullObj)
+  {
+  return i;
+  break;
+  }
+ }
+}
+
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+super;
+              for(local t = 0; t<501; t++)
+                {
+                        if(SDisr[t] != NullObj && SDisr[t]->Team == Team)
+                        {
+                              if(SDisr[t]->WorkTimer > 0)
+                              {
+                              SDisr[t]->WorkTimer = SDisr[t]->WorkTimer - 1;
+                              }
+                              else
+                              {
+                              DisrOff->Play(1.0,0.0,false);
+                              SDisr[t]->Health = 0;
+                              }
+                        }
+                }
+}

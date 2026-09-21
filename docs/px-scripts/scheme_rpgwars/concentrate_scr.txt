@@ -1,0 +1,44 @@
+CSoundFile* concentrate;
+
+void concentrate_scr::InitGraphic()
+{
+}
+
+void concentrate_scr::Init()
+{
+concentrate = new CSoundFile(GetAttachment("concentrate.wav"));
+}
+
+void concentrate_scr::FirstFrame()
+{
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+ CastedConcentrateToday = false;
+super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+         if(Weap->CheckName("Concentrate") && CastedConcentrateToday == false)                           //sick gfx here plx
+         {
+		 concentrate->Play(2.0, 0.0, false);                                                                                             //also bool resets in base script
+         CastedConcentrateToday = true;
+         AddSpells();
+         
+         if(Root->Timer > 6000)
+		 	{
+			Root->Timer = Root->Timer - 5000;
+			}
+		 else
+		 	{
+			ShowTeamMessage(2,"No time to concentrate!",WormTeam);
+			PlayLocalSound(120, 3, 1, 1);
+			return;
+			}
+         return;
+         }
+super;
+}

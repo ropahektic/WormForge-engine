@@ -1,0 +1,60 @@
+CCardInterface3 : CObject;
+CBitmap* GUIBitmap3;
+
+void CardInterface3::InitGraphic()
+   { 
+   GUIBitmap3 = MakeBitmap(75,50);
+   }
+
+void CardInterface3::FirstFrame()
+   {
+   local DeIn = new CCardInterface3(Root);
+   DeIn->CalculatePosition3();
+   }
+
+CCardInterface3::CCardInterface3(CObject* parent)
+   {
+   super(parent,GS);   
+   CardUI3 = GUIBitmap3;    
+   }
+
+void CCardInterface3::CalculatePosition3()
+   {
+   PositionX = 0 + GS->Disp->xRes / 2 - 48;
+   PositionY = 0 - GS->Disp->yRes / 2 + 35;
+   }
+
+void CCardInterface3::DrawBitmap3()
+   {
+   AddInterfaceBitmap(0,PositionX ,PositionY,CardUI3,75,50,0);
+   }
+
+void CCardInterface3::DrawBackground3()
+   {
+   CardUI3->Rect(0,0,75,50,ARGB(255,0,0,0));
+   }
+
+void CCardInterface3::DrawText3()
+   {           			 
+   local a = 1;
+   local b = 1;	
+   GS->Disp->DrawText(16,CardUI3, 2, 5, "Cards left:" , &a, &b);	
+  	
+   GS->Disp->DrawText(23,CardUI3, Center2, 22, ItoA(Credits-TotalCount[GetTeamColor(Root->CurTeam)]), &a, &b);	
+   }
+
+void CCardInterface3::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+   {
+   if (Type == M_FRAME)
+       {
+       if( Credits-TotalCount[Root->CurTeam-1] < 10) Center2 = 33;
+       else Center2 = 28; 
+               
+       DrawBackground3();
+       DrawText3();    
+       }
+   if (Type == M_DRAWQUEUE)
+       {
+       DrawBitmap3();
+       }
+   }

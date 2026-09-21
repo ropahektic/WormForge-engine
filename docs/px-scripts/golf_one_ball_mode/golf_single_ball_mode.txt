@@ -1,0 +1,18 @@
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    checkBallMode = true;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   super;
+   if (checkBallMode)
+   {
+      if (Type == M_FRAME)
+      {
+          oneBallMode = true;
+          checkBallMode = false;
+      }
+   }
+}

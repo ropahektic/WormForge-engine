@@ -1,0 +1,10 @@
+CSprite* green_fireball;
+
+void fireball_replace::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("green_fireball.png");
+   green_fireball = LoadSprite(f, 20, -1);
+   
+   SetSpriteOverride(83, green_fireball);
+}

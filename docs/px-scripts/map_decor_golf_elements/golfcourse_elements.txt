@@ -1,0 +1,381 @@
+// Golf course elements by raffie
+require utils;
+
+$editor
+ 
+ $object WindMillBase
+  $origin -136 -160
+  $image "windmill_base.png"
+  $radius 136
+  $autoname windmill_base
+  $func SpawnWindMillBase
+  $param Size int 100
+  $param Z_Layer int 1
+ $object_end
+
+ $object WindMillBlades
+  $origin -144 -144
+  $image "windmill_blades.png"
+  $radius 144
+  $autoname windmill_blades
+  $func SpawnWindMillBlades
+  $param Size int 100
+  $param Z_Layer int 1
+ $object_end
+ 
+  $object WaterWave
+  $origin -128 -24
+  $image "water_prev.png"
+  $radius 24
+  $autoname water_wave
+  $param AnimStart enum 4 Three Six Nine Twelve
+  $func SpawnWaterWave
+  $param Size int 100
+  $param Z_Layer int 999
+ $object_end 
+
+ $object Dolphin
+  $origin -84 -84
+  $image "dolphin.png"
+  $radius 84
+  $autoname dolphin
+  $func SpawnDolphin
+  $param Size int 100
+  $param Z_Layer int 998
+ $object_end
+
+  $object DirectionArrow
+  $origin -24 -28
+  $image "arrow_side1.png"
+  $radius 24
+  $autoname direction_arrow
+  $param DirectionArrows enum 9 Left1 Right1 Left2 Right2 LeftDepth1 RightDepth1 LeftUp1 RightUp1 AllDirections
+  $func SpawnDirectionArrow
+  $param Size int 100
+  $param Z_Layer int 6
+ $object_end 
+
+  $object Building
+  $origin -164 -104
+  $image "club_house.png"
+  $radius 136
+  $autoname map_building
+  $param BuildingType enum 1 ClubHouse
+  $func SpawnBuilding
+  $param Size int 100
+  $param Z_Layer int 1
+ $object_end
+
+ $object Tree
+  $origin -93 -275
+  $image "tree_pine1.png"
+  $radius 17
+  $autoname map_tree
+  $func SpawnPineTree
+  $param Tree enum 1 Pine1
+  $param Size int 100
+  $param Z_Layer int 1
+ $object_end
+$end
+
+CWindMillBase : CObject;
+CWindMillBlades : CObject;
+CWaterWave : CObject;
+CDolphin : CObject;
+CDirectionArrow : CObject;
+CHouseSpriter : CObject;
+CGolfSpriterPineTree : CObject;
+
+//Sprites
+CSprite*golfWindMillBase;
+CSprite*golfWindMillBlades;
+CSprite*golfWaterWave;
+CSprite*golfDolphin;
+CSprite*golfClubHouse;
+CSprite*golfTreePine1;
+
+CSprite*arrowSide1;
+CSprite*arrowSide2;
+CSprite*arrowSide3;
+CSprite*arrowUp1;
+CSprite*arrowsAllDirections;
+
+void golfcourse_elements::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("windmill_base.png");			golfWindMillBase = LoadSprite(f, 1, 0);
+	f = GetAttachment("windmill_blades.png");		golfWindMillBlades = LoadSprite(f, 1, 0);
+        f = GetAttachment("water.png");		                golfWaterWave = LoadSprite(f, 12, 0);
+        f = GetAttachment("dolphin.png");		        golfDolphin = LoadSprite(f, 1, 0);
+        f = GetAttachment("club_house.png");		        golfClubHouse = LoadSprite(f, 1, 0);
+        f = GetAttachment("tree_pine1.png");                    golfTreePine1 = LoadSprite(f, 1, 0);
+        
+       	f = GetAttachment("arrow_side1.png");			arrowSide1 = LoadSprite(f, 1, 0);
+		f = GetAttachment("arrow_side2.png");		        arrowSide2 = LoadSprite(f, 1, 0);
+        f = GetAttachment("arrow_side3.png");		        arrowSide3 = LoadSprite(f, 1, 0);
+        f = GetAttachment("arrow_up1.png");		        arrowUp1 = LoadSprite(f, 1, 0);
+        f = GetAttachment("arrows_everywhere.png");             arrowsAllDirections = LoadSprite(f, 1, 0);
+}
+
+
+//Windmill
+CWindMillBase::CWindMillBase(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  x = aobj->PosX;
+  y = aobj->PosY - 1*scale;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+}
+
+
+void CWindMillBase::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        AddSpriteEx( z, x, y, golfWindMillBase->Index, 0.0, rot, scale);
+    }
+}
+
+CWindMillBlades::CWindMillBlades(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  x = aobj->PosX;
+  y = aobj->PosY - 1*scale;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+  
+  AnimTimer = 0.0;
+  RotationTimer = 0.0;
+    
+}
+
+
+void CWindMillBlades::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+
+    if (Type == M_DRAWQUEUE)
+    {  
+        AddSpriteEx( z, x, y, golfWindMillBlades->Index, 0.0, RotationTimer, scale);
+        //AddSpriteEx( z, x, y, golfWindMillBlades->Index, AnimTimer, rot, scale);
+
+    }
+    if (Type == M_FRAME)
+    {  
+        if (AnimTimer < 1.0) {
+                  AnimTimer += 0.06;
+               }
+        else AnimTimer = 0.0;
+        
+        if (RotationTimer < 90.0) {
+                  RotationTimer += 0.02;
+               }
+        else RotationTimer = 0.0;
+
+    }
+
+} 
+
+
+//Water Wave
+CWaterWave::CWaterWave(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  x = aobj->PosX;
+  y = aobj->PosY - 1*scale;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+  
+  waterAnimTimer = 0.0;
+  
+  if (StrCmp(aobj->GetString("AnimStart"), "Three")) waterAnimTimer = 0.25;
+  if (StrCmp(aobj->GetString("AnimStart"), "Six")) waterAnimTimer = 0.50;
+  if (StrCmp(aobj->GetString("AnimStart"), "Nine")) waterAnimTimer = 0.75;
+  if (StrCmp(aobj->GetString("AnimStart"), "Twelve")) waterAnimTimer = 0.0;        
+    
+}
+
+
+void CWaterWave::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+
+    if (Type == M_DRAWQUEUE)
+    {  
+        AddSpriteEx( z, x, y, golfWaterWave->Index, waterAnimTimer, rot, scale);
+
+    }
+    if (Type == M_FRAME)
+    {  
+        if (waterAnimTimer < 1.0) {
+                  waterAnimTimer += 0.03;
+               }
+        else waterAnimTimer = 0.0;
+
+    }
+
+}
+
+//Dolphin
+CDolphin::CDolphin(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  x = aobj->PosX;
+  y = aobj->PosY - 1*scale;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+  
+  dolphinAppearTimer = 0.0;
+  dolphinRotationTimer = 0.0;
+    
+}
+
+
+void CDolphin::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+
+    if (Type == M_DRAWQUEUE)
+    {  
+        AddSpriteEx( z, x, y, golfDolphin->Index, 0.0, dolphinRotationTimer, scale);
+
+    }
+    if (Type == M_FRAME)
+    {  
+        if (dolphinAppearTimer < 150.0) {
+               dolphinAppearTimer += 0.1;
+               }else{
+                dolphinRotationTimer = -51;
+               }
+
+
+        if (dolphinRotationTimer > -50.0) {
+                  dolphinRotationTimer -= 0.08;
+               }else dolphinRotationTimer = 0.0;
+           
+    }
+
+} 
+
+//Arrows Direction
+CDirectionArrow::CDirectionArrow(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  x = aobj->PosX;
+  y = aobj->PosY + 2*scale;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+  
+      if (StrCmp(aobj->GetString("DirectionArrows"), "Left1")) directionArrowSprite = arrowSide1->Index + 262144;
+      if (StrCmp(aobj->GetString("DirectionArrows"), "Right1")) directionArrowSprite = arrowSide1->Index;
+      if (StrCmp(aobj->GetString("DirectionArrows"), "Left2")) directionArrowSprite = arrowSide2->Index + 262144;
+      if (StrCmp(aobj->GetString("DirectionArrows"), "Right2")) directionArrowSprite = arrowSide2->Index;
+      if (StrCmp(aobj->GetString("DirectionArrows"), "LeftDepth1")) directionArrowSprite = arrowSide3->Index + 262144;
+      if (StrCmp(aobj->GetString("DirectionArrows"), "RightDepth1")) directionArrowSprite = arrowSide3->Index;
+      if (StrCmp(aobj->GetString("DirectionArrows"), "LeftUp1")) directionArrowSprite = arrowUp1->Index + 262144;
+      if (StrCmp(aobj->GetString("DirectionArrows"), "RightUp1")) directionArrowSprite = arrowUp1->Index;
+      if (StrCmp(aobj->GetString("DirectionArrows"), "AllDirections")) directionArrowSprite = arrowsAllDirections->Index;
+  
+}
+
+void CDirectionArrow::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {     
+        AddSpriteEx( z, x, y, directionArrowSprite, 0.0, rot, scale);
+    }
+}
+
+//Buildings
+CHouseSpriter::CHouseSpriter(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  x = aobj->PosX;
+  y = aobj->PosY*scale;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+  
+  if (StrCmp(aobj->GetString("BuildingType"), "ClubHouse")) buildingSprite = golfClubHouse->Index;
+
+}
+
+
+void CHouseSpriter::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        AddSpriteEx( z, x, y, buildingSprite, 0.0, rot, scale);
+    }
+}
+
+//Tree
+CGolfSpriterPineTree::CGolfSpriterPineTree(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Scale = aobj->GetInt("Size");
+  //Classic Trees
+  //if (StrCmp(aobj->GetString("Tree"), "Pine")) treeSprite = golfTree->Index;
+  //if (StrCmp(aobj->GetString("Tree"), "Maple")) treeSprite = golfTree2->Index;
+  //New Trees
+  if (StrCmp(aobj->GetString("Tree"), "Pine1")) treeSprite = golfTreePine1->Index;
+  scale = Scale/100.0;
+  x = aobj->PosX;
+  y = aobj->PosY-132;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+}
+
+void CGolfSpriterPineTree::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        AddSpriteEx( z, x, y, treeSprite, 0.0, rot, scale);
+    }
+}
+
+
+
+void SpawnWindMillBase(CEditorObject* obj)
+{
+  zone = new CWindMillBase(obj);
+}
+
+void SpawnWindMillBlades(CEditorObject* obj)
+{
+  zone = new CWindMillBlades(obj);
+}  
+ 
+void SpawnWaterWave(CEditorObject* obj)
+{
+  zone = new CWaterWave(obj);
+}
+
+void SpawnDolphin(CEditorObject* obj)
+{
+  zone = new CDolphin(obj);
+}   
+
+void SpawnDirectionArrow(CEditorObject* obj)
+{
+  zone = new CDirectionArrow(obj);
+}
+
+void SpawnBuilding(CEditorObject* obj)
+{
+  zone = new CHouseSpriter(obj);
+}
+
+void SpawnPineTree(CEditorObject* obj)
+{
+  zone = new CGolfSpriterPineTree(obj);
+}                                                               

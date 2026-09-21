@@ -1,0 +1,64 @@
+// Script by PyroMan
+
+require utils;
+
+CColMask*GCMask;
+
+void cpl_spd::Init()
+{
+keySync->AddKey(49);
+keySync->AddKey(50);
+keySync->AddKey(51);
+keySync->AddKey(52);
+keySync->AddKey(53);
+keySync->AddKey(16);
+keySync->AddKey(17);
+keySync->AddKey(38);
+keySync->AddKey(40);
+GCMask = new CColMask(3, 3, MakeCircleMask(6));
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+GCSpeed = 0.0;
+GCCheck = false;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+	{
+	if (weap->CheckName("Guidance Cue"))
+		{
+		if (IsFlying)
+			{
+			if (keySync->KeyPressed(16) || keySync->KeyPressed(17) || keySync->KeyPressed(38) || keySync->KeyPressed(40))
+				{
+				if (keySync->KeyPressed(16) || keySync->KeyPressed(38)) GCSpeed = 0.4;
+				if (keySync->KeyPressed(17) || keySync->KeyPressed(40)) GCSpeed = -0.6;
+				}
+
+			else GCSpeed = 0.0;
+
+			local hit1 = CheckMaskAt(Root, GCMask, PosX+SpX*0.8, PosY+SpY*0.8, -1);
+			if (hit1 != NullObj && hit1->ClType == OC_Landscape)
+				{
+				if (GCCheck)
+					{
+					GCCheck = false;
+					}
+				PosX = PosX+SpX*(-0.05);
+				PosY = PosY+SpY*(-0.05);
+				}
+			else
+				{
+				GCCheck = false;
+				PosX = PosX+SpX*GCSpeed;
+				PosY = PosY+SpY*GCSpeed;
+				}
+			}
+		}
+	}
+super;
+}

@@ -1,0 +1,12 @@
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+      if(Type == M_FRAME)
+      {
+              if(DodgeStarted == true)
+              {
+              GS->CameraX = 1524;
+              GS->CameraY = 502;
+              }
+      }
+}

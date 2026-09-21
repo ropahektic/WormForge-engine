@@ -1,0 +1,220 @@
+// Script by PyroMan;
+
+require utils, particles;
+
+CAnimation : CObject;
+CWASound : CObject;
+CWAnimation : CObject;
+
+
+CAnimationParams::CAnimationParams()
+{
+    sprite = 64;
+    speed = 30;
+    duration = 10; // Duration - how long sprite will be visible before fading. Here: secs. result: msecs. 
+    ZPlane = 5;
+    turns = 4;
+    rot = 0;  // int
+    scale = 1.0;
+    alpha = 100;  // percentage
+    loop = false;
+    fade = true;
+    once = false;
+    backwards = false;
+    useObj = false;
+    color = ARGB(85, 0, 0, 0);
+    blend_type = 2;
+    colorMod = false;
+    color_mod = RGB(0, 0, 0);
+    color_mod_type = 6;
+}
+
+
+CAnimation::CAnimation(CObject* parent, fixed ax, fixed ay, CGObject* obj, CAnimationParams* Params, ARGB color)
+{
+    super(parent, GS);
+    useObj = Params->useObj;
+    if (useObj)
+    {
+      Obj = obj;
+      x = Obj->PosX;
+      y = Obj->PosY;
+    } else {
+      x = ax;
+      y = ay;
+    }
+    z = Params->ZPlane;
+    turns = Params->turns;
+    sprite = Params->sprite;
+    scale = Params->scale;
+    scale_fixed = scale;
+    alpha = Params->alpha;  // percentage
+//    float rotAngle = Params->rot;
+//    if (rotAngle < 0) rot = 6.28318 - rot;
+//    else rot = (1 - rotAngle) * 3.14159;
+//    rot1 = Params->rot - 26;
+//    rot = (rot1 / 360 + MATH_HALF_PI) * 6.29;
+//    rot = Params->rot/360*MATH_PI-MATH_HALF_PI;
+    rot1 = Params->rot - 26;
+    rot = (rot1 / 360 + MATH_HALF_PI) * 6.3;
+    loop = Params->loop;
+    fade = Params->fade;
+    once = Params->once;
+    backwards = Params->backwards;
+    speed = Params->speed;  // 20 works fine for standart WA sprites
+    
+    playnow = true;
+    local as = speed;
+    as = float(as)/1000.0;
+    AnimationSpeedT = 0.0;     // ASpeed / 100;
+    AnimationSpeedT = as;
+    AnimationPhaseT = 0.0;
+    
+    fader = 150;
+    fade_duration = 150;   //msecs
+    duration = Params->duration*1000/3;
+    col = Params->color;
+    blend_type = Params->blend_type;
+    colorMod = Params->colorMod;
+    color_mod = Params->color_mod;
+    color_mod_type = Params->color_mod_type;
+    //Dead = false;
+}
+
+void CAnimation::Render()
+{
+    local sprites = fade_duration / 15 * alpha/100;
+    CQuad q;
+    if (colorMod) SetColorMod(color_mod, color_mod_type);
+    FillSpriteQuad(&q, sprite, AnimationPhaseT, 0);
+    if (useObj && Obj != NullObj){TransformQuad(&q, rot, scale, scale, Obj->PosX, Obj->PosY);}
+    else {TransformQuad(&q, rot, scale, scale, x, y);}
+    for (local i = 0; i < 4; i += 1) q.v[i].color = col;    
+    q.blend = blend_type;
+    RenderQuad(&q, 0);          
+    if (sprite < 700)    // 700 ~number of WA sprites
+    {
+      if (useObj && Obj != NullObj){AddSpriteEx( z, Obj->PosX, Obj->PosY, sprite, AnimationPhaseT, 0.0, scale);}
+      else {
+        AddSpriteEx( z, x, y, sprite, AnimationPhaseT, rot, scale);
+      }  
+    } else {
+      for (local i = 1; i <= sprites; i++)
+      {
+        AddSpriteQ( z, &q, sprite, AnimationPhaseT, 1);
+      }
+    }
+}
+
+void CAnimation::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+/*
+  if (Type == M_FRAME)
+  {
+      if (Dead) 
+      {
+         Free(true);
+         return;
+      }
+  }
+*/
+  if (duration < 0) return;
+  if (useObj && Obj == NullObj) return;
+  if (Type == M_DRAWQUEUE)
+  {
+    if (turns <= 0)
+    {
+	if (duration > 0)
+      {
+        if (playnow)
+        {
+          Render();
+        }
+        if (fade)
+        {
+          if (duration < fader)
+          {
+            fade_duration = duration;
+            scale = scale_fixed - scale_fixed/fade_duration;
+          }
+        }
+        duration -= 1;
+      } else {fade = false;}
+    } else {
+        if (playnow)
+        {
+          Render();
+        }
+    }
+  }
+  if(Type == M_FRAME)
+  {
+      if (backwards) 
+      {
+        if (playnow)
+        {  
+          if (!loop) {AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;}
+          if(AnimationPhaseT > 0.99){ if(!loop) {AnimationPhaseT = AnimationPhaseT - AnimationSpeedT; loop = true;}}
+          if (loop) { AnimationPhaseT = AnimationPhaseT - AnimationSpeedT;}
+          if(loop){ if(AnimationPhaseT <= 0.00){AnimationPhaseT = AnimationPhaseT + AnimationSpeedT; if (once){playnow = false;}else{loop = false;}}}
+        } else Dead = true;
+      } else
+      {
+          if(AnimationPhaseT > 0.99){AnimationPhaseT = 0.0; if (once)playnow = false;}
+          else if (playnow){AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;} else Dead = true;
+      }
+  }
+  if (Type == M_TURNEND)
+  {
+      turns -= 1;
+  }
+}          
+
+
+/*
+======================================================================================
+*/
+
+CWASound::CWASound(CObject* parent, fixed SNum, int unkb, fixed unkc, fixed pan, bool Loop, fixed Timer, fixed Delay)
+{
+    super(parent, GS);
+    SIndex = SNum;
+    Pan = pan;
+    UnkB = unkb;  // 10 for normal playing   // 1.0 for normal playing actually
+    UnkC = unkc;  // 0 for normal playing    // 1.0 for normal playing actually
+    loop = Loop;
+    timer = Timer;
+    delay = Delay;
+    working = true;
+    local time = timer;
+} 
+
+void CWASound::Play()
+{
+    PlaySound( SIndex, UnkB, UnkC, Pan);
+} 
+
+void CWASound::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (!working) return;
+  if (Type == M_FRAME)
+  {
+    if (delay <= 0)
+    {
+      if (loop)
+      {
+        if (time <= 0)
+        {
+          Play();
+          time = timer;
+        }
+        time--;
+      } else {
+        Play();
+        working = false;
+      }
+    } else {
+      delay--;
+    }
+  }
+}                              

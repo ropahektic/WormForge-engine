@@ -1,0 +1,55 @@
+CSprite* healing_aiming;                                                 
+CSprite* healing_bullet;                                                 
+
+void healing::InitGraphic()                                 
+{   CFile* f;                                                   
+    f = GetAttachment("staff.png");                             
+    healing_aiming = LoadSprite(f, 1, 0);                                
+    f = GetAttachment("healball.png");                                   
+    healing_bullet = LoadSprite(f, 1, 0);                                
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Healing Spell";                                            
+     sprite = healing_aiming->Index;                                   
+     Params->hand_radius = -6.0;
+     Params->hand_rotation = 0.5; //1.0                                         
+     Params->hand_radial_rotation = 0.9;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.7;
+     Params->weap_radius = 10.0;
+     Params->hand_type = 2;    
+     Params->hand_scale = 0.8;  
+
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){                                                         
+     if (weap->CheckName("Healing Spell")) {                            
+         if (healing_anim) {                                            
+              local sprite = healing_bullet->Index;                     
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              healing_anim = false;             
+         }
+     }
+  }   
+}
+ 
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+  healing_anim = false;                                                   
+}                                                                         

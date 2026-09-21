@@ -1,0 +1,13 @@
+//List of sprites
+CSprite* phone;
+
+void phone_change::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("phone.png"); 
+   phone = LoadSprite(f, 20, 0);
+
+   //Let's override the sprites!
+   SetSpriteOverride(70, phone);
+}

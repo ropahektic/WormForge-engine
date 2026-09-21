@@ -1,0 +1,190 @@
+
+bool GameStartedToDestroy; //true when game is ending
+
+int g_tColorInd[6];  
+int g_tColorInd2[7];  //reversed
+            
+            
+            //rad is actually about 1/2 of actual diameter :D
+bool TeleportObject(CGObject* obj, int tX, int tY, int rad, bool onGround, int flags)
+{
+     local dx = 0;
+     local dy = -1;
+     local iX = obj->PosX; local iY = obj->PosY;
+     
+     obj->PosY = -1000;
+     
+     l = 1;
+     for (local nm = 0; nm <= rad; nm++)
+     {
+       for (local i = 0; i < l; i++)
+       {
+          
+          obj->PosY -= 1;
+          
+          if (Env->CheckCollisionEx(obj, tX, tY, obj->ColMask, flags) == NullObj)
+          {             
+             obj->PosY -= 1;
+          
+             if (!onGround || (Env->CheckCollisionEx( obj, tX, tY + 1, obj->ColMask, flags) != NullObj))
+             {
+                obj->PosX = tX;
+                obj->PosY = tY;
+                return true;
+             }
+          }
+          
+          tX += dx;
+          tY += dy;
+       }
+       local t = dx;
+       dx = -dy;
+       dy = t;
+       
+       if (nm % 2 == 1)
+       {
+         l++;
+       }
+     }
+     obj->PosY = iY;
+     return false;
+}
+      
+string MakeZeroedNumber(int n, int minLen)
+{
+  string str = ItoA(n);
+  while (StrLen(str) < minLen) str = StrCon("0", str);
+  return str;
+}
+     
+void generateTColorInd()
+{         
+  tExists = new bool[7];
+  sTeam = 1;
+  
+  for (i = 0; i < 7; i++) 
+  {
+    tExists[i] = false;
+    g_tColorInd2[i] = -1;
+  }
+  for (i = 1; i <= 6; i++)
+  {
+      if (Root->GetObject(TI_Team, i) != NullObj)
+      {
+         tExists[GetTeamColor(i)] = true;
+      }
+  }        
+  for (i = 0; i <= 5; i++)
+  {
+      if (tExists[i])
+      {               
+         g_tColorInd2[sTeam] = i;
+         g_tColorInd[i] = sTeam++;
+      }
+  }
+  
+}
+
+override void CTurnGame::Free(bool FreeMem)
+{
+  GameStartedToDestroy = true;
+  super;
+  GameStartedToDestroy = false;
+}
+
+CBitmap1* MakeCircleMask(int rad)
+{
+  msk = new CBitmap1(rad * 2, rad * 2);
+  rsq = rad * rad;
+  drad = rad * 2;
+//  hrad = rad / 2;
+  for (int i = 0; i < drad; i+=1)
+  {
+    cwidth = int(sqrt(rsq - (i - rad) * (i - rad)));
+    lborder = rad - cwidth;
+    rborder = rad + cwidth;
+    if (rborder >= drad) rborder = drad - 1;
+    msk->HLine(lborder, rborder, i, 1);
+  };
+  return msk;
+};
+
+CBitmap1* MakeRectMask(int sx, int sy)
+{
+  msk = new CBitmap1(sx, sy);
+  msk->Rect( 0, 0, sx, sy, 1);
+  return msk;
+}
+
+CBitmap1* MakePixelMask()
+{
+  msk = new CBitmap1(1, 1);
+  msk->SetPixel(0, 0, 1);
+  return msk;
+};
+
+CGObject* CheckMaskAt(CGObject* Obj, CColMask* msk, fixed x, fixed y, int flags)
+{
+    nObj = Env->Objs.Count;
+    for (i = 0; i < nObj; i += 1)
+    {
+        trg = CGObject(Env->Objs.Objs[i]);
+        if (trg == Obj) continue;
+        if (trg == NullObj) continue;
+        if (flags >= 0 && flags != trg->Layer) continue;
+        if (msk->Check(x, y, trg->ColMask, trg->PosX, trg->PosY))
+        {
+           return trg;                           
+        };
+    };
+    
+    return NullObj;
+};
+
+void GetTeamColorRGB(int clr, int* r, int* g, int* b)
+{
+  if (clr == 1)
+  {       
+    *r = 255; 
+    *g = 128;
+    *b = 128;
+  } else if (clr == 2)
+  {                 
+    *r = 0; 
+    *g = 150;
+    *b = 255;  
+  } else if (clr == 3)
+  {          
+    *r = 0; 
+    *g = 208;
+    *b = 0;  
+  } else if (clr == 4)
+  {  
+    *r = 255; 
+    *g = 255;
+    *b = 64;  
+  } else if (clr == 5)
+  {  
+    *r = 232; 
+    *g = 0;
+    *b = 232;  
+  } else if (clr == 6)
+  {  
+    *r = 80; 
+    *g = 255;
+    *b = 255;  
+  } else {
+    *r = 255; 
+    *g = 255;
+    *b = 255;
+  }
+}
+
+int GetTeamColorRGB(int clr)
+{
+  int r;
+  int g;
+  int b;
+  GetTeamColorRGB(clr, &r, &g, &b);
+  return RGB(r, g, b);
+}

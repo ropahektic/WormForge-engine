@@ -1,0 +1,220 @@
+require utils, utils_danylo;
+//-----------------------------------------------------------------------------
+$editor
+ $object KtkControl
+  $origin -24 -66    
+  $image "ktk_control.png"  
+  $radius 26            
+  $func InitKtkControl
+  $param KingZone area 30 40
+  $param TimeForAttack int 300000 
+  $param TimerType enum 2 AttackOnly DefendAndCompensate 
+  $param TimerCaption string "Remaining attack time: "
+  $param AttackersColour enum 6 Red Blue Green Yellow Purple Cyan
+  $param DefendersColour enum 6 Red Blue Green Yellow Purple Cyan  
+  $param DestructionPercentage int 75
+  $param DrawKing enum 5 No LeftSmall LeftBig RightSmall RightBig 
+ $object_end
+$end
+//-----------------------------------------------------------------------------
+CKtkControl : CObject;
+CKtkControl* KtkControl[2];
+CGUIText* GUIAttackTimer[2];
+CGUIText* GUIKingHealth[2];
+CColMask* PixelMask;
+
+CBitmap* LeftSmallKing;
+CBitmap* LeftBigKing;
+
+CBitmap* RightSmallKing;
+CBitmap* RightBigKing;
+
+CSoundFile* 30seconds;
+CSoundFile* 60seconds;
+
+int KingsN; // number of kings. can be 1 or 2 only 
+
+//-----------------------------------------------------------------------------
+void ktk_control::Init()
+{
+KingsN = 0;
+30seconds = new CSoundFile(GetAttachment("30_seconds_remain.wav"));
+60seconds = new CSoundFile(GetAttachment("1_minute_remains.wav"));
+} 
+//-----------------------------------------------------------------------------
+void ktk_control::InitGraphic() 
+{
+  GUIAttackTimer[0] = new CGUIText(GS->Disp, 16, 1);
+  GUIAttackTimer[1] = new CGUIText(GS->Disp, 16, 1);
+  GUIKingHealth[0] = new CGUIText(GS->Disp, 16, 1);
+  GUIKingHealth[1] = new CGUIText(GS->Disp, 16, 1);
+  PixelMask = new CColMask(0, 0, makePixelMask());
+  
+  local spr = GetAttachment("leftsmallking.png");    LeftSmallKing = LoadImage(spr);
+  local spr = GetAttachment("leftbigking.png");      LeftBigKing = LoadImage(spr);
+  
+  local spr = GetAttachment("rightsmallking.png");   RightSmallKing = LoadImage(spr);
+  local spr = GetAttachment("rightbigking.png");     RightBigKing = LoadImage(spr);
+}
+//-----------------------------------------------------------------------------
+void ktk_control::FirstFrame() {}
+//-----------------------------------------------------------------------------
+void InitKtkControl(CEditorObject* EObj) 
+{
+  KtkControl[KingsN] = new CKtkControl(EObj, KingsN); 
+  KingsN++; 
+} 
+//-----------------------------------------------------------------------------
+CKtkControl::CKtkControl(CEditorObject* EObj, int index) 
+{                                                                                                                                                                                                                                       super(Root, GS);
+  Index = index;
+  KtkTimer = new CTimer(Root);
+  KtkTimer->SetTimer(EObj->GetInt("TimeForAttack")); 
+  TimerType = StrSave(EObj->GetString("TimerType"));
+  Attackers = colourToInt(EObj->GetString("AttackersColour"));
+  Defenders = colourToInt(EObj->GetString("DefendersColour"));
+  TimerCaption = StrSave(EObj->GetString("TimerCaption")); 
+  KingX1 = EObj->PosX;
+  KingY1 = EObj->PosY;
+  KingX2 = KingX1 + EObj->GetInt("KingZone");
+  KingY2 = KingY1 + EObj->GetInt2("KingZone");
+  
+  if (StrCmp(EObj->GetString("DrawKing"), "LeftSmall"))
+      {
+      local bmp = LeftSmallKing;
+      GG->land->Draw(bmp, KingX1, KingY1);
+      KingX2 = KingX1 + 20;         
+      KingY2 = KingY1 + 40;
+      }
+  else if (StrCmp(EObj->GetString("DrawKing"), "LeftBig"))
+      {
+      local bmp = LeftBigKing;
+      GG->land->Draw(bmp, KingX1, KingY1);
+      KingX2 = KingX1 + 40;
+      KingY2 = KingY1 + 80;
+      }
+      
+  else if (StrCmp(EObj->GetString("DrawKing"), "RightSmall"))
+      {
+      local bmp = RightSmallKing;
+      GG->land->Draw(bmp, KingX1, KingY1);
+      KingX2 = KingX1 + 20;         
+      KingY2 = KingY1 + 40;
+      }
+  else if (StrCmp(EObj->GetString("DrawKing"), "RightBig"))
+      {
+      local bmp = RightBigKing;
+      GG->land->Draw(bmp, KingX1, KingY1);
+      KingX2 = KingX1 + 40;
+      KingY2 = KingY1 + 80;
+      }
+  
+  local Landscape = CGObject(Env->Objs.Objs[0]);
+  TotalKingArea = 0;
+  for (local x = KingX1; x < KingX2; x++) {
+    for (local y = KingY1; y < KingY2; y++) {
+      if (PixelMask->Check(x, y, Landscape->ColMask, 0, 0)) TotalKingArea++;
+    }
+  }
+  CurrKingArea = TotalKingArea;
+  DestructionP = EObj->GetInt("DestructionPercentage");
+  DestructionArea = TotalKingArea - TotalKingArea * DestructionP / 100;
+  CurrDestructionP = 0; 
+  AttackersLost = false;
+  
+      
+} 
+//-----------------------------------------------------------------------------
+void CKtkControl::Message(CObject* sender ,EMType Type, int MSize, 
+  CMessageData* MData) 
+{
+  if (Index >= KingsN) return;
+  if (Type == M_DRAWQUEUE)
+     {
+     DrawKingHealth();
+     if (!AttackersLost) DrawAttackTimer();   
+     }
+  else 
+    if (Type == M_FRAME) { 
+    
+    // Attackers timer
+    if (GetTeamColor(Root->CurTeam) == Attackers) {
+      if (Root->IsTimerActive()) {
+        if (!KtkTimer->IsActive) { 
+          KtkTimer->IsActive = true; 
+          KtkTimer->TickUnit = -20; // normal speed
+        }
+		if (KtkTimer->CurrValue == 60000) {60seconds->Play(1.0, 0.0, false);} // 1 minute
+		if (KtkTimer->CurrValue == 30000) {30seconds->Play(1.0, 0.0, false);} // 30 seconds
+
+		if (KtkTimer->CurrValue > 30000) {more_than_30_sec = true;}
+		else more_than_30_sec = false;
+		
+        if (KtkTimer->CurrValue == 0) {
+          
+          for (local teamIndex = 1; teamIndex <= 6; teamIndex++){
+            if (GetTeamColor(teamIndex) == Attackers){
+              destroyTeam(teamIndex);
+              AttackersLost = true; 
+            } 
+          } 
+        }              
+      } else { KtkTimer->IsActive = false; }  
+    }
+
+    if (TimerType == "DefendAndCompensate") {
+    // Compensate timer
+    if (GetTeamColor(Root->CurTeam) == Defenders) {
+      if (Root->IsTimerActive()) {
+        if (!KtkTimer->IsActive) { 
+          KtkTimer->IsActive = true; 
+          KtkTimer->TickUnit = 5; // reversed slowed speed
+        }             
+      } else { KtkTimer->IsActive = false; }  
+    }
+    }
+    // King's destruction
+    local PixelCount = 0;
+    local Landscape = CGObject(Env->Objs.Objs[0]);
+    for (local x = KingX1; x < KingX2; x++) {
+      for (local y = KingY1; y < KingY2; y++) {
+        if (PixelMask->Check(x, y, Landscape->ColMask, 0, 0)) {
+          PixelCount++;
+        }
+      }
+    }
+    if (PixelCount < CurrKingArea) {
+      CurrKingArea = PixelCount;     
+      CurrDestructionP = 
+        (TotalKingArea - CurrKingArea) * 100 / TotalKingArea;
+      if (CurrKingArea <= DestructionArea) {
+        for (local teamIndex = 1; teamIndex <= 6; teamIndex++){
+          if (GetTeamColor(teamIndex) == Defenders){
+            destroyTeam(teamIndex);    
+          } 
+        }      
+      }
+    }
+  }
+}
+//-----------------------------------------------------------------------------
+void CKtkControl::DrawAttackTimer() 
+{
+  local x = -GS->ResX / 2 + 15;
+  local y = GS->ResY / 2 - 88 - (20*Index);
+  local outX = 1;
+  local outY = 1;
+  local timerStr = StrCon(TimerCaption, KtkTimer->FormatTime(false, true, true));
+  local bitm = GUIAttackTimer[Index]->SetText(timerStr, Attackers, 0, RGB(127, 127, 127), &outX, &outY, 0);
+  AddInterfaceBitmap(0, x + outX / 2, y, bitm, outX, outY, 1);
+}  
+//-----------------------------------------------------------------------------
+void CKtkControl::DrawKingHealth()                         
+{
+  local outX = 8;
+  local outY = 1;
+  local healthStr = StrCon(ItoA(100 - CurrDestructionP), " %");
+  local bitm = GUIKingHealth[Index]->SetText(healthStr, Defenders, 0, getTeamColourRGB(Defenders), &outX, &outY, 0);
+  AddBitmap(0, KingX1 + outX / 2, KingY1 - 12, bitm, outX, outY, 1);
+}
+//-----------------------------------------------------------------------------

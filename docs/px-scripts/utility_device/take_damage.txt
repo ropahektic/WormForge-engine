@@ -1,0 +1,22 @@
+void CDevice::TakeExplosionDamage(fixed x, fixed y, int dmg)
+{
+	if(dmg == 0) return;
+
+	float fdmg = dmg;
+	float dx = PosX - x;
+	float dy = PosY - y;
+
+	float distsqr = dx*dx + dy*dy;
+	float fdmgsqr = fdmg*fdmg*4.0;
+
+	fdmg = (1.0-distsqr/fdmgsqr) * fdmg;
+	dmg = fdmg;
+
+	if(dmg > 0) TakeDamage(dmg);
+}
+
+
+void CDevice::TakeDamage(int dmg)
+{
+	Health -= dmg;
+}

@@ -1,0 +1,195 @@
+$editor
+ $object TerminalSP
+  $origin -13 -15
+  $image "edterm.png"
+  $func SpawnTerminal
+  $radius 17
+  $param Target int 0
+  $param Combay int 0
+  $param Equip int 0
+ $object_end
+$end
+
+CSoundFile* keyboard;
+CTerminal : CBuilding;
+
+int HelpArriveTurns;
+int ItemCooldown;
+
+void terminal::Init()
+{
+keyboard = new CSoundFile(GetAttachment("keyboard.wav"));
+}
+
+void terminal::FirstFrame()
+{
+HelpArriveTurns = 100;
+ItemCooldown = 0;
+}
+
+void terminal::InitGraphic()
+{
+}
+
+CTerminal::CTerminal(CObject* parent, fixed x, fixed y)
+{
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+    GravityFactor = 0;
+    IsMaterial = false;
+
+    TargetElevator = 0;
+    TargetCombay = false;
+    TargetEquipFab = false;
+}
+
+
+void CTerminal::Activation()
+{
+if(TargetElevator != 0)
+	{
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+		{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(obj->IsMaterial == false) continue;
+
+		if(obj->ClType == EObjectClass(79))
+			{
+			local buildn = CBuilding(obj);
+            if(StrCmp(buildn->ClassType,"Elevator"))
+            	{
+                local elev = CElevator(obj);
+                if(elev->Number == TargetElevator){elev->Move();}
+                }
+			}
+        }
+  	}
+
+if(GetCurrentWorm() != NullObj)
+ 	{
+  	if(TargetCombay != false && GetCurrentWorm()->WormTeam != 1)
+  		{
+   		if(HelpArriveTurns == 100)
+   			{
+   			PlaySound(1, 0, 0, 1.0);
+   			GG->WriteToChat(1, "Establishing link...", false);
+   			GG->WriteToChat(1, "Communication with Earth established...", false);
+   			GG->WriteToChat(1, "Requesting Emergency Crew...", false);
+   			GG->WriteToChat(1, "Emergency Crew on its way...", false);
+   			HelpArriveTurns = 25;
+   			}
+   		else
+   			{
+   			GG->WriteToChat(1, MakeNumberString("Emergency Crew needs ",HelpArriveTurns," more turns to come."), false);
+   			}
+  		}
+ 	}
+
+if(GetCurrentWorm() != NullObj)
+ 	{
+  	if(TargetEquipFab != false && GetCurrentWorm()->WormTeam != 1)
+  		{
+   		if(ItemCooldown == 0)
+   			{
+   			GG->WriteToChat(1, "Equipment Fabricator was successfully used!", false);
+
+   			ItemCooldown = 1;
+   			local random = RandomInt(1,5);
+   			local weapname = "Null";
+   			if(random == 1){weapname = "Stun Mine";}
+   			if(random == 2){weapname = "Hand Grenade";}
+   			if(random == 3){weapname = "Plasma Rifle";}
+   			if(random == 4){weapname = "Jet Pack";}
+   			if(random == 5){weapname = "Medkit";}
+
+	        if(StrCmp(weapname,"Null") != true)
+         		{
+         		local wep = GS->GetWeaponByName(weapname);
+               	if(wep != NullObj)
+               		{
+               		PlaySound(124,0,0,1.0);
+               		ShowTeamMessage(1, weapname, GetCurrentWorm()->WormTeam);
+               		GS->Info.AddWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);
+               		}
+         		}
+   			}
+  		}
+ 	}
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if (Weap->CheckName("Use Terminal"))
+	{
+    CGObject *obj;
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+		{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(obj->IsMaterial == true) continue;
+
+		if(obj->ClType == EObjectClass(79))
+			{
+			local buildn = CBuilding(obj);
+			if(StrCmp(buildn->ClassType,"Terminal"))
+            	{
+				local term = CTerminal(obj);
+                if(PosX > term->PosX-40 && PosX < term->PosX+40 && PosY > term->PosY-40 && PosY < term->PosY+40)
+                	{
+                	keyboard->Play(1.0, 0.0, false);
+                    term->Activation();
+                    }
+                }
+			}
+        }
+    }
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_TURNEND)
+	{
+    if(WormTeam == 1)
+        {
+        if(HelpArriveTurns != 100)
+        	{
+            GG->WriteToChat(1, MakeNumberString("Emergency Crew needs ",HelpArriveTurns," more turns to come."), false);
+            if(HelpArriveTurns <= 0){GS->Info.SetWormHealth(WormTeam, WormNumber, 0);}
+
+			HelpArriveTurns = HelpArriveTurns - 1;
+            }
+
+		if(ItemCooldown == 1){ItemCooldown = 0;}
+        }
+	}
+super;
+}
+
+void SpawnTerminal(CEditorObject* obj)
+{
+  x = obj->PosX;
+  y = obj->PosY;
+  GotTarget = obj->GetInt("Target");
+  Combay = obj->GetInt("Combay");
+  EquipF = obj->GetInt("Equip");
+  Combool = false;
+  Equipbool = false;
+
+  if(Combay != 0){Combool = true;}
+  if(EquipF != 0){Equipbool = true;}
+
+  Terminal = new CTerminal(Root->GetObject(25, 0), 0, 0);
+  Terminal->PosX = x;
+  Terminal->PosY = y;
+  Terminal->TargetElevator = GotTarget;
+  Terminal->TargetCombay = Combool;
+  Terminal->TargetEquipFab = Equipbool;
+  Terminal->GravityFactor = 0;
+  Terminal->IsMaterial = false;
+  Terminal->ClassType = "Terminal";
+}

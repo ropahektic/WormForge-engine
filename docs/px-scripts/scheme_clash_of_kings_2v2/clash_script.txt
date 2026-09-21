@@ -1,0 +1,219 @@
+require utils, utils_steps, wosc_lib;
+
+void clash_script::Init()
+{
+  personalinvisibility = true;
+  invisibilityturns = 8;
+}
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  super;
+  TFclass = "";
+  MaxHealth = 100;
+  Weapons = new string[71];
+  
+  if(StrCmp(GetTeamName(WormTeam), "RED LEADER") || StrCmp(GetTeamName(WormTeam), "BLUE LEADER"))
+        {
+  		if(WormNumber == 1)
+			{
+			TFclass = "King";
+			MaxHealth = 60;
+			Weapons[0] = "Invisibility";
+			Weapons[1] = "Handgun";
+      		Weapons[2] = "Prod";
+      		Weapons[3] = "Ninja Rope";
+			}
+		}
+  
+  if(StrCmp(GetTeamName(WormTeam), "RED SUPPORT") || StrCmp(GetTeamName(WormTeam), "BLUE SUPPORT"))
+        {
+        if(WormNumber == 1)
+			{
+			TFclass = "Guard 1";
+			MaxHealth = 100;
+			Weapons[0] = "Bazooka";
+			Weapons[1] = "Grenade";
+			Weapons[2] = "Battle Axe";
+			Weapons[3] = "Shotgun";
+			Weapons[4] = "Uzi";
+			Weapons[5] = "Longbow";
+			Weapons[6] = "Fire Punch";
+			Weapons[7] = "Dragon Ball";
+			Weapons[8] = "Suicide Bomber";
+			Weapons[9] = "Mine";
+			Weapons[10] = "Select Worm";
+			}
+        else if(WormNumber == 2)
+			{
+			TFclass = "Guard 2";
+			MaxHealth = 100;
+			Weapons[0] = "Bazooka";
+			Weapons[1] = "Grenade";
+			Weapons[2] = "Battle Axe";
+			Weapons[3] = "Shotgun";
+			Weapons[4] = "Uzi";
+			Weapons[5] = "Longbow";
+			Weapons[6] = "Fire Punch";
+			Weapons[7] = "Dragon Ball";
+			Weapons[8] = "Suicide Bomber";
+			Weapons[9] = "Mine";
+			Weapons[10] = "Select Worm";
+			}
+        else if(WormNumber == 3)
+			{
+			TFclass = "Guard 3";
+			MaxHealth = 100;
+			Weapons[0] = "Bazooka";
+			Weapons[1] = "Grenade";
+			Weapons[2] = "Battle Axe";
+			Weapons[3] = "Shotgun";
+			Weapons[4] = "Uzi";
+			Weapons[5] = "Longbow";
+			Weapons[6] = "Fire Punch";
+			Weapons[7] = "Dragon Ball";
+			Weapons[8] = "Suicide Bomber";
+			Weapons[9] = "Mine";
+			Weapons[10] = "Select Worm";
+			}
+		}
+
+  GS->Info.SetWormHealth( WormTeam, WormNumber, MaxHealth);
+  SetName(TFclass);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+
+if(Type == M_FRAME)
+  	{
+    if(StrCmp(TFclass, "King"))
+    	{
+      	CaptainAlive();
+    	}
+    
+    if (gframe < 10)
+        {
+        for(int i = 1; i < Env->Objs.Count; i++)
+    		{
+        	local obj = Env->Objs.Objs[i];
+
+		    if(obj == NullObj) continue;
+    		if((obj is CWorm) == false) continue;
+
+	        CWorm* worm = CWorm(obj);
+
+		    if(worm == NullObj) continue;
+
+        	if(StrCmp(GetTeamName(WormTeam), "RED LEADER") || StrCmp(GetTeamName(WormTeam), "BLUE LEADER"))
+	            {
+            	for (local wormIndex = 2; wormIndex <= 8; wormIndex++)
+					{
+   			 		GS->Info.SetWormHealth( WormTeam, wormIndex, 0);
+      				GS->Info.Teams[WormTeam-1].Worms[wormIndex-1].State = 135;
+      				CWorm* wormy = Root->GetObject( 2, 16 * WormTeam + wormIndex);
+      				if (wormy == NullObj) continue;
+      				wormy->Free(true);
+  					}
+  				}
+
+            if(StrCmp(GetTeamName(WormTeam), "RED SUPPORT") || StrCmp(GetTeamName(WormTeam), "BLUE SUPPORT"))
+	            {
+            	for (local wormIndex = 4; wormIndex <= 8; wormIndex++)
+					{
+   			 		GS->Info.SetWormHealth( WormTeam, wormIndex, 0);
+      				GS->Info.Teams[WormTeam-1].Worms[wormIndex-1].State = 135;
+      				CWorm* wormy = Root->GetObject( 2, 16 * WormTeam + wormIndex);
+      				if (wormy == NullObj) continue;
+      				wormy->Free(true);
+  					}
+  				}
+			}
+        }
+  	}
+  	
+    if(Type == M_TURNBEGIN || Type == M_TURNEND || Root->Timer == 0)
+      	{
+      	AutoWeaponManagement();
+      	}
+
+	if(Type == M_AFTERSHOOT && this == GetCurrentWorm()) AutoWeaponManagement();
+}
+
+void CWorm::AutoWeaponManagement()
+{
+    RemoveWeaps();
+    AddWeaps();
+}
+
+void CWorm::AddWeaps()
+{
+  local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=0; i<71; i++)
+  {
+    if(Weapons[i] == 0) continue;
+
+    local weap = GetWeaponByName(Weapons[i]);
+    if(weap == NullObj) continue;
+
+    GS->Info.SetWeaponEx(TeamNumber, weap->GetWeaponIndex(), weap->GetPageIndex(), -1);
+  }
+}
+
+void CWorm::RemoveWeaps()
+{
+  local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=1; i<68; i++)
+  {
+    local weap = GS->GetWeaponByIndex(1, i);
+    if(weap == NullObj) continue;
+    if(weap->CheckName("Skip Go") ||
+	   weap->CheckName("Surrender") ||
+	   weap->CheckName("Barrel Launcher") ||
+	   weap->CheckName("Magnetic Missile") ||
+	   
+	   weap->CheckName("Tazer") ||
+	   weap->CheckName("Sentry Gun") ||
+	   weap->CheckName("Mole Bomb") ||
+	   
+       weap->CheckName("BlowTorch") ||
+       weap->CheckName("Girder") ||
+	   weap->CheckName("Parachute") ||
+	   weap->CheckName("Hang-Glider") ||
+	   
+	   weap->CheckName("Petrol Bomb") ||
+	   weap->CheckName("Bowling Ball") ||
+	   weap->CheckName("Skunk") ||
+	   weap->CheckName("Low Gravity") ||
+	   weap->CheckName("Health Zone") ||
+	   weap->CheckName("Swim Suit")
+	   ) continue;
+
+    GS->Info.SetWeaponEx(TeamNumber, i, weap->GetPageIndex(), 0);
+  }
+}
+
+void CWorm::CaptainAlive()      //msg
+{
+if(GS->Info.GetWormHealth(WormTeam, WormNumber) == 0)   //if king dies, you'll lose
+    {
+    CGObject *eobj;
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+		{
+		eobj = CGObject(Env->Objs.Objs[i]);
+		if(eobj == this) continue;
+		if(eobj == NullObj) continue;
+		if(eobj->IsMaterial == false) continue;
+		if(eobj->ClType == OC_Worm)
+			{
+			local worm = CWorm(eobj);
+			if(GetTeamColor(worm->WormTeam) == GetTeamColor(WormTeam))
+				{
+				GS->Info.SetWormHealth( worm->WormTeam, worm->WormNumber, 0);
+				}
+			}
+		}
+	}
+}

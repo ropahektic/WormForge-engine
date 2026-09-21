@@ -1,0 +1,159 @@
+require utils, utils_pyroman, p_sprite_builder;
+
+CColMask* smallWormMask;
+CColMask* smallWormMask60;
+CColMask* wormsOriginalMask;
+int wormsOriginalMaskIndex;
+                                 
+void small_worm_script::FirstFrame()
+{
+    smallWormMask = new CColMask(2, 2, MakeCircleMask(3));
+    smallWormMask60 = new CColMask(8, 8, MakeCircleMask(16));
+}
+
+void CWorm::RenderNewWorm() {
+    local n = WormTeam*10 + WormNumber;
+    if (Invisible) animColor = ARGB(150, 255, 255, 255);
+    else animColor = ARGB(255, 255, 255, 255);
+    CQuad q;
+    FillSpriteQuad(&q, currentSpriteIndex[n], currentSpriteFrame[n], 1);
+    TransformQuad(&q, WAP->Rotation, WAP->Size * -TurnSide, WAP->Size , currentSpriteX[n], currentSpriteY[n]);
+    for (local i = 0; i < 4; i += 1) q.v[i].color = animColor;
+    if (Invisible) q.blend = 1;
+    else q.blend = 0;
+    RenderQuad(&q, 0);
+    AddSpriteQ( WAP->ZPlane, &q, currentSpriteIndex[n], currentSpriteFrame[n], 1);
+}
+
+override void CWorm::RenderWorm() {
+  if (imSmallWorm) RenderNewWorm();
+  super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+super;
+//   if (Type == M_DRAWQUEUE) {
+//      if (imSmallWorm) RenderNewWorm();
+//   }
+   if (Type == M_TURNEND) {
+      if (imSmallWorm) WAP->ReadyDeactive = true; 
+   }
+   if (Type == M_FRAME) {
+/*      if (imSmallWorm) {
+         if (alphaRise) smallWormAlpha--;
+         else smallWormAlpha++;
+         if (smallWormAlpha > 254) alphaRise = true;
+         else if (smallWormAlpha < 75) alphaRise = false;
+         animColor = ARGB(smallWormAlpha/2 + 128, smallWormAlpha, 180, 255);
+         if(sizeRise) params2->Size += 0.01;
+         else params2->Size -= 0.01;
+         if (params2->Size > 1.7) sizeRise = false;
+         else if (params2->Size < 0.60) sizeRise = true;         
+      }*/
+      if (CurWeapon->CheckName("Small Worm")) {
+         if (IsMoving()) CanFire = false;                                              
+         else CanFire = true;
+      }
+       if (WAP->ReadyDeactive) {
+         if (imSmallWorm && ObjState == WS_IDLE) {
+             SmallDeactivate();
+         }
+      }
+   }
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) {
+   if (Weap->CheckName("Small Worm")) {
+      if (imSmallWorm) {
+         SmallDeactivate();
+/*      
+         ColMask = wormsOriginalMask;
+         MaskIndex = wormsOriginalMaskIndex;
+         PosY -= 9;
+         local hit1 = CheckMaskAt(this,smallWormMask,PosX-3,PosY-6, -1);
+         local hit2 = CheckMaskAt(this,smallWormMask,PosX+3,PosY-6, -1);
+         local hit3 = CheckMaskAt(this,smallWormMask,PosX-3,PosY-3, -1);
+         local hit4 = CheckMaskAt(this,smallWormMask,PosX+3,PosY-3, -1);
+         if (hit1 != NullObj || hit2 != NullObj || hit3 != NullObj || hit4 != NullObj) {
+            GG->land->MakeHole( 5, PosX, PosY-4);
+            GG->land->MakeHole( 4, PosX-6, PosY+4);
+            GG->land->MakeHole( 4, PosX+6, PosY+4);
+            GG->land->MakeHole( 4, PosX-6, PosY);
+            GG->land->MakeHole( 4, PosX+6, PosY);
+            GG->land->MakeHole( 4, PosX, PosY-1);
+         }
+         ShowMessage("Small worm mode: OFF");
+         imSmallWorm = false;
+         hideWorm = false;
+         SpX = 0.0;
+         SpY = 0.0;
+         animatedWorm = false;
+         GravityFactor = GravityFactor * 1.333333;
+         SpeedDivider = SpeedDivider * 0.666666;
+*/
+      } 
+      else if (imFatWorm)
+      {
+          FatDeactivate();
+          SmallActivate();
+      }
+      else {
+          SmallActivate();
+      }
+      return;
+   }
+super;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params) {
+super;
+//   params2 = new CWormAnimationParams;
+   smallWormAlpha = 255;
+   sizeRise = true;
+   alphaRise = true;
+}
+
+void CWorm::SmallDeactivate()
+{
+          MaskIndex = wormsOriginalMaskIndex;
+          ColMask = wormsOriginalMask;
+          PosY -= 9;
+          SpX = 0.0;   // we need this to avoid glitches
+          SpY = 0.0; 
+          local hit1 = CheckMaskAt(this,smallWormMask,PosX-5,PosY-7, -1);
+          local hit2 = CheckMaskAt(this,smallWormMask,PosX+5,PosY-7, -1);
+          local hit3 = CheckMaskAt(this,smallWormMask,PosX-3,PosY-3, -1);
+          local hit4 = CheckMaskAt(this,smallWormMask,PosX+3,PosY-3, -1);
+            if (hit1 != NullObj || hit2 != NullObj || hit3 != NullObj || hit4 != NullObj) {
+            GG->land->MakeHole( 5, PosX, PosY-4);
+            GG->land->MakeHole( 4, PosX-6, PosY+4);
+            GG->land->MakeHole( 4, PosX+6, PosY+4);
+            GG->land->MakeHole( 4, PosX-6, PosY);
+            GG->land->MakeHole( 4, PosX+6, PosY);
+            GG->land->MakeHole( 4, PosX, PosY-1);
+            }
+          ShowMessage("Small worm mode: OFF");
+          imSmallWorm = false;
+          hideWorm = false;
+//          params2->ReadyDeactive = false;
+          animatedWorm = false;
+          GravityFactor = GravityFactor * 1.333333;
+          SpeedDivider = SpeedDivider * 0.666666;
+}
+
+void CWorm::SmallActivate()
+{
+         PosY -= 5;
+         wormsOriginalMask = ColMask;
+         WAP->Size = 0.85;
+         animColor = ARGB(255, 90, 180, 255);    // lol
+         wormsOriginalMaskIndex = MaskIndex;
+         MaskIndex = 2; // mine = 2
+         ColMask = smallWormMask60;
+         ShowMessage("Small worm mode: ON");            
+         imSmallWorm = true;
+         hideWorm = true;
+         animatedWorm = true;
+         GravityFactor = GravityFactor * 0.75;
+         SpeedDivider = SpeedDivider * 1.5; 
+}

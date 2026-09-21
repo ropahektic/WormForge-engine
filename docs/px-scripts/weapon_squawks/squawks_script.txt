@@ -1,0 +1,16 @@
+CSprite* fparrot1;
+CSprite* fparrot2;
+
+void squawks_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+
+   f = GetAttachment("fparrot1.png");
+   fparrot1 = LoadSprite(f, 32, 1);
+   f = GetAttachment("fparrot2.png");
+   fparrot2 = LoadSprite(f, 32, 1);
+   
+   SetSpriteOverride(464, fparrot1);
+   SetSpriteOverride(465, fparrot2);
+}

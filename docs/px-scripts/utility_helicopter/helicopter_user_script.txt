@@ -1,0 +1,298 @@
+require utils, utils_steps;
+
+CSprite* HeliAnim;
+CSprite* HeliJumpIn;
+
+CSoundFile* HeliWav;
+CSoundFile* RadioWav1;
+CSoundFile* RadioWav2;
+CSoundFile* RadioWav3;
+CSoundFile* RadioWav4;
+CSoundFile* Oops1;
+CSoundFile* Oops2;
+CSoundFile* Oops3;
+CSoundFile* Oops4;
+CSoundFile* Oops5;
+
+void helicopter_user_script::Init()
+{
+    keySync->AddKey(16); // Shift
+}
+
+void helicopter_user_script::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("heli-anim.png");           HeliAnim   = LoadSprite(f, 3, 1);
+    f = GetAttachment("heli-jumpin-sprite.png");  HeliJumpIn = LoadSprite(f, 23, 1);
+    f = GetAttachment("helicopterloop.wav");      HeliWav = new CSoundFile(f);
+    f = GetAttachment("1.wav");      	RadioWav1 = new CSoundFile(f);
+    f = GetAttachment("2.wav");      	RadioWav2 = new CSoundFile(f);
+    f = GetAttachment("3.wav");      	RadioWav3 = new CSoundFile(f);
+    f = GetAttachment("4.wav");      	RadioWav4 = new CSoundFile(f);
+    f = GetAttachment("oops1.wav");     Oops1 = new CSoundFile(f);
+    f = GetAttachment("oops2.wav");     Oops2 = new CSoundFile(f);
+    f = GetAttachment("huh.wav");       Oops3 = new CSoundFile(f);
+    f = GetAttachment("poop.wav");      Oops4 = new CSoundFile(f);
+    f = GetAttachment("idiot.wav");     Oops5 = new CSoundFile(f);
+}  
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    fixed hframenum;
+    fixed jumpinframenum;
+    FuelAmount = 100; 		 // Set to 0 for infinite fuel
+    Realistic = true;        // Affected by gravity and wind
+    ExplodeOnTurnEnd = true; // Explosion when timer reaches 0
+    super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    CWorm* w = GetCurrentWorm();
+    Shifth = keySync->KeyPressed(16);
+    
+    if (Type == M_FRAME)
+        {
+        if (helicopter && (SpX != 0 || SpY != 0))
+			{
+			if (gframe % 47) {}
+			else HeliWav->Play(1.2, (SpX/SpY)/2, false);
+			
+			local ii=RandomInt(1,200);
+         	if (ii==20) { RadioWav1->Play(0.3, SpX, false); }
+         	if (ii==40) { RadioWav2->Play(0.3, SpX, false); }
+         	if (ii==60) { RadioWav3->Play(0.3, SpX, false); }
+         	if (ii==80) { RadioWav4->Play(0.3, SpX, false); }
+			}
+             
+        if (ObjState == WS_FIRED && CurWeapon->CheckName("Helicopter"))
+            {
+            jumpin = true;
+            jumpinframenum = jumpinframenum + 0.047;
+            }
+        
+        if (helicopter)
+            {
+            if (PosY == Env->Water) {DisableHeli(SpX, SpY);}
+            
+            if (FuelAmount == 0)
+            	{
+            	JetFuel=1;
+            	if (JetFuel <= 1 * 65536) { JetFuel = 1*65536;}
+            	}
+            	
+            if (helilaunch)
+            	{
+            	if (FuelAmount > 0)
+            	    {
+            		JetFuel = FuelAmount*65536;
+            		}
+                     
+                jumpinframenum = 0;
+                jumpin = false;
+                
+                if (Realistic == true)
+                    {
+                    local cw = GetCurrentWorm();
+                    cw->WindFactor = 0.2;
+                    }
+                else {}
+                
+            	helilaunch = false;
+                }
+// Code to do:
+// The number of ticks it takes for the helicopter to completely stop going in x or y
+// depends on the speed it was going in this direction before the key was released and/or? the opposite key is pressed(realistic inertia)
+
+// Reminder: & evaluates both sides of the operation. && evaluates the left side of the operation, if it's true, it continues and evaluates the right side
+// A double equal sign means "is equal to." A single equal sign means "is."
+// The next line would be: "If up is not pressed but also down is not pressed, the current vertical speed is divided by 1.085
+// If nothing is pressed, current speed is now current speed divided by value  ?? IDK
+                
+                if (PressedUp == 0 && PressedDown == 0) SpY = SpY / 1.105;
+                if (PressedLeft == 0 && PressedRight == 0) SpX = SpX / 1.105;
+                if (PressedUp == 1 && PressedDown == 1) SpY = SpY / 1.095;
+                if (PressedLeft == 1 && PressedRight == 1) SpX = SpX / 1.095;
+                
+                if (PressedUp == 1 && PressedRight == 1) SpY = SpY * 0.99;  //North East behavior
+                if (PressedUp == 1 && PressedRight == 1) SpX = SpX * 0.99;  
+                if (PressedRight == 1 && PressedUp == 1) SpX = SpX * 0.99;
+                if (PressedRight == 1 && PressedUp == 1) SpY = SpY * 0.99;
+
+				if (PressedUp == 1 && PressedLeft == 1) SpY = SpY * 0.99;  //North West
+                if (PressedUp == 1 && PressedLeft == 1) SpX = SpX * 0.99;  
+                if (PressedLeft == 1 && PressedUp == 1) SpX = SpX * 0.99;
+                if (PressedLeft == 1 && PressedUp == 1) SpY = SpY * 0.99;
+                
+                if (PressedDown == 1 && PressedRight == 1) SpY = SpY * 0.99; // South East
+                if (PressedDown == 1 && PressedRight == 1) SpX = SpX * 0.99;
+                if (PressedRight == 1 && PressedDown == 1) SpX = SpX * 0.99;
+                if (PressedRight == 1 && PressedDown == 1) SpY = SpY * 0.99;
+                
+                if (PressedDown == 1 && PressedLeft == 1) SpY = SpY * 0.99; //South West
+                if (PressedDown == 1 && PressedLeft == 1) SpX = SpX * 0.99;
+                if (PressedLeft == 1 && PressedDown == 1) SpX = SpX * 0.99;
+                if (PressedLeft == 1 && PressedDown == 1) SpY = SpY * 0.99;
+                
+                     if (hframenum == 0.99) hframenum = 0.00;
+                else if (hframenum == 0.50) hframenum = 0.99;
+                else if (hframenum == 0.00) hframenum = 0.50;
+                
+                if (Root->RetreatTimer == 0 && w != NullObj) JetFuel -=0.020*65536;
+                
+                if (PressedUp == 1)
+                {                
+                    PressedUp = 0;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.2*65536;
+                    
+                    if (SpY > -1){SpY -= 0.2;}
+                    if (SpY > -4){SpY -= 0.4;}
+                    if (SpY > -8){SpY -= 0.15;}
+                    if (SpY > -10){SpY -= 0.05;}
+                }
+                
+                if (PressedDown == 1)
+                {
+                    PressedDown = 0;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.020*65536;
+                    
+                    if (SpY < 1){SpY += 0.2;}
+                    if (SpY < 4){SpY += 0.4;}
+                    if (SpY < 8){SpY += 0.15;}
+                    if (SpY < 10){SpY += 0.05;}
+                }
+                
+                if (PressedLeft == 1)
+                {
+                    PressedLeft = 0;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.1*65536;
+                    if (w != NullObj) {if (!Shifth) TurnSide = -1;}
+                     
+                    if (SpX > -1){SpX -= 0.2;}
+                    if (SpX > -4){SpX -= 0.4;}
+                    if (SpX > -8){SpX -= 0.15;}
+                    if (SpX > -10){SpX -= 0.05;}
+                }
+                
+                if (PressedRight == 1)
+                {
+                    PressedRight = 0;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.1*65536;
+                    if (w != NullObj) {if (!Shifth) TurnSide = 1;}
+                    
+                    if (SpX < 1){SpX += 0.2;}
+                    if (SpX < 4){SpX += 0.4;}
+                    if (SpX < 8){SpX += 0.15;}
+                    if (SpX < 10){SpX += 0.05;}
+                }
+               
+                if (ObjState != WS_JETPACK)
+                {
+                    if (SpY == 0 && ObjState != WS_FIRED && ObjState != WS_TELEPORTING) SetState(WS_SLIDING);
+                    GravityFactor = 1;
+                    local cw = GetCurrentWorm();
+                    if(cw != NullObj) cw->WindFactor = 0;
+                    helicopter = false;                                  
+                }
+                
+                else if (JetFuel <= 0.1*65536)
+                {
+                    DisableHeli(SpX, SpY);
+                }
+            }
+        }
+        
+        if (Type == M_TURNEND)
+        {
+            if (helicopter)
+				{
+				if (ExplodeOnTurnEnd) {DisableHeli(SpX, SpY);}
+            	else {}
+            	}
+        }
+        
+        if (Type == M_DRAWQUEUE)
+        {
+            if (helicopter)
+            {
+                if (TurnSide > 0) {AddSpriteEx(4,PosX,PosY,HeliAnim->Index,hframenum,sin(SpX/24),1);}
+                else {AddSpriteEx(4,PosX,PosY,HeliAnim->Index+262144,hframenum,sin(SpX/24),1);}
+            }
+            
+            else if (jumpin)
+            {
+                if (TurnSide > 0) {AddSpriteEx(4,PosX-11.5,PosY+1,HeliJumpIn->Index,jumpinframenum,0,1);}
+                else {AddSpriteEx(4,PosX+12.5,PosY+1,HeliJumpIn->Index+262144,jumpinframenum,0,1);}
+            }
+        }
+super;
+}
+
+override void CWorm::RenderWorm()
+{
+    if (!helicopter && !jumpin) super;
+}  
+
+void CWorm::DisableHeli(fixed sx, fixed sy)
+{
+if (helicopter)
+    {
+        local explosionSize;
+        local SpeedAverage;
+        local push;
+                    
+        SpeedAverage = (abs(sy) + abs(sx))/2;
+        explosionSize = ((JetFuel/65536-75)/10)*SpeedAverage;
+
+		if (explosionSize < 10){explosionSize = 10;}
+
+		push = explosionSize*2;
+                    
+        DoExplosion(PosX,PosY,push,explosionSize,0,0);
+        GravityFactor = 1;
+        local cw = GetCurrentWorm();
+        if(cw != NullObj) cw->WindFactor = 0;
+        
+        local hh=RandomInt(1,10);
+
+        if (hh==2) { Oops1->Play(1.2, 0, false); }
+        if (hh==4) { Oops2->Play(1.2, 0, false); }
+        if (hh==6) { Oops3->Play(1.2, 0, false); }
+        if (hh==8) { Oops4->Play(1.2, 0, false); }
+        if (hh==10) { Oops5->Play(1.2, 0, false); }
+        
+        helicopter = false;
+
+    }
+}
+
+override void CWorm::Collide(CGObject* Obj,int type) 
+{
+    if (helicopter)
+    	{
+        if (Obj != NullObj)
+	        {
+        	if (Obj->ClType != OC_Mine)
+				{
+				if (SpY > 1 || SpY < -1 || SpX < -1 || SpX > 1) {DisableHeli(SpX, SpY);}
+				else {}
+            	}
+        	}
+    	}
+    
+    super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Helicopter"))
+    {
+        if(Realistic == true){GravityFactor = 0.2;}
+		else GravityFactor = 0;
+		
+        helicopter = true;
+        helilaunch = true;
+    }
+    super;
+}

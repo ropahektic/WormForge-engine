@@ -1,0 +1,47 @@
+require utils, utils_steps, p_sprite_builder, p_animation;
+
+CBitmap32* ShieldBitmap;
+CSoundFile* ShieldWoosh;
+
+void shield_gun_script::Init()
+{
+ShieldWoosh = new CSoundFile(GetAttachment("shield_woosh.wav"));
+}
+
+void shield_gun_script::InitGraphic()
+{
+    local spr       = GetAttachment("shield.png");
+    ShieldBitmap     = LoadImage(spr);
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+if (weap->CheckName("Shield Gun"))
+  	{
+    CWorm * w = GetCurrentWorm();
+    if(w == NullObj) return;
+    local bmp = ShieldBitmap;
+	GG->land->Draw(bmp, PosX-50, PosY-50));
+	
+	for(i = 0; i < Env->Objs.Count; i++)
+      				{
+          			local obj = CGObject(Env->Objs.Objs[i]);
+          			if(obj == NullObj) continue;
+          			if(obj != NullObj && obj->ClType != OC_Missile)
+             			{
+             			if(obj->IsInBox( PosX - 55, PosY - 55, PosX + 55, PosY + 55))                  // left, top, right, bottom
+             				{
+		              		GG->land->ApplyMask(4, obj->PosX-5, obj->PosY+5);
+		              		GG->land->ApplyMask(4, obj->PosX-5, obj->PosY-5);
+		              		GG->land->ApplyMask(4, obj->PosX+5, obj->PosY+5);
+		              		GG->land->ApplyMask(4, obj->PosX+5, obj->PosY-5);
+							}
+						}
+					}
+	
+	vol = CalculateSoundVolume(PosX,PosY);
+    pan = CalculateSoundPan(PosX,PosY);
+    ShieldWoosh->Play(vol, pan, false);
+ 	}
+else super;
+}

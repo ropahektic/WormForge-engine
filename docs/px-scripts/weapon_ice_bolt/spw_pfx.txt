@@ -1,0 +1,84 @@
+require p_sprite_builder, pxparticles, utils;
+
+CSprite* lglow_tr;
+
+void spw_pfx::InitGraphic()
+{
+CFile *f;
+f = GetAttachment("lglow_tr.png");
+lglow_tr = LoadSprite(f, 1, 0);
+}
+
+void CMissile::tfx_icearw()
+{
+if (PosY < Env->Water)
+	{
+	p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+	p0->SetBlendMode(1);
+	p0->SetStartColor(0,0,0);
+	p0->SetEndColor(120,125,223);
+	p0->SetStartAlpha(255);
+	p0->SetEndAlpha(150);
+	p0->SetLifeTime(8);
+	p0->SetRandomVelocity(0,3);
+	p0->SetMotionRandomness(0);
+	p0->SetAirResistance(1.0);
+	p0->SetStartSize(0.28,0.28);
+	p0->SetEndSize(0.12,0.12);
+
+	p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+	p1->SetBlendMode(1);
+	p1->SetStartColor(0,0,0);
+	p1->SetEndColor(190,210,255);
+	p1->SetStartAlpha(255);
+	p1->SetEndAlpha(150);
+	p1->SetLifeTime(8);
+	p1->SetRandomVelocity(0,3);
+	p1->SetMotionRandomness(0);
+	p1->SetAirResistance(1.0);
+	p1->SetStartSize(0.28,0.28);
+	p1->SetEndSize(0.12,0.12);
+	}
+}
+//-----------------------AIMING-PARTICLE-EFFECTS--------------------------------
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_FRAME)
+	{
+	if (CurWeapon->CheckName("Ice Bolt"))
+		{
+		if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+			{
+			DoAnimParticleEffects(
+			lglow_tr->Index,     //  SPRITE
+			1,       //  RADIUS
+			16,      //  RELX
+			10,      //  RELY
+			30,      //  LIFETIME
+			0.02,    //  SPEED
+			1.0,     //  VELO.MIN
+			3.0,     //  VELO.MAX
+			255,     //  START.ALPHA
+			255,     //  END.ALPHA
+			0,       //  WIND
+			0.33,    //  START.SIZE
+			0.01,    //  END.SIZE
+			0.00,    //  ANGLE.MIN
+			0.00,    //  ANGLE.MAX
+			0.0,     //  RANDOMNESS
+			1.0);    //  GRAVITY
+			}
+		}
+	}
+}
+
+//------------------------------------------------------------------------------
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+	{
+	if (weap->CheckName("Ice Bolt")){tfx_icearw();}
+	}
+super;
+}

@@ -1,0 +1,108 @@
+require utils, weapon_sentry_gun, weapon_sentry_laser;
+
+$editor
+ $object SentryGun
+  $origin -16 -16
+  $image "spawn_sentry_gun.png"
+  $func SpawnSentryGun
+  $radius 17
+ $object_end
+ 
+ $object SentryLaser
+  $origin -16 -16
+  $image "spawn_sentry_laser.png"
+  $func SpawnSentryLaser
+  $radius 17
+ $object_end
+$end
+ 
+CSentryGunSpawn : CObject;
+CSentryLaserSpawn : CObject;
+
+CSentryGunSpawn::CSentryGunSpawn(CEditorObject* obj)
+{
+   super(Root, GS);
+      
+   bx = obj->PosX;
+   by = obj->PosY;
+		  
+  DidSpawn = false;
+}
+
+CSentryLaserSpawn::CSentryLaserSpawn(CEditorObject* obj)
+{
+   super(Root, GS);
+
+   bx = obj->PosX;
+   by = obj->PosY;
+
+  DidSpawn = false;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void CSentryGunSpawn::DoSpawn()
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+     
+     SDesc.Team = 0;
+     SDesc.X = bx;
+     SDesc.Y = by;
+     SDesc.SpX = 0;
+     SDesc.SpY = 0;
+     
+     local SentryGun = new PxSentryGun(GetObject(25, 0), &SDesc);
+}
+
+void CSentryLaserSpawn::DoSpawn()
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+
+     SDesc.Team = 0;
+     SDesc.X = bx;
+     SDesc.Y = by;
+     SDesc.SpX = 0;
+     SDesc.SpY = 0;
+
+     local SentryLaser = new PxSentryLaser(GetObject(25, 0), &SDesc);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void CSentryGunSpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (DidSpawn == false)
+     {
+      if (Type == M_FRAME)
+      {
+       DoSpawn();
+       DidSpawn = true;
+      }
+     }
+}
+
+void CSentryLaserSpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (DidSpawn == false)
+     {
+      if (Type == M_FRAME)
+      {
+       DoSpawn();
+       DidSpawn = true;
+      }
+     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SpawnSentryGun(CEditorObject* obj)
+{
+  sgobj = new CSentryGunSpawn(obj);
+}
+
+void SpawnSentryLaser(CEditorObject* obj)
+{
+  slobj = new CSentryLaserSpawn(obj);
+}

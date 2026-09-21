@@ -1,0 +1,9 @@
+require utils, utils_steps;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    plopped = false;
+    swimsuit = false;
+    fastaim = false;
+    super;
+}

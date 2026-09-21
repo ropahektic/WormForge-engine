@@ -1,0 +1,60 @@
+bool ninjarope;
+
+void ninjarope_SCRIPT::Init()
+{
+     keySync->AddKey(16); // SHIFT
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+CWorm* w = GetCurrentWorm();
+
+         if (Type == M_FRAME && w != NullObj)
+         {
+             if (w->CurWeapon->CheckName("Ninjarope"))
+             {
+                 if (w->ObjState == WS_FIRED && w->ObjState != WS_SLIDING && w->ObjState != WS_AFTERROPE)
+                 {
+                     firedfromland = true;
+                     ninjarope = true;
+                     w->SetState(WS_SHOOTINGROPE);
+                 }
+
+                 if (w->ObjState == WS_SLIDING && ninjarope)
+                 {
+                       firedfromland = false;
+                       w->SetState(WS_AFTERROPE);
+                 }
+
+                 if (w->ObjState == WS_AFTERROPE)
+                 {
+                       firedfromland = false;
+                 }
+
+                 if (w->ObjState != WS_ROPING && w->ObjState != WS_SHOOTINGROPE && w->ObjState != WS_AFTERROPE && w->ObjState != WS_BUNGEE)
+                 {
+                     ninjarope = false;
+                     firedfromland = false;
+                 }
+             }
+         }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+CWorm* w = GetCurrentWorm();
+
+         if (w != NullObj)
+         {
+             if (Weap->CheckName("Ninjarope") && !firedfromland)
+             {
+                 ninjarope = true;
+                 w->SetState(WS_SHOOTINGROPE);
+             }
+
+             else super;
+         }
+
+else super;
+}

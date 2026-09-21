@@ -1,0 +1,310 @@
+//A revised version of trampoline script by StepS to fix the crashes, inaccuracies and stuck mines/weapons.
+//If you want to use antiglitch, get the `antiglitch_revised' for the safe, crash-less play.
+//New sprites made by raffie.
+//Deactivation to avoid forever-jumping glitch by PyroMan.
+//Original `trampoline' made by `tuomatz' (`ravander'). All rights reserved.
+
+require utils;
+
+$editor
+ $object Trampoline
+  $origin -45 5
+  $image "tramp.png"
+  $func DoTrampoline  
+  $radius 45
+  $param TrampBounce int 10;
+  $param RndJumps bool false;
+  $param TrampSpX int 3;      
+ $object_end
+$end
+
+CTrampoline : CGObject;
+
+CSprite* TrampSprite;
+CSprite* TJumpSprite;
+
+CGObject* lastobj;
+
+int tramx;
+int tramy;
+int objx;
+int objy;
+bool collided;
+
+CSoundFile* TrampJumpSound;
+CSoundFile* TrampJumpSound2;
+
+void trampoline::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("bananaimpact.wav");	TrampJumpSound = new CSoundFile(f);
+	f = GetAttachment("wormspring.wav");	TrampJumpSound2 = new CSoundFile(f);
+       	
+}
+
+
+void trampoline::InitGraphic()
+{
+    local spr       = GetAttachment("tramp.png");
+    TrampSprite     = LoadSprite(spr, 1, 0);
+    local spr2       = GetAttachment("jumptramp.png");
+    TJumpSprite     = LoadSprite(spr2, 1, 0);        
+} 
+
+void DoTrampoline(CEditorObject* obj)
+{
+  local x = obj->PosX;
+  local y = obj->PosY;
+  local p = new CTrampoline(Root->GetObject(25, 0), x, y);
+  p->TrampBounce     = obj->GetInt("TrampBounce");
+  p->TrampRandom     = obj->GetBool("RndJumps");
+  p->TrampSpX     = obj->GetInt("TrampSpX");
+  p->SpeedDivider = 32767;
+}
+
+CTrampoline::CTrampoline(CObject* parent, fixed x, fixed y)
+{    
+    
+    super(parent, 17, 9); 
+    PosX          = x;
+    PosY          = y;
+    jumping       = false;  
+
+    IsMaterial  = true; 
+    ColGroup    = 4423679;    
+    TrampBounce = 10;
+    TrampRandom = false;
+    TrampSpX    = 3;
+    SpX         = 0.0;
+    jtime       = 0;
+    SpY         = 0.0;    
+    ClType      = EObjectClass(935);
+    ColMask = new CColMask(43,0,MakeRectMask(86,12));
+    AvoidLoop = 0; 
+    
+    start_be_inactive = false;
+    inactive_timer_limit = 250;  // frames. 50 frames = 1 sec. so here we have 5 seconds deactivation timer. 
+    inactive_timer = 0;
+    active = true;            
+    
+    active2 = true;
+    start_read_loop = false;
+    loop_timer_limit = 125; // 2.5 seconds, loop reader
+    loop_jumps_limit = 10;
+    loop_jumps = 0;
+    loop_timer = 0;        
+    
+}
+
+void CTrampoline::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{      
+   if (Type == M_TURNEND) 
+   {
+     start_be_inactive = true;
+   }
+   if (Type == M_TURNBEGIN) 
+   {
+     start_be_inactive = false;       // Deactivate timer if turn started earlier then timer deactivated trampoline.
+     inactive_timer = 0;              // Usefull if some1 is afk (for example). Becouse otherwise timer would disable trampoline`s activity on some1`s turn start :D
+     active = true;
+   }
+   
+   local spr1 = TrampSprite->Index;
+   local spr2 = TJumpSprite->Index;
+   local w = GetCurrentWorm();   
+   if (Type == M_DRAWQUEUE)
+   {
+      if (jumping == false) AddSprite(14,PosX,PosY,1,spr1,0.0);
+      if (jumping)          AddSprite(14,PosX,PosY,1,spr2,0.0);            
+   }
+
+   if (Type == M_FRAME) {
+      if (w != NullObj && active2) active = true;
+      else if (active2 == false) active = false;
+      if (jumping) {
+            if ((jtime + 1) <= GS->Tick) jumping = false;      
+             }          
+    
+    if(start_be_inactive)
+    {
+      inactive_timer++;
+      if (inactive_timer > inactive_timer_limit)
+      {
+         active = false;         
+         inactive_timer = 0;
+         start_be_inactive = false;
+      }
+    }
+    
+    if (start_read_loop)
+    {
+       loop_timer++;
+       if (loop_jumps > (loop_jumps_limit*2)) 
+       {
+          active2 = false;
+          start_read_loop = false;
+       }
+       if (loop_timer > loop_timer_limit)
+       {
+          loop_jumps = 0;
+          start_read_loop = false;
+       }
+    }
+    
+   }
+   
+}
+   
+override CGObject* CEnv::CheckCollisionEx(CGObject* obj,fixed x,fixed y,CColMask* mask,int colflags)
+{
+  CGObject* ret = super;
+  if (ret is CTrampoline)
+  {
+    local p = CTrampoline(ret);
+    if (obj is CWorm || obj is CMissile || obj is CMine)
+    {
+       if (obj->ObjState == WS_IDLE) 
+       {
+          p->active2 = true;
+          p->loop_jumps = 0;
+          p->loop_timer = 0;
+       }
+       if ((obj->ObjState == WS_IDLE) || (obj->ObjState == WS_SHOOTINGROPE) || (obj->ObjState == WS_REPEATFIRE) || (obj->ObjState == WS_FIRECONT) || (obj->ObjState == WS_SETPOWER) || (obj->ObjState == WS_FIRED) || (obj->ObjState == WS_TELEPORTING) || (obj->ObjState == WS_AIMING) || (obj->ObjState == WS_WALKING) || (obj->ObjState == WS_BLOWTORCH)) return;
+        
+         p->start_read_loop = true;
+         p->loop_jumps++;
+         p->loop_timer = 0;
+         
+         tramx = p->PosX;
+         tramy = p->PosY;
+         objx = obj->PosX;
+         objy = obj->PosY;
+         
+         if (obj is CWorm && obj->ObjState != WS_ROPING && obj->ObjState != WS_JETPACK && obj->ObjState != WS_BUNGEE)  obj->SetState(WS_JUMP);
+         if (obj is CMissile || obj is CMine || (obj is CWorm && obj->ObjState != WS_ROPING && obj->ObjState != WS_BUNGEE))
+         {
+                 lastobj = obj;
+                 collided = true;
+         }
+         
+         p->SpeedDivider = 32767;
+         
+        if (obj->ObjState != WS_ROPING && obj->ObjState != WS_BUNGEE) 
+        {
+            p->jumping = true;
+            local rndsound = RandomInt(1,2);
+            if (rndsound == 1) TrampJumpSound->Play(0.5, 0.0, false);
+            else TrampJumpSound2->Play(0.5, 0.0, false);                
+            p->jtime = GS->Tick;
+            if (p->AvoidLoop >= 2) p->AvoidLoop = 0;
+            if (p->TrampBounce <= 2) p->TrampBounce = 3;
+            p->AvoidLoop = (p->AvoidLoop + 1);                                                                                  
+            if (p->active) obj->SpY = (-(p->TrampBounce) - p->AvoidLoop);
+            else obj->SpY = 0;
+            
+            if (p->TrampRandom) 
+            {
+                local rnd = RandomInt(-(p->TrampSpX),p->TrampSpX); 
+                if (p->active) obj->SpX = rnd;
+                else obj->SpX = 0;
+            }
+            
+            else
+            {
+              if (p->active)
+              {  
+                if (obj->PosX <= p->PosX) obj->SpX = p->TrampSpX;
+                else obj->SpX = -(p->TrampSpX);
+              }
+//              else obj->PosX = p->PosX;
+            } 
+        }         
+     }
+  }
+  return ret;
+} 
+
+// placeable trampoline
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) {
+         if (Weap->CheckName("Trampoline"))
+         {
+            local x = PosX - 3;
+            local y = PosY - 12;
+            local forceX = -2;
+            local forceY = -3;
+             
+            if (TurnSide > 0)
+            { 
+                x = PosX + 3; 
+                forceX = 2;
+            }
+            
+            Tramp = new CTrampoline(Root->GetObject(25, 0), x, y);
+            Tramp->SpX = forceX;
+            Tramp->SpY = forceY;            
+        }
+    else super;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{  
+    if (Type == M_FRAME)
+    {
+        if (collided)
+        {
+            if (lastobj != NullObj)
+            {
+                if (lastobj is CWorm)
+                {
+                    if (lastobj->ObjState == WS_JUMP || lastobj->ObjState == WS_JETPACK) 
+                    {
+                        if ((objx == tramx + 45 || objx == tramx + 47 || objx == tramx + 48) || (objx == tramx - 45 || objx == tramx - 47 || objx == tramx - 48))
+                        {
+                            lastobj->PosY = lastobj->PosY - 10;
+                        }
+                        
+                        else if (objx == tramx + 46)
+                        {
+                            lastobj->PosY -= 10;
+                            lastobj->PosX -= 1;
+                        }
+                        
+                        else if (objx == tramx - 46)
+                        {
+                            lastobj->PosY -= 10;
+                            lastobj->PosX += 1;
+                        }
+                            
+                    }      
+                    
+                    if (lastobj->ObjState == WS_JETPACK)
+                    {
+                       if (lastobj->PosY == tramy + 21 && objx >= tramx - 50 && objx <= tramx + 50)
+                       {
+                            lastobj->PosY -= 5;
+                            lastobj->SpY = -lastobj->SpY;         //stuck jetpacks fix.
+                       } 
+                    }
+                }    
+                
+                else 
+                {
+                    if ((objy == tramy + 14 && objx >= tramx - 50 && objx <= tramx + 50))
+                    {
+                        lastobj->PosY -= 5;
+                        lastobj->SpY = -lastobj->SpY;             //stuck mines and weapons fix.
+                    }
+                    
+                    if ((objx >= tramx + 45 && objx <= tramx + 48) || (objx <= tramx - 45 && objx >= tramx - 48))
+                    {
+                        lastobj->PosY -= 10;
+                    }
+                }
+            }
+            
+            collided = false;
+        }
+    }
+super;
+}    

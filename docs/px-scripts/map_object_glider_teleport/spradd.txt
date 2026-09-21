@@ -1,0 +1,67 @@
+require utils;
+
+$editor
+ $object Spriter
+  $origin -13 -15
+  $image "edsprite.png"
+  $func AddSpriter
+  $param SpriteName string "No Sprite"
+  $param FrameNum int 1
+  $param AnimSpeed int 100
+  $param ZPlane int 5
+  $radius 17
+ $object_end
+$end
+
+CSpriter : CObject;
+
+CSpriter::CSpriter(CEditorObject* aobj)
+{
+  super(Root, GS);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+
+  SName = "No Sprite";
+  SprName = aobj->GetString("SpriteName");
+
+  FrameNum = aobj->GetInt("FrameNum");
+
+  local as = aobj->GetInt("AnimSpeed");
+  as = float(as)/1000.0;
+  AnimationSpeed = 0.0;     // aobj->GetInt("AnimSpeed") / 100;
+  AnimationSpeed = as;
+  AnimationPhase = 0.0;
+
+  ZPlane = aobj->GetInt("ZPlane");
+  CSprite* Sprite;
+};
+
+
+void AddSpriter(CEditorObject* obj)
+{
+ new CSpriter(obj);
+}
+
+
+void CSpriter::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if(Type == M_DRAWQUEUE)
+ {
+ if(Sprite == NullObj)
+ {
+ local spr11       = GetAttachment(SprName);
+ Sprite     = LoadSprite(spr11, FrameNum, 0);
+ }
+  if(Sprite != NullObj)
+  {
+  local spr1 = Sprite->Index;
+  AddSprite(ZPlane,PosX,PosY,0,spr1,AnimationPhase);
+  }
+ }
+
+ if(Type == M_FRAME)
+ {
+ if(AnimationPhase > 0.99){AnimationPhase = 0.0;}
+ else{AnimationPhase = AnimationPhase + AnimationSpeed;}
+ }
+}

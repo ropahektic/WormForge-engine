@@ -1,0 +1,134 @@
+require utils_hack;
+
+// ---- PUBLIC -----------------------------------------------------------------
+
+// ---- Game Speed ----
+
+// Gets the speed for both physics and sound (if they are different, physics
+// speed is returned).
+int deb_gamespeed_GetGameSpeed()
+{
+    // Always return from variable, as we do not know if the opcode is prepared
+    return deb_gamespeed_physicsSpeed;
+} 
+
+// Sets the speed for both physics and sound.
+void deb_gamespeed_SetGameSpeed(int speed)
+{
+    speed = deb_gamespeed_priv_ValidateSpeed(speed);
+    deb_gamespeed_physicsSpeed = speed;
+    deb_gamespeed_soundSpeed = speed;
+    WriteMemoryInt(deb_gamespeed_addrPhysics + 1, deb_gamespeed_physicsSpeed);
+    WriteMemoryInt(deb_gamespeed_addrSound   + 1, deb_gamespeed_soundSpeed); 
+}
+
+// Resets the speed for both physics and sound.
+void deb_gamespeed_ResetGameSpeed()
+{
+    deb_gamespeed_SetGameSpeed($10000);
+}
+
+// ---- Physics Speed ----
+
+// Gets the physics speed.
+int deb_gamespeed_GetPhysicsSpeed()
+{
+    // Always return from variable, as we do not know if the opcode is prepared
+    return deb_gamespeed_physicsSpeed;
+}        
+ 
+// Sets the physics speed.
+void deb_gamespeed_SetPhysicsSpeed(int speed)
+{
+    deb_gamespeed_physicsSpeed = deb_gamespeed_priv_ValidateSpeed(speed);
+    WriteMemoryInt(deb_gamespeed_addrPhysics + 1, deb_gamespeed_physicsSpeed); 
+}
+
+// Resets the physics speed.
+void deb_gamespeed_ResetPhysicsSpeed()
+{
+    deb_gamespeed_SetPhysicsSpeed($10000);
+}
+
+// ---- Sound Speed ----
+  
+// Gets the sound speed.
+int deb_gamespeed_GetSoundSpeed()
+{
+    // Always return from variable, as we do not know if the opcode is prepared
+    return deb_gamespeed_soundSpeed;
+}        
+ 
+// Sets the sound speed.
+void deb_gamespeed_SetSoundSpeed(int speed)
+{
+    deb_gamespeed_soundSpeed = deb_gamespeed_priv_ValidateSpeed(speed);
+    WriteMemoryInt(deb_gamespeed_addrSound + 1, deb_gamespeed_soundSpeed); 
+}
+
+// Resets the sound speed.
+void deb_gamespeed_ResetSoundSpeed()
+{
+    deb_gamespeed_SetSoundSpeed($10000);
+}
+
+// ---- PRIVATE ----------------------------------------------------------------
+
+bool deb_gamespeed_state;
+int  deb_gamespeed_addrPhysics;
+int  deb_gamespeed_addrSound;
+int  deb_gamespeed_physicsSpeed;
+int  deb_gamespeed_soundSpeed;
+
+void deb_scr_gamespeed::FirstFrame()
+{
+    deb_gamespeed_addrPhysics = $4FBB1A;
+    deb_gamespeed_addrSound   = $545AB1;
+    deb_gamespeed_physicsSpeed = $10000; // = 100% speed
+    deb_gamespeed_soundSpeed   = $10000; // = 100% speed
+    deb_gamespeed_priv_ManipulateOpcode(true);
+}
+
+void deb_gamespeed_priv_ManipulateOpcode(bool enable)
+{
+    // Prepares opcode to enable manipulation of the gamespeed or restores it
+    deb_gamespeed_state = enable;
+    if (enable)
+    {
+        // Game speed opcode
+        WriteMemoryByte(deb_gamespeed_addrPhysics,     $B8); // MOV EAX,
+        WriteMemoryInt (deb_gamespeed_addrPhysics + 1, deb_gamespeed_physicsSpeed); // const
+        WriteMemoryByte(deb_gamespeed_addrPhysics + 5, $90); // NOP
+        // Sound sample rate opcode (inversed to game speed)
+        WriteMemoryByte(deb_gamespeed_addrSound,     $B8); // MOV EAX,
+        WriteMemoryInt (deb_gamespeed_addrSound + 1, deb_gamespeed_soundSpeed); // const
+        WriteMemoryByte(deb_gamespeed_addrSound + 5, $90); // NOP
+    }
+    else
+    {
+        // Game speed opcode
+        WriteMemoryWord(deb_gamespeed_addrPhysics,          $868B); // MOV EAX, [ESI...
+        WriteMemoryInt (deb_gamespeed_addrPhysics + 2,      $0000724C); // ...+4C720000]
+        // Sound sample rate opcode
+        WriteMemoryWord(deb_gamespeed_addrSound,     $838B); // MOV EAX, [EBX...
+        WriteMemoryInt (deb_gamespeed_addrSound + 2, $00000BB8); // ...+B80B0000           
+    }    
+}
+
+int deb_gamespeed_priv_ValidateSpeed(int speed)
+{
+    // Slower than $1500 freezes the game
+    if (speed < $1500)
+    {
+        speed = $1500;
+    }
+
+    // Only write the speed if the opcode has been prepared for that
+    if (!deb_gamespeed_state)
+    {
+        // If the opcode hasn't been prepared for manipulation yet, do it now
+        deb_gamespeed_priv_ManipulateOpcode(true);
+    }
+    
+    return speed;
+}

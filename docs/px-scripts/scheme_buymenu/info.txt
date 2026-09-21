@@ -1,0 +1,108 @@
+/*
+How to calc cost:
+
+Weapons:
+
+Affects all worms\all team: +8
+Low Knockback: +1
+High Knockback: +3
+Can do damage: +0.1 for each point of damage (+5 for weapons that do damage other way, +6 for napalm based weapons)
+Melee: +1
+Low range: +2
+High range: +3
+AoE: +1
+Poison: +1
+Napalm: +2
+Destroys land: +1
+Works after the end of turn: +1
+Kills user: -2
+Launcher: +1
+Can be targeted (homing/uses mouse): +2
+Has changeable timer: +1
+Controllable: +6
+Walks/flies around obstacles: +2
+Has power gauge: +1
+Can be shot twice: *2
+Clusters/multiple missiles: +0.1 for each point of damage of cluster/msl
+Throws target up/explodes below actual position: +5  (escept for mine strike)
+Explodes on spacebar: +2
+Sucks: -2
+OP: +4
+Big Holes: +10
+VERY BIG HOLES: +30
+
+Movement tools:
+Unlimited range: +2
+Shots: +2 for each shot
+Blocking ability: +2 for each block
+Controllable: +2
+Targetable: +3
+Can knock: +2
+Does not end the turn: +1
+
+Bazooka = 1+5+3+1+1+1+1=13
+HM = 1+5+3+1+1+1+2+1 = 15
+Mortar = 1+1+3+1+1+1+1-2 (sucks)=7
+HP = 3+7+3+1+1+1+2+2=21
+SL = 3+7+3+1+1+1+2+2=22
+Grenade = 1+5+3+1+1+1+1+1=14
+Cluster = 1+2+3+1+1+1+1+1+2=13
+Banana Bomb = 3+7+3+1+1+1+1+1+7+10=35
+Axe = 1+1+5 = 7
+EQ = 1+1+8 = 10
+Sg = 1+2+3+1+1)*2=16
+Hg = 1+3+2+1=7
+Uzi = 1+5+2+1=9
+Minigun = 1+10+2+1=14  
+LB = 1+1+3)*2 = 10
+FP = 1+3+1+1+1 = 7
+DB = 1+3+1 = 5
+Kami = 1+3+3+1+1-2 = 7
+SB = 1+3+1+1+1+1-2-2 (sucks) = 4
+Prod = 1+1+1 = 3
+Dynamite = 3+7+1+1+1+5 = 18
+Mine = 1+5+1+1+1+1+5 = 15
+Sheep = 3+7+1+1+1+2+2 = 18
+Aqua = 3+7+1+1+1+6+2+2 = 23
+MoleB = 1+2+1+1+1+2+2 = 10
+AS = 1+3+3+1+1+2+3 = 14
+NS = 1+6+3+1+2+1+2 = 17
+MS = 1+5+3+1+1+2+5 = 18
+Mine Strike = 1+5+3+1+1+1+2+5 = 19
+Mole Sq = 1+2+3+1+1+2+2 = 12
+BT = 1+1+1+1 = 4
+Drill = 1+1+1+1 = 4
+Girder = 2+2+3 = 7
+Bat = 3+3+1+1 = 9
+Girder Pack = 10+10+3 = 23
+Ninja Rope = 4+2+3+2+1 = 12
+Bungee = 2+2+2+1-2 (it sucks) = 5
+Chute = 2+2+1+2 = 7
+Teleport = 2+3+2 = 7
+Scales = 8+5 = 13
+SBB = 3+7+3+1+1+1+1+7+2+10 = 36
+HHG = 3+10+3+1+1+1+1+5+10 = 35
+Flame = 3+6+2+1+2+1 = 15
+Army = 3+7+1+1+1+6+2+10 = 31
+MB Bomb = 3+10+3+1+1+2-10 (sucks) = 28
+Petrol Bomb = 1+1+3+1+2+1+1+1+1 = 12
+Skunk = 1+2+1+1+1+1+2+2 = 11
+Vase = 3+7+1+1+1+7+10 = 30
+Sheep Str = 3+5+3+1+2+1+2+5+10 = 32
+Carpets = 1+3+3+1+1+2+3+4 (op) = 18
+Mad Cow = 3+7+1+1+1+7+10 = 30
+OldW = 3+7+1+1+1 = 13
+Donkey = 3+10+3+1+1+2+10+30 = 60
+Test = 8+5+3+1+1+1+4+30 (op) = 53
+Armageddon = 8+3+5+3+1+1+5+4+30 (op) = 60
+Select Worm = 5
+Freeze = 8+4 (op) = 12
+Bullet = 3+10+3+1+1+1+2+2+10 = 33
+Jet Pack = 2+2+1+4 (op) = 9
+LowG = 8+2+1 = 11
+FW = 1
+LS = 1
+Invisibility = 8
+
+
+*/

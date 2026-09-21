@@ -1,0 +1,159 @@
+require utils, utils_steps, pxparticles, p_sprite_builder, script_super_sheep_control;
+
+CWorm* rodeo_worm;
+
+void rodeo_sheep_script::Init()
+{
+keySync->AddKey(13); // Enter
+keySync->AddKey(40); // Down
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+hideRodeoWorm = false;
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+if (weap->CheckName("Rodeo Sheep"))
+	{
+    if (rodeo_worm != NullObj)
+       	{
+        rodeo_worm->sheep_horse = false;
+        rodeo_worm->hideRodeoWorm = false;
+        rodeo_worm = CWorm(NullObj);
+       	}
+    }
+super;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+	{
+    if (weap->CheckName("Rodeo Sheep"))
+    	{
+        if (rodeo_worm != NullObj && rodeo_worm->sheep_horse && rodeo_worm is CWorm)
+            {
+            if (PosY > Env->Water + 170) SetState(WS_IDLE); // actually this means explode sheep
+
+			if (rodeo_worm->swimsuit && PosY >= Env->Water) rodeo_worm->SetState(WS_JUMP);
+			
+            local speedX;
+            local speedY;
+
+			if (rodeo_worm->ObjState == WS_PARACHUTE)   // slow down sheep when chute opened
+                {
+                if (SpX > 0) speedX = -2;
+                else speedX = 2;
+                
+                if (SpY > 0) speedY = -2;
+                else speedY = -1;
+                }
+                
+            else
+                {
+                speedX = 0;
+                speedY = 0;
+                }
+                
+            rodeo_worm->PosX = PosX;
+            rodeo_worm->PosY = PosY-2;
+            PosX += speedX;
+            PosY += speedY;
+
+			if (rodeo_worm->SpY < 8.0)   // allows not loose control when riding on sheep, but when sheep falls from big heights
+                {
+                rodeo_worm->SpX = SpX;
+                rodeo_worm->SpY = SpY;
+                }
+			else if (rodeo_worm->SpY > -8.0)
+				{
+                rodeo_worm->SpX = SpX;
+                rodeo_worm->SpY = SpY;
+                }
+			else if (rodeo_worm->SpY > 8.0)
+				{
+                rodeo_worm->SpX = SpX;
+                rodeo_worm->SpY = 8.0;
+                }
+			else
+				{
+                rodeo_worm->SpX = SpX;
+                rodeo_worm->SpY = -8.0;
+                }
+                
+            if (rodeo_worm->ObjState == WS_BUNGEE) rodeo_worm->SetState(WS_IDLE);
+            if (rodeo_worm->ObjState == WS_ROPING) rodeo_worm->SetState(WS_IDLE);
+            }
+        }
+    }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if (Weap->CheckName("Rodeo Sheep"))
+	{
+    sheep_horse = true;
+    rodeo_worm = this;
+    hideRodeoWorm = true;
+    }
+
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+    {
+    local w = GetCurrentWorm();
+
+	if (rodeo_worm != NullObj && rodeo_worm->sheep_horse)
+    	{
+        if (keySync->KeyPressed(40) || keySync->KeyPressed(13))
+			{
+            rodeo_worm->sheep_horse = false;
+            rodeo_worm->hideRodeoWorm = false;
+           	}
+        }
+
+	if (w == NullObj && rodeo_worm != NullObj)
+		{
+        rodeo_worm->sheep_horse = false;
+        rodeo_worm->hideRodeoWorm = false;
+        }
+        
+    if (rodeo_bool && rodeo_worm != NullObj)
+        {
+        if (rodeo_count > 10)
+            {
+            if (swimsuit)
+            	{
+                GravityFactor = 1;
+                swimsuit = false;
+                rodeo_worm->SetState(WS_SINKING);
+                rodeo_worm = CWorm(NullObj);
+                rodeo_bool = false;
+               }
+            }
+        rodeo_count++;
+        }
+    }
+    
+    if (Type == M_TURNBEGIN) rodeo_bool = false;
+    if (Type == M_TURNEND)
+    	{
+        rodeo_count = 0;
+        rodeo_bool = true;
+    	}
+
+super;
+}
+
+override void CWorm::RenderWorm()
+{
+if (hideRodeoWorm) return;
+else super;
+}

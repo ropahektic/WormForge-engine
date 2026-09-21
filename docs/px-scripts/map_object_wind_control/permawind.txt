@@ -1,0 +1,46 @@
+//script by StepS
+//  This library allows you to set the permanent (unchangeable)
+//  wind for the whole game through the Map Editor
+//  100 will set the max wind to right, -100 will set the max wind to left
+//
+
+require utils;
+int windforce;
+
+$editor
+ $object PermaWind
+  $origin -50 -50
+  $image "windok.png"
+  $func permawind
+  $radius 50
+  $param WindForce int 0
+ $object_end 
+$end
+
+void permawind(CEditorObject* obj)
+{
+  windforce = obj->GetInt("WindForce");
+};
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+float wforce;
+if(windforce > 0)
+{wforce = windforce*0.002857;}  //0.2857 - WA's default max wind for the right side
+if(windforce == 0)
+{wforce = 0;}                   //zero wind
+if(windforce < 0)
+{wforce = windforce*0.0028571;} //0.28571 - WA's default max wind for the left side
+
+if(Env->Wind != wforce) {Env->Wind = wforce;} 
+if(Type == M_FRAME)
+{
+CMessageData* mdata = new CMessageData;
+mdata->fparams[0] = wforce;
+if(GetCurrentWorm() != NullObj)
+{         
+Root->Message(Root, M_UPDATEWIND,4,mdata);
+} 
+}
+super;      
+}

@@ -1,0 +1,18 @@
+CSprite* santadeers;
+CSprite* fwyellow;
+CSprite* cgift;
+
+void christmas_sprites::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("oleni.png");
+   santadeers = LoadSprite(f, 1, 0);
+   f = GetAttachment("fwyellow.png");
+   fwyellow = LoadSprite(f, 1, 0);
+   f = GetAttachment("gift1.png");
+   cgift = LoadSprite(f, 1, 0);
+   
+   SetSpriteOverride(715, santadeers);
+   SetSpriteOverride(716, fwyellow);
+   SetSpriteOverride(717, cgift);
+}

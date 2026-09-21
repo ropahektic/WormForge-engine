@@ -1,0 +1,122 @@
+require p_sprite_builder, utils;
+
+CSprite* golfb;
+CSprite* lglow;
+CSprite* bounce;
+CSprite* pdrivere;
+CSprite* pdriveru;
+CSprite* pdriverd;
+CSprite* pbdrivere;
+CSprite* pbdriveru;
+CSprite* pbdriverd;
+CSprite* adrivere;
+CSprite* adriveru;
+CSprite* adriverd;
+CSprite* frivere;
+CSprite* fdriveru;
+CSprite* fdriverd;
+
+void golf_spb::InitGraphic()
+{
+CFile *f;
+f = GetAttachment("golfb.png");
+golfb = LoadSprite(f, 1, 0);
+f = GetAttachment("lglow.png");
+lglow = LoadSprite(f, 1, 0);
+f = GetAttachment("bounce.png");
+bounce = LoadSprite(f, 6, 0);
+f = GetAttachment("pdrivere.png");
+pdrivere = LoadSprite(f, 10, 0);
+f = GetAttachment("pdriveru.png");
+pdriveru = LoadSprite(f, 10, 0);
+f = GetAttachment("pdriverd.png");
+pdriverd = LoadSprite(f, 10, 0);
+f = GetAttachment("pbdrivere.png");
+pbdrivere = LoadSprite(f, 10, 0);
+f = GetAttachment("pbdriveru.png");
+pbdriveru = LoadSprite(f, 10, 0);
+f = GetAttachment("pbdriverd.png");
+pbdriverd = LoadSprite(f, 10, 0);
+f = GetAttachment("adrivere.png");
+adrivere = LoadSprite(f, 32, 0);
+f = GetAttachment("adriveru.png");
+adriveru = LoadSprite(f, 32, 0);
+f = GetAttachment("adriverd.png");
+adriverd = LoadSprite(f, 32, 0);
+f = GetAttachment("fdrivere.png");
+fdrivere = LoadSprite(f, 32, 0);
+f = GetAttachment("fdriveru.png");
+fdriveru = LoadSprite(f, 32, 0);
+f = GetAttachment("fdriverd.png");
+fdriverd = LoadSprite(f, 32, 0);
+
+SetSpriteOverride(45, golfb);
+SetSpriteOverride(47, golfb);
+SetSpriteOverride(80, bounce);
+SetSpriteOverride(430, pdrivere);
+SetSpriteOverride(431, pdriveru);
+SetSpriteOverride(432, pdriverd);
+SetSpriteOverride(433, pbdrivere);
+SetSpriteOverride(434, pbdriveru);
+SetSpriteOverride(435, pbdriverd);
+SetSpriteOverride(519, adrivere);
+SetSpriteOverride(520, adriveru);
+SetSpriteOverride(521, adriverd);
+SetSpriteOverride(522, fdrivere);
+SetSpriteOverride(523, fdriveru);
+SetSpriteOverride(524, fdriverd);
+SetSpriteOverride(427, pbdrivere);
+SetSpriteOverride(428, pbdriveru);
+SetSpriteOverride(429, pbdriverd);
+SetSpriteOverride(591, fdrivere);
+SetSpriteOverride(592, fdriveru);
+SetSpriteOverride(593, fdriverd);
+}
+//------------------------------------------------------------------------------
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+super;
+if (Type == M_FRAME) {
+if (gframe == 1) {
+local weapName; local sprite;
+
+CWormAnimParams* Params = new CWormAnimParams;
+weapName = "Golf Ball";
+sprite = golfb->Index;
+Params->hand_radius = -8.0;
+Params->hand_rotation = -0.0;
+Params->hand_radial_rotation = 0.0;
+Params->weap_radial_rotation = 0.0;
+Params->weap_rotation = 0.5;
+Params->weap_radius = -11.2;
+Params->hand_type = 1;
+Params->hand_scale = 1.2;
+Params->dont_rotate_with_angle = true;
+Params->ang_if_static = 0.0;
+Params->hand_ang_if_static = 0.4;
+local WA = new WormSprite(weapName, sprite, Params);
+}
+}
+}
+//------------------------------------------------------------------------------
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+if(CurWeapon->CheckName("Driver")
+|| CurWeapon->CheckName("Driver.T"))
+{
+if (sound == 140 || sound == 194) return;         // FIRE!
+else if (sound == 177 || sound == 231) return;    // WATCH THIS...
+else super;
+} else
+{
+super;
+}
+}
+//------------------------------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if(Weap->CheckName("Driver")
+|| Weap->CheckName("Driver.T"))
+{PlaySound(30,1.0,2.0,1.0);}
+
+super;
+}

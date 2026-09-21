@@ -1,0 +1,374 @@
+//by: Ted feat. Buxnaman
+//edit: m4d-c4t
+
+require utils;
+
+/*mc: Ted's adjusted, additional* crates generator. Additional in sense that they are being spawned not in between the moves, but elswhere...
+Below are 3 generators: weapons (ncrate), utilities (ucrate) and energy crates (hcrate). Only energy spawns on time basis. An weapon and utility crate spawn command can be found in another,
+"CratesAndHealthPerKill" script*/
+
+int mapsizeX;
+int mapsizeY;
+int mapwater;
+
+int ncrateCounter;
+int ucrateCounter;
+int hcrateCounter;
+
+int ncrateNextSpawn;
+int ucrateNextSpawn;
+int hcrateNextSpawn;
+
+bool spawnedNikolaWeapon;
+
+void extra_crates::Init()
+{
+	mapsizeX = 0;
+	mapsizeY = 0;
+	mapwater = 0;
+	ncrateCounter = 1;
+	ncrateNextSpawn = 0;
+	ucrateCounter = 1;
+	ucrateNextSpawn = 0;
+	hcrateCounter = 1;
+	hcrateNextSpawn = 0;
+
+    spawnedNikolaWeapon = false;
+}
+
+void extra_crates::FirstFrame()
+{
+	mapsizeX = GS->LevelSX;
+	mapsizeY = GS->LevelSY;
+	mapwater = Env->Water;
+	
+       GG->WriteToChat(GG->curFont+6, "------ PX Team17 ver. 2.3 by 0rang3 and popka------", false);
+       GG->WriteToChat(GG->curFont+3, "-ONLY TELEPORT END'S TURN!! RANDOM MINES!! ONLY TWO SWIM SUITS!! ONE PRIMAL WEAPON PER TURN!!", false);
+       GG->WriteToChat(GG->curFont+2, "-PRIMAL WEAPONS are: Fire Punch, Dragon Ball, Prod, BlowTorch, Pneumatic Drill, Girder and Teleport .", false);
+       GG->WriteToChat(GG->curFont+4, "-An UTILITY and a WEAPON CRATE will spawn AFTER A WORM KILL, followed by a +25HP reward.", false);
+       GG->WriteToChat(GG->curFont+1, "-WEAPON PANEL on Alt+P, Alt+Up/Down and Alt+O for a better position.", false);
+       GG->WriteToChat(GG->curFont+6, "All thanks to 0rang3 and m4d-c4t! Have Lots Of Fun & GL!!", false);
+
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+    local CurrWorm = GetCurrentWorm();
+    isCurrentWorm = (CurrWorm != NullObj && CurrWorm == this);
+	if (isCurrentWorm == true)
+		{
+		if (Type == M_FRAME)
+			{
+			if (hcrateNextSpawn == 0)
+				{
+				hcrateNextSpawn = 18000 + (GS->GetRandom() % 7200);  //mc: this is the time interval for health crate. 25200 + %10800 frames = 5-7 minutes.
+				}
+
+			if (hcrateCounter >= hcrateNextSpawn)
+				{
+				hcrateNextSpawn = 0;
+				hcrateCounter = 0;
+
+				if (ShouldSpawnCrate()){local rez = SpawnNikolaHealth();}
+				
+				if (rez == false) {hcrateNextSpawn = 60;} 			// spawn failed, try again in 60 frames
+				else {ShowMessage("Health crate spawned.");}
+				}
+
+
+			ncrateCounter = ncrateCounter + 1;
+			ucrateCounter = ucrateCounter + 1;
+			hcrateCounter = hcrateCounter + 1;
+
+			if (ncrateCounter <= 0){ncrateCounter = 1;}
+			if (ucrateCounter <= 0){ucrateCounter = 1;}
+			if (hcrateCounter <= 0){hcrateCounter = 1;}
+			}
+    	}
+super;
+}
+
+override void CTurnGame::FinishTurn(int reason)
+{
+	super;
+	spawnedNikolaWeapon = 0;
+}
+
+bool SpawnUtilityCrate()
+{
+    string uWeps[14];
+	int uWepsCount = 13;
+	
+	uWeps[0] = "Crate Grabber";
+	uWeps[1] = "Wind Changer";
+	uWeps[2] = "Health Zone";
+	uWeps[3] = "Ninja Rope";
+	uWeps[4] = "Magnetic Missile";
+	uWeps[5] = "Sentry Gun";
+	uWeps[6] = "Sentry Laser";
+	uWeps[7] = "Select Worm";
+	uWeps[8] = "Low Gravity";
+	uWeps[9] = "Double Jump";
+	uWeps[10] = "Damage*2";
+	uWeps[11] = "Crate Spy";
+	uWeps[12] = "Double Turn Time";
+	uWeps[13] = "Crate Shower";
+
+	if (mapsizeX < 100 || mapsizeY < 100)
+        {
+		mapsizeX = GS->LevelSX;
+		mapsizeY = GS->LevelSY;
+		}
+
+	CCrateDesc cDesc;
+	zero(&cDesc);
+	cDesc.X = -1000;
+	cDesc.Y = -1000;
+	cDesc.type = CT_UTILITY; // CT_WEAPON CT_UTILITY CT_HEALTH
+
+	int ruWep = GS->GetRandom() % (uWepsCount + 1);
+	cDesc.wType = WCT_DEFINED;
+	cDesc.amount = 1;
+	local wep1 = GS->GetWeaponByName(uWeps[ruWep]);
+
+        if (wep1 != NullObj)
+        {
+		cDesc.weapon = 100 * wep1->GetPageIndex() + wep1->GetWeaponIndex();
+	}
+        if (wep1 == NullObj){
+           local wep1 = GS->GetWeaponByName("Low Gravity");
+           string smrd = uWeps[ruWep];
+           cDesc.weapon = 100 * wep1->GetPageIndex() + wep1->GetWeaponIndex();
+        }
+
+	local nwC = new CCrate(Root->GetObject(25, 0), &cDesc, DT_CHUTE); // creates the crate but it does not have a spawn point yet
+	// the crate is created because we need to access its collision mask
+
+	int trywX = mapsizeX / 5;
+	int trywY = mapsizeY / 5;
+	int startwX = GS->GetRandom() % trywX;
+	int startwY = GS->GetRandom() % trywY;
+	for (int n = 0; n < (trywX * trywY); n++)
+	{
+		int nwX = ((startwX + (n % trywX)) % trywX) * 5;
+		int nwY = ((startwY + (n / trywY)) % trywY) * 5;
+		CGObject * ow = Env->CheckCollision(nwC, nwX, nwY);
+		if (ow == NullObj)
+		{
+
+			int hitX = 0;
+			int hitY = 0;
+			if (TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY) != NullObj) {
+				nwC->PosX = nwX;
+				nwC->PosY = nwY;
+				nwC->X = nwX;
+				nwC->Y = nwY;
+				return true; // found a spawn point, return. This means exit this entire function.
+			}
+		}
+	}
+	nwC->Free(true); // we did not find a spawn point, lets destroy the crate we have created
+	return false;
+}
+
+bool SpawnNikolaHealth()
+{
+		if (mapsizeX < 100 || mapsizeY < 100)
+        {
+		mapsizeX = GS->LevelSX;
+		mapsizeY = GS->LevelSY;
+	}
+
+	CCrateDesc cDesc;
+	zero(&cDesc);
+	cDesc.X = -1000;
+	cDesc.Y = -1000;
+	cDesc.type = CT_HEALTH; // CT_WEAPON CT_UTILITY CT_HEALTH
+	cDesc.health = 75;
+
+
+	local nwC = new CCrate(Root->GetObject(25, 0), &cDesc, DT_CHUTE); // creates the crate but it does not have a spawn point yet
+	// the crate is created because we need to access its collision mask
+
+	int trywX = mapsizeX / 5;
+	int trywY = mapsizeY / 5;
+	int startwX = GS->GetRandom() % trywX;
+	int startwY = GS->GetRandom() % trywY;
+	for (int n = 0; n < (trywX * trywY); n++)
+	{
+		int nwX = ((startwX + (n % trywX)) % trywX) * 5;
+		int nwY = ((startwY + (n / trywY)) % trywY) * 5;
+		CGObject * ow = Env->CheckCollision(nwC, nwX, nwY);
+		if (ow == NullObj)
+		{
+
+			int hitX = 0;
+			int hitY = 0;
+			if (TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY) != NullObj) {
+				nwC->PosX = nwX;
+				nwC->PosY = nwY;
+				nwC->X = nwX;
+				nwC->Y = nwY;
+				return true; // found a spawn point, return. This means exit this entire function.
+			}
+		}
+	}
+	nwC->Free(true); // we did not find a spawn point, lets destroy the crate we have created
+	return false;
+}
+
+bool SpawnNikolaWeapon() {
+	string wWeps[100];
+	string sWeps[100];
+
+	wWeps[0] = "Double Bazooka";
+	wWeps[1] = "Mine Launcher";
+	wWeps[2] = "Bible Launcher";
+	wWeps[3] = "Gravler";
+	
+	wWeps[4] = "Frag Grenade";
+	wWeps[5] = "Big Cluster Bomb";
+	wWeps[6] = "Chilli Bomb";
+	wWeps[7] = "Poison Grenade";
+	
+	wWeps[8] = "Real Shotgun";
+	wWeps[9] = "Hotchkiss";
+	wWeps[10] = "Laser Gun";
+	wWeps[11] = "Shadow-Bolt";
+	
+	wWeps[12] = "Bomb-omb";
+	wWeps[13] = "Thrown Dynamite";
+	wWeps[14] = "Mole Herd Launcher";
+	wWeps[15] = "Bowling Ball";
+	
+	wWeps[16] = "Underwater Bomb";
+	wWeps[17] = "Bulldozer";
+	wWeps[18] = "Tazer";
+	
+
+    sWeps[0] = "Burning Sheep Launcher";
+	sWeps[1] = "Golden Grenade";
+	sWeps[2] = "Multi-Bolt";
+	sWeps[3] = "Thrown Ming Vase";
+	
+	sWeps[4] = "Normal Barrel";
+    sWeps[5] = "Holy Hand-Grenade";
+	sWeps[6] = "Hellish Hand-Grenade";
+	sWeps[7] = "Super Gravedigger";
+	sWeps[8] = "Submarine Attack";
+	sWeps[9] = "Valyrian Fire";
+
+	sWeps[10] = "Super Remote Roller ";
+	sWeps[11] = "Buffalo of Lies";
+
+	int wWepsCount = 18; // Moved this down here for visiblity
+    int sWepsCount = 11;
+
+	if (mapsizeX < 100 || mapsizeY < 100) // stupid thing might not be set because stupid PX
+		{
+		mapsizeX = GS->LevelSX;
+		mapsizeY = GS->LevelSY;
+		}
+
+	CCrateDesc cDesc;
+	zero(&cDesc);
+	cDesc.X = -1000;
+	cDesc.Y = -1000;
+	cDesc.type = CT_WEAPON; // CT_WEAPON CT_UTILITY CT_HEALTH
+
+	local lucky = GS->GetRandom() % 10;
+
+	if(lucky < 6){
+	         int rwWep = GS->GetRandom() % (wWepsCount + 1); // pick a random weapon index
+	         local wep1 = GS->GetWeaponByName(wWeps[rwWep]);
+
+	         //GG->WriteToChat( 2, "Obicno oruzje", false);
+
+	         cDesc.wType = WCT_DEFINED;
+
+	         if (wWeps[rwWep] == "Underwater Bomb") {cDesc.amount = 3;}
+             else cDesc.amount = 1;
+
+             if (wep1 != NullObj){cDesc.weapon = 100 * wep1->GetPageIndex() + wep1->GetWeaponIndex();}
+
+             if (wep1 == NullObj)
+			 	{
+                string smrd = wWeps[rwWep];
+                cDesc.wType = WCT_RANDOM;
+                }
+        }
+        if(lucky > 5){
+	         int rsWep = GS->GetRandom() % (sWepsCount + 1); // pick a random weapon index
+	         local wep2 = GS->GetWeaponByName(sWeps[rsWep]);
+
+	         cDesc.wType = WCT_DEFINED;
+	         cDesc.amount = 1;
+
+                 if (wep2 != NullObj){
+		    cDesc.weapon = 100 * wep2->GetPageIndex() + wep2->GetWeaponIndex();
+	         }
+
+                 if (wep2 == NullObj){
+                    string smrd = sWeps[rsWep];
+
+                    cDesc.wType = WCT_RANDOM;
+                 }
+        }
+
+
+	local nwC = new CCrate(Root->GetObject(25, 0), &cDesc, DT_CHUTE); // creates the crate but it does not have a spawn point yet
+	// the crate is created because we need to access its collision mask
+
+	int trywX = mapsizeX / 5;
+	int trywY = mapsizeY / 5;
+	int startwX = GS->GetRandom() % trywX;
+	int startwY = GS->GetRandom() % trywY;
+	for (int n = 0; n < (trywX * trywY); n++)
+	{
+		int nwX = ((startwX + (n % trywX)) % trywX) * 5;
+		int nwY = ((startwY + (n / trywY)) % trywY) * 5;
+		CGObject * ow = Env->CheckCollision(nwC, nwX, nwY);
+		if (ow == NullObj)
+		{
+
+			int hitX = 0;
+			int hitY = 0;
+			if (TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY) != NullObj) {
+				nwC->PosX = nwX;
+				nwC->PosY = nwY;
+				nwC->X = nwX;
+				nwC->Y = nwY;
+				return true; // found a spawn point, return. This means exit this entire function.
+			}
+		}
+	}
+	nwC->Free(true); // we did not find a spawn point, lets destroy the crate we have created
+	return false;
+
+}
+
+bool ShouldSpawnCrate(){
+     local crn = 0;
+     for(local i = 1; i < Env->Objs.Count; i+=1){
+               local obj = Env->Objs.Objs[i];
+               if(obj != NullObj){
+                  if(obj->ClType == OC_Crate) crn++;
+               }
+     }
+     if (crn > 4) return false;
+     return true;
+}
+override void CObject::ForceFocus(fixed x, fixed y)
+{
+    if (ClType != OC_Crate || Root->TimerDisabled)
+    {
+    	super;
+    }
+}
+override void CGObject::LookAtMe(fixed x, fixed y, int priority)
+{
+    if (ClType != OC_Crate || Root->TimerDisabled)
+    {
+    	super;
+    }
+}

@@ -1,0 +1,44 @@
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_TURNBEGIN)
+         {
+                 if(Weapons == false)
+                 {
+                 Weapons = true;
+                 //t1
+                 local wep2 = GS->GetWeaponByName("BlowTorch");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(1, wep2->GetWeaponIndex(), wep2->GetPageIndex(), 2);} 
+                 wep2 = GS->GetWeaponByName("Bungee");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(1, wep2->GetWeaponIndex(), wep2->GetPageIndex(), 2);} 
+                 wep2 = GS->GetWeaponByName("Ninja Rope");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(1, wep2->GetWeaponIndex(), wep2->GetPageIndex(), 1);} 
+                 wep2 = GS->GetWeaponByName("Fast Walk");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(1, wep2->GetWeaponIndex(), wep2->GetPageIndex(), 1);} 
+                 
+                 
+                 //t2
+                 wep2 = GS->GetWeaponByName("Move Left");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 wep2 = GS->GetWeaponByName("Move Right");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 wep2 = GS->GetWeaponByName("Jump Left");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 wep2 = GS->GetWeaponByName("Jump Right");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 wep2 = GS->GetWeaponByName("Backflip Left");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 wep2 = GS->GetWeaponByName("Backflip Right");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 wep2 = GS->GetWeaponByName("Stop");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 wep2 = GS->GetWeaponByName("Repeated Backspace");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 wep2 = GS->GetWeaponByName("Remove Last Order");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 wep2 = GS->GetWeaponByName("Select Worm");
+                 if(wep2 != NullObj){GS->Info.SetWeaponEx(2, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+                 }
+         }
+super;
+}

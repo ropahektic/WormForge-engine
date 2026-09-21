@@ -1,0 +1,111 @@
+require utils;
+
+CRegenerationMode* ggRm;
+CSoundFile* regen_sound;
+bool RegenerationMode;
+bool RM_RegenerateNow;
+
+void RegenerationMode_SCRIPT::Init() 
+{
+   RegenerationMode = false;
+   RM_RegenerateNow = false;
+   
+   ggRm = new CRegenerationMode;
+}
+
+void RegenerationMode_SCRIPT::FirstFrame()
+{
+f = GetAttachment("regen_sound.wav");	 regen_sound = new CSoundFile(f);
+}
+
+CRegenerationMode::CRegenerationMode()
+{
+   RM_rTimer = 0; // time since last regeneration
+}
+
+void CRegenerationMode::Frame()
+{
+   if(RegenerationMode == true)
+   {
+      if(Root->IsTimerActive() == true)
+      {
+         RM_rTimer += 20;
+      
+         if(RM_rTimer == 1000)
+         {     
+            RM_RegenerateNow = true;
+            
+            RM_rTimer = 0;
+         }
+      } 
+   }
+   else 
+   {
+      RM_rTimer = 0;
+   }  
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{ 
+   if(RegenerationMode == true)
+   {
+      if(RM_RegenerateNow == true)
+      {
+         local cw = GetCurrentWorm();
+      
+         if(cw != NullObj)
+         {
+            local cw_HP = GS->Info.GetWormHealth(cw->WormTeam, cw->WormNumber);
+      
+            if(cw_HP < 300)
+            {
+               GS->Info.SetWormHealth(cw->WormTeam, cw->WormNumber, cw_HP + 1);
+               SickFlags = 0;
+               SickDamage = 0;
+               
+               RM_RegenerateNow = false;
+            }
+         }
+      }
+   }
+    
+   super;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(Type == M_FRAME)
+   {
+      ggRm->Frame();
+   } 
+   
+   if(Type == M_TURNBEGIN)
+   {
+      ggRm->rTimer = 0;
+   }
+     
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{ 
+  if(Weap->CheckName("Regeneration Mode"))
+  {  
+     if(RegenerationMode == false)
+     {
+        RegenerationMode = true;
+        vol = CalculateSoundVolume(PosX,PosY);
+     	pan = CalculateSoundPan(PosX,PosY);
+        regen_sound->Play(vol, pan, false);
+        ShowMessage("Regeneration Mode: ON");
+     }     
+     else if(RegenerationMode == true)
+     {
+        RegenerationMode = false;
+        
+        ShowMessage("Regeneration Mode: OFF");
+     }      
+  } 
+  
+  super;
+}

@@ -1,0 +1,55 @@
+require utils_steps;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    invincible = false;
+    super;
+}   
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (!invincible)
+        {
+            if (firstdied)
+            {
+                SpX = laspix;
+                SpY = laspiy;
+                firstdied = false;
+            }
+            
+            if (fastdying && gframe > dieframe + 50*2)
+            {
+                DoExplosion(PosX, PosY, 100, 30, 0, WormTeam);
+                PosY = Env->Water + 1000;
+                PosX = -2100;
+                fastdying = false;
+            }
+            
+            if (GS->Info.GetWormHealth(WormTeam, WormNumber) == 0 && !died)
+            {
+                if (PosY >= Env->Water)
+                {
+                    DoExplosion(PosX, PosY, 0, 0, 0, WormTeam);
+                    PosY = Env->Water + 1000;
+                    PosX = -2100;
+                }
+                else
+                {
+                    laspix = SpX;
+                    laspiy = SpY;
+                    SetState(WS_DEATH);
+                    firstdied = true;
+                    dieframe = gframe;
+                    fastdying = true;
+                    IsStatic = false;
+                }
+            
+                died = true;
+            }
+        }
+    }
+    
+    super;
+}

@@ -1,0 +1,40 @@
+override int CTurnGame::GetNextTeam()
+{
+	if(nocrash <= 100)
+		{
+ 		local nt = super;
+ 		local wormnum = 0;
+    	for(local t = 1; t<9; t++)
+	       	{
+	        local w = CWorm(Root->GetObject(2, 16 * nt + t));
+	        if(w != NullObj){if(w->Zombie == false) wormnum = wormnum + 1;}
+	       	}
+
+		if(wormnum > 0){return nt;}
+	 	else
+	 		{
+	 		CurTeam = nt;
+	 		nocrash = nocrash + 1;
+	 		return GetNextTeam();
+	 		}
+		}
+		
+	else {super;}
+}
+
+override int CTeam::GetNextWorm()
+{   
+	if(nocrash <= 100)
+		{
+  		local nw = super;
+  		local w = CWorm(Root->GetObject(2, 16 * Index + nw));
+  		if (w->Zombie)
+  			{
+    		CurWorm = nw;
+    		return GetNextWorm();
+  			}
+  		return nw;
+		}
+
+	else {super;}
+}

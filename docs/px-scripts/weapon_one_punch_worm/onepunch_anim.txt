@@ -1,0 +1,58 @@
+require utils;
+
+CSprite* wprdlnk;
+CSprite* wprdlnku;
+CSprite* wprdlnkd;
+
+CSprite* wprod;
+CSprite* wprodu;
+CSprite* wprodd;
+
+CSprite* wprdbk2;
+CSprite* wprdbk2u;
+CSprite* wprdbk2d;
+
+void onepunch_anim::InitGraphic()
+{
+CFile *f;
+
+f = GetAttachment("wprdlnk.png");		wprdlnk = LoadSprite(f, 6, 24);
+f = GetAttachment("wprdlnku.png");		wprdlnku = LoadSprite(f, 6, 24);
+f = GetAttachment("wprdlnkd.png");		wprdlnkd = LoadSprite(f, 6, 24);
+
+f = GetAttachment("wprod.png");			wprod = LoadSprite(f, 5, 24);
+f = GetAttachment("wprodu.png");		wprodu = LoadSprite(f, 5, 24);
+f = GetAttachment("wprodd.png");		wprodd = LoadSprite(f, 5, 24);
+
+f = GetAttachment("wprdbk2.png");		wprdbk2 = LoadSprite(f, 10, 24);
+f = GetAttachment("wprdbk2u.png");		wprdbk2u = LoadSprite(f, 10, 24);
+f = GetAttachment("wprdbk2d.png");		wprdbk2d = LoadSprite(f, 10, 24);
+
+   SetSpriteOverride(362, wprdlnk);
+   SetSpriteOverride(363, wprdlnku);
+   SetSpriteOverride(364, wprdlnkd);
+   
+   SetSpriteOverride(365, wprod);
+   SetSpriteOverride(366, wprodu);
+   SetSpriteOverride(367, wprodd);
+
+   SetSpriteOverride(368, wprdbk2);
+   SetSpriteOverride(369, wprdbk2u);
+   SetSpriteOverride(370, wprdbk2d);
+}
+
+CSoundFile* onepunch;
+
+void onepunch_anim::Init()
+{
+onepunch = new CSoundFile(GetAttachment("onepunch.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("One Punch Worm"))
+     {
+        onepunch->Play(1.5, 0.0, false);
+     }
+super;
+}

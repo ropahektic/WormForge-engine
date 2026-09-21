@@ -1,0 +1,24 @@
+//List of sprites
+
+CSprite* clouds;
+CSprite* cloudm;
+CSprite* cloudl;
+
+void sky_change::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   
+   f = GetAttachment("clouds.png");
+   clouds = LoadSprite(f, 20, -1);
+   f = GetAttachment("cloudm.png");
+   cloudm = LoadSprite(f, 20, -1);
+   f = GetAttachment("cloudl.png");
+   cloudl = LoadSprite(f, 20, -1);
+  
+   //Let's override the sprites!
+   
+   SetSpriteOverride(616, clouds);
+   SetSpriteOverride(617, cloudm);
+   SetSpriteOverride(618, cloudl);
+}

@@ -1,0 +1,552 @@
+CGObject* Trace(CObject* parent, CColMask* colmask, fixed x, fixed y, float ang, float res, int maxlen, int flags, int* outL)
+{    
+     tx = float(x);
+     ty = float(y);
+     
+     dx = sin(ang) * res;
+     dy = 0 - cos(ang) * res;   //lol, TODO
+     
+     nchecks = int(maxlen / res);
+     for (i = 0; i < nchecks; i += 1)
+     {
+         obj = CheckMaskAt(parent, colmask, tx, ty, flags);
+         if (obj != NullObj)
+         {
+            *outL = i * res;
+            return obj;
+         }; 
+         tx += dx;
+         ty += dy;
+     };  
+     *outL = maxlen;
+     return NullObj;
+};
+
+CGObject* DTrace(CObject* parent, CColMask* colmask, fixed x, fixed y, fixed shx, fixed shy, int nchecks, int flags, int* outInter)
+{    
+     tx = float(x);
+     ty = float(y);
+     
+     dx = float(shx);
+     dy = float(shy);   //lol, TODO
+          
+     for (i = 0; i < nchecks; i += 1)
+     {
+         obj = CheckMaskAt(parent, colmask, tx, ty, flags);
+         if (obj != NullObj)
+         {
+            *outInter = i;
+            return obj;
+         }; 
+         tx += dx;
+         ty += dy;
+     };  
+     *outInter = nchecks;
+     return NullObj;
+};
+
+CGObject* BTrace(CObject* parent, CColMask* colmask, fixed x, fixed y, float shx, float shy, fixed g, int nchecks, int flags, int* outInter)
+{    
+     tx = float(x);
+     ty = float(y);
+     
+     dx = shx;
+     dy = shy;   //lol, TODO
+     
+     ddy = float(g);
+          
+     for (i = 0; i < nchecks; i += 1)
+     {
+         obj = CheckMaskAt(parent, colmask, tx, ty, flags);
+         if (obj != NullObj)
+         {
+//            parent->DoExplosion( 1, tx, ty, 100, 10, 0, 1);
+            *outInter = i;
+            return obj;
+         }; 
+         tx += dx;
+         ty += dy;
+         dy += ddy;
+     };  
+     *outInter = nchecks;
+     return NullObj;
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+CLineTracer::CLineTracer()
+{
+	X1 = 0;
+	Y1 = 0;
+	X2 = 0;
+	Y2 = 0;
+	DX = 0;
+	DY = 0;
+	AbsDX = 0;
+	AbsDY = 0;
+	SX = 0;
+	SY = 0;
+	DIR = 0;
+	E = 0;
+	END = false;
+}
+
+void CLineTracer::Start(int x1, int y1, int x2, int y2)
+{
+	X1 = x1;
+	Y1 = y1;
+	X2 = x2;
+	Y2 = y2;
+	DX = x2-x1;
+	DY = y2-y1;
+	
+	if(DX == 0)		{ SX = 0;	AbsDX = 0;	}
+	else if(DX > 0)	{ SX = 1;	AbsDX = DX;	}
+	else			{ SX = -1;	AbsDX = -DX;}
+	
+	if(DY == 0)		{ SY = 0;	AbsDY = 0;	}
+	else if(DY > 0)	{ SY = 1;	AbsDY = DY;	}
+	else			{ SY = -1;	AbsDY = -DY;}
+	
+	if(AbsDX >= AbsDY)	{ E = AbsDX; DIR = 0;	}
+	else				{ E = AbsDY; DIR = 1;	}
+	
+	AbsDX = AbsDX * 2;
+	AbsDY = AbsDY * 2;
+	
+	END = false;
+}
+
+void CLineTracer::NextPoint(int *x, int *y)
+{
+	if(END) return;
+	
+	if(DIR == 0)
+	{
+		X1 += SX;
+		*x = X1;
+		*y = Y1;
+		if(X1 == X2)
+		{
+			END = true;
+			return;
+		}
+		
+		if(SY != 0)
+		{
+			E -= AbsDY;
+			if(E < 0)
+			{
+				Y1 += SY;
+				*y = Y1;
+				E += AbsDX;
+			}
+		}
+	}
+	else
+	{
+		Y1 += SY;
+		*x = X1;
+		*y = Y1;
+		if(Y1 == Y2)
+		{
+			END = true;
+			return;
+		}
+		
+		if(SX != 0)
+		{
+			E -= AbsDX;
+			if(E <= 0)
+			{
+				X1 += SX;
+				*x = X1;
+				E += AbsDY;
+			}
+		}
+	}
+}
+
+bool CLineTracer::Finished()
+{
+	return END;
+}
+
+CColMask *MASK_PIXEL;
+CLineTracer *LineTracer;
+
+void tracers::FirstFrame()
+{
+	CBitmap1 *bmp = new CBitmap1(1, 1);
+	bmp->SetPixel(0, 0, 1);
+	MASK_PIXEL = new CColMask(1,1,bmp);
+	
+	LineTracer = new CLineTracer();
+}
+
+CTraceRes::CTraceRes()
+{
+	HitX = 0;
+	HitY = 0;
+	PreHitX = 0;
+	PreHitY = 0;
+	TangentX = 0.0;
+	TangentY = 0.0;
+	NormalX = 0.0;
+	NormalY = 0.0;
+	StartsSolid = false;
+	LeftSolidX = 0;
+	LeftSolidY = 0;
+	HitObject = NullObj;
+	Hit = false;
+	
+	Point1X = 0;
+	Point1Y = 0;
+	Point2X = 0;
+	Point2Y = 0;
+}
+
+bool MatchCollisionGroup(CGObject *obj, int flags)
+{
+	if(obj->ClType == OC_Landscape)	{ if(flags & 2 == 0) return false; }	// Land
+	else if(obj->ClType == OC_Worm)
+	{
+		if(flags & 4 == 0)												// Standing worms
+		{
+			if(obj->ObjState == WS_IDLE)		return false;
+			if(obj->ObjState == WS_WALKING)		return false;
+			if(obj->ObjState == WS_AIMING)		return false;
+			if(obj->ObjState == WS_SETPOWER)	return false;
+			if(obj->ObjState == WS_JUMPPREPARE)	return false;
+		}
+		if(flags & 8 == 0)												// Worms with weapon
+		{
+			if(obj->ObjState == WS_FIRED)			return false;
+			if(obj->ObjState == WS_FIRECONT)		return false;
+			if(obj->ObjState == WS_DRILLING)		return false;
+			if(obj->ObjState == WS_TELEPORTING)		return false;
+			if(obj->ObjState == WS_CONTROL_WEAPON)	return false;
+			if(obj->ObjState == WS_BLOWTORCH)		return false;
+		}
+		if(flags & 16 == 0)												// Worms in mid-air
+		{
+			if(obj->ObjState == WS_POING)		return false;
+			if(obj->ObjState == WS_JUMP)		return false;
+			if(obj->ObjState == WS_PARACHUTE)	return false;
+			if(obj->ObjState == WS_SLIDING)		return false;
+			if(obj->ObjState == WS_POWERFLY)	return false;
+			if(obj->ObjState == WS_FLYING)		return false;
+			if(obj->ObjState == WS_FLYING2)		return false;
+			if(obj->ObjState == WS_JETPACK)		return false;
+			if(obj->ObjState == WS_AFTERROPE)	return false;
+		}
+		if(flags & 32 == 0)												// Worms on rope/bungee
+		{
+			if(obj->ObjState == WS_ROPING)	return false;
+			if(obj->ObjState == WS_BUNGEE)	return false;
+		}
+		if(flags & 64 == 0)												// Frozen worms
+		{
+			if(obj->ObjState == WS_FROZEN)	return false;
+		}
+		if(flags & 256 == 0)											// Suicide bomber/kamikaze
+		{
+			if(obj->ObjState == WS_FIREPUNCH)		return false;
+			if(obj->ObjState == WS_SUICIDEBOMBER)	return false;
+		}
+	}
+	else if(obj->ClType == OC_Mine)		{ if(flags & 1024 == 0) return false; }		// Mines
+	else if(obj->ClType == OC_Crate)	{ if(flags & 2048 == 0) return false; }		// Crates
+	else if(obj->ClType == OC_Cross)	{ if(flags & 8192 == 0) return false; }		// Gravestones
+	else if(obj->ClType == OC_Missile)	{ if(flags & 32768 == 0) return false; }	// Weapons
+	else if(obj->ClType == OC_Arrow)	{ if(flags & 65536 == 0) return false; }	// Arrows
+	else if(obj->ClType == OC_OilDrum)	{ if(flags & 131072 == 0) return false; }	// Oil drums
+	else								{ if(flags & (1 << obj->Layer) == 0) return false; } // Custom objects
+	
+	return true;
+}
+
+CGObject* FindInMask(CGObject* parent, CColMask* msk, int x, int y, int flags)
+{
+    int i;
+	CGObject *obj;
+	
+	if(flags <= 0 && parent != NullObj) flags = parent->ColGroup;
+	
+    for(i = 0; i < Env->Objs.Count; i += 1)
+    {
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == parent) continue;
+		if(obj == NullObj) continue;
+		if(MatchCollisionGroup(obj, flags) == false) continue;
+		
+		if(msk->Check(x, y, obj->ColMask, obj->PosX, obj->PosY))
+		{
+			return obj;                           
+		}
+	}
+	return NullObj;
+}
+
+CGObject *_TraceMask(CObject *parent, CColMask *mask, int x1, int y1, int x2, int y2, int flags, int *xr, int *yr, int *xl, int *yl, int *ssolid, int *xls, int *yls)
+{
+	bool first = true;
+	bool insolid = false;
+	
+	CGObject *obj;
+	
+	*xl = x1;
+	*yl = y1;
+	*xls = x1;
+	*yls = y1;
+	*ssolid = 0;
+	
+	LineTracer->Start(x1, y1, x2, y2);
+	
+	while(LineTracer->Finished() == false)
+	{
+		obj = FindInMask(parent, mask, x1, y1, flags);
+		if(obj != NullObj)
+		{
+			if(first)
+			{
+				*ssolid = 1;
+				insolid = true;
+			}
+			else
+			{
+				if(insolid == false)
+				{
+					*xr = x1;	*yr = y1;
+					return obj;
+				}
+			}
+		}
+		else
+		{
+			if(insolid)
+			{
+				insolid = false;
+				*xls = x1;
+				*yls = y1;
+			}
+		}
+		
+		*xl = x1;
+		*yl = y1;
+		
+		LineTracer->NextPoint(&x1, &y1);
+		
+		first = false;
+	}
+	
+	*xr = x2;
+	*yr = y2;
+	return NullObj;
+}
+
+CGObject *TraceMask(CObject *parent, CColMask *mask, int x1, int y1, int x2, int y2, int flags, int *xr, int *yr)
+{
+	int t;
+	return _TraceMask(parent, mask, x1, y1, x2, y2, flags, xr, yr, &t, &t, &t, &t, &t);
+}
+
+CGObject *TraceLine(CObject *parent, int x1, int y1, int x2, int y2, int flags, int *xr, int *yr)
+{
+	return TraceMask(parent, MASK_PIXEL, x1, y1, x2, y2, flags, xr, yr);
+}
+
+bool TraceMaskEx(CObject *parent, CColMask *mask, int x1, int y1, int x2, int y2, int flags, CTraceRes *res)
+{
+	int num_points = 6;
+	
+	int x;
+	int y;
+	int xl;
+	int yl;
+	int ss;
+	int xls;
+	int yls;
+	
+	CGObject *obj = _TraceMask(parent, mask, x1, y1, x2, y2, flags, &x, &y, &xl, &yl, &ss, &xls, &yls);
+	CGObject *o;
+	
+	res->HitX = x;
+	res->HitY = y;
+	res->HitObject = obj;
+	
+	if(ss == 1)	res->StartsSolid = true;
+	else		res->StartsSolid = false;
+	
+	res->PreHitX = xl;
+	res->PreHitY = yl;
+	res->LeftSolidX = xls;
+	res->LeftSolidY = yls;
+	
+	if(obj == NullObj)
+	{
+		res->TangentX = 1.0;
+		res->TangentY = 0.0;
+		res->NormalX = 0.0;
+		res->NormalY = -1.0;
+		res->Point1X = 0;
+		res->Point1Y = 0;
+		res->Point2X = 0;
+		res->Point2Y = 0;
+		res->Hit = false;
+		return false;
+	}
+	
+	int cx0;
+	int cy0;
+	int cx1 = x;
+	int cy1 = y;
+	int cx2 = x;
+	int cy2 = y;
+	
+	int dx;
+	int dy;
+	int t;
+	int abs_dx;
+	int abs_dy;
+	int rx;
+	int ry;
+	
+	float tangx;
+	float tangy;
+	float normx;
+	float normy;
+	float dist;
+	
+	bool changed;
+	
+	dx = x2 - x1;
+	dy = y2 - y1;
+	
+	if(dx == 0)		{ rx = 0;	abs_dx = 0;		}
+	else if(dx > 0)	{ rx = 1;	abs_dx = dx;	}
+	else			{ rx = 0-1;	abs_dx = 0-dx;	}
+	
+	if(dy == 0)		{ ry = 0;	abs_dy = 0;		}
+	else if(dy > 0)	{ ry = 1;	abs_dy = dy;	}
+	else			{ ry = 0-1;	abs_dy = 0-dy;	}
+	
+	int n;
+	
+	n = num_points;
+	dx = rx;
+	dy = 0;
+	changed = false;
+	while(true)
+	{
+		o = FindInMask(parent, mask, cx1, cy1, flags);
+		if(o != NullObj)
+		{
+			n -= 1;
+			t = dx;
+			dx = dy;
+			dy = 0-t;
+			if(n<=0) break;
+		}
+		else
+		{
+			t = dx;
+			dx = 0-dy;
+			dy = t;
+		}
+		cx1 += dx;
+		cy1 += dy;
+		
+		if(cx1==x)
+		{
+			if(cy1==y)
+			{
+				if(changed)
+				{
+					break;
+				}
+				else
+				{
+					dx = 0;
+					dy = ry;
+					changed = true;
+				}
+			}
+		}
+	}
+	
+	n = num_points;
+	dx = rx;
+	dy = 0;
+	changed = false;
+	while(true)
+	{
+		o = FindInMask(parent, mask, cx2, cy2, flags);
+		if(o != NullObj)
+		{
+			n -= 1;
+			t = dx;
+			dx = 0-dy;
+			dy = t;
+			if(n<=0) break;
+		}
+		else
+		{
+			t = dx;
+			dx = dy;
+			dy = 0-t;
+		}
+		cx2 += dx;
+		cy2 += dy;
+		
+		if(cx2==x)
+		{
+			if(cy2==y)
+			{
+				if(changed)
+				{
+					break;
+				}
+				else
+				{
+					dx = 0;
+					dy = ry;
+					changed = true;
+				}
+			}
+		}
+	}
+	
+	res->Point1X = cx1;
+	res->Point1Y = cy1;
+	res->Point2X = cx2;
+	res->Point2Y = cy2;
+	tangx = (cx2 - cx1);
+	tangy = (cy2 - cy1);
+	normx = (cy1 - cy2);
+	normy = (cx2 - cx1);
+	dist = sqrt(normx*normx + normy*normy);
+	
+	if(dist > 0)
+	{
+		res->TangentX = tangx / dist;
+		res->TangentY = tangy / dist;
+		res->NormalX = normx / dist;
+		res->NormalY = normy / dist;
+	}
+	else
+	{
+		res->TangentX = 1.0;
+		res->TangentY = 0.0;
+		res->NormalX = 0.0;
+		res->NormalY = -1.0;
+	}
+	
+	res->Hit = true;
+	return true;
+}
+
+bool TraceLineEx(CObject *parent, int x1, int y1, int x2, int y2, int flags, CTraceRes *res)
+{
+	return TraceMaskEx(parent, MASK_PIXEL, x1, y1, x2, y2, flags, res);
+}

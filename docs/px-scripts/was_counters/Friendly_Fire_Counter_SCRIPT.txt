@@ -1,0 +1,36 @@
+/* 
+
+Made by: DannyB, April 2023
+
+*/
+
+// This script adds a friendly fire-counter to the game (can be used for statistical GUI's)
+
+int friendly_fire_counts[6];
+
+void Friendly_Fire_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          friendly_fire_counts[i] = 0;
+     }
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{  
+     if(type == M_WORMDAMAGED)
+     {  
+          if(this != Current_Worm)
+          {
+               if(getWormTeam(this, 0) == current_worm_team)
+               {
+                    if(GS->Info.Teams[getWormTeam(this, 0)].Worms[getWormNumber(this, 0)].DamageTaken != 0)
+                    {
+                         friendly_fire_counts[current_worm_team]++;
+                    }
+               }
+          }
+     } 
+  
+     super;
+}

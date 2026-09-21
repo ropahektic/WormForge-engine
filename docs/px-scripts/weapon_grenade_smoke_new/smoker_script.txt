@@ -1,0 +1,45 @@
+require utils, particles;
+
+CSmoker : CObject;
+
+CSmoker::CSmoker(CObject* parent, fixed ax, fixed ay, bool toxic)
+{
+  super(parent, GS);
+  x = ax;
+  y = ay;
+  life = 0;
+  turn = 4;
+  tox = toxic;
+};
+
+void CSmoker::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+  if (turn < 0) return;
+  if (Type == M_FRAME)
+  {
+      if (tox)
+      {
+           if (life % 8 == 0) parman->ParticleBoom(6, x, y, 6, parman->toxicdesc);
+      } else {
+           if (life % 7 == 0) parman->ParticleBoom(8, x, y, 12, parman->smokedesc);
+      };
+      life += 1;
+  };
+  if (Type == M_TURNEND)
+  {
+      turn -= 1;
+  };
+};
+
+override void CMissile::ExplodeAt(fixed x, fixed y)
+{
+  if (weap->CheckName("Smoke Grenade"))
+  {
+    local smoker = new CSmoker(Root, x, y, false);
+  } else if (weap->CheckName("Toxic Grenade"))
+  {
+    local smoker = new CSmoker(Root, x, y, true);
+  } else {
+    super;
+  };
+};

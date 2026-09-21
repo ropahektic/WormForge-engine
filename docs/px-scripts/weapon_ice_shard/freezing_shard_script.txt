@@ -1,0 +1,231 @@
+// Original weapon by StringKing
+// Freezing clusters and particles added by 0rang3
+
+require utils, utils_pyroman, utils_steps, particles, pxparticles;
+
+bool freezehim;
+bool IcyShardColdEffect;
+CSprite* shard_clusters;
+
+void freezing_shard_script::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("shard_clusters.png");
+    shard_clusters = LoadSprite(f, 6, 0);
+    
+    IcyShardColdEffect = true;
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+imCheckMis = CMissile(NullObj);
+freezehim = false;
+}
+
+void CMissile::CrystalShard(int ClPosX, int ClPosY)
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+     SDesc.Team = ClWT;
+     SDesc.Worm = ClWN;
+     SDesc.X = ClPosX;
+     SDesc.Y = ClPosY;
+     SDesc.Delay = 0;
+     local ldata;
+     local weapon;
+     local memory;
+     local sprite;
+     ldata = GetWeaponByName("Crystal Shard");
+     memory = ldata;
+     
+     sprite = shard_clusters->Index;
+     
+     ldata->launch.gravityFactor = 100;
+     ldata->launch.anim.trailIndex = 0;
+     ldata->launch.anim.trailPower = 0;
+     ldata->launch.anim.trailSpeed = 0;
+     ldata->launch.action = WAction_Bounce;
+     ldata->launch.explosion.damage = 15;
+     ldata->launch.countdownFrom = 0;
+     ldata->launch.explosion.flags = 30;
+     
+         WeapSpriteParams* Params = new WeapSpriteParams;
+     	 SDesc.SpX = RandomFloat(5, -5);
+         SDesc.SpY = RandomFloat(1, -1);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         SDesc.SpX = RandomFloat(4, -4);
+         SDesc.SpY = RandomFloat(2, -2);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         SDesc.SpX = RandomFloat(3, -3);
+         SDesc.SpY = RandomFloat(3, -3);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         SDesc.SpX = RandomFloat(4, -4);
+         SDesc.SpY = RandomFloat(2, -2);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         SDesc.SpX = RandomFloat(5, -5);
+         SDesc.SpY = RandomFloat(1, -1);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         
+         SDesc.SpX = RandomFloat(3, -3);
+         SDesc.SpY = RandomFloat(1, -1);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         SDesc.SpX = RandomFloat(3, -3);
+         SDesc.SpY = RandomFloat(2, -2);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         SDesc.SpX = RandomFloat(3, -3);
+         SDesc.SpY = RandomFloat(3, -3);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         SDesc.SpX = RandomFloat(3, -3);
+         SDesc.SpY = RandomFloat(2, -2);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         SDesc.SpX = RandomFloat(3, -3);
+         SDesc.SpY = RandomFloat(1, -1);
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         new WeapSprite(weapon, sprite, Params);
+         
+         freezehim = true;
+         
+     ldata = memory;
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    super;
+    
+    if (weap->CheckName("Crystal Shard"))
+    {
+        local bah = this;
+        if (bah->imCheckMis != this) return;
+        local w = GetCurrentWorm();
+        
+        if (w != NullObj)CrystalShard(bah->PosX, bah->PosY);
+        else if (bah != NullObj) CrystalShard(bah->PosX, bah->PosY);
+    }
+    
+    if (freezehim)
+	{
+		CWorm * cur_worm = GetCurrentWorm();
+
+      	for(int k = 1; k < Env->Objs.Count; k++)
+      		{
+          	local obj = CGObject(Env->Objs.Objs[k]);
+          	if(obj == NullObj) continue;
+          	if(obj->ClType == OC_Worm)
+	  			{
+	      		CWorm *sel_worm = CWorm(obj);
+
+	      		if(DistBetweenObjs(this, sel_worm) <= 40)
+	      			{
+                  	local state = sel_worm->ObjState;
+
+                  	if (state != WS_SINKING && state != WS_DEAD && state != WS_DEATH && state != WS_FROZEN && sel_worm->DispHealth > 0)    //
+                  		{
+                  		sel_worm->SetState(WS_FROZEN);
+                  		}
+              		}
+           		}
+       		}
+       		
+       	PxParticle *p;
+
+           for(int i=0; i<80;i++)
+           {
+               p = new PxParticle(611, PosX, PosY);
+
+               p->SetLifeTime(70);
+               p->SetMotionRandomness(0.4);
+               p->SetAirResistance(0.02);
+               float s = RandomFloat(0.75, 1.0);
+               p->SetStartSize(s, s);
+               p->SetEndSize(s-0.4, s-0.4);
+               p->SetStartAlpha(255);
+               p->SetEndAlpha(175);
+               p->SetBlendMode(1);
+               p->SetStartColor(0, 75, 255);
+               p->SetEndColor(0, 125, 255);
+               p->SetRandomVelocity(1.0,3.0);
+		  }
+		  
+		PlayLocalSound(24, 5, 1.0,1.0);
+     }
+    
+    
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Crystal Shard"))
+        {
+            imCheckMis = this;
+		}
+	}
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if(Type == M_FRAME)
+    {
+       if(CurWeapon->CheckName("Crystal Shard"))
+       {
+
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+			//DoParticleEffects( sprite, RelX, RelY, lifeTime, animSpeed, veloMin, veloMax, startAlpha, endAlpha, windFactor, startSize, endSize, angleMin, angleMax, randomMotion, grav);
+            DoAnimParticleEffects( shard_aiming->Index, 8, -10, -7, 10, 0.03, -3.0, -7.0, 255, 255, 0, 0.5, 0.2, 0.0, 2.31, 0.0, -1.0);
+
+
+		  if(IcyShardColdEffect == true)
+          {
+             PxParticle *p;
+
+             for(int i=0; i<100;i++)
+             {
+                p = new PxParticle(611, PosX-(8*TurnSide), PosY);
+
+                p->SetLifeTime(70);
+                p->SetMotionRandomness(0.4);
+                p->SetAirResistance(0.20);
+                float s = RandomFloat(0.30, 0.40);
+                p->SetStartSize(s, s);
+                p->SetEndSize(s-0.4, s-0.4);
+                p->SetStartAlpha(255);
+                p->SetEndAlpha(175); 
+                p->SetBlendMode(1);
+                p->SetStartColor(0, 75, 255);
+                p->SetEndColor(0, 125, 255);
+                p->SetRandomVelocity(1.0,3.0);
+             }
+
+             IcyShardColdEffect = false;
+          }
+       }
+    }
+
+    if(Type == M_SETWEAPON)
+    {
+       IcyShardColdEffect = true;
+    }
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+	if (Weap->CheckName("Crystal Shard"))
+    {
+		ClWT = WormTeam;
+        ClWN = WormNumber;
+    }
+}

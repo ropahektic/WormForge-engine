@@ -1,0 +1,207 @@
+//   Thanks  StepS
+
+require utils, utils_steps, wosc_lib;
+
+CSprite* UfoAnim;
+CSprite* UfoJumpIn;
+CSoundFile* UfoWav;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    fixed hframenum_ufo;
+    fixed jumpinframenum_ufo;
+    super;
+}
+
+void ufo_SCRIPT::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("ufo-anim.png");           UfoAnim   = LoadSprite(f, 3, 1);
+    f = GetAttachment("ufo-jumpin-sprite.png");  UfoJumpIn = LoadSprite(f, 23, 1);
+    f = GetAttachment("helicopterloop.wav");      UfoWav = new CSoundFile(f);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    CWorm* w = GetCurrentWorm();
+    local Shifth = keySync->KeyPressed(16);
+    
+        if (Type == M_FRAME)
+        {
+            if (ufo && (SpX != 0 || SpY != 0)){ if (gframe % 47) {} else UfoWav->Play(1.2, 0.0, false); }
+            
+            if (ObjState == WS_FIRED && CurWeapon->CheckName("UFO"))
+            {
+                jumpin_ufo = true;
+                jumpinframenum_ufo = jumpinframenum_ufo + 0.047;
+            }
+        
+            if (ufo)
+            {
+                if (ufolaunch)
+                {
+                    JetFuel = 600*65536;
+                    jumpinframenum_ufo = 0;                      
+                    jumpin_ufo = false;
+                    ufolaunch = false;
+                }
+                
+                if (PressedUp == 0 && PressedDown == 0) SpY = SpY / 1.05;
+                if (PressedLeft == 0 && PressedRight == 0) SpX = SpX / 1.05;
+                if (PressedUp == 1 && PressedDown == 1) SpY = SpY / 1.05;
+                if (PressedLeft == 1 && PressedRight == 1) SpX = SpX / 1.05;
+                
+                if (Root->RetreatTimer == 0 && w != NullObj) JetFuel -=0.020*65536;
+                
+                     if (hframenum_ufo == 0.99) hframenum_ufo = 0.00;
+                else if (hframenum_ufo == 0.50) hframenum_ufo = 0.99;
+                else if (hframenum_ufo == 0.00) hframenum_ufo = 0.50;
+                
+                if (PressedUp == 1)
+                {
+                    PressedUp = 0;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.2*65536;
+                    
+                    if (SpY > -10)
+                    {
+                        SpY -= 0.2;
+                    }
+                }
+                
+                if (PressedDown == 1)
+                {
+                    PressedDown = 0;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.2*65536;
+                    
+                    if (SpY < 10)
+                    {
+                        SpY += 0.2;
+                    }
+                }
+                
+                if (PressedLeft == 1)
+                {
+                    PressedLeft = 0;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.2*65536;
+                    if (w != NullObj) {if (!Shifth) TurnSide = -1;}
+                    
+                    if (SpX > -10)
+                    {
+                        SpX -= 0.2;
+                    }
+                }
+                
+                if (PressedRight == 1)
+                {
+                    PressedRight = 0;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.2*65536;
+                    if (w != NullObj) {if (!Shifth) TurnSide = 1;}
+                    
+                    if (SpX < 10)
+                    {
+                        SpX += 0.2;                                          
+                    }
+                }
+               
+                if (ObjState != WS_JETPACK)
+                {
+                    if (SpY == 0 && ObjState != WS_FIRED && ObjState != WS_TELEPORTING) SetState(WS_SLIDING);
+                    GravityFactor = 1;
+                    ufo = false;                                  
+                }
+                
+                else if (JetFuel <= 1*65536)
+                {
+                    DoExplosion(PosX,PosY,100,10,0,0);
+                    GravityFactor = 1;
+                    ufo = false;
+                }
+                
+                else if (disableufo)
+                {
+                    
+                    DoExplosion(PosX,PosY,100,10,0,0);
+                    GravityFactor = 1;                                        
+                    ufo = false;
+                    disableufo = false;
+                }                                                               
+            }
+        }
+        
+        if (Type == M_TURNEND)
+        {
+            if (ObjState != WS_JETPACK && ufo)
+            {
+                DoExplosion(PosX,PosY,100,10,0,0);
+                GravityFactor = 1;
+                ufo = false;                                  
+            }
+            
+            else if (ufo)
+            {
+                SpX = 0;
+                SpY = 0;
+            }
+        }
+super;
+}
+
+override void CWorm::RenderWorm()
+{
+    if (!ufo && !jumpin_ufo) super;
+    else DrawUfoWorm();
+}  
+
+void CWorm::DrawUfoWorm()
+{
+local w = GetCurrentWorm();
+if (w == NullObj) return;
+
+if(isInvisible)
+	{
+    local c = GetTeamColor(WormTeam);
+    if((GG->machColors[GetLocalMachine()] & (1 << c)) != 0) SetColorMod(ARGB(100, 0, 0, 0), (1 | 4));
+	}
+
+if (ufo)
+    {
+    if (TurnSide > 0) AddSpriteEx(4,PosX,PosY,UfoAnim->Index,hframenum_ufo,sin(SpX/24),1);
+    else AddSpriteEx(4,PosX,PosY,UfoAnim->Index+262144,hframenum_ufo,sin(SpX/24),1);
+    }
+
+else if (jumpin_ufo)
+    {
+    if (TurnSide > 0) AddSpriteEx(4,PosX-0.0,PosY+0.0,UfoJumpIn->Index,jumpinframenum_ufo,0,1);
+    else AddSpriteEx(4,PosX+0.0,PosY+0.0,UfoJumpIn->Index+262144,jumpinframenum_ufo,0,1);
+    }
+
+if(isInvisible)
+	{
+    local c = GetTeamColor(WormTeam);
+    if((GG->machColors[GetLocalMachine()] & (1 << c)) != 0) ClearColorMod();
+	}
+}
+
+override void CWorm::Collide(CGObject* Obj,int type) 
+{
+    if (ufo)
+    {
+        if (Obj != NullObj)
+        {
+            if (Obj->ClType != OC_Mine) disableufo = true;
+        }
+    }
+    super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("UFO"))
+    {
+        GravityFactor = 0;
+        ufo = true;
+        ufolaunch = true;
+    }
+    super;
+}

@@ -1,0 +1,336 @@
+require utils;
+
+/* 
+
+Modified by: DannyB, February 2023 (organization and improved stages)
+Original coder: Entuser
+
+*/
+
+// This script creates an anti-glitcher to minimize game standstills.
+
+CAntiGlitch* AntiGlitch_Timer;
+
+void AntiGlitch_SCRIPT::Init()
+{
+     AntiGlitch_Timer = new CAntiGlitch;
+}
+
+CAntiGlitch::CAntiGlitch()
+{
+     AG_Turn_Time = 0; // A value for "turn time" used to trigger the anti-glitcher
+     AG_Retreat_Time = 0; // A value for "retreat time" used to trigger the anti-glitcher
+   
+     AG_Current_Stage = 0; // Current anti-gltich stage
+     AG_Standstill_Time = 0; // Time passed since game stopped progressing
+}
+
+void CAntiGlitch::Frame()
+{
+     if(AG_Turn_Time == Root->Timer && AG_Retreat_Time == Root->RetreatTimer)
+     {
+          AG_Standstill_Time += 20;
+      
+          if(AG_Standstill_Time == 20000)
+          {
+               // Warns that Anti-Glitch is starting soon
+               ShowMessage("Anti-Glitch will start in 10 seconds!");
+          }
+      
+          if(AG_Standstill_Time > 30000)
+          {
+               if(AG_Current_Stage == 0)
+               {
+                    // Shake and try to explode all weapon-objects
+                    ShowMessage("Anti-Glitch: Stage One");
+          
+                    for(local i = 1; i < Env->Objs.Count; i++)
+                    {
+                         local obj = CGObject(Env->Objs.Objs[i]);
+               
+                         if(obj == NullObj) 
+                         {
+                              continue;
+                         }
+               
+                         local shake = obj->IsMoving();
+               
+                         if(!shake)
+                         { 
+                              continue; 
+                         }
+                            
+                         if(obj is CMissile)
+                         {
+                              missile = CMissile(obj);
+                              missile->ExplodeAt(missile->PosX, missile->PosY);
+                              missile->Free(true);
+                 
+                              continue;
+                         }
+                         
+                         if (obj->ClType == OC_Worm)
+                         {
+                              GG->land->MakeHole(25, obj->PosX, obj->PosY);
+                              obj->PosX = obj->PosX+10;
+                              obj->PosY = obj->PosY-15;
+                              
+                              continue;
+                         }
+                
+                         obj->SpX = GS->GetRandom() % 200 - 100;   
+                         obj->SpY = GS->GetRandom() % 200 - 100;
+                    }
+            
+                    AG_Current_Stage = 1;
+                    
+                    AG_Standstill_Time = 10000; 
+               }
+               else if(AG_Current_Stage == 1)
+               {                                 
+                    // Delete all weapon-objects
+                    ShowMessage("Anti-Glitch: Stage Two");
+            
+                    for(local i = 1; i < Env->Objs.Count; i++)
+                    {
+                         local obj = CGObject(Env->Objs.Objs[i]);
+              
+                         if(obj == NullObj)
+                         {
+                              continue;
+                         }
+              
+                         if(obj->ClType == OC_Worm) 
+                         {
+                              continue;
+                         } 
+              
+                         if(!obj->IsMoving()) 
+                         {
+                              continue;
+                         }
+              
+                         obj->Free(true);
+                    }
+        
+                    AG_Current_Stage = 2;
+                    
+                    AG_Standstill_Time = 10000;
+               }
+               else if(AG_Current_Stage == 2)
+               {
+                    // Force kill all worms at 0 health
+                    ShowMessage("Anti-Glitch: Stage Three");
+
+                    for(local i = 1; i < Env->Objs.Count; i++)
+                    {
+                         local obj = Env->Objs.Objs[i];
+                         
+                         if(obj == NullObj)
+                         {
+                              continue;
+                         }
+                         
+                         if((obj is CWorm) == false)
+                         { 
+                              continue;
+                         }
+                         
+                         CWorm * worm = CWorm(obj);
+                         
+                         if(worm == NullObj) 
+                         {
+                              continue;
+                         }
+                         
+                         if(GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber) == 0)
+                         {
+                              worm->SetState(WS_DEATH);    
+                         }  
+                    }
+                                         
+                    AG_Current_Stage = 3;
+                    
+                    AG_Standstill_Time = 10000; 
+               }
+               else if(AG_Current_Stage == 3)
+               {
+                    // Place all worms at a higher point on the Y-axis to cause a non-damaging fall
+                    ShowMessage("Anti-Glitch: Stage Four");
+
+                    for(local i = 1; i < Env->Objs.Count; i++)
+                    {
+                         local obj = Env->Objs.Objs[i];
+                         
+                         if(obj == NullObj)
+                         {
+                              continue;
+                         }
+                         
+                         if((obj is CWorm) == false)
+                         { 
+                              continue;
+                         }
+                         
+                         CWorm * worm = CWorm(obj);
+                         
+                         if(worm == NullObj) 
+                         {
+                              continue;
+                         }
+                         
+                         worm->PosY = worm->PosY - 25;    
+                    }
+                    
+                    Root->Message( Root, M_SKIPTURN, 0, NullObj);
+                                         
+                    AG_Current_Stage = 4;
+                    
+                    AG_Standstill_Time = 10000; 
+               }
+               else if(AG_Current_Stage == 4)
+               {
+                    // Place all worms at a higher point on the Y-axis to cause a damaging fall
+                    ShowMessage("Anti-Glitch: Stage Five");
+
+                    for(local i = 1; i < Env->Objs.Count; i++)
+                    {
+                         local obj = Env->Objs.Objs[i];
+                         
+                         if(obj == NullObj)
+                         {
+                              continue;
+                         }
+                         
+                         if((obj is CWorm) == false)
+                         { 
+                              continue;
+                         }
+                         
+                         CWorm * worm = CWorm(obj);
+                         
+                         if(worm == NullObj) 
+                         {
+                              continue;
+                         }
+                         
+                         worm->PosY = worm->PosY - 100;
+                         
+                         if(obj is CFire)
+                         {
+                              fire = CFire(obj);
+                              fire->Free(true);
+
+                              continue;
+                         }
+                    }
+                                         
+                    AG_Current_Stage = 5;
+                    
+                    AG_Standstill_Time = 10000; 
+               }
+               else if(AG_Current_Stage == 5)
+               {                      
+                    // Throw everything around hard
+                    ShowMessage("Anti-Glitch: Stage Six");
+            
+                    for(local i = 1; i < Env->Objs.Count; i++)
+                    {
+                         local obj = CGObject(Env->Objs.Objs[i]);
+               
+                         if(obj == NullObj)
+                         {
+                              continue;
+                         }
+               
+                         obj->SpX = GS->GetRandom() % 200 - 100;   
+                         obj->SpY = GS->GetRandom() % 200 - 100;   
+               
+                         if(obj is CMissile)
+                         {
+                              missile = CMissile(obj);
+                              missile->Free(true);
+                  
+                              continue;
+                         }
+                    }   
+            
+                    AG_Current_Stage = 6;
+                    
+                    AG_Standstill_Time = 10000;
+               }
+               else if(AG_Current_Stage == 6)
+               {
+                    // Skip the turn
+                    ShowMessage("Anti-Glitch: Stage Seven");
+
+                    Root->FinishTurn(0);
+                    Root->FinishTurn(1);
+                    Root->FinishTurn(2);
+                                         
+                    AG_Current_Stage = 7;
+                    
+                    AG_Standstill_Time = 10000; 
+               }
+               else if(AG_Current_Stage == 7)
+               {
+                    // Skip the turn
+                    ShowMessage("Anti-Glitch: Stage Eight(final)");
+
+                    Root->Message(Root, M_SKIPTURN, 0, NullObj);
+                                         
+                    AG_Current_Stage = 8;
+                    
+                    AG_Standstill_Time = 10000; 
+               }
+               else if(AG_Current_Stage == 8)
+               {                      
+                    // Restart the anti-glitching process
+                    ShowMessage("Anti-Glitch failed to reinstate the game! :(");                    
+                    
+                    ShowMessage("Retrying...");
+            
+                    AG_Current_Stage = 0;
+                    
+                    AG_Standstill_Time = 50000;
+               }
+          }
+     } 
+     else 
+     {
+          AG_Turn_Time = Root->Timer;
+          AG_Retreat_Time = Root->RetreatTimer;
+      
+          AG_Current_Stage = 0;
+          AG_Standstill_Time = 0;
+     }
+}
+
+override void CTurnGame::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+     if(Type == M_FRAME)
+     {  
+          AntiGlitch_Timer->Frame();
+     } 
+  
+     super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+     AntiGlitch_Timer->AG_Current_Stage = 0;
+     AntiGlitch_Timer->AG_Standstill_Time = 0;  
+  
+     super;
+}
+
+override void CWorm::SetState(EObjState State)
+{
+     if(State == WS_DEAD)
+     {
+          AntiGlitch_Timer->AG_Current_Stage = 0;
+          AntiGlitch_Timer->AG_Standstill_Time = 0;
+     }
+   
+     super;
+}

@@ -1,0 +1,11 @@
+require utility_parkour;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+WallJumpMultiplier = 6;
+BhopMultiplier = 3;
+WallJumpDelay = 0;
+BhopDelay = 0;
+parkouring = false;
+}

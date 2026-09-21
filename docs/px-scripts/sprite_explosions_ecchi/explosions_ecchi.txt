@@ -1,0 +1,91 @@
+   CSprite* skdsmoke;
+   CSprite* circle50;
+   CSprite* circle25;
+   CSprite* circle75;
+   
+   CSprite* elipse25;
+   CSprite* elipse50;
+   CSprite* elipse75;
+   
+   CSprite* smklt25;
+   CSprite* smklt50;
+   CSprite* smklt75;
+   CSprite* smklt100;
+   
+   CSprite* smkdrk20;
+   CSprite* smkdrk30;
+   CSprite* smkdrk40;
+
+void explosions_ecchi::InitGraphic()
+{
+   CFile *f;
+   
+   f = GetAttachment("skdsmoke.png");
+   skdsmoke = LoadSprite(f, 12, 0);
+   SetSpriteOverride(507, skdsmoke);
+   
+   f = GetAttachment("circle50.png");
+   circle50 = LoadSprite(f, 20, 0);
+   //SetSpriteOverride(596, circle50);  // biff
+   //SetSpriteOverride(597, circle50);  // poot
+   //SetSpriteOverride(598, circle50);  // pow
+   //SetSpriteOverride(599, circle50);  // poot
+   SetSpriteOverride(601, circle50);
+
+   f = GetAttachment("circle25.png");
+   circle25 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(600, circle25);
+
+   f = GetAttachment("circle75.png");
+   circle75 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(602, circle75);
+   //SetSpriteOverride(603, circle75);
+   
+   
+   
+   f = GetAttachment("elipse25.png");
+   elipse25 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(604, elipse25);
+   
+   f = GetAttachment("elipse50.png");
+   elipse50 = LoadSprite(f, 18, 0);
+   SetSpriteOverride(605, elipse50);
+   
+   f = GetAttachment("elipse75.png");
+   elipse75 = LoadSprite(f, 18, 0);
+   SetSpriteOverride(606, elipse75);
+   //SetSpriteOverride(607, elipse75);
+   
+   
+   
+   f = GetAttachment("smklt25.png");
+   smklt25 = LoadSprite(f, 12, 0);
+   SetSpriteOverride(609, smklt25);
+   
+   f = GetAttachment("smklt50.png");
+   smklt50 = LoadSprite(f, 12, 0);
+   SetSpriteOverride(610, smklt50);
+   
+   f = GetAttachment("smklt75.png");
+   smklt75 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(611, smklt75);
+   
+   //f = GetAttachment("smklt100.png");
+   //smklt100 = LoadSprite(f, 12, 0);
+   //SetSpriteOverride(612, smklt100);
+   
+   
+   
+   f = GetAttachment("smkdrk20.png");
+   smkdrk20 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(613, smkdrk20);
+   
+   f = GetAttachment("smkdrk30.png");
+   smkdrk30 = LoadSprite(f, 12, 0);
+   SetSpriteOverride(614, smkdrk30);
+   
+   f = GetAttachment("smkdrk40.png");
+   smkdrk40 = LoadSprite(f, 12, 0);
+   SetSpriteOverride(615, smkdrk40);
+   
+}

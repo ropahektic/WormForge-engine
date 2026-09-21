@@ -1,0 +1,12 @@
+//=============================================================================
+//  Utils
+//=============================================================================
+// Version: alpha.3;
+// Author: Danylo;
+//-----------------------------------------------------------------------------
+// Description:
+//   Lib contains a lot of borrowed functions from utils.pxl and other libs.
+// I have no rights for them. I've just rewritten them in my own way to have 
+// more pleasure in using. I addition, lib contains some functions that I've 
+// written by myself. Descriptions will be included inside each script. 
+//-----------------------------------------------------------------------------

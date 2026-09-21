@@ -1,0 +1,56 @@
+/* 
+
+Made by: DannyB, January 2023
+
+*/
+
+// This script makes the screen shake when an explosion happens (gunshots excluded).
+
+int explosive_power;
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{
+     // default explosive power
+     if(type == M_TURNBEGIN)
+     {
+          explosive_power = 50;     
+     }
+  
+     super;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{        
+     // create the shaking effect
+     if(type == M_EXPLOSION)
+     {
+          GS->ShakeX = explosive_power * 0.12;  
+     }
+     
+     super;
+}
+
+override void CWorm::SetState(EObjState state)
+{
+     // worm death explosive power
+     if(state == WS_DEATH)
+     {
+          explosive_power = 30;
+     }
+   
+     super;
+}
+
+override void CWorm::FireFinal(CWeapon* weap, CShootDesc* desc)
+{
+     // weapon explosive power
+     if(weap->NameA != GetWeaponByName("Armageddon")) // Armageddon causes explosion damage, but already has shake effect
+     {
+          if(weap->launch.explosion.damage != 0)
+          {
+               explosive_power = weap->launch.explosion.damage;
+          }
+     }
+  
+     super;
+}

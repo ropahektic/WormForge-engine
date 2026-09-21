@@ -1,0 +1,56 @@
+require utils, utils_steps;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    plopped = false;
+    swimsuit = false;
+    fastaim = false;
+    super;
+}
+
+bool mfix;
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (ObjState != WS_JETPACK && ghostjet)
+        {
+            if (swimsuit) ColGroup = 134342;
+            else ColGroup = 134342 + 4194304;
+            
+            ghostjet = false;
+            mfix = false;
+        }
+    }  
+super;
+}
+
+override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (mfix)
+        {
+            if (PosX == 0 && PosY == -1024)    //prevent the remote spawn
+            {
+                Free(true);
+            }
+        }
+    }
+    
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Ghost Jet Pack"))
+    {
+        if (!swimsuit) ColGroup = 4194304;
+        else ColGroup = 0;
+        ghostjet = true;
+        mfix = true;
+    }
+
+    super;
+}

@@ -1,0 +1,12 @@
+CSprite* bombbt;
+
+void bomb_omb_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+
+   f = GetAttachment("bombbt.png");
+   bombbt = LoadSprite(f, 7, 0);
+
+   SetSpriteOverride(461, bombbt);
+}

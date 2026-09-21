@@ -1,0 +1,77 @@
+
+bool delayF4;
+bool delayF7;
+
+override void CWorm::Message(CObject* obj,EMType Type,int MSize,CMessageData* MData)
+{
+local w = GetCurrentWorm();
+
+if(w != NullObj)
+	{
+	local team_number = GetTeamNumber(w->WormTeam);
+
+	local fp = GetWeaponByName("Fire Punch");
+    local db = GetWeaponByName("Dragon Ball");
+    local prd = GetWeaponByName("Prod");
+
+    local bt = GetWeaponByName("BlowTorch");
+    local pd = GetWeaponByName("Pneumatic Drill");
+    local grd = GetWeaponByName("Girder");
+
+    local tp = GetWeaponByName("Super Tele");
+
+	if(Type == M_TURNEND || Root->Timer == 0)
+	    {
+		GS->Info.SetWeaponDelay(team_number, fp->GetWeaponIndex(), fp->GetPageIndex(), 0 );
+	    GS->Info.SetWeaponDelay(team_number, db->GetWeaponIndex(), db->GetPageIndex(), 0 );
+	    GS->Info.SetWeaponDelay(team_number, prd->GetWeaponIndex(), prd->GetPageIndex(), 0 );
+
+	    GS->Info.SetWeaponDelay(team_number, bt->GetWeaponIndex(), bt->GetPageIndex(), 0 );
+	    GS->Info.SetWeaponDelay(team_number, pd->GetWeaponIndex(), pd->GetPageIndex(), 0 );
+	    GS->Info.SetWeaponDelay(team_number, grd->GetWeaponIndex(), grd->GetPageIndex(), 0 );
+
+	    GS->Info.SetWeaponDelay(team_number, tp->GetWeaponIndex(), tp->GetPageIndex(), 0 );
+		}
+
+    if(Type == M_FRAME)
+	    {
+		if(delayF4 == true)
+	    		{
+	    		GS->Info.SetWeaponDelay(team_number, fp->GetWeaponIndex(), fp->GetPageIndex(), -1 );
+	        	GS->Info.SetWeaponDelay(team_number, db->GetWeaponIndex(), db->GetPageIndex(), -1 );
+	        	GS->Info.SetWeaponDelay(team_number, prd->GetWeaponIndex(), prd->GetPageIndex(), -1 );
+	        	GS->Info.SetWeaponDelay(team_number, tp->GetWeaponIndex(), tp->GetPageIndex(), -1 );
+	        	delayF4 = false;
+				}
+
+    	if(delayF7 == true)
+    			{
+    			GS->Info.SetWeaponDelay(team_number, bt->GetWeaponIndex(), bt->GetPageIndex(), -1 );
+	        	GS->Info.SetWeaponDelay(team_number, pd->GetWeaponIndex(), pd->GetPageIndex(), -1 );
+	        	GS->Info.SetWeaponDelay(team_number, grd->GetWeaponIndex(), grd->GetPageIndex(), -1 );
+	        	GS->Info.SetWeaponDelay(team_number, tp->GetWeaponIndex(), tp->GetPageIndex(), -1 );
+	        	delayF7 = false;
+    			}
+    	}
+	}
+super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (Weap->CheckName("Fire Punch") || Weap->CheckName("Dragon Ball") || Weap->CheckName("Prod"))
+			{
+	        delayF4 = true;
+  	     	}
+
+    if (Weap->CheckName("BlowTorch") || Weap->CheckName("Pneumatic Drill") || Weap->CheckName("Girder"))
+			{
+	        delayF7 = true;
+  	     	}
+
+    if (Weap->CheckName("Super Tele")){Weap->EndsTurn = true;}
+    if (!Weap->CheckName("Super Tele")){Weap->EndsTurn = false;}
+
+	super;
+}

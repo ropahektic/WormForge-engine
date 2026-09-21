@@ -1,0 +1,60 @@
+int ReadMemoryByte(int MemoryAddress)
+{
+    return ReadMemoryInt(MemoryAddress) % 256;      
+}
+
+int ReadMemoryWord(int MemoryAddress)
+{
+    return ReadMemoryInt(MemoryAddress) % 65536;      
+}
+
+int ReadMemoryInt(int MemoryAddress)
+{
+    CMessageData* slavedata = PCMessageData_intP(MemoryAddress);
+    return slavedata->params[0];       
+}
+   
+void WriteMemoryBool(int MemoryAddress, bool NewValue)
+{
+    CMessageData* slavedata = PCMessageData_intP(MemoryAddress);
+    slavedata->params[0] = NewValue;       
+}
+
+void WriteMemoryInt(int MemoryAddress, int NewValue)
+{
+    CMessageData* slavedata = PCMessageData_intP(MemoryAddress);
+    slavedata->params[0] = NewValue;       
+}
+    
+void WriteMemoryWord(int MemoryAddress, int NewValue)
+{
+    if (NewValue > 65535) NewValue = 65535;
+    else if (NewValue < -65535) NewValue = 1;
+    int oldval = ReadMemoryInt(MemoryAddress+2);
+    WriteMemoryInt(MemoryAddress, NewValue);
+    WriteMemoryInt(MemoryAddress+2, oldval);   
+}
+      
+void WriteMemoryByte(int MemoryAddress, int NewValue)
+{
+    if (NewValue > 255) NewValue = 255;
+    else if (NewValue < -255) NewValue = 1;
+    int oldval = ReadMemoryInt(MemoryAddress+1);
+    WriteMemoryInt(MemoryAddress, NewValue);
+    WriteMemoryInt(MemoryAddress+1, oldval);   
+}
+                       
+void FillMemoryRange(int MemoryAddress, int Count, int Value)
+{
+    if (Count >= 1)
+    {
+        for (int i = MemoryAddress; i < MemoryAddress+Count; i++)
+            WriteMemoryByte(i, Value);
+    }
+    else if (Count < 0)
+    {
+        for (int i = MemoryAddress; i > MemoryAddress+Count; i--)
+            WriteMemoryByte(i, Value); 
+    }       
+}
+               

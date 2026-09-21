@@ -1,0 +1,25 @@
+require utils;
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Shotgun Berserker"))
+    {
+        super;
+        super;
+        super;
+        super;                           // 5 shots.
+    }
+    if (Weap->CheckName("Power Shotgun"))
+    {
+        super;
+        super;
+        super;
+        super;
+        super;
+        super;
+        super;
+        super;
+        super;                           // 10 shots.
+    }
+    super;
+}

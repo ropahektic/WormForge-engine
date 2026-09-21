@@ -1,0 +1,12 @@
+CSprite* magics_tr;
+
+void sprite_254::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("magicst.png");
+    magics_tr = LoadSprite(f, 8, 0);
+    //f = GetAttachment("magicst_old.png");
+    //magicst = LoadSprite(f, 8, 0);
+
+    SetSpriteOverride(254, magics_tr);
+}

@@ -1,0 +1,42 @@
+
+require utils;
+
+$editor
+
+ $object SpawnPoint
+  $origin -13 -15
+  $image "spawn_point.png"
+  $func DoSpawnPoint
+  $radius 16
+  $param TeamNumber int 0
+ $object_end
+
+$end
+
+void DoSpawnPoint(CEditorObject* obj)
+{
+  x = obj->PosX;
+  y = obj->PosY;
+  
+  team = obj->GetInt("TeamNumber");
+  if (team < 0) team = 0; if (team > 6) team = 6;
+
+  generateTColorInd();
+
+  for (j = 1; j < 7; j++) //team
+  {
+    for (i = 1; i < 9; i++)     //worm
+    {
+      if (team == 0 || (g_tColorInd[GetTeamColor(j)]) == team)
+      {
+        local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+        if (Worm)
+        {
+          Worm->PosX = x;
+          Worm->PosY = y;
+          x = x + 2;
+        };
+      };
+    };
+  };
+};

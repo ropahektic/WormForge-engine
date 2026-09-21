@@ -1,0 +1,1551 @@
+require p_sprite_builder, pxparticles, utils;
+
+//--------------------------PARTICLE-EFFECTS------------------------------------
+//------GRAVLER-----------------------------------------------------------------
+void CMissile::tfx_grvlr()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(115);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.23,0.23);
+p0->SetEndSize(0.08,0.08);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(255,255,255);
+p1->SetStartAlpha(115);
+p1->SetEndAlpha(0);
+p1->SetLifeTime(8);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.23,0.23);
+p1->SetEndSize(0.08,0.08);
+}
+}
+//------HOMING-MORTAR-----------------------------------------------------------
+void CMissile::tfx_homem()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(0,0,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(7);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.30,0.30);
+p0->SetEndSize(0.08,0.08);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(0,0,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(0);
+p1->SetLifeTime(7);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.30,0.30);
+p1->SetEndSize(0.08,0.08);
+}
+}
+//------PETROL-ROCKET-----------------------------------------------------------
+void CMissile::tfx_ptrlr()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(255,0,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(80);
+p0->SetLifeTime(7);
+p0->SetRandomVelocity(0,1.40);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.25,0.25);
+p0->SetEndSize(0.05,0.05);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(255,255,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(80);
+p1->SetLifeTime(7);
+p1->SetRandomVelocity(0,1.40);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.25,0.25);
+p1->SetEndSize(0.05,0.05);
+}
+}
+//------BLASTER-WORM------------------------------------------------------------
+void CMissile::tfx_blast()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(224,167,166);
+p0->SetEndColor(224,167,166);
+p0->SetStartAlpha(75);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(10);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.23,0.23);
+p0->SetEndSize(0.08,0.08);
+}
+}
+//------PIGEON-CANNON-----------------------------------------------------------
+void CMissile::tfx_pignc()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(140,145,200);
+p0->SetEndColor(175,110,180);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.21,0.21);
+p0->SetEndSize(0.08,0.08);
+}
+}
+//------S.M.A.R.T-BOMB----------------------------------------------------------
+void CMissile::tfx_smrtb()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(255,0,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(30);
+p0->SetLifeTime(7.5);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.22,0.22);
+p0->SetEndSize(0.06,0.06);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(255,0,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(30);
+p1->SetLifeTime(7.5);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.22,0.22);
+p1->SetEndSize(0.06,0.06);
+
+p2 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p2->SetBlendMode(1);
+p2->SetStartColor(0,0,0);
+p2->SetEndColor(255,0,0);
+p2->SetStartAlpha(255);
+p2->SetEndAlpha(30);
+p2->SetLifeTime(7.5);
+p2->SetRandomVelocity(0,0);
+p2->SetMotionRandomness(0);
+p2->SetAirResistance(1.0);
+p2->SetStartSize(0.22,0.22);
+p2->SetEndSize(0.06,0.06);
+}
+}
+//------CLOUD-BUSTER------------------------------------------------------------
+void CMissile::tfx_cloud()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,255,255);
+p0->SetEndColor(50,50,255);
+p0->SetStartAlpha(200);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(10);
+p0->SetRandomVelocity(0,4);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.25,0.25);
+p0->SetEndSize(0.04,0.04);
+}
+}                                                                   // RIP W.R.
+//------THUMPER-NADE------------------------------------------------------------
+void CMissile::tfx_thump()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,255,20);
+p0->SetEndColor(0,255,100);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(7);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.25,0.25);
+p0->SetEndSize(0.08,0.08);
+}
+}
+//------ION-BOMB----------------------------------------------------------------
+void CMissile::tfx_ionbb()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(RandomInt(0,255),RandomInt(0,255),RandomInt(0,255));
+p0->SetEndColor(RandomInt(0,255),RandomInt(0,255),RandomInt(0,255));
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(50);
+p0->SetLifeTime(14);
+p0->SetRandomVelocity(0,3);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.40,0.40);
+p0->SetEndSize(0.08,0.08);
+}
+}
+//------MAGIC-SLAMMER-----------------------------------------------------------
+void CMissile::tfx_magca()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,150,255);
+p0->SetEndColor(255,0,230);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(7.5);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.35,0.35);
+p0->SetEndSize(0.08,0.08);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,150,255);
+p1->SetEndColor(255,0,230);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(0);
+p1->SetLifeTime(7.5);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.35,0.35);
+p1->SetEndSize(0.08,0.08);
+}
+}
+//------SUPER-MAGIC-SLAMMER-----------------------------------------------------
+void CMissile::tfx_magcb()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(100,0,110);
+p0->SetEndColor(0,40,145);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(7.5);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.35,0.35);
+p0->SetEndSize(0.08,0.08);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(100,0,110);
+p1->SetEndColor(0,40,145);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(0);
+p1->SetLifeTime(7.5);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.35,0.35);
+p1->SetEndSize(0.08,0.08);
+}
+}
+//------GRAVEDIGGER-------------------------------------------------------------
+void CMissile::tfx_grvea()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(110,255,0);
+p0->SetEndColor(110,255,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(9);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.35,0.35);
+p0->SetEndSize(0.08,0.08);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(110,255,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(75);
+p1->SetLifeTime(9);
+p1->SetRandomVelocity(0,2);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(0.3);
+p1->SetStartSize(0.25,0.25);
+p1->SetEndSize(0.01,0.01);
+
+p2 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p2->SetBlendMode(1);
+p2->SetStartColor(0,0,0);
+p2->SetEndColor(110,255,0);
+p2->SetStartAlpha(255);
+p2->SetEndAlpha(75);
+p2->SetLifeTime(9);
+p2->SetRandomVelocity(0,2);
+p2->SetMotionRandomness(0);
+p2->SetAirResistance(0.3);
+p2->SetStartSize(0.25,0.25);
+p2->SetEndSize(0.01,0.01);
+}
+}
+//------SUPER-GRAVEDIGGER-------------------------------------------------------
+void CMissile::tfx_grveb()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,0,0);
+p0->SetEndColor(255,255,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(9);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.35,0.35);
+p0->SetEndSize(0.08,0.08);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(255,0,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(75);
+p1->SetLifeTime(9);
+p1->SetRandomVelocity(0,2);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(0.3);
+p1->SetStartSize(0.25,0.25);
+p1->SetEndSize(0.01,0.01);
+
+p2 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p2->SetBlendMode(1);
+p2->SetStartColor(0,0,0);
+p2->SetEndColor(255,255,0);
+p2->SetStartAlpha(255);
+p2->SetEndAlpha(75);
+p2->SetLifeTime(9);
+p2->SetRandomVelocity(0,2);
+p2->SetMotionRandomness(0);
+p2->SetAirResistance(0.3);
+p2->SetStartSize(0.25,0.25);
+p2->SetEndSize(0.01,0.01);
+}
+}
+//------CROSSBOW----------------------------------------------------------------
+void CMissile::tfx_crbow()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(0,125,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(5.5);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.125,0.125);
+p0->SetEndSize(0.01,0.01);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(0,125,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(100);
+p1->SetLifeTime(5.5);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.125,0.125);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------EXPLOSIVE-ARROW---------------------------------------------------------
+void CMissile::tfx_expla()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(255,0,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(120);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.125,0.125);
+p0->SetEndSize(0.01,0.01);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(255,0,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(120);
+p1->SetLifeTime(8);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.125,0.125);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------WINDY-ARROW-------------------------------------------------------------
+void CMissile::tfx_winda()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(0,125,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(7);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.15,0.15);
+p0->SetEndSize(0.01,0.01);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(0,125,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(100);
+p1->SetLifeTime(7);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.125,0.125);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------REBOUNDER---------------------------------------------------------------
+void CMissile::tfx_rebnd()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(0,255,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.125,0.125);
+p0->SetEndSize(0.01,0.01);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(0,255,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(100);
+p1->SetLifeTime(8);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.125,0.125);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------HOMING-ARROW------------------------------------------------------------
+void CMissile::tfx_homea()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(0,255,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.125,0.125);
+p0->SetEndSize(0.01,0.01);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(0,255,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(100);
+p1->SetLifeTime(8);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.125,0.125);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------MULTI-BOLT--------------------------------------------------------------
+void CMissile::tfx_multi()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(0,255,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0.5,1);
+p0->SetMotionRandomness(0.1);
+p0->SetAirResistance(0.5);
+p0->SetStartSize(0.165,0.165);
+p0->SetEndSize(0.01,0.01);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(255,0,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(255);
+p1->SetLifeTime(8);
+p1->SetRandomVelocity(0.5,1);
+p1->SetMotionRandomness(0.1);
+p1->SetAirResistance(0.5);
+p1->SetStartSize(0.165,0.165);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------WILDFIRE-BOLT-----------------------------------------------------------
+void CMissile::tfx_fbolt()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(0,255,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.125,0.125);
+p0->SetEndSize(0.01,0.01);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(0,255,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(100);
+p1->SetLifeTime(8);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.125,0.125);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------SHADOW-BOLT-------------------------------------------------------------
+void CMissile::tfx_shadb()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(120,0,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.125,0.125);
+p0->SetEndSize(0.01,0.01);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(120,0,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(100);
+p1->SetLifeTime(8);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.125,0.125);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------TELE-ARROW--------------------------------------------------------------
+void CMissile::tfx_telea()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,255);
+p0->SetEndColor(255,255,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(14);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.17,0.17);
+p0->SetEndSize(0.08,0.08);
+}
+}
+//------SNOW-BALL---------------------------------------------------------------
+void CMissile::tfx_snowb()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,255,255);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(7);
+p0->SetRandomVelocity(0,2);
+p0->SetMotionRandomness(0.5);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.10,0.10);
+p0->SetEndSize(0.02,0.02);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(255,255,255);
+p1->SetEndColor(255,255,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(0);
+p1->SetLifeTime(7);
+p1->SetRandomVelocity(0,2);
+p1->SetMotionRandomness(0.5);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.10,0.10);
+p1->SetEndSize(0.02,0.02);
+
+p2 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p2->SetBlendMode(1);
+p2->SetStartColor(255,255,255);
+p2->SetEndColor(255,255,255);
+p2->SetStartAlpha(255);
+p2->SetEndAlpha(0);
+p2->SetLifeTime(7);
+p2->SetRandomVelocity(0,2);
+p2->SetMotionRandomness(0.5);
+p2->SetAirResistance(1.0);
+p2->SetStartSize(0.10,0.10);
+p2->SetEndSize(0.02,0.02);
+}
+}
+//------SLINGSHOT---------------------------------------------------------------
+void CMissile::tfx_stone()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,90,255);
+p0->SetEndColor(0,90,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(6);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.10,0.10);
+p0->SetEndSize(0.01,0.01);
+}
+}
+//------JAVELIN-----------------------------------------------------------------
+void CMissile::tfx_javln()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(0,220,110);
+p0->SetStartAlpha(180);
+p0->SetEndAlpha(30);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.30,0.30);
+p0->SetEndSize(0.08,0.08);
+}
+}
+//------NINJA-STAR--------------------------------------------------------------
+void CMissile::tfx_ninja()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,255,100);
+p0->SetEndColor(0,100,255);
+p0->SetStartAlpha(175);
+p0->SetEndAlpha(75);
+p0->SetLifeTime(6);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.08,0.08);
+p0->SetEndSize(0.01,0.01);
+}
+}
+//------STAFF-OF-JOLTING--------------------------------------------------------
+void CMissile::tfx_staff()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,255);
+p0->SetEndColor(0,255,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(10);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.30,0.30);
+p0->SetEndSize(0.08,0.08);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(255,255,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(50);
+p1->SetLifeTime(9);
+p1->SetRandomVelocity(0,1.75);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(0.3);
+p1->SetStartSize(0.20,0.20);
+p1->SetEndSize(0.02,0.02);
+
+p2 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p2->SetBlendMode(1);
+p2->SetStartColor(0,0,0);
+p2->SetEndColor(255,255,255);
+p2->SetStartAlpha(255);
+p2->SetEndAlpha(50);
+p2->SetLifeTime(9);
+p2->SetRandomVelocity(0,1.75);
+p2->SetMotionRandomness(0);
+p2->SetAirResistance(0.3);
+p2->SetStartSize(0.20,0.20);
+p2->SetEndSize(0.02,0.02);
+}
+}
+//------FIRE-ORBS---------------------------------------------------------------
+void CMissile::tfx_forbs()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,RandomInt(125,255),0);
+p0->SetEndColor(255,0,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(10);
+p0->SetRandomVelocity(0,2);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.16,0.16);
+p0->SetEndSize(0.08,0.08);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(255,RandomInt(125,255),0);
+p1->SetEndColor(255,0,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(0);
+p1->SetLifeTime(10);
+p1->SetRandomVelocity(0,2);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.16,0.16);
+p1->SetEndSize(0.08,0.08);
+}
+}
+//------ETHER-BALLOONS----------------------------------------------------------
+void CMissile::tfx_ether()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,255,255);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(150);
+p0->SetEndAlpha(60);
+p0->SetLifeTime(30);
+p0->SetRandomVelocity(0,1);
+p0->SetMotionRandomness(1);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.08,0.08);
+p0->SetEndSize(0.02,0.02);
+p0->SetWindFactor(0.0);
+}
+}
+//------GIRDER-LAUNCHER---------------------------------------------------------
+void CMissile::tfx_girdl()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,0,0);
+p0->SetEndColor(255,0,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(11);
+p0->SetRandomVelocity(0,1);
+p0->SetMotionRandomness(1);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.10,0.10);
+p0->SetEndSize(0.03,0.03);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(255,0,0);
+p1->SetEndColor(255,0,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(100);
+p1->SetLifeTime(11);
+p1->SetRandomVelocity(0,1);
+p1->SetMotionRandomness(1);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.10,0.10);
+p1->SetEndSize(0.03,0.03);
+
+p2 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p2->SetBlendMode(1);
+p2->SetStartColor(255,220,220);
+p2->SetEndColor(255,255,255);
+p2->SetStartAlpha(255);
+p2->SetEndAlpha(100);
+p2->SetLifeTime(11);
+p2->SetRandomVelocity(0,1);
+p2->SetMotionRandomness(1);
+p2->SetAirResistance(1.0);
+p2->SetStartSize(0.10,0.10);
+p2->SetEndSize(0.03,0.03);
+}
+}
+//------THROW-DYNAMITE----------------------------------------------------------
+void CMissile::tfx_tdyna()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetEndColor(255,255,255);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(50);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(30);
+p0->SetRandomVelocity(0,1);
+p0->SetMotionRandomness(1);
+p0->SetAirResistance(0.5);
+p0->SetStartSize(0.02,0.02);
+p0->SetEndSize(0.02,0.02);
+p0->GravityFactor(-2.0);
+p0->SetWindFactor(0.30);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetEndColor(255,255,0);
+p1->SetEndColor(255,255,0);
+p1->SetStartAlpha(275);
+p1->SetEndAlpha(0);
+p1->SetLifeTime(2);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.65,0.65);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------THROWN-MING-VASE--------------------------------------------------------
+void CMissile::tfx_tming()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(250,215,0);
+p0->SetEndColor(250,85,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(9);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.35,0.35);
+p0->SetEndSize(0.08,0.08);
+}
+}
+//------ASCENDER----------------------------------------------------------------
+void CMissile::tfx_ascdr()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(125);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(1.5,4);
+p0->SetMotionRandomness(2);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.05,0.05);
+p0->SetEndSize(0.02,0.02);
+p0->GravityFactor(10.0);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(255,255,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(125);
+p1->SetLifeTime(8);
+p1->SetRandomVelocity(1.5,4);
+p1->SetMotionRandomness(2);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.05,0.05);
+p1->SetEndSize(0.02,0.02);
+p1->GravityFactor(10.0);
+
+p2 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p2->SetBlendMode(1);
+p2->SetStartColor(0,0,0);
+p2->SetEndColor(255,255,255);
+p2->SetStartAlpha(255);
+p2->SetEndAlpha(125);
+p2->SetLifeTime(8);
+p2->SetRandomVelocity(1.5,4);
+p2->SetMotionRandomness(2);
+p2->SetAirResistance(1.0);
+p2->SetStartSize(0.05,0.05);
+p2->SetEndSize(0.02,0.02);
+p2->GravityFactor(10.0);
+}
+}
+//------DESCENDER---------------------------------------------------------------
+void CMissile::tfx_dscdr()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,0,0);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(125);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(1.5,4);
+p0->SetMotionRandomness(2);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.05,0.05);
+p0->SetEndSize(0.02,0.02);
+p0->GravityFactor(-10.0);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,0);
+p1->SetEndColor(255,255,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(125);
+p1->SetLifeTime(8);
+p1->SetRandomVelocity(1.5,4);
+p1->SetMotionRandomness(2);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.05,0.05);
+p1->SetEndSize(0.02,0.02);
+p1->GravityFactor(-10.0);
+
+p2 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p2->SetBlendMode(1);
+p2->SetStartColor(0,0,0);
+p2->SetEndColor(255,255,255);
+p2->SetStartAlpha(255);
+p2->SetEndAlpha(125);
+p2->SetLifeTime(8);
+p2->SetRandomVelocity(1.5,4);
+p2->SetMotionRandomness(2);
+p2->SetAirResistance(1.0);
+p2->SetStartSize(0.05,0.05);
+p2->SetEndSize(0.02,0.02);
+p2->GravityFactor(-10.0);
+}
+}
+//------REMOTE-ROLLER-----------------------------------------------------------
+void CMissile::tfx_rolla()
+{            
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(0,255,0);
+p0->SetEndColor(0,255,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(17);
+p0->SetRandomVelocity(0,2);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.18,0.18);
+p0->SetEndSize(0.02,0.02);
+p0->GravityFactor(1.1);
+}
+}
+//------SUPER-REMOTE-ROLLER-----------------------------------------------------
+void CMissile::tfx_rollb()
+{            
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,0,0);
+p0->SetEndColor(255,0,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(20);
+p0->SetRandomVelocity(0,2);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.25,0.25);
+p0->SetEndSize(0.04,0.04);
+p0->GravityFactor(1.1);
+}
+}
+//------SKIPPER-----------------------------------------------------------------
+void CMissile::tfx_skipr()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(225,170,165);
+p0->SetEndColor(250,245,45);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(150);
+p0->SetLifeTime(18);
+p0->SetRandomVelocity(0,2);
+p0->SetMotionRandomness(2);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.04,0.04);
+p0->SetEndSize(0.015,0.015);
+p0->GravityFactor(-1.0);
+}
+}
+//------POGO-SHEEP--------------------------------------------------------------
+void CMissile::tfx_pogos()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,255,255);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(0);
+p0->SetLifeTime(25);
+p0->SetRandomVelocity(2,5);
+p0->SetMotionRandomness(2);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.06,0.06);
+p0->SetEndSize(0.01,0.01);
+p0->GravityFactor(0.0);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(255,255,255);
+p1->SetEndColor(255,255,255);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(0);
+p1->SetLifeTime(25);
+p1->SetRandomVelocity(2,5);
+p1->SetMotionRandomness(2);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.06,0.06);
+p1->SetEndSize(0.01,0.01);
+p1->GravityFactor(0.0);
+}
+}
+//------BATTERING-RAM-----------------------------------------------------------
+void CMissile::tfx_btram()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(250,215,30);
+p0->SetEndColor(255,0,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(15);
+p0->SetRandomVelocity(0,2);
+p0->SetMotionRandomness(2);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.06,0.06);
+p0->SetEndSize(0.01,0.01);
+p0->GravityFactor(-1.25);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(250,215,30);
+p1->SetEndColor(255,0,0);
+p1->SetStartAlpha(255);
+p1->SetEndAlpha(100);
+p1->SetLifeTime(15);
+p1->SetRandomVelocity(0,2);
+p1->SetMotionRandomness(2);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.06,0.06);
+p1->SetEndSize(0.01,0.01);
+p1->GravityFactor(-1.00);
+}
+}
+//------CRAZY-CHICKEN-----------------------------------------------------------
+void CMissile::tfx_cchkn()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,255,0);
+p0->SetEndColor(255,255,0);
+p0->SetStartAlpha(60);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(18);
+p0->SetRandomVelocity(0,2);
+p0->SetMotionRandomness(2);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.045,0.045);
+p0->SetEndSize(0.02,0.02);
+p0->GravityFactor(-1.50);
+}
+}
+//------DRILLING-CREW-----------------------------------------------------------
+void CMissile::tfx_drill()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,220,220);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(160);
+p0->SetEndAlpha(40);
+p0->SetLifeTime(20);
+p0->SetRandomVelocity(0,2);
+p0->SetMotionRandomness(1);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.16,0.16);
+p0->SetEndSize(0.02,0.02);
+p0->GravityFactor(-3.00);
+}
+}
+//------SQUAWKS-----------------------------------------------------------------
+void CMissile::tfx_sqwks()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(50,160,10);
+p0->SetEndColor(50,160,10);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(15);
+p0->SetRandomVelocity(0,4);
+p0->SetMotionRandomness(2);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.06,0.06);
+p0->SetEndSize(0.02,0.02);
+p0->GravityFactor(0.0);
+}
+}
+//------SUPER-WORM--------------------------------------------------------------
+void CMissile::tfx_sworm()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(tazer_lightningGlowSprite->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(225,0,0);
+p0->SetEndColor(225,0,0);
+p0->SetStartAlpha(200);
+p0->SetEndAlpha(100);
+p0->SetLifeTime(5);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.60,0.60);
+p0->SetEndSize(0.01,0.01);
+
+p1 = new PxParticle(tazer_lightningGlowSprite->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(0,0,255);
+p1->SetEndColor(0,0,255);
+p1->SetStartAlpha(200);
+p1->SetEndAlpha(100);
+p1->SetLifeTime(5);
+p1->SetRandomVelocity(0,0);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.35,0.35);
+p1->SetEndSize(0.01,0.01);
+}
+}
+//------FIRE-PELLET-------------------------------------------------------------
+void CMissile::trailpfx_frplt()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,RandomInt(175,255),0);
+p0->SetEndColor(255,0,0);
+p0->SetStartAlpha(220);
+p0->SetEndAlpha(120);
+p0->SetLifeTime(6.5);
+p0->SetRandomVelocity(0,1.8);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.10,0.10);
+p0->SetEndSize(0.02,0.02);
+
+p1 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p1->SetBlendMode(1);
+p1->SetStartColor(255,RandomInt(175,255),0);
+p1->SetEndColor(255,0,0);
+p1->SetStartAlpha(220);
+p1->SetEndAlpha(120);
+p1->SetLifeTime(6.5);
+p1->SetRandomVelocity(0,1.8);
+p1->SetMotionRandomness(0);
+p1->SetAirResistance(1.0);
+p1->SetStartSize(0.10,0.10);
+p1->SetEndSize(0.02,0.02);
+}
+}
+//------TORCH-FLAME-------------------------------------------------------------
+void CMissile::tfx_torch()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow_tr->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,50,0);
+p0->SetEndColor(255,RandomInt(125,255),0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(4);
+p0->SetRandomVelocity(0,1);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.11,0.11);
+p0->SetEndSize(0.01,0.01);
+}
+}
+//-----------------------AIMING-PARTICLE-EFFECTS--------------------------------
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_FRAME) {
+if (CurWeapon->CheckName("Mini-Torch")) {
+if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+DoAnimParticleEffects(
+259,     //  SPRITE
+1,       //  RADIUS
+20,      //  RELX
+15,      //  RELY
+45,      //  LIFETIME
+0.01,    //  SPEED
+1.0,     //  VELO.MIN
+1.5,     //  VELO.MAX
+255,     //  START.ALPHA
+255,     //  END.ALPHA
+0,       //  WIND
+0.22,    //  START.SIZE
+0.01,    //  END.SIZE
+0.00,    //  ANGLE.MIN
+0.00,    //  ANGLE.MAX
+0.0,     //  RANDOMNESS
+-2.5);   //  GRAVITY
+}
+if (CurWeapon->CheckName("Staff of Jolting")) {
+if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+DoAnimParticleEffects(
+256,     //  SPRITE
+1,       //  RADIUS
+22,      //  RELX
+20,      //  RELY
+50,      //  LIFETIME
+0.02,    //  SPEED
+1.0,     //  VELO.MIN
+3.0,     //  VELO.MAX
+255,     //  START.ALPHA
+255,     //  END.ALPHA
+0,       //  WIND
+0.33,    //  START.SIZE
+0.01,    //  END.SIZE
+0.00,    //  ANGLE.MIN
+0.00,    //  ANGLE.MAX
+0.0,     //  RANDOMNESS
+-3.0);   //  GRAVITY
+}
+}
+}
+//------------------------------------------------------------------------------
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+{
+if(weap->CheckName("Gravler")
+|| weap->CheckName("Gravler FD")
+|| weap->CheckName("Gravler FD "))
+{tfx_grvlr();}
+
+if(weap->CheckName("Homing Mortar")
+|| weap->CheckName("Homing Mortar "))
+{tfx_homem();}
+
+if(weap->CheckName("Petrol Rocket")
+|| weap->CheckName("Petrol Rocket "))
+{tfx_ptrlr();}
+
+if(weap->CheckName("Blaster Worm")
+|| weap->CheckName("Blaster Worm "))
+{tfx_blast();}
+
+if(weap->CheckName("Pigeon Cannon")
+|| weap->CheckName("Pigeon Cannon "))
+{tfx_pignc();}
+
+if(weap->CheckName("S.M.A.R.T Bomb")
+|| weap->CheckName("S.M.A.R.T Bomb ")
+|| weap->CheckName("S.M.A.R.T.E.R Bomb")
+|| weap->CheckName("S.M.A.R.T.E.R Bomb "))
+{tfx_smrtb();}
+
+if(weap->CheckName("Cloud Buster"))
+{tfx_cloud();}
+
+if(weap->CheckName("Thumper Nade"))
+{tfx_thump();}
+
+if(weap->CheckName("Ion Bomb")
+|| weap->CheckName("Super Ion Bomb"))
+{tfx_ionbb();}
+
+if(weap->CheckName("Magic Slammer"))
+{tfx_magca();}
+
+if(weap->CheckName("Super Magic Slammer"))
+{tfx_magcb();}
+
+if(weap->CheckName("Gravedigger")
+|| weap->CheckName("Gravedigger "))
+{tfx_grvea();}
+
+if(weap->CheckName("Super Gravedigger")
+|| weap->CheckName("Super Gravedigger "))
+{tfx_grveb();}
+
+if(weap->CheckName("Crossbow")
+|| weap->CheckName("Crossbow "))
+{tfx_crbow();}
+
+if(weap->CheckName("Explosive Arrow")
+|| weap->CheckName("Explosive Arrow "))
+{tfx_expla();}
+
+if(weap->CheckName("Windy Arrow")
+|| weap->CheckName("Windy Arrow "))
+{tfx_winda();}
+
+if(weap->CheckName("Rebounder")
+|| weap->CheckName("Rebounder "))
+{tfx_rebnd();}
+
+if(weap->CheckName("Homing Arrow")
+|| weap->CheckName("Homing Arrow "))
+{tfx_homea();}
+
+if(weap->CheckName("Multi-Bolt")
+|| weap->CheckName("Multi-Bolt "))
+{tfx_multi();}
+
+if(weap->CheckName("Wildfire-Bolt") 
+|| weap->CheckName("Wildfire-Bolt "))
+{tfx_fbolt();}
+
+if(weap->CheckName("Shadow-Bolt")
+|| weap->CheckName("Shadow-Bolt "))
+{tfx_shadb();}
+
+if(weap->CheckName("Tele Arrow")
+|| weap->CheckName("Tele Arrow "))
+{tfx_telea();}
+
+if(weap->CheckName("Snow Ball"))
+{tfx_snowb();}
+
+if(weap->CheckName("Stone Blaster")
+|| weap->CheckName("SlingShot"))
+{tfx_stone();}
+
+if(weap->CheckName("Javelin"))
+{tfx_javln();}
+
+if(weap->CheckName("Ninja Star"))
+{tfx_ninja();}
+
+if(weap->CheckName("Staff of Jolting"))
+{tfx_staff();}
+
+if(weap->CheckName("Fire Orbs"))
+{tfx_forbs();}
+
+if(weap->CheckName("Ether Balloons"))
+{tfx_ether();}
+
+if(weap->CheckName("Girder Launcher"))
+{tfx_girdl();}
+
+if(weap->CheckName("Thrown Dynamite"))
+{tfx_tdyna();}
+
+if(weap->CheckName("Thrown Ming Vase"))
+{tfx_tming();}
+
+if(weap->CheckName("Ascender")
+|| weap->CheckName("Super Ascender"))
+{tfx_ascdr();}
+
+if(weap->CheckName("Descender")
+|| weap->CheckName("Super Descender"))
+{tfx_dscdr();}
+
+if(weap->CheckName("Remote Roller")
+|| weap->CheckName("Remote Roller "))
+{tfx_rolla();}
+
+if(weap->CheckName("Super Remote Roller")
+|| weap->CheckName("Super Remote Roller "))
+{tfx_rollb();}
+
+if(weap->CheckName("Skipper"))
+{tfx_skipr();}
+
+if(weap->CheckName("Pogo Sheep"))
+{tfx_pogos();}
+
+if(weap->CheckName("Battering Ram"))
+{tfx_btram();}
+
+if(weap->CheckName("Crazy Chicken")
+|| weap->CheckName("Super Crazy Chicken"))
+{tfx_cchkn();}
+
+if(weap->CheckName("Drilling Crew"))
+{tfx_drill();}
+
+if(weap->CheckName("Squawks"))
+{tfx_sqwks();}
+
+if (weap->CheckName("Super Worm"))
+{tfx_sworm();}
+
+if (weap->CheckName("Fire Pellet"))
+{trailpfx_frplt();}
+
+if(weap->CheckName("Torch Flame"))
+{tfx_torch();}
+
+}
+super;
+}

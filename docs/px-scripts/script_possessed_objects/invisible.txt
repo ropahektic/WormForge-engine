@@ -1,0 +1,17 @@
+override void CMine::Render()
+{
+   if(PossessType == 6)
+   {
+   return;
+   }
+super;
+}
+
+override void COilDrum::Render()
+{
+   if(PossessType == 6)
+   {
+   return;
+   }
+super;
+}

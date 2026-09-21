@@ -1,0 +1,19 @@
+require utils, utils_steps;
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    CWorm* w = GetCurrentWorm();
+    
+    if (w != NullObj)
+    {
+        if (Weap->CheckName("Die"))
+        {
+            GS->Info.SetWormHealth(w->WormTeam, w->WormNumber, 0);
+            w->SetState(WS_DEATH);
+        }
+        
+        else super;
+    }
+    
+    else super;
+}

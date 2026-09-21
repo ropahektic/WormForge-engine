@@ -1,0 +1,307 @@
+// By PyroMan.
+
+require utils, utils_steps, utils_pyroman, pxparticles, weapon_tazer;
+
+int paintBall_number;
+int paintBall_turns;
+
+CPaintBallZone : CObject;
+CColMask* paintBallMask;
+
+void paintball_script::FirstFrame()
+{
+    paintBallMask = new CColMask(2, 2, MakeCircleMask(2));
+    paintBall_number = 0;
+    paintBall_turns = 4;
+}
+
+CPaintBallZone::CPaintBallZone(string zoneName, int ax, int ay, int Dmg, int turns_left)
+{
+super(Root, GS);
+
+    zone_name = StrSave(zoneName);
+    PosX = ax;                                                   
+    PosY = ay;
+    Damage = Dmg;
+    unkB = 0;
+    worknow = true;
+    turns = turns_left;
+    Dead = false;
+    timer = 0;
+    fps = 3;
+    active = true;
+    start_be_inactive = false;
+    inactive_timer = 0;
+    check1 = true;
+    check2 = true;
+    check3 = true;
+    owner = CWorm(NullObj);
+    GravityFactor = 0;
+    ColMask = paintBallMask;
+    rad = 5;
+}
+
+void CPaintBallZone::Reflect(CGObject* Obj,int type)
+{
+ //   super;    
+    if (owner == NullObj)
+    {
+       if (Obj is CWorm) owner = Obj;
+    }
+}
+
+void CPaintBallZone::do_paint_effects()
+{
+   if (PosY < Env->Water)
+   {
+   p0 = new PxParticle(608, PosX, PosY);
+   p0->SetAnimSpeed( 40);
+   p0->SetBlendMode(1);
+   p0->SetStartColor(150,150,150);
+   p0->SetEndColor(0,0,0);
+   p0->SetLifeTime(40);
+   p0->SetRandomVelocity(-1.0, -3.0);
+   p0->SetAirResistance(1.0);
+   p0->SetAlpha(220);
+   p0->SetEndAlpha(0);
+   p0->SetWindFactor( 4.0);
+   p0->SetStartSize(0.45,0.45);
+   p0->SetEndSize(0.1,0.1);
+   r = RandomFloat(0.0, 2.31);
+   p0->SetAngle( r);
+   }
+}
+
+void CPaintBallZone::HealthBack()
+{
+   if (owner == NullObj) return;
+   if (owner->SickDamage >= Damage) owner->SickDamage -= Damage;
+   else owner->SickDamage = 0;
+}
+
+void CPaintBallZone::PaintBall()
+{
+    if (owner == NullObj) return;
+       local worm = owner->WormNumber;
+       local team = owner->WormTeam;  
+       if (check1) 
+       {
+          owner->SickDamage += Damage;
+          check1 = false;
+       }
+}
+
+void CPaintBallZone::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if (Type == M_TURNEND) 
+ {
+    turns--;
+    start_be_inactive = true;
+    if (turns <= 0) 
+    {
+      HealthBack();
+      Dead = true;
+      active = false;
+      Free(true);
+    }
+ }
+ if (Type == M_EXPLOSION)
+ {
+     if (owner == NullObj)
+     {
+        local dmg = MData->GetParameter(4);         // Damage
+        local dist = int(DistBetweenObjs(sender, this));
+        if (dist < dmg) {
+           turns = 0;
+           Free(true);
+        }
+     }
+ }
+ if (Type == M_GUNEXP)
+ {
+     if (owner == NullObj)
+     {
+        local dmg = MData->GetParameter(5);    // dmg
+        local dist = int(DistBetweenObjs(sender, this));
+        if (dist < dmg) {
+           turns = 0;
+           Free(true);
+        }
+     }
+ }
+ if (Type == M_TURNBEGIN) 
+ {
+      if (Dead == false)
+      {
+      // Deactivate timer if turn started earlier then timer deactivated zone.
+         start_be_inactive = false;       
+         inactive_timer = 0;             
+         active = true;
+         if (turns <= 0) Free(true);
+      }
+      else {
+         Free(true);
+      }
+ }
+ if (Type == M_FRAME)
+ {
+   timer++;
+   if (owner != NullObj) 
+   {
+      PosX = owner->PosX;
+      PosY = owner->PosY;
+      if (check3)
+      {
+          PaintBall();
+          check3 = false;
+          IsMaterial = false;
+      } 
+   }
+   if (timer % fps) return;
+   do_paint_effects();
+   if (active == false) return;
+        if (owner == NullObj)
+        {
+           local masked1 = CheckMaskAt(this, paintBallMask, PosX-rad, PosY, -1);
+           local masked2 = CheckMaskAt(this, paintBallMask, PosX+rad, PosY, -1);
+           local masked3 = CheckMaskAt(this, paintBallMask, PosX, PosY-rad, -1);
+           local masked4 = CheckMaskAt(this, paintBallMask, PosX, PosY+rad, -1);
+           local masked5 = CheckMaskAt(this, paintBallMask, PosX-rad, PosY+rad, -1);
+           local masked6 = CheckMaskAt(this, paintBallMask, PosX+rad, PosY+rad, -1);
+           if (masked1 == NullObj && masked2 == NullObj && masked3 == NullObj && masked4 == NullObj && masked5 == NullObj && masked6 == NullObj) 
+           {
+              Dead = true;
+              turns = 0;
+              Free(true);
+           }
+           if (masked1 != NullObj)
+           {
+             if (masked1->ClType == OC_Worm)
+             {
+               owner = CWorm(masked1);
+               PaintBall();
+             }
+           }
+           if (masked2 != NullObj)
+           {
+             if (masked2->ClType == OC_Worm)
+             {
+               owner = CWorm(masked2);
+               PaintBall();
+             }
+           }
+           if (masked3 != NullObj)
+           {
+             if (masked3->ClType == OC_Worm)
+             {
+               owner = CWorm(masked3);
+               PaintBall();
+             }
+           }
+           if (masked4 != NullObj)
+           {
+             if (masked4->ClType == OC_Worm)
+             {
+               owner = CWorm(masked4);
+               PaintBall();
+             }
+           }
+           if (masked5 != NullObj)
+           {
+             if (masked5->ClType == OC_Worm)
+             {
+               owner = CWorm(masked5);
+               PaintBall();
+             }
+           }
+           if (masked6 != NullObj)
+           {
+             if (masked6->ClType == OC_Worm)
+             {
+               owner = CWorm(masked6);
+               PaintBall();
+             }
+           }
+        }
+        
+   if(start_be_inactive)
+   {
+      inactive_timer++;
+      if (inactive_timer > (250/fps)) // 5 secs
+      {
+         active = false;         
+         start_be_inactive = false;
+         inactive_timer = 0;
+      }
+   }
+ }
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    imCheckMis = CMissile(NullObj);
+    not_too_much_particles_pack2 = true;
+}
+
+
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    super;
+    if (weap->CheckName("Toxic PaintBall"))
+    {
+//        if (imCheckingMis == this) {
+           paintBall_number++;
+           local number = MakeNumberString("paintBall_", paintBall_number, "");
+           local tPB = new CPaintBallZone(number, x, y, 15, paintBall_turns);
+//        }
+    }
+}
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)    
+    {                          
+        if (weap->CheckName("Toxic PaintBall"))
+        {
+            imCheckingMis = this;
+            if (not_too_much_particles_pack2) 
+            {
+               do_sprite_trail_effects(608, PosX, PosY);
+            }
+        }
+    }
+}
+
+bool CWorm::CheckParticlesNumber2() {
+    for (local i = 1; i < Env->Objs.Count; i++)
+    {                                                                   
+        local part_counter;
+        if (i == 1) part_counter = 0;
+        local part = CMissile(Env->Objs.Objs[i]);
+        if (part == NullObj) continue;
+        if (part->ClType != OC_Missile) continue;
+//        {
+            part_counter++;
+//        }
+        if (i == (Env->Objs.Count - 1))
+        {
+            if (part_counter > 10) part->not_too_much_particles_pack2 = false;
+            else part->not_too_much_particles_pack2 = true;
+        }
+    }
+    return part->not_too_much_particles_pack2;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    // Let`s limit particles making
+  if (Weap->CheckName("Toxic PaintBall"))
+  {  
+     CheckParticlesNumber2();
+  } 
+    super;
+}

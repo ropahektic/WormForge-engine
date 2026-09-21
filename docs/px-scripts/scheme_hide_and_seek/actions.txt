@@ -1,0 +1,56 @@
+void CWorm::Moving(int dir)
+{
+local obj1 = CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber));
+
+    if(dir == -1)
+    {
+     CMessageData msgleft;
+     msgleft.params[0] = WormTeam;
+     obj1->Message(NullObj, M_PLEFT, 1032, &msgleft);
+    }
+    
+    if(dir == 1)
+    {
+     CMessageData msgright;
+     msgright.params[0] = WormTeam;
+     obj1->Message(NullObj, M_PRIGHT, 1032, &msgright);
+    }
+}
+
+
+void CWorm::Jumping(int dir)
+{
+local obj1 = CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber));
+
+      if(ObjState != WS_JUMPPREPARE)
+      {
+         TurnSide = dir;
+         CMessageData msgenter;
+         msgenter.params[0] = WormTeam;
+         obj1->Message(NullObj, M_ENTER, 1032, &msgenter);
+      }
+}
+
+
+void CWorm::Backflip(int dir)
+{
+local obj1 = CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber));
+
+         TurnSide = dir*-1;
+         CMessageData msgenter;
+         msgenter.params[0] = WormTeam;
+         obj1->Message(NullObj, M_BACKSPACE, 1032, &msgenter);
+}
+
+
+void CWorm::Backspace()
+{
+local obj1 = CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber));
+
+      if(ObjState != WS_JUMPPREPARE)
+      {
+         CMessageData msgenter;
+         msgenter.params[0] = WormTeam;
+         obj1->Message(NullObj, M_BACKSPACE, 1032, &msgenter);
+      }
+}

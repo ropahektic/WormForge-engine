@@ -1,0 +1,53 @@
+string btoa(bool b)                             //bool to string
+{
+    if (b) return "true";
+    else return "false";
+}
+
+bool atob(string s)                             //string to bool
+{
+    if (StrCmp(s,"true")) return true;
+    else if (StrCmp(s,"false")) return false;
+    else return false;
+}
+
+string ftoaEx(float f, int DecimalDigits)       //float to string with the ability to set decimal digits. Current max: 5
+{
+    local fa = ftoa(f);
+    local strlength = StrLen(fa);
+    local leftside = StrLeft(fa,strlength-4);
+    local rightside = StrRight(fa,3);
+    
+    if (DecimalDigits == 0) return ItoA(f);
+    else if (DecimalDigits < 4) return StrLeft(fa,strlength-(3-DecimalDigits));
+    else
+    {
+        local hrightside = StrLeft(rightside,2);
+        local decdot = ".";                                                     
+        local decmultipl = 10^(DecimalDigits-2);
+        local famult = ftoa(f*decmultipl);
+        local veryrightside = StrRight(famult,3);
+        local finalrightside = StrLeft(veryrightside,DecimalDigits-2);
+        return StrCon4(leftside,decdot,hrightside,finalrightside);
+    }
+}
+
+string FtoA(float f)                            //uppercase alias
+{
+    return ftoa(f);
+}
+
+string FtoAEx(float f, int DecimalDigits)       //uppercase alias
+{
+    return ftoaEx(f,DecimalDigits);
+}        
+
+string BtoA(bool b)                             //uppercase alias
+{                                                                               
+    return btoa(b);
+}
+
+string itoa(int i)                              //lowercase alias
+{
+    return ItoA(i);
+}

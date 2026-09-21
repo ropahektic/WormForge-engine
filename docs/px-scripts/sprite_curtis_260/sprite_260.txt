@@ -1,0 +1,12 @@
+CSprite* windya_tr;
+
+void sprite_260::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("windyat.png");
+    windya_tr = LoadSprite(f, 8, 0);
+    //f = GetAttachment("windyat_old.png");
+    //windyat = LoadSprite(f, 13, 0);
+
+    SetSpriteOverride(260, windya_tr);
+}

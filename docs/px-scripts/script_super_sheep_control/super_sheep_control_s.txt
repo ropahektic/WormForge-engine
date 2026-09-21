@@ -1,0 +1,65 @@
+// script by PyroMan
+
+require utils;
+
+CColMask* SSMask;
+
+void super_sheep_control_s::Init()
+{
+    keySync->AddKey(16); // Shift
+    keySync->AddKey(17); // Ctrl
+    SSMask = new CColMask(3, 3, MakeCircleMask(6));
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    SSSpeed = 0.0;
+    SSCheck = true;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{ 
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Super Sheep") ||
+            weap->CheckName("Aqua Sheep") ||
+            weap->CheckName("Rodeo Sheep") ||
+            weap->CheckName("Ultra Sheep") ||
+            weap->CheckName("Ghost Sheep") ||
+            weap->CheckName("Farting Sheep") ||
+            weap->CheckName("Precision Flying Sheep") )
+            
+        {
+          if (IsFlying)
+          {
+            if (keySync->KeyPressed(16) || keySync->KeyPressed(17))
+            {
+                if (keySync->KeyPressed(16)) SSSpeed = 0.6;
+                if (keySync->KeyPressed(17)) SSSpeed = -0.3; 
+            }
+
+            else SSSpeed = 0.0;
+
+            local hit1 = CheckMaskAt(Root, SSMask, PosX+SpX*0.8, PosY+SpY*0.8, -1);
+            if (hit1 != NullObj && hit1->ClType == OC_Landscape) 
+            {
+
+                if (SSCheck) 
+                {
+                   SSCheck = false;
+                }
+                PosX = PosX+SpX*(-0.05);  // slow down a bit to make regular script proceed collision, if its there
+                PosY = PosY+SpY*(-0.05);
+            }
+            else
+            {
+                SSCheck = true;
+                PosX = PosX+SpX*SSSpeed;
+                PosY = PosY+SpY*SSSpeed;
+            }   
+          }    
+        }                                  
+    }
+    super;   
+}

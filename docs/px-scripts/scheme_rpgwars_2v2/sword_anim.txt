@@ -1,0 +1,76 @@
+///////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////  ANIMATE WORM  ///////////////////////////////////
+//```````````````````````````````````````````````````````````````````````````````//
+CSprite* sword_aiming;                                                 //   1.   rename as "YOUR_WEAP_aiming"
+CSprite* sword_bullet;                                                 //   2.   rename as "YOUR_WEAP_bullet".
+
+//WormSprite* toxicPaintBallWS;
+//WeapSprite* toxicPaintBallws;
+                                                                                 //
+
+void sword_anim::InitGraphic()                                  //   name of your sript in LibEditor
+{   CFile* f;                                                                    //
+    f = GetAttachment("sword.png");                             //    3.  (replace with your attached png of aiming sprite)
+    sword_aiming = LoadSprite(f, 1, 0);                                //    4.  (replace with variable from 1.)
+    f = GetAttachment("sword.png");                                   //    5.  (replace with your attached png of bullet sprite (if it differs from aiming sprite))
+    sword_bullet = LoadSprite(f, 1, 0);                                //    6.  (replace with variable from 2.)
+}                                                                                //
+                                                                                 //
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;                                                                          //
+  if (Type == M_FRAME) {                                                         //
+    if (gframe == 1) {                                                           //
+     local weapName; local sprite;
+///////......................................................................\\\\\\
+//
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Longsword";                                               //    7.  weap name: EXACT weap name.
+     sprite = sword_aiming->Index;                                     //    8.  (replace with variable from 1.)
+     Params->hand_radius = -6.0;
+     Params->hand_rotation = 0.5; //1.0                                               //    10. rotate worm`s hand, if u need: -1.0...1.0;
+     Params->hand_radial_rotation = 0.9;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.7;
+     Params->weap_radius = 10.0;
+     Params->hand_type = 2;     // 1 = lower hand. 2 = normal hand. 3 - upper hand.
+     Params->hand_scale = 0.8;               ///// I recommend don`t change it. //////   //
+
+     //Params->dont_rotate_with_angle = true; // actually this allows to fix angle
+     //Params->ang_if_static = 0.1; // necessary addition angles when dont_rotate_with_angle enabled.
+     //Params->hand_ang_if_static = 0.4; // same for hand.
+//     Params->zplane = 10.0;          // this is def value;
+//     Params->scale = 1.0;           // this better dont change. 1.0 is default value.
+//
+///////``````````````````````````````````````````````````````````````````````//////
+     local WA = new WormSprite(weapName, sprite, Params);
+    }                                                                            //
+  }                                                                              //
+}                                                                                //
+//_____________________________ END OF WORM ANIMATION ___________________________//
+///////////////////////////////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////  ANIMATE BULLET  //////////////////////////////////
+//```````````````````````````````````````````````````````````````````````````````//
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){                                                          //
+     if (weap->CheckName("Longsword")) {                                   //   11. replace with your weap name
+         if (longsword_anim) {                                              //   12. replace "toxic_paintBall_anim" with variable from 15.
+              local sprite = sword_bullet->Index;                      //   13. replace "toxic_paintBall_bullet" with variable from 2.
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              longsword_anim = false;                                       //   14. replace "toxic_paintBall_anim" with variable from 15.
+         }
+     }
+  }                                                                              //
+}                                                                                //
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           //
+  longsword_anim = true;                                                    //   15. rename variable to YOUR_WEAP_anim
+}                                                                                //
+//                                                                               //
+//____________________________ END OF BULLET ANIMATION __________________________//
+///////////////////////////////////////////////////////////////////////////////////

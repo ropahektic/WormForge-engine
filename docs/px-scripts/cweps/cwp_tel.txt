@@ -1,0 +1,106 @@
+//  ORIGINAL SCRIPT FROM "nades.pxl"
+//  REVISED BY RAFA``2
+
+require utils;
+
+//------TELE-ARROW--------------------------------------------------------------
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+if(weap->CheckName("Tele Arrow")
+|| weap->CheckName("Tele Arrow "))
+{
+exp_telea1->turns = 1;
+exp_telea1->sprite = 79;
+exp_telea1->speed = 80;
+exp_telea1->scale = 0.75;
+exp_telea1->duration = 1;
+exp_telea1->ZPlane = 6;
+exp_telea1->backwards = false;
+exp_telea1->once = true;
+exp_telea1->color = ARGB(30,60,40,240);
+exp_telea1->blend_type = 6;
+
+exp_telea2->turns = 1;
+exp_telea2->sprite = 605;
+exp_telea2->rot = 90;
+exp_telea2->speed = 80;
+exp_telea2->scale = 0.40;
+exp_telea2->duration = 1;
+exp_telea2->ZPlane = 6;
+exp_telea2->backwards = false;
+exp_telea2->once = true;
+exp_telea2->color = ARGB(30,255,150,0);
+exp_telea2->blend_type = 6;
+
+exp_telea3->turns = 1;
+exp_telea3->sprite = 605;
+exp_telea3->rot = -90;
+exp_telea3->speed = 80;
+exp_telea3->scale = 0.40;
+exp_telea3->duration = 1;
+exp_telea3->ZPlane = 6;
+exp_telea3->backwards = false;
+exp_telea3->once = true;
+exp_telea3->color = ARGB(30,255,150,0);
+exp_telea3->blend_type = 6;
+
+PlaySound(68,1.0,1.0,1.0);
+new CAnimation(Root, x, y, NullObj, exp_telea1);
+new CAnimation(Root, x, y, NullObj, exp_telea2);
+new CAnimation(Root, x, y, NullObj, exp_telea3);
+
+CWorm * w = GetCurrentWorm();
+if(w == NullObj) return;
+int rowX = 0;
+int colY = 0;
+int limitX = 9;
+int limitY = 9;
+int teleX =  x;
+int teleY =  y;
+
+CGObject * o = Env->CheckCollision(w, teleX, teleY);
+
+if(o == NullObj)
+{
+w->PosX = teleX;
+w->PosY = teleY;
+
+return;
+}
+else
+{
+teleX =  x - limitX/2;
+teleY =  y - limitY/2;
+}
+
+while(1)
+{
+CGObject * obj = Env->CheckCollision(w, teleX, teleY);
+
+if(obj == NullObj)
+{
+w->PosX = teleX;
+w->PosY = teleY;
+
+return;
+}
+else
+{
+if(rowX <= limitX)
+{
+teleX++;
+rowX++;
+}
+else if(colY <= limitY)
+{
+teleY++;
+colY++;
+teleX = x - limitX/2;
+rowX = 0;
+}
+else return;
+}
+}
+}
+else super;
+}

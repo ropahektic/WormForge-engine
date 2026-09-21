@@ -1,0 +1,57 @@
+//List of sprites
+
+CSprite* petrol1a;
+CSprite* petrol2a;
+CSprite* petrol3a;
+CSprite* petrol4a;
+CSprite* petrol1;
+CSprite* petrol2;
+CSprite* petrol3;
+CSprite* petrol4;
+CSprite* petrol5;
+CSprite* petrol6;
+
+
+void petrol_change_2::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   
+   f = GetAttachment("petrol1a.png"); 
+   petrol1a = LoadSprite(f, 64, 0);
+   f = GetAttachment("petrol2a.png"); 
+   petrol2a = LoadSprite(f, 64, 0);   
+   f = GetAttachment("petrol3a.png"); 
+   petrol3a = LoadSprite(f, 64, 0);   
+   f = GetAttachment("petrol4a.png"); 
+   petrol4a = LoadSprite(f, 64, 0);   
+   f = GetAttachment("petrol1.png"); 
+   petrol1 = LoadSprite(f, 20, 0);
+   f = GetAttachment("petrol2.png"); 
+   petrol2 = LoadSprite(f, 20, 0);
+   f = GetAttachment("petrol3.png"); 
+   petrol3 = LoadSprite(f, 20, 0);
+   f = GetAttachment("petrol4.png"); 
+   petrol4 = LoadSprite(f, 20, 0);
+   f = GetAttachment("petrol5.png"); 
+   petrol5 = LoadSprite(f, 20, 0);
+   f = GetAttachment("petrol6.png"); 
+   petrol6 = LoadSprite(f, 20, 0);
+   f = GetAttachment("tcloud.png"); 
+   tcloud = LoadSprite(f, 29, 0);
+   
+  
+   //Let's override the sprites!
+   
+   SetSpriteOverride(120, petrol1a);
+   SetSpriteOverride(121, petrol2a);
+   SetSpriteOverride(122, petrol3a);
+   SetSpriteOverride(123, petrol4a);
+   SetSpriteOverride(124, petrol1);
+   SetSpriteOverride(125, petrol2);
+   SetSpriteOverride(126, petrol3);
+   SetSpriteOverride(127, petrol4);
+   SetSpriteOverride(128, petrol5);
+   SetSpriteOverride(129, petrol6);
+   
+}

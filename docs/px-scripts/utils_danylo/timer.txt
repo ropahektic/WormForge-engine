@@ -1,0 +1,50 @@
+//-----------------------------------------------------------------------------
+CTimer : CObject;
+//-----------------------------------------------------------------------------
+CTimer::CTimer(CObject* Parent) {
+  super(Parent, GS);
+  IsActive  = false; // controls running and pausing
+  TickUnit = -20; // timer elapses at normal speed (20) 
+}
+//-----------------------------------------------------------------------------
+void CTimer::SetTimer(int valueInMSecs) {
+  StartingValue = valueInMSecs;
+  CurrValue = StartingValue;
+} 
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void CTimer::Tick() {
+    if (CurrValue > 0) { CurrValue += TickUnit; } 
+    else { CurrValue = 0; IsActive = false; } 
+    MSecs = CurrValue % 1000;
+    Secs  = CurrValue / 1000 % 60;
+    Mins  = CurrValue / 60000 % 60;
+    Hours = CurrValue / 3600000; 
+}
+//-----------------------------------------------------------------------------
+void CTimer::Message(CObject* sender, EMType Type, int MSize,
+  CMessageData* MData) {
+  if (Type == M_FRAME) {
+    if (IsActive) Tick();
+  } 
+}  
+//-----------------------------------------------------------------------------
+string CTimer::FormatTime() {
+  local hstr = StrCon(makeLeftTrailedNumber(Hours, 2, "0"), ":");
+  local mstr = StrCon(makeLeftTrailedNumber(Mins, 2, "0"), ":");
+  local sstr = (makeLeftTrailedNumber(Secs, 2, "0"));
+  return StrCon(hstr, StrCon(mstr, sstr));
+} 
+// 1 - mins:secs
+string CTimer::FormatTime(bool hours, bool mins, bool secs) {
+  string s = "";
+  if (hours) { s = StrCon(s, makeLeftTrailedNumber(Hours, 2, "0"));
+    if (mins)  s = StrCon(s, ":"); }
+  if (mins) {  s = StrCon(s, makeLeftTrailedNumber(Mins, 2, "0"));
+    if (secs)  s = StrCon(s, ":"); }
+  if (secs)    s = StrCon(s, makeLeftTrailedNumber(Secs, 2, "0"));
+  return s;
+} 
+//-----------------------------------------------------------------------------
+void CTimer::Reverse() { TickUnit = -TickUnit; }
+//-----------------------------------------------------------------------------

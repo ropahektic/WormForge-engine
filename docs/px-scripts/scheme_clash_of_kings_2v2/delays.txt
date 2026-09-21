@@ -1,0 +1,55 @@
+bool delayInvis;
+bool delaySelect;
+
+override void CWorm::Message(CObject* obj,EMType Type,int MSize,CMessageData* MData)
+{
+local w = GetCurrentWorm();
+
+if(w != NullObj)
+	{
+	local team_number = GetTeamNumber(w->WormTeam);
+
+	local nr = GetWeaponByName("Ninja Rope");
+    local in = GetWeaponByName("Invisibility");
+    local sw = GetWeaponByName("Select Worm");
+
+	if(StrCmp(TFclass, "King"))
+	    {
+	    if(ObjState == WS_ROPING)
+	        {
+	    	GS->Info.SetWeaponDelay(team_number, nr->GetWeaponIndex(), nr->GetPageIndex(), 1 );
+	    	}
+		}
+
+    if(Type == M_FRAME)
+	    {
+    	if(delayInvis == true)
+    			{
+	        	GS->Info.SetWeaponDelay(team_number, in->GetWeaponIndex(), in->GetPageIndex(), -1 );
+	        	delayInvis = false;
+    			}
+    			
+        if(delaySelect == true)
+    			{
+	        	GS->Info.SetWeaponDelay(team_number, sw->GetWeaponIndex(), sw->GetPageIndex(), 2 );
+	        	delaySelect = false;
+    			}
+    	}
+	}
+super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (Weap->CheckName("Invisibility"))
+			{
+	        delayInvis = true;
+  	     	}
+
+    if (Weap->CheckName("Select Worm"))
+			{
+	        delaySelect = true;
+  	     	}
+	super;
+}

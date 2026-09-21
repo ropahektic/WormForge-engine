@@ -1,0 +1,20 @@
+override void CGameInfo::SetWeaponEx(int Color,int Weapon,int Page,int Count)
+{
+    super;
+    local icon = GS->GetWeaponIcon( Page, Weapon);
+    GS->SetWeaponIcon( Page, Weapon, icon);
+}
+override int CGameInfo::AddWeaponEx(int Color,int Weapon,int Page,int Count)
+{
+    super;
+    local icon = GS->GetWeaponIcon( Page, Weapon);
+    GS->SetWeaponIcon( Page, Weapon, icon);      
+}  
+override void CGameInfo::AddWeapon(int Team,int Weapon,int Count)
+{
+    super;
+    local Weap = GS->GetWeaponByIndex(Weapon);
+    local Page = Weap->GetPageIndex();
+    local icon = GS->GetWeaponIcon( Page, Weapon);
+    GS->SetWeaponIcon( Page, Weapon, icon);
+}

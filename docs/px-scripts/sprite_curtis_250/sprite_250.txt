@@ -1,0 +1,12 @@
+CSprite* smartb_tr;
+
+void sprite_250::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("smartbt.png");
+    smartb_tr = LoadSprite(f, 10, 0);
+    //f = GetAttachment("smartbt_old.png");
+    //smartbt = LoadSprite(f, 10, 0);
+
+    SetSpriteOverride(250, smartb_tr);
+}

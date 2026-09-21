@@ -1,0 +1,418 @@
+require utils;
+
+COrder : CGObject;
+
+CSoundFile* victorysnd;
+CSprite* MLSprite;
+CSprite* MRSprite;
+CSprite* JLSprite;
+CSprite* JRSprite;
+CSprite* BLSprite;
+CSprite* BRSprite;
+CSprite* BSSprite;
+CSprite* SSprite;
+bool GameStarted;
+bool Weapons;     //acquired
+bool GameEnded;
+int OrderNum[8]; // 0-7
+COrder* Orders[800]; //0-799, up to 100 orders for 1 worm. Each 100 for each worm.
+//1st worm - 0-99
+//2nd - 100-199
+//and so on
+
+
+
+void hns::InitGraphic()  
+{
+    local spr5       = GetAttachment("move_l.png");
+    MLSprite     = LoadSprite(spr5, 1, 0);  
+    
+    spr5       = GetAttachment("move_r.png");
+    MRSprite     = LoadSprite(spr5, 1, 0);  
+    
+    spr5       = GetAttachment("enter_l.png");
+    JLSprite     = LoadSprite(spr5, 1, 0);  
+    
+    spr5       = GetAttachment("enter_r.png");
+    JRSprite     = LoadSprite(spr5, 1, 0);  
+    
+    spr5       = GetAttachment("backflip_l.png");
+    BLSprite     = LoadSprite(spr5, 1, 0);  
+    
+    spr5       = GetAttachment("backflip_r.png");
+    BRSprite     = LoadSprite(spr5, 1, 0);  
+    
+    spr5       = GetAttachment("repeat_j.png");
+    BSSprite     = LoadSprite(spr5, 1, 0);  
+    
+    spr5       = GetAttachment("stop.png");
+    SSprite     = LoadSprite(spr5, 1, 0);  
+}
+
+void hns::Init()     
+{
+
+}
+
+void hns::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("victory.wav");	victorysnd = new CSoundFile(f);
+GameStarted = false;
+Weapons = false;
+GameEnded = false;
+
+        for(local t = 0;t<8;t++)
+        {
+        OrderNum[t] = 0;
+        }
+        
+        for(local i = 0;i<800;i++)
+        {
+        Orders[i] = NullObj;
+        }
+}
+
+// local wormy = Root->GetObject(2, 16 * Team + Number);
+//YOOOOOOOSH
+
+COrder::COrder(CObject* parent, float x, float y)
+{
+    CGOBJECT_LAYER_OVERRIDE = 17;
+    CGOBJECT_MASKINDEX_OVERRIDE = 9;      
+    super(parent, x, y);
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+    
+    IsMaterial  = false; 
+    //ColGroup    = 236670; //2+4+8+16+32+64+1024+2048+4096+32768+65536+131072;
+    ClType = EObjectClass(71);
+
+    SpX         = 0.0;
+    SpY         = 0.0;    
+    
+    Direction = 0; 
+    WormNum = 0;
+    
+    OrderType = "Null";   
+    
+}
+
+void COrder::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(GetCurrentWorm() != NullObj)
+   {
+     if(Type == M_DRAWQUEUE)
+     {
+       if(WormNum == GetCurrentWorm()->WormNumber && GetCurrentWorm()->WormTeam != 1)
+       {
+         if(DoIKnowHim(GetCurrentWorm()) == true)
+         {
+          local spr5 = MLSprite->Index;
+     
+          if(StrCmp(OrderType, "Move"))
+          {
+             if(Direction == -1)
+             {
+             spr5 = MLSprite->Index;
+             AddSprite(6,PosX,PosY,1,spr5,0.00);
+             }
+             
+             if(Direction == 1)
+             {
+             spr5 = MRSprite->Index;
+             AddSprite(6,PosX,PosY,1,spr5,0.00);
+             }
+          }
+          
+          if(StrCmp(OrderType, "Jump"))
+          {
+             if(Direction == -1)
+             {
+             spr5 = JLSprite->Index;
+             AddSprite(6,PosX,PosY,1,spr5,0.00);
+             }
+             
+             if(Direction == 1)
+             {
+             spr5 = JRSprite->Index;
+             AddSprite(6,PosX,PosY,1,spr5,0.00);
+             }
+          }
+          
+          if(StrCmp(OrderType, "Backflip"))
+          {
+             if(Direction == -1)
+             {
+             spr5 = BLSprite->Index;
+             AddSprite(6,PosX,PosY,1,spr5,0.00);
+             }
+             
+             if(Direction == 1)
+             {
+             spr5 = BRSprite->Index;
+             AddSprite(6,PosX,PosY,1,spr5,0.00);
+             }
+          }
+          
+          if(StrCmp(OrderType, "Backspace"))
+          {
+             spr5 = BSSprite->Index;
+             AddSprite(6,PosX,PosY,1,spr5,0.00);
+          }
+          
+          if(StrCmp(OrderType, "Stop"))
+          {
+             spr5 = SSprite->Index;
+             AddSprite(6,PosX,PosY,1,spr5,0.00);
+          }
+         }
+       }
+     }
+   }
+super;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+OrderInProgress = 0;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_TURNEND)
+         {
+                 if(WormTeam == 1)
+                 {
+                             for(local t = 0;t<8;t++)
+                             {
+                             OrderNum[t] = 0;
+                             local ww = CWorm(Root->GetObject(2, 16 * 2 + (t+1))); 
+                             if(ww != NullObj)ww->OrderInProgress = 0;
+                             }
+        
+                             for(local i = 0;i<800;i++)
+                             {
+                               if(Orders[i] != NullObj)
+                               {
+                               Orders[i]->Free(true);
+                               Orders[i] = NullObj;
+                               }
+                             }
+                 }
+         }
+
+         if(Type == M_FRAME)
+         {
+                 if(Root->CurTeam == 1 && WormTeam == 2)
+                 {
+                     if(OrderNum[WormNumber-1] != 0)
+                     {
+                     DoOrders();
+                     CheckOrders();
+                     }
+                     
+                     if(GameEnded == false){Catch();}
+                 }
+         }
+         
+         if(WormTeam == 2 && Root->CurTeam == 2)
+         {
+                     if(Type == M_PLEFT || Type == M_PRIGHT || Type == M_ENTER || Type == M_BACKSPACE)
+                     {
+                     return;
+                     }
+         }
+         
+super;
+}
+
+void CWorm::Catch()
+{
+     if(WormTeam == 2 && GetCurrentWorm() != NullObj)
+     {
+           if(PosX <= GetCurrentWorm()->PosX+10 && PosX >= GetCurrentWorm()->PosX-10)
+           {
+                   if(PosY <= GetCurrentWorm()->PosY+10 && PosY >= GetCurrentWorm()->PosY-10)
+                   {
+                   //CATCH!
+                   GameEnded = true;
+                   GG->WriteToChat( 3, "Seekers won!", false);
+                   victorysnd->Play(1.0,0.0,false);
+                   }
+           }
+     }
+}
+
+void CWorm::DoOrders()
+{
+     if(OrderInProgress < OrderNum[WormNumber-1])
+     {
+        if(Orders[(100*(WormNumber-1))+OrderInProgress] != NullObj)
+        {
+          if(StrCmp(Orders[(100*(WormNumber-1))+OrderInProgress]->OrderType,"Move"))
+          {
+          Moving(Orders[(100*(WormNumber-1))+OrderInProgress]->Direction);
+          }
+          
+          if(StrCmp(Orders[(100*(WormNumber-1))+OrderInProgress]->OrderType,"Jump"))
+          {
+          Jumping(Orders[(100*(WormNumber-1))+OrderInProgress]->Direction);
+          }
+          
+          if(StrCmp(Orders[(100*(WormNumber-1))+OrderInProgress]->OrderType,"Backflip"))
+          {
+          Backflip(Orders[(100*(WormNumber-1))+OrderInProgress]->Direction);
+          }
+          
+          if(StrCmp(Orders[(100*(WormNumber-1))+OrderInProgress]->OrderType,"Backspace"))
+          {
+          Backspace();
+          }
+        }
+     } 
+}
+
+
+void CWorm::CheckOrders()
+{
+     if(OrderInProgress < OrderNum[WormNumber-1])
+     {
+       if(Orders[(100*(WormNumber-1))+OrderInProgress+1] != NullObj)
+       {
+         local x = Orders[(100*(WormNumber-1))+OrderInProgress+1]->PosX;
+         local y = Orders[(100*(WormNumber-1))+OrderInProgress+1]->PosY;            
+           if(PosX <= x+10 && PosX >= x-10)
+           {
+                   if(PosY <= y+10 && PosY >= y-10)
+                   {
+                   OrderInProgress = OrderInProgress + 1;
+                   }
+           }
+       }
+     } 
+}
+
+
+
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(WormTeam == 2 && OrderNum[WormNumber-1] < 100 && Root->CurTeam == 2)
+  {
+    if(Weap->CheckName("Move Right"))
+    {
+      order = new COrder(Root->GetObject(25, 0), 0, 0);
+      order->PosX = SelectX/65536;
+      order->PosY = SelectY/65536;
+      order->Direction = 1;
+      order->OrderType = "Move";
+      order->WormNum = WormNumber;
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))] = order;
+      OrderNum[WormNumber-1] = OrderNum[WormNumber-1] + 1;
+      return;
+    }
+    
+    if(Weap->CheckName("Move Left"))
+    {
+      order = new COrder(Root->GetObject(25, 0), 0, 0);
+      order->PosX = SelectX/65536;
+      order->PosY = SelectY/65536;
+      order->Direction = -1;
+      order->OrderType = "Move";
+      order->WormNum = WormNumber;
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))] = order;
+      OrderNum[WormNumber-1] = OrderNum[WormNumber-1] + 1;
+      return;
+    }
+    
+    if(Weap->CheckName("Jump Right"))
+    {
+      order = new COrder(Root->GetObject(25, 0), 0, 0);
+      order->PosX = SelectX/65536;
+      order->PosY = SelectY/65536;
+      order->Direction = 1;
+      order->OrderType = "Jump";
+      order->WormNum = WormNumber;
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))] = order;
+      OrderNum[WormNumber-1] = OrderNum[WormNumber-1] + 1;
+      return;
+    }
+    
+    if(Weap->CheckName("Jump Left"))
+    {
+      order = new COrder(Root->GetObject(25, 0), 0, 0);
+      order->PosX = SelectX/65536;
+      order->PosY = SelectY/65536;
+      order->Direction = -1;
+      order->OrderType = "Jump";
+      order->WormNum = WormNumber;
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))] = order;
+      OrderNum[WormNumber-1] = OrderNum[WormNumber-1] + 1;
+      return;
+    }
+    
+    if(Weap->CheckName("Backflip Right"))
+    {
+      order = new COrder(Root->GetObject(25, 0), 0, 0);
+      order->PosX = SelectX/65536;
+      order->PosY = SelectY/65536;
+      order->Direction = 1;
+      order->OrderType = "Backflip";
+      order->WormNum = WormNumber;
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))] = order;
+      OrderNum[WormNumber-1] = OrderNum[WormNumber-1] + 1;
+      return;
+    }
+    
+    if(Weap->CheckName("Backflip Left"))
+    {
+      order = new COrder(Root->GetObject(25, 0), 0, 0);
+      order->PosX = SelectX/65536;
+      order->PosY = SelectY/65536;
+      order->Direction = -1;
+      order->OrderType = "Backflip";
+      order->WormNum = WormNumber;
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))] = order;
+      OrderNum[WormNumber-1] = OrderNum[WormNumber-1] + 1;
+      return;
+    }
+    
+    if(Weap->CheckName("Repeated Backspace"))
+    {
+      order = new COrder(Root->GetObject(25, 0), 0, 0);
+      order->PosX = SelectX/65536;
+      order->PosY = SelectY/65536;
+      order->OrderType = "Backspace";
+      order->WormNum = WormNumber;
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))] = order;
+      OrderNum[WormNumber-1] = OrderNum[WormNumber-1] + 1;
+      return;
+    }
+    
+    if(Weap->CheckName("Stop"))
+    {
+      order = new COrder(Root->GetObject(25, 0), 0, 0);
+      order->PosX = SelectX/65536;
+      order->PosY = SelectY/65536;
+      order->OrderType = "Stop";
+      order->WormNum = WormNumber;
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))] = order;
+      OrderNum[WormNumber-1] = OrderNum[WormNumber-1] + 1;
+      return;
+    }
+    
+    if(Weap->CheckName("Remove Last Order"))
+    {
+      OrderNum[WormNumber-1] = OrderNum[WormNumber-1] - 1;
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))]->Free(true);
+      Orders[(OrderNum[WormNumber-1]+((WormNumber-1)*100))] = NullObj;
+      return;
+    }
+  }
+super;
+}

@@ -1,0 +1,65 @@
+require p_sprite_builder;
+
+CSprite* SheDevil_aiming;
+
+void she_devil_sb::InitGraphic()                                 
+{   CFile* f;                                                    
+    f = GetAttachment("The Face of the She-Devil.png");          
+    SheDevil_aiming = LoadSprite(f, 1, 0);                       
+}                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "She-Devil";         
+     sprite = SheDevil_aiming->Index;
+     Params->hand_radius = 32.0;                                                 
+     Params->hand_rotation = 1.05;   
+     Params->hand_radial_rotation = 1.0;
+     Params->weap_radial_rotation = 0.9;     
+     Params->weap_rotation = -1.0;
+     Params->weap_radius = 12.0;
+     Params->hand_type = 1;     
+     Params->hand_scale = 0.8;  
+//     Params->zplane = 10.0;   
+//     Params->scale = 1.0;     
+
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){    
+super;
+  if (Type == M_FRAME){                 
+     if (weap->CheckName("She-Devil")) {
+         if (SheDevil_anim) {           
+              local sprite = SheDevil_aiming->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);              
+              weap->launch.anim.spriteIndex = 0;
+              SheDevil_anim = false;            
+         }                                                                     
+     }                                                                                                                                                     
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+SheDevil_anim = true;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("She-Devil")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+//DoAnimParticleEffects( sprite, Rad, RelX, RelY, lifeTime, animSpeed, veloMin, veloMax, startAlpha, endAlpha, windFactor, startSize, endSize, angleMin, angleMax, randomMotion, grav);
+            DoAnimParticleEffects(850, 1, 20, -13, 20, 0.03, 1.0, 7.0, 255, 255, 0, 1.0, 0.5, 0.0, 2.31, 0.0, 1.0);
+        }
+    }
+}

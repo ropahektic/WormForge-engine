@@ -1,0 +1,282 @@
+//Gravity Module by DabbyB, util edited by 0rang3
+
+require utils;
+
+CSoundFile* activate;
+CSoundFile* error;
+CGravityModule* ggGm;
+
+bool GravityModule_Active;
+bool GravityModule_Informer;
+bool Transform;
+float InitialGravity;
+float ModulatedGravity;
+float TransformedGravity;
+
+bool highgrav;
+bool zerograv;
+
+float doublegrav;
+
+void gravity_control_script::Init()
+{
+   ggGm = new CGravityModule;
+}
+
+void gravity_control_script::FirstFrame()
+{
+   GravityModule_Active = false;
+   GravityModule_Informer = true;
+
+   InitialGravity = Env->Gravity;
+   ModulatedGravity = 1;
+
+   zerograv = Env->Gravity * 0.0001;
+   doublegrav = Env->Gravity * 2;
+
+   keySync->AddKey(49); // 1 button
+   keySync->AddKey(50); // 2 button
+   keySync->AddKey(51); // 3 button
+   keySync->AddKey(52); // 4 button
+   keySync->AddKey(53); // 5 button
+
+   f = GetAttachment("activate.wav");	 activate = new CSoundFile(f);
+   f = GetAttachment("error.wav");	 error = new CSoundFile(f);
+}
+
+CGravityModule::CGravityModule()
+{
+   GM_tTime = 0; // the turn-timer
+   GM_rTime = 0; // the retreat-timer
+   GM_sTime = 0; // time passed since game stopped progressing
+}
+
+void CGravityModule::Frame()
+{
+   if(GravityModule_Active == true)
+   {
+      if(GM_tTime == Root->Timer && GM_rTime == Root->RetreatTimer)
+      {
+         GM_sTime += 20;
+
+         if(GM_sTime > 10000)
+         {
+            Env->Gravity = InitialGravity;
+            ModulatedGravity = 1;
+
+            ShowMessage("Gravity Control Inactive");
+
+            GM_sTime = 0;
+         }
+      }
+      else
+      {
+         GM_tTime = Root->Timer;
+         GM_rTime = Root->RetreatTimer;
+
+         GM_sTime = 0;
+      }
+   }
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+
+   if(Type == M_FRAME)
+   {
+      if(CurWeapon->CheckName("Gravity Control"))
+      {
+         if(GravityModule_Informer == true)
+         {
+            local cw = GetCurrentWorm();
+            ShowTeamMessage(7,"Choose a value for gravity from 1-5 and press space",WormTeam);
+            PlayLocalSound(1, 1.0, 1.0, 1.0);
+            GravityModule_Informer = false;
+         }
+  //
+
+         if(keySync->KeyPressedNow(49))
+         {
+            Transform = true;
+            TransformedGravity = 0.3;
+            ShowTeamMessage(2,"Very Low Gravity",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         }
+         else if(keySync->KeyPressedNow(50))
+         {
+            Transform = true;
+            TransformedGravity = 0.5;
+            ShowTeamMessage(2,"Low Gravity",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         }
+         else if(keySync->KeyPressedNow(51))
+         {
+            Transform = true;
+            TransformedGravity = 1.0;
+            ShowTeamMessage(7,"Normal Gravity",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         }
+         else if(keySync->KeyPressedNow(52))
+         {
+            Transform = true;
+            TransformedGravity = 1.7;
+            ShowTeamMessage(1,"High Gravity",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         }
+         else if(keySync->KeyPressedNow(53))
+         {
+            Transform = true;
+            TransformedGravity = 2.4;
+            ShowTeamMessage(1,"Very High Gravity",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         }
+      }
+   }
+
+   if(Type == M_SETWEAPON)
+   {
+      if(GravityModule_Informer == false)
+      {
+         GravityModule_Informer = true;
+      }
+   }
+
+   super;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(Type == M_FRAME)
+   {
+      ggGm->Frame();
+   }
+
+   if(GravityModule_Active == true)
+   {
+      if(ModulatedGravity != 1)
+      {
+         Env->Gravity = InitialGravity * ModulatedGravity;
+      }
+      else if(ModulatedGravity == 1)
+      {
+         Env->Gravity = InitialGravity;
+      }
+   }
+
+   if(Type == M_TURNBEGIN)
+   {
+      if(GravityModule_Active == true)
+      {
+         Env->Gravity = InitialGravity;
+         ModulatedGravity = 1;
+
+         GravityModule_Active = false;
+      }
+   }
+
+   if (highgrav){GravityModule_Active = false; zerograv = false; Env->Gravity = doublegrav;}
+   if (zerograv){GravityModule_Active = false; highgrav = false; Env->Gravity = zerograv;}
+
+   if (Type == M_TURNEND)
+    	{
+        if (highgrav)
+        	{
+            highgrav = false;
+            Env->Gravity = InitialGravity;
+            }
+        if (zerograv)
+			{
+            zerograv = false;
+            Env->Gravity = InitialGravity;
+            }
+        }
+
+   super;
+}
+
+
+override void CWorm::SetState(EObjState State)
+{
+   if(State == WS_DEAD)
+   {
+      ggGm->GM_sTime = 0;
+   }
+
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+if(Weap->CheckName("Gravity Control"))
+    {
+    vol = CalculateSoundVolume(PosX,PosY);
+    pan = CalculateSoundPan(PosX,PosY);
+    if (Transform == true)
+		{
+        GravityModule_Active = true;
+        zerograv = false;
+        highgrav = false;
+        ModulatedGravity = TransformedGravity;
+        activate->Play(vol, pan, false);
+        ShowMessage("Gravity Control Activated");
+        Transform = false;
+        }
+   	else
+        {
+        local worm = GetCurrentWorm();
+        local wepGC = GS->GetWeaponByName("Gravity Control");
+        GS->Info.AddWeapon(worm->WormTeam, wepGC->GetWeaponIndex(), 1);
+        error->Play(vol, pan, false);
+        Transform = false;
+        ShowMessage("Nothing selected.");
+        return;
+        }
+	}
+
+   ggGm->GM_sTime = 0;
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+ if (Weap->CheckName("Zero Gravity"))
+ {
+ 	 vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     if(!zerograv)
+        {
+        zerograv = true;
+        highgrav = false;
+        activate->Play(vol, pan, false);
+        ShowMessage("Zero Gravity: ON");
+        }
+     else
+        {
+        zerograv = false;
+        error->Play(vol, pan, false);
+        Env->Gravity = 1.0;
+        ShowMessage("Zero Gravity: OFF");
+        }
+ }
+
+ if (Weap->CheckName("High Gravity"))
+ {
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     if(!highgrav)
+        {
+        highgrav = true;
+        zerograv = false;
+        activate->Play(vol, pan, false);
+        ShowMessage("High Gravity: ON");
+        }
+     else
+        {
+        highgrav = false;
+        error->Play(vol, pan, false);
+        Env->Gravity = 1.0;
+        ShowMessage("High Gravity: OFF");
+        }
+ }
+ super;
+}

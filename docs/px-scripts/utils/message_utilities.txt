@@ -1,0 +1,212 @@
+// new message types (EMTypes) hidden in the WA source code and other useful message utilities.
+
+EMType M_CRATECOLLECTED;
+EMType M_WORMDROWNED;
+EMType M_CAMERAAUTO;
+EMType M_CURSORMOVED;
+EMType M_STRIKECHANGED;
+EMType M_TEAMVICTORY;
+EMType M_GAMEOVER;
+EMType M_GIVECRATES;
+EMType M_APPLYPOISON;
+EMType M_THINKINGSHOW;
+EMType M_FACELEFT;
+EMType M_FACERIGHT;
+EMType M_SURRENDER;
+EMType M_DETONATEWEAPON;
+EMType M_MOVEWEAPONLEFT;
+EMType M_MOVEWEAPONRIGHT;
+EMType M_RESUMETURN;
+EMType M_TURNFINISHED;
+EMType M_KILLWORM;
+EMType M_SHOWDAMAGE;
+EMType M_ENABLEWEAPONS;
+EMType M_DISABLEWEAPONS;
+EMType M_WORMMOVED;
+EMType M_WORMDAMAGED;
+EMType M_WEAPONFINISHED;
+EMType M_WEAPONHOMING;
+EMType M_WEAPONDESTROYED;
+EMType M_WEAPONCLAIMCONTROL;
+EMType M_WEAPONRELEASECONTROL;
+EMType M_CREATEANIMATION;
+EMType M_ARMAGEDDON;
+EMType M_PAUSETIMER;
+EMType M_RESUMETIMER;
+EMType M_MOVESPECIAL;
+EMType M_STATEWRONGCHECKSUM;
+EMType M_STATEWRONGINITCHECKSUM;
+EMType M_QUITGAME;
+EMType M_CHANGEWEAPONPANEL;
+EMType M_PXMESSAGECUSTOM;
+
+void message_utilities::FirstFrame()
+{
+     int temp;
+     
+     temp = EMType(7);
+     M_CRATECOLLECTED = temp;
+     
+     temp = EMType(11);
+     M_WORMDROWNED = temp;
+     
+     temp = EMType(16);
+     M_CAMERAAUTO = temp;
+     
+     temp = EMType(17);
+     M_CURSORMOVED = temp;
+     
+     temp = EMType(19);
+     M_STRIKECHANGED = temp;
+     
+     temp = EMType(20);
+     M_TEAMVICTORY = temp;
+     
+     temp = EMType(21);
+     M_GAMEOVER = temp;
+     
+     temp = EMType(23);
+     M_GIVECRATES = temp;
+     
+     temp = EMType(24);
+     M_APPLYPOISON = temp;
+     
+     temp = EMType(26);
+     M_THINKINGSHOW = temp;
+     
+     temp = EMType(34);
+     M_FACELEFT = temp;
+     
+     temp = EMType(35);
+     M_FACERIGHT = temp;
+     
+     temp = EMType(43);
+     M_SURRENDER = temp; 
+     
+     temp = EMType(44);
+     M_DETONATEWEAPON = temp; 
+     
+     temp = EMType(45);
+     M_MOVEWEAPONLEFT = temp; 
+     
+     temp = EMType(46);
+     M_MOVEWEAPONRIGHT = temp; 
+     
+     temp = EMType(54);
+     M_RESUMETURN = temp;
+     
+     temp = EMType(57);
+     M_TURNFINISHED = temp;
+     
+     temp = EMType(64);
+     M_KILLWORM = temp;
+     
+     temp = EMType(68);
+     M_SHOWDAMAGE = temp;
+
+     temp = EMType(69);
+     M_ENABLEWEAPONS = temp; 
+     
+     temp = EMType(70);
+     M_DISABLEWEAPONS = temp;
+     
+     temp = EMType(71);
+     M_WORMMOVED = temp;
+     
+     temp = EMType(72);
+     M_WORMDAMAGED = temp;
+     
+     temp = EMType(74);
+     M_WEAPONFINISHED = temp;
+     
+     temp = EMType(77);
+     M_WEAPONHOMING = temp;
+     
+     temp = EMType(78);
+     M_WEAPONDESTROYED = temp;
+     
+     temp = EMType(79);
+     M_WEAPONCLAIMCONTROL = temp;
+     
+     temp = EMType(80);
+     M_WEAPONRELEASECONTROL = temp;
+     
+     temp = EMType(86);
+     M_CREATEANIMATION = temp;
+     
+     temp = EMType(91);
+     M_ARMAGEDDON = temp;
+     
+     temp = EMType(96);
+     M_PAUSETIMER = temp;
+     
+     temp = EMType(97);
+     M_RESUMETIMER = temp;
+     
+     temp = EMType(98);
+     M_MOVESPECIAL = temp;
+     
+     temp = EMType(99);
+     M_STATEWRONGCHECKSUM = temp;
+     
+     temp = EMType(107);
+     M_STATEWRONGINITCHECKSUM = temp;
+     
+     temp = EMType(117);
+     M_QUITGAME = temp;
+     
+     temp = EMType(128);
+     M_CHANGEWEAPONPANEL = temp;
+     
+     temp = EMType(130);
+     M_PXMESSAGECUSTOM = temp;
+     
+     temp = 0;
+}   
+
+void CWorm::thinkingShow(CWorm* worm)
+{
+     CMessageData thinking_show_msg;
+     
+     thinking_show_msg.params[0] = worm->WormTeam;
+     
+     worm->Message(NullObj, M_THINKINGSHOW, 4, &thinking_show_msg);
+}
+
+void CWorm::setWeapon(CWorm* worm, string weapon_name, bool visibly)
+{
+     local wp = GetWeaponByName(weapon_name); 
+     
+     CMessageData set_weapon_msg;
+     
+     set_weapon_msg.params[0] = worm->WormTeam;
+     set_weapon_msg.params[1] = worm->WormNumber;
+     set_weapon_msg.params[2] = wp->GetWeaponIndex();
+     
+     if(visibly == false)
+     {
+          set_weapon_msg.params[3] = 0;
+          
+          worm->Message(NullObj, M_SETWEAPON, 1032, &set_weapon_msg);
+     }
+     else
+     {
+          set_weapon_msg.params[3] = 1;  
+          
+          worm->Message(NullObj, M_SETWEAPON, 16, &set_weapon_msg);
+     }
+}
+
+void CWorm::enableWeapons(CWorm* worm)
+{
+     CMessageData enable_weapons_msg;
+     
+     worm->Message(NullObj, M_ENABLEWEAPONS, 0, &enable_weapons_msg);
+}
+
+void CWorm::disableWeapons(CWorm* worm)
+{
+     CMessageData disable_weapons_msg;
+     
+     worm->Message(NullObj, M_DISABLEWEAPONS, 0, &disable_weapons_msg);
+}

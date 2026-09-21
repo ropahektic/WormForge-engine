@@ -1,0 +1,78 @@
+require utils, utils_steps;
+
+CSprite* GreenInfo;
+CSprite* RedInfo;
+bool ShowInformer;
+bool WET;
+
+void weapon_indicator::FirstFrame()
+{
+ShowInformer = false;
+WET = true;
+}
+
+void weapon_indicator::InitGraphic()
+{
+   GreenInfo = LoadSprite(GetAttachment("GreenInfo.png"), 1, 0);
+   RedInfo = LoadSprite(GetAttachment("RedInfo.png"), 1, 0);
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_FRAME && gframe > 0 && IsMultiplayer())
+    {
+    if(IsKeyPressed(18)) // Alt
+        {
+        if(IsKeyPressed(73) && ShowInformer == false) // alt+i  on/off
+            {
+            ShowInformer = true;
+            }
+        else if(IsKeyPressed(73) && ShowInformer == true)
+            {
+            ShowInformer = false;
+            }
+		}
+	}
+super;
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+if(ShowInformer == true)
+	{
+	if(Type == M_FRAME)
+		{
+		local cw = GetCurrentWorm();
+		if(cw != NullObj)
+        	{
+            local cwp = cw->CurWeapon;
+			if(cwp != NullObj)
+            	{
+                // Does it end the turn?
+                if(cwp->EndsTurn == true){WET = true;}
+                else if(cwp->EndsTurn == false){WET = false;}
+                }
+			}
+		}
+						 
+	if(Type == M_DRAWQUEUE)
+   		{
+        local cw = GetCurrentWorm();
+		if(cw != NullObj)
+        	{
+            local cwp = cw->CurWeapon;
+            if(cwp != NullObj)
+                {
+            	if(WET == false){cw->AddSprite(10, cw->PosX+(28*cw->TurnSide), cw->PosY-20, 0, GreenInfo->Index, 0.5);}
+                else{cw->AddSprite(10, cw->PosX+(28*cw->TurnSide), cw->PosY-20, 0, RedInfo->Index, 0.5);}
+				}
+			}
+   		}
+	}
+
+if(Type == M_TURNEND)
+   	{
+    ShowInformer = false;
+   	}
+super;
+}

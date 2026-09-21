@@ -1,0 +1,407 @@
+
+require utils;
+
+//#GLIDER_DEBUG
+//#GLIDER_NOANGLECONSTRAINT
+#WEAPON_GLIDER
+
+//////////////////////////
+// Global variables
+
+float GliderGravityFactor;
+float GliderWindFactor;
+float GliderFriction;
+float GliderMaxAngularVelocity;
+float GliderMaxTurningSpeed;
+float GliderAnimSpeed;
+float GliderRotationLerp;
+float GliderMoveAcceleration;
+
+CSprite* wormGliderSprite;
+CSprite* wormGliderBakSprite;
+CSoundFile* hangopen;
+CSoundFile* hangclose;
+
+//////////////////////////
+// Global initializations
+void paratest::FirstFrame()
+{
+	// Tweaks
+	GliderGravityFactor = 0.75;
+	GliderWindFactor = 3.0;
+	GliderFriction = 0.25;
+	GliderMaxAngularVelocity = 0.06;
+	GliderMaxTurningSpeed = 20.0;
+	GliderAnimSpeed = 0.04;
+	GliderRotationLerp = 0.03;
+	GliderMoveAcceleration = 0.02;
+	
+	f = GetAttachment("hangopen.wav");	 hangopen = new CSoundFile(f);
+    f = GetAttachment("hangclose.wav");	 hangclose = new CSoundFile(f);
+}
+
+void paratest::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("wgldlnk.png");	wormGliderSprite = LoadSprite(f, 10, 0);
+	f = GetAttachment("wgldbak.png");	wormGliderBakSprite = LoadSprite(f, 6, 24);
+}
+
+//////////////////////////
+// CWormGlider
+
+CWormGlider::CWormGlider(CWorm *owner)
+{
+	GliderAnimCycle = 0.0;
+	GliderAng = 0.0;
+	GliderTargetAng = 0.0;
+	ParaSpX = 0.0;
+	ParaSpY = 0.0;
+	
+	Deployed = false;
+	Enabled = false;
+	
+	Owner = owner;
+	PRegister(&Owner);
+	
+	// Angle system used for the Hang-Glider
+	//        -pi/2
+	//    -
+	//
+	//  0  <-----|
+	//
+	//    +
+	//        +pi/2
+	//
+	// positive angle = facing down
+	// negative angle = facing up
+}
+
+void CWormGlider::OnStartGliding()
+{
+	GliderAng = 0.0;
+	GliderTargetAng = 0.0;
+	GliderAnimCycle = 0.0;
+}
+
+void CWormGlider::OnStopGliding()
+{
+	GliderAng = 0.0;
+	GliderTargetAng = 0.0;
+	GliderAnimCycle = 0.0;
+}
+
+void CWormGlider::Think()
+{
+	// Owner was deleted, don't do anything
+	if(Owner == NullObj)
+	{
+		PUnregister(&Owner);
+		return;
+	}
+	
+	// Which kind of parachute is currently used?
+	if(Owner->ObjState != WS_PARACHUTE)
+	{
+		if(Owner->CurWeapon->CheckName("Hang-Glider"))
+		{
+			Enabled = true;
+		}
+		else if(Owner->CurWeapon->CheckName("Parachute"))
+		{
+			Enabled = false;
+		}
+		else if(Owner->CurWeapon->CheckName("Hot Air Balloon"))
+		{
+			Enabled = false;
+		}
+		else if(Owner->CurWeapon->CheckName("Umbrella"))
+		{
+			Enabled = false;
+		}
+	}
+	
+	if(Owner->ObjState == WS_PARACHUTE)
+	{
+		if(Enabled)
+		{
+			// Worm just entered parachute state while having the Hang-Glider equipped, start the physics overrides
+			if(Deployed == false)
+			{
+                vol = CalculateSoundVolume(Owner->PosX,Owner->PosY);
+     			pan = CalculateSoundPan(Owner->PosX,Owner->PosY);
+				hangopen->Play(vol, pan, false);
+
+				Deployed = true;
+				OnStartGliding();
+			}
+			// Invisible animation (prevents the worm from being drawn using the default method)
+			Owner->Anim->Reset();
+			Owner->Anim->SetAnimEx(136, 0.0);
+		}
+		else
+		{
+			// Using regular Parachute, don't do anything
+			return;
+		}
+	}
+	else
+	{
+		// Worm left parachute state, stop the physics overrides
+		if(Deployed)
+		{
+            vol = CalculateSoundVolume(Owner->PosX,Owner->PosY);
+     		pan = CalculateSoundPan(Owner->PosX,Owner->PosY);
+			hangclose->Play(vol, pan, false);
+
+			Deployed = false;
+			OnStopGliding();
+		}
+		
+		// Always keep track of the worm's current velocity (so it is transmitted to the glider when it becomes deployed)
+		ParaSpX = Owner->SpX;
+		ParaSpY = Owner->SpY;
+		
+		return;
+	}
+	
+	////////////////////////////////////
+	// Main physics calculations
+	
+	// Calculating up and forward relative vectors
+	float ang;
+	if(Owner->TurnSide < 0)
+	{
+		ang = GliderAng;
+	}
+	else
+	{
+		ang = 3.141593 - GliderAng;
+	}
+	
+	float ForwardX = -cos(ang);
+	float ForwardY = sin(ang);
+	
+	float UpX;
+	float UpY;
+	if(Owner->TurnSide < 0)
+	{
+		UpX = -ForwardY;
+		UpY = ForwardX;
+	}
+	else
+	{
+		UpX = ForwardY;
+		UpY = -ForwardX;
+	}
+	
+	// Applying gravity
+	ParaSpY = ParaSpY + GS->env->Gravity * GliderGravityFactor;
+	
+	// Applying wind
+	float WindVel = UpX * GS->env->Wind * GliderWindFactor;
+	ParaSpX = ParaSpX + WindVel * UpX;
+	ParaSpY = ParaSpY + WindVel * UpY;
+	
+	// Applying air resistance
+	float UpVel = ParaSpX * UpX + ParaSpY * UpY;
+	ParaSpX = ParaSpX - UpX * UpVel * GliderFriction;
+	ParaSpY = ParaSpY - UpY * UpVel * GliderFriction;
+	
+	// Don't go backwards
+	//if(ParaSpX * Owner->TurnSide < 0)
+	//{
+	//	ParaSpX = 0;
+	//}
+	
+	// Calculating new glider angle based on current speed
+	if(Owner->TurnSide < 0)
+	{
+		ang = atan2(ParaSpY, -ParaSpX);
+	}
+	else
+	{
+		ang = atan2(ParaSpY, ParaSpX);
+	}
+	
+	// Normalize
+	ang = NormalizeAngle(ang);
+	
+	// Clamp to approx. [-80° ; 80°] (don't fly straight down when nose-diving)
+	if(#GLIDER_NOANGLECONSTRAINT) { }
+	else
+	{
+		if(ang > 1.5)	ang = 1.5;
+		if(ang < -1.5)	ang = -1.5;
+	}
+	
+	GliderTargetAng = ang;
+	
+	// Approach the target angle
+	GliderAng = LerpAngle(GliderRotationLerp, GliderAng, GliderTargetAng);
+	
+	if(#GLIDER_DEBUG)
+	{
+		// DEBUG1 : GliderAng
+		Debug1X = Owner->PosX + 40*ForwardX;
+		Debug1Y = Owner->PosY + 40*ForwardY;
+		
+		// DEBUG2 : GliderTargetAng
+		if(Owner->TurnSide < 0)
+		{
+			ang = GliderTargetAng;
+		}
+		else
+		{
+			ang = 3.141593 - GliderTargetAng;
+		}
+		
+		ForwardX = -cos(ang);
+		ForwardY = sin(ang);
+		Debug2X = Owner->PosX + 40*ForwardX;
+		Debug2Y = Owner->PosY + 40*ForwardY;
+		
+		// END DEBUG
+	}
+	
+	// Animation
+	GliderAnimCycle = GliderAnimCycle + GliderAnimSpeed;
+	if(GliderAnimCycle >= 1.0) GliderAnimCycle = 1.0;
+	
+	// Going to hit an obstacle, stop gliding
+	int hitX;
+	int hitY;
+	if(TraceMask(Owner, Owner->ColMask, Owner->PosX, Owner->PosY, Owner->PosX + 1.1 * ParaSpX, Owner->PosY + 1.1 * ParaSpY, 4332670, &hitX, &hitY) != NullObj)
+	{
+		Owner->SetState(WS_AFTERROPE);
+	}
+	
+	// Update the worm's velocity
+	Owner->SpX = ParaSpX;
+	Owner->SpY = ParaSpY;
+}
+
+void CWormGlider::Render()
+{
+	if(Deployed)
+	{
+		if(Owner->TurnSide < 0)
+		{
+			Owner->AddSpriteEx(6, Owner->PosX, Owner->PosY, wormGliderSprite->Index, GliderAnimCycle, -GliderAng, 1.0);
+		}
+		else
+		{
+			Owner->AddSpriteEx(6, Owner->PosX, Owner->PosY, wormGliderSprite->Index + 262144, GliderAnimCycle, GliderAng, 1.0);
+		}
+		
+		if(#GLIDER_DEBUG)
+		{
+			Owner->AddSpriteEx(7, Debug1X, Debug1Y, 2, 0, 0, 1);
+			Owner->AddSpriteEx(7.1, Debug2X, Debug2Y, 3, 0, 0, 1);
+		}
+	}
+}
+
+void CWormGlider::Move(EMType Type)
+{
+	if(Type == M_PUP)
+	{
+		// Rotate up
+		float vel = sqrt(ParaSpX*ParaSpX + ParaSpY*ParaSpY) / GliderMaxTurningSpeed;
+		if(vel > 1.0) vel = 1.0;
+		
+		GliderAng -= GliderMaxAngularVelocity * vel;
+		
+		if(#GLIDER_NOANGLECONSTRAINT) { }
+		else if(GliderAng < -1.5)
+		{
+			GliderAng = -1.5;
+		}
+	}
+	else if(Type == M_PDOWN)
+	{
+		// Rotate down
+		float vel = sqrt(ParaSpX*ParaSpX + ParaSpY*ParaSpY) / GliderMaxTurningSpeed;
+		if(vel < 0.5) vel = 0.5;
+		if(vel > 1.0) vel = 1.0;
+		
+		GliderAng += GliderMaxAngularVelocity * vel;
+		
+		if(#GLIDER_NOANGLECONSTRAINT) { }
+		else
+		if(GliderAng > 1.5)
+		{
+			GliderAng = 1.5;
+		}
+	}
+	
+	if(Type == M_PLEFT)
+	{
+		// Left acceleration
+		ParaSpX -= GliderMoveAcceleration;
+	}
+	else if(Type == M_PRIGHT)
+	{
+		// Right acceleration
+		ParaSpX += GliderMoveAcceleration;
+	}
+}
+
+///////////////////////////
+// CWorm overrides
+
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	super;
+	Glider = new CWormGlider(this);
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		Glider->Think();
+	}
+	
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Glider->Deployed)
+		{
+			Glider->Render();
+			//return;
+		}
+	}
+	
+	if(Type == M_PUP || Type == M_PDOWN || Type == M_PLEFT || Type == M_PRIGHT)
+	{
+		if(Glider->Deployed)
+		{
+			Glider->Move(Type);
+		}
+	}
+	
+	super;
+}
+
+///////////////////////////////////////////////////
+// CSpriteAnim overrides
+
+override void CSpriteAnim::SetAnimEx(int sindex, fixed frame)
+{
+	 // Make sure the game has actually started (otherwise GetCurrentWorm would crash the game due to Root not existing)
+	if(GS->Tick >= 1)
+	{
+		// If we belong to the current worm
+		CWorm *w = GetCurrentWorm();
+		if(w != NullObj && w->Anim == this)
+		{
+			if(sindex == 289 && w->Glider->Enabled) // Glider landing animation
+			{
+				super(wormGliderBakSprite->Index, frame);
+				return;
+			}
+		}
+	}
+	
+	super;
+}

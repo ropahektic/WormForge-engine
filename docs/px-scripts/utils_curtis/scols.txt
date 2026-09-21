@@ -1,0 +1,106 @@
+require utils;
+
+CColMask* generic_COLMASK;
+
+void scols::Init(){}
+
+void scols::FirstFrame()
+{
+     generic_COLMASK = new CColMask(10,10,MakeRectMask(20,20));
+}
+
+//----------------------------------------------------------------------------//
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+SType = false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+ if(Weap->CheckName("Baseball Bomb")
+ || Weap->CheckName("Basketball")
+ || Weap->CheckName("Basketball Strike")
+ || Weap->CheckName("Battering Ram")
+ || Weap->CheckName("Bumper Bomb")
+ || Weap->CheckName("Drilling Crew")
+ || Weap->CheckName("Mini-Torch")
+ 
+ || Weap->CheckName("SlingShot")
+ || Weap->CheckName("Snow Ball")
+ || Weap->CheckName("Staff of Jolting")
+ || Weap->CheckName("Stone Blaster")
+ || Weap->CheckName("Super Bumper Bomb")
+ || Weap->CheckName("Tennis Ball Blaster"))
+ 
+ 
+ {
+    	CGObject *pushero;
+        CMissile *pusherm;
+	pushero = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+	     if (pushero != NullObj)
+             if(pushero->ClType == OC_Missile)
+             {
+             pusherm = pushero;
+             pusherm->SType = true;
+             }
+ }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(SType == true)
+   {
+              if(Type == M_FRAME)
+              {
+                      GenericCollision(15.0);
+              }
+   }
+super;
+}
+
+void CMissile::GenericCollision(float Speed)
+{
+	CGObject *pusherob;
+
+	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		pusherob = CGObject(Env->Objs.Objs[i]);
+		if(pusherob == this) continue;
+		if(pusherob == NullObj) continue;
+		if(GetCurrentWorm() != NullObj)
+		                    {
+		                    if(pusherob == GetCurrentWorm()) continue;
+		                    }
+
+
+		if(pusherob->ClType == OC_Worm)
+		{
+			if(generic_COLMASK->Check(PosX, PosY, pusherob->ColMask, pusherob->PosX, pusherob->PosY))
+			{
+				float ForceX = pusherob->PosX - PosX;
+				float ForceY = pusherob->PosY - PosY;
+				float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+				if(dist > 0)
+				{
+					ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+					ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+
+					CMessageData msg;
+					msg.params[0]	= 0;
+					msg.fparams[1]	= PosX;
+					msg.fparams[2]	= PosY;
+					msg.fparams[3]	= ForceX;
+					msg.fparams[4]	= ForceY;
+					msg.params[5]	= 0;
+					msg.params[6]	= 0;
+
+					pusherob->Message(this, M_GUNEXP, 1032, &msg);
+				}
+			}
+		}
+	}
+}

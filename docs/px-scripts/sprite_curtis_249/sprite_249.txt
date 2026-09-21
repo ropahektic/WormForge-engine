@@ -1,0 +1,12 @@
+CSprite* wormh_tr;
+
+void sprite_249::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("wormht.png");
+    wormh_tr = LoadSprite(f, 9, 0);
+    //f = GetAttachment("wormht_old.png");
+    //wormht = LoadSprite(f, 9, 0);
+
+    SetSpriteOverride(249, wormh_tr);
+}

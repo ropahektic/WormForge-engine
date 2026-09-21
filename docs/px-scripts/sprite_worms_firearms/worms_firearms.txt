@@ -1,0 +1,37 @@
+   CSprite* wshotf;
+   CSprite* wshotfu;
+   CSprite* wshotfd;
+
+   CSprite* wuzif;
+   CSprite* wuzifu;
+   CSprite* wuzifd;
+   
+void worms_firearms::InitGraphic()
+{
+   CFile *f;
+   
+   
+   f = GetAttachment("wshotf.png");
+   wshotf = LoadSprite(f, 32, 1);
+   SetSpriteOverride(549, wshotf);
+   
+   f = GetAttachment("wshotfu.png");
+   wshotfu = LoadSprite(f, 32, 1);
+   SetSpriteOverride(550, wshotfu);
+   
+   f = GetAttachment("wshotfd.png");
+   wshotfd = LoadSprite(f, 32, 1);
+   SetSpriteOverride(551, wshotfd);
+   
+   f = GetAttachment("wuzif.png");
+   wuzif = LoadSprite(f, 32, 1);
+   SetSpriteOverride(567, wuzif);
+   
+   f = GetAttachment("wuzifu.png");
+   wuzifu = LoadSprite(f, 32, 1);
+   SetSpriteOverride(568, wuzifu);
+   
+   f = GetAttachment("wuzifd.png");
+   wuzifd = LoadSprite(f, 32, 1);
+   SetSpriteOverride(569, wuzifd);
+}

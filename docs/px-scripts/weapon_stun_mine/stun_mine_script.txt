@@ -1,0 +1,210 @@
+require utils;
+
+#StunMine
+
+CStunMine : CGObject;
+CElectroExp : CStunMine;
+CStunSpr : CStunMine;
+
+//CWorm* stunactivator;
+
+int SMframes;
+
+void stun_mine_script::InitGraphic(){}
+
+void stun_mine_script::Init(){}
+
+void stun_mine_script::FirstFrame(){}
+
+CStunMine::CStunMine(CObject* parent, float x, float y)
+{
+    CGOBJECT_LAYER_OVERRIDE = 17;
+    CGOBJECT_MASKINDEX_OVERRIDE = 9;
+    super(parent, x, y);
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+
+    IsMaterial  = true;
+    GravityFactor = 0;
+    ColGroup    = 236670;
+    ClType = EObjectClass(88);
+    DumpingA = 0.3;
+    DumpingB = 0.3;
+    DumpingC = 1.0;
+    SpX         = 0.0;
+    SpY         = 0.0;
+
+    Health = 15;
+    Team = 0;
+
+    HasSprite = false;
+    AnimPhase = 0.0;
+    AnimPhaseSpeed = 0.0;
+    Direction = 0;
+    AnimBool = false;
+
+    ClassType = "Null";
+    //stunactivator = CWorm(NullObj);
+}
+
+
+void CStunMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+//basic - death, falling, animphase
+AnimPhaseProcess();
+Destroy();
+   if (Type == M_FRAME)
+   {
+      if(SpX != 0.0)SpX = 0.0;
+      if(SpY != 0.0)SpY = 0.0;
+   }
+
+  if(Type == M_GUNEXP || Type == M_EXPLOSION)
+  {
+  return;
+  }
+
+super;
+}
+
+
+void CStunMine::Collide ( CGObject *obj, int type )
+{
+super;
+}
+
+void CStunMine::Reflect ( CGObject *obj, int type )
+{
+super;
+if(type == 2 || type == 4)obj->SpX = -1 * obj->SpX;
+if(type == 1 || type == 3)
+	{
+    if(obj->ClType == OC_Missile)
+    	{
+        obj->SpY = -1 * obj->SpY;
+        }
+ 	}
+}
+
+void CStunMine::Destroy()
+{
+      if (Health < 1) //Destroying
+      {
+      Free(true); return;
+      }
+
+      if(PosY > GS->LevelSY)
+      {
+      Health = 0;
+      }
+}
+
+void CStunMine::AnimPhaseProcess()
+{
+     if(AnimPhase < 1.0)
+     {
+     AnimPhase = AnimPhase + AnimPhaseSpeed;
+     }
+
+     if(AnimPhase > 0.99)
+     {
+       if(StrCmp(ClassType,"Electro Explosion"))
+       {
+       Health = 0;
+       }
+       AnimPhase = 0.0;
+     }
+}
+
+override void CMissile::Collide(CGObject* Obj,int type)
+{
+ if(Obj->ClType == EObjectClass(88))
+ {
+ return;
+ }
+ super;
+}
+
+CElectroExp::CElectroExp(CObject* parent, fixed x, fixed y)
+{
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+    GravityFactor = 0;
+    IsMaterial = false;
+}
+
+CStunSpr::CStunSpr(CObject* parent, fixed x, fixed y)
+{
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+    GravityFactor = 0;
+    IsMaterial = false;
+}
+
+
+void CStunSpr::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+local stunactivator = CWorm(Root->GetObject(2, 16 * 1 + 1));
+
+/*
+for (local i = 1; i < Env->Objs.Count; i += 1)
+  	{
+    local obj = CGObject(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    if (obj->ClType == OC_Worm)
+        {
+        stunactivator = obj;
+        */
+        
+      	if(stunactivator == NullObj)
+      		{
+      		Health = 0;
+		    }
+      	else
+      		{
+          	PosX = stunactivator->PosX;
+          	PosY = stunactivator->PosY;
+          	if(stunactivator->Stunned == false)
+          		{
+          		Health = 0;
+          		}
+			}
+		//}
+	//}
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+                 if(SMframes < 15)
+                 {
+                 SMframes = SMframes+1;
+                 }
+                 if(SMframes == 10){CreateSMSprite();}
+         }
+super;
+}
+
+void CreateSMSprite()
+{
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+	   {
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == NullObj) continue;
+		if(obj->ClType == EObjectClass(88))
+			{
+            local building = CStunMine(obj);
+            if(building->HasSprite == false)
+                {
+                building->HasSprite = true;
+                MM->MakeSpriter(building->PosX, building->PosY, building);
+                }
+			}
+        }
+}

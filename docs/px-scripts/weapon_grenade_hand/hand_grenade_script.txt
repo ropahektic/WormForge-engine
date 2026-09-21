@@ -1,0 +1,31 @@
+require utils, pxparticles, utils_pyroman, p_sprite_builder;
+
+void CMissile::MakeParticleExplosion(fixed PosX, fixed PosY, int sprite, int number) {
+   
+ for (local i = 0; i < number; i++)
+ {  
+   p0 = new PxParticle(sprite, PosX, PosY);
+   p0->SetAnimSpeed(0.02);
+   p0->SetBlendMode(1);
+   p0->SetStartColor(150,150,150);
+   p0->SetEndColor(150,150,150);
+   p0->SetLifeTime(40);
+   p0->SetRandomVelocity(-15.0, 20.0);
+   p0->SetAirResistance(1.0);
+   p0->SetAlpha(255);
+   p0->SetEndAlpha(100);
+   p0->SetWindFactor(0.0);
+   p0->SetStartSize(1.0, 1.0);
+   p0->SetEndSize(0.2,0.2);
+   r = RandomFloat(-MATH_PI, MATH_PI);
+   p0->SetAngle( r);
+   p0->GravityFactor(0.0);
+ }
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y) {
+super;
+   if (weap->CheckName("Hand Grenade")) {
+      MakeParticleExplosion(x, y, 611, 15);        
+   }
+}

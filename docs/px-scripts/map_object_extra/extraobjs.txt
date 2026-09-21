@@ -1,0 +1,353 @@
+require utils, weapon_bowlingball, utility_fan, weapon_magnet;
+
+//////////////////////////////////
+//EXTRA EDITOR OBJECTS
+//////////////////////////////////
+
+$editor
+ 
+ $object CrateSupply
+  $origin -15 -15
+  $image "edcrate.png"
+  $func SpawnCrateSupply
+  $radius 17
+  $param CrateType enum 2 Health Weapon
+  $param Delay int 1
+  $param Health int 50
+ $object_end
+ 
+ $object CrateSupplyEx
+  $origin -15 -15
+  $image "edcrate.png"
+  $func SpawnCrateSupplyEx
+  $radius 17
+  $param Weapon string "Bazooka"
+  $param Amount int 1
+  $param Delay int 1
+  $param Page int 1 //unnecessary?
+ $object_end
+ 
+ $object BowlingBall
+  $origin -16 -16
+  $image "edbowlingball.png"
+  $func SpawnBBall
+  $radius 17
+ $object_end
+ 
+ $object Fan
+  $origin -14 -20
+  $image "edfan.png"
+  $func SpawnFan
+  $radius 21
+  $param FanForce int 3
+  $param UnsafeMode bool false
+  $param FacesRight bool true
+ $object_end 
+ 
+ $object ElectroMagnet
+  $origin -13 -13
+  $image "edmagnet.png"
+  $func SpawnMagnet
+  $radius 14
+  $param Repel bool true
+  $param Range radius 170
+ $object_end
+
+$end
+
+//////////////////////////////////
+//Classes..
+CCrateSupply : CObject;
+CCrateSupplyEx : CObject;
+CBBallSpawn : CObject;
+CFanSpawn : CObject;
+CMagnetSpawn : CObject;
+//////////////////////////////////
+
+void CCrateSupply::Spawn()
+{
+  CCrateDesc cDesc;
+  zero(&cDesc);
+  cDesc.X = PosX;
+  cDesc.Y = PosY;
+  cDesc.type = CrateType;
+
+  if (CrateType == CT_HEALTH)
+    cDesc.health = Health;
+
+  if (CrateType == CT_WEAPON || CrateType == CT_UTILITY)
+  {
+    cDesc.wType = WCT_RANDOM;
+  }
+
+  spawnee = new CCrate(Root, &cDesc, DT_NONE);
+
+  timer = Delay;
+}
+
+CCrateSupply::CCrateSupply(CEditorObject* obj)
+{
+   super(Root, GS);
+
+   PosX = obj->PosX;
+   PosY = obj->PosY;
+
+   Delay = obj->GetInt("Delay");
+   Health = obj->GetInt("Health");
+   if (StrCmp(obj->GetString("CrateType"), "Health")) CrateType = CT_HEALTH;
+   if (StrCmp(obj->GetString("CrateType"), "Weapon")) CrateType = CT_WEAPON;
+
+   //fields
+   timer = Delay;
+
+
+   spawnee = CCrate(NullObj);
+   Spawn();
+}
+
+void CCrateSupplyEx::Spawn() //Spawn Crate
+{
+ if (GotWeap == true && OnHold == false) {
+  //GetWeaponByName won't work here, GotWeap&OnHold are a workaround
+  CCrateDesc cDesc;
+  zero(&cDesc);
+  cDesc.X = PosX;
+  cDesc.Y = PosY;
+  cDesc.type = CrateType;
+  cDesc.wType = WCT_DEFINED;
+  cDesc.weapon = 100 * Page + Weapon->GetWeaponIndex();
+  cDesc.amount = Amount;
+  
+  spawnee = new CCrate(Root, &cDesc, DT_NONE);
+  timer = Delay;
+  }
+ else OnHold = true;
+}
+
+CCrateSupplyEx::CCrateSupplyEx(CEditorObject* obj) //CrateSupply Extended
+{
+   super(Root, GS);
+   
+   PosX = obj->PosX;
+   PosY = obj->PosY;
+   
+   Delay = obj->GetInt("Delay");
+   CrateType = CT_WEAPON;
+   WeapName = obj->GetString("Weapon");
+   Amount = obj->GetInt("Amount");
+   Page = obj->GetInt("Page");
+   
+   timer = Delay;
+   OnHold = false; //Will get your CWeapon soon
+   GotWeap = false;
+
+   spawnee = CCrate(NullObj);
+   Spawn();
+}
+
+CBBallSpawn::CBBallSpawn(CEditorObject* obj) //Bowling Ball Spawn
+{
+   super(Root, GS);
+      
+   bx = obj->PosX;
+   by = obj->PosY;
+		  
+  DidSpawn = false;
+}
+
+CFanSpawn::CFanSpawn(CEditorObject* obj) //Fan Spawn
+{
+   super(Root, GS);
+      
+   bx = obj->PosX;
+   by = obj->PosY;
+   FForce = obj->GetInt("FanForce");
+   if (FForce > 5)
+      FForce = 5;
+   Unsafe = obj->GetBool("UnsafeMode");
+   if (Unsafe)
+      FMode = 1;
+   else
+      FMode = 0;
+   FRight = obj->GetBool("FacesRight");
+   if (FRight)
+      TSide = 1;
+   else
+      TSide = -1;		  
+  DidSpawn = false;
+}
+
+CMagnetSpawn::CMagnetSpawn(CEditorObject* obj) //Electromagnet Spawn
+{
+   super(Root, GS);
+      
+   bx = obj->PosX;
+   by = obj->PosY;
+   Rep = obj->GetBool("Repel");
+   Range = obj->GetInt("Range");
+   if (!Rep)
+      Polarity = -1;
+   else
+      Polarity = 1;		  
+   DidSpawn = false;
+}
+
+void CBBallSpawn::DoSpawn() //Actually spawn the Bowling Ball
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+     
+     SDesc.Team = 1; //Any would do, really.
+     SDesc.X = bx;
+     SDesc.Y = by;
+     SDesc.SpX = 0;
+     SDesc.SpY = 0;
+     
+     local BBall = new CBowlingBall(Root->GetObject(25, 0), &SDesc); //Hooray!
+}
+
+void CFanSpawn::DoSpawn() //Actually spawn the Fan
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+     
+     SDesc.Team = 0;
+     SDesc.X = bx;
+     SDesc.Y = by;
+     SDesc.SpX = 0;
+     SDesc.SpY = 0;
+     
+     local Fan = new PxFan(GetObject(25, 0), &SDesc, FForce, FMode, TSide);
+     Fan->TurnsRemaining = 32000; //Gotta last for some time!
+     Fan->MaxHealth = 32000; //Gotta endure some explosions!
+     Fan->Health = 32000; //Yeah
+}
+
+void CMagnetSpawn::DoSpawn() //Actually spawn the Magnet.
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+     
+     SDesc.Team = 0;
+     SDesc.X = bx;
+     SDesc.Y = by;
+     SDesc.SpX = 0;
+     SDesc.SpY = 0;
+     
+     local Magnet = new CMagnet(GetObject(25, 0), &SDesc, 1, Polarity);
+     Magnet->TurnsRemaining = 32000; //Gotta last for some time as well!
+     Magnet->IgnoreDamage = true; //Damage? What damage?
+     Magnet->MaxRange = Range;
+     
+}
+
+void CCrateSupply::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_TURNEND)
+   {
+     if (spawnee == NullObj)
+     {
+       if (timer <= 0)
+       {
+         Spawn();
+       } else
+       timer--;
+     } else timer = Delay;
+   }
+}
+
+void CBBallSpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (DidSpawn == false) //Haven't spawned yet?
+     {
+      if (Type == M_FRAME) //Time to do so!
+      {
+       DoSpawn();
+       DidSpawn = true;
+      }
+     }
+}
+
+void CFanSpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (DidSpawn == false) //Haven't spawned yet?
+     {
+      if (Type == M_FRAME) //Time to do so!
+      {
+       DoSpawn();
+       DidSpawn = true;
+      }
+     }
+}
+
+void CMagnetSpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (DidSpawn == false) //Haven't spawned yet?
+     {
+      if (Type == M_FRAME) //Time to do so!
+      {
+       DoSpawn();
+       DidSpawn = true;
+      }
+     }
+}
+
+void CCrateSupplyEx::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_TURNEND)
+   {
+     if (spawnee == NullObj)
+     {
+       if (timer <= 0)
+       {
+         Spawn();
+       } else
+       timer--;
+     } else timer = Delay;
+   }
+   if (Type == M_FRAME)
+   {
+   if (GotWeap == false)
+     {
+     Weapon = GS->GetWeaponByName(WeapName); //Now we've got the weapon!
+     GotWeap = true;
+     }
+   else if (OnHold == true)
+     {
+      OnHold = false; //Ready to spawn..
+      Spawn();
+     }
+   }
+}
+
+//Spawn stuff.
+///////////////////////////
+
+void SpawnCrateSupply(CEditorObject* obj)
+{
+  cs = new CCrateSupply(obj);
+};
+
+void SpawnCrateSupplyEx(CEditorObject* obj)
+{
+  cs = new CCrateSupplyEx(obj);
+};
+
+void SpawnBBall(CEditorObject* obj)
+{
+  bbobj = new CBBallSpawn(obj);
+};
+
+void SpawnFan(CEditorObject* obj)
+{
+  fanobj = new CFanSpawn(obj);
+};
+
+void SpawnMagnet(CEditorObject* obj)
+{
+  magobj = new CMagnetSpawn(obj);
+};
+
+
+/////////////////////////////////
+//END OF EXTRA EDITOR OBJECTS LIB

@@ -1,0 +1,475 @@
+
+//require pxparticles;
+require utils;
+
+///////////------Written by PyroMan------///////////
+
+//CSoundFile* sharkSound;
+CSprite* sharkBodyL;
+CSprite* sharkBodyR;
+CSprite* sharkSink;
+CSprite* sharkHeadL;
+CSprite* sharkHeadR;
+CSprite* sharkBlood;
+//CTraceRes *SharkTrace;
+CSharkChecker : CObject;
+CSharkChecker *SC;
+CBloodFX : CObject;
+CBloodFX *BFX;
+float LastWormPosX;
+bool SharkPlayNow;
+bool ShowSharkHead;
+bool WormInactive;
+bool sharkBloodNow1;
+bool sharkBloodNow2;
+bool sharkBloodNow3;
+bool sharkBloodNow4;
+bool sharkBloodNow5;
+float SharkAnimPhase;
+float SharkAnimSpeed;
+float sharkBloodFrameNow;
+float sharkBloodRotationNow;
+float SharkBloodRotation;
+float SharkBloodAngleX;
+float SharkBloodAngleY;
+float SharkBloodSize;
+float SharkBloodPlaySpeed;
+int SharkBloodLife;
+int SharkBloodPlayRotation;
+//bool sharkWTF;
+//float sharkRot;
+//int sharkI;
+
+void shark_s::InitGraphic()
+{
+  local f = GetAttachment("shark_1_left.png");
+  sharkBodyL = LoadSprite(f, 25, 0);
+  local f = GetAttachment("shark_1_right.png");
+  sharkBodyR = LoadSprite(f, 25, 0);
+  f = GetAttachment("shark_sink.png");
+  sharkSink = LoadSprite(f, 3, 1);
+  f = GetAttachment("shark_attack_jumpl.png");
+  sharkHeadL = LoadSprite(f, 5, 0);
+  f = GetAttachment("shark_attack_jumpr.png");
+  sharkHeadR = LoadSprite(f, 5, 0);
+  f = GetAttachment("shark_blood.png");
+  sharkBlood = LoadSprite(f, 8, 0);
+}
+
+void shark_s::FirstFrame()
+{
+  sharkIndependentCounter = 0;
+  SharkPlayNow = true;
+  ShowSharkHead = true;
+  sharkRot = 1.0;
+  sharkI = 0;
+  checkLoopNow = 0;
+  SharkAnimPhase = 0.0;
+  AnimSpeed = 10;
+  as = AnimSpeed;
+  as = float(as)/1000.0;
+  SharkAnimSpeed = as;
+  SC = new CSharkChecker();
+  BFX = new CBloodFX();
+}
+
+CSharkChecker::CSharkChecker()
+{
+    super(Root, GS);
+}
+
+CBloodFX::CBloodFX()  //float SharkBloodAngleX, float SharkBloodAngleY, float SharkBloodSize, float SharkBloodPlaySpeed, int SharkBloodLife, int SharkBloodRotation)
+{
+    super(Root, GS);
+/*    SharkBloodAngleX = RandomFloat(-1.0, 1.0);
+    SharkBloodAngleY = RandomFloat(-1.0, 1.0);
+    SharkBloodSize = 1.0;
+    SharkBloodPlaySpeed = 1.0;
+    SharkBloodLife = 1;
+    SharkBloodRotation = 1;
+*/
+}
+
+void CBloodFX::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+  if(Type == M_DRAWQUEUE)
+  {
+    if (sharkBloodNow1)
+    {
+      local worm = GetCurrentWorm();
+      if (worm is CWorm)
+      {
+        if (sharkBloodFrameNow < 0.01)
+        {
+           SharkBloodAngleX = RandomFloat(-1.0, 1.0);
+           SharkBloodAngleY = RandomFloat(-1.0, 1.0);
+           SharkBloodSize = RandomFloat(0.3, 0.7);
+           SharkBloodPlaySpeed = 1.05;
+           SharkBloodLife = 1.05;
+           SharkBloodRotation = RandomFloat(0.5, 1.0);
+        }
+        sharkBloodRotationNow = sharkBloodRotationNow + SharkBloodRotation/1000;
+        local sprBlood = sharkBlood->Index;
+        AddSpriteEx(5, worm->PosX + SharkBloodAngleX/10 * SharkBloodLife, worm->PosY + SharkBloodAngleY/10 * SharkBloodLife, sprBlood, sharkBloodFrameNow, sharkBloodRotationNow, SharkBloodSize);
+//        AddSpriteEx(10, worm->PosX, worm->PosY - 10, 119, 0.0, 1.0, 1.0);                       //fixed z,fixed x,fixed y,int sprite,fixed frame,float rot,float scale
+        if (sharkBloodFrameNow < 0.95) {
+           sharkBloodFrameNow = sharkBloodFrameNow + SharkBloodPlaySpeed/100;
+           SharkBloodAngleX = SharkBloodAngleX * SharkBloodPlaySpeed;
+           SharkBloodAngleY = SharkBloodAngleY * 1.01;
+        }
+        else
+        {
+           sharkBloodFrameNow = 0.0;
+           sharkBloodNow1 = false;
+           return;
+        }
+      }
+    }
+    if (sharkBloodNow2)
+    {
+      local worm = GetCurrentWorm();
+      if (worm is CWorm)
+      {
+        if (sharkBloodFrameNow < 0.01)
+        {
+           SharkBloodAngleX = RandomFloat(-1.0, 1.0);
+           SharkBloodAngleY = RandomFloat(-1.0, 1.0);
+           SharkBloodSize = RandomFloat(0.5, 1.3);
+           SharkBloodPlaySpeed = 1.1;
+           SharkBloodLife = 1.1;
+           SharkBloodRotation = RandomFloat(0.5, 1.3);
+        }
+        sharkBloodRotationNow = sharkBloodRotationNow + SharkBloodRotation/100;
+        AddSpriteEx(10, worm->PosX + SharkBloodAngleX/10 * SharkBloodLife, worm->PosY + SharkBloodAngleY/10 * SharkBloodLife, 119, sharkBloodFrameNow, sharkBloodRotationNow, SharkBloodSize);
+//        AddSpriteEx(10, worm->PosX, worm->PosY - 10, 119, 0.0, 1.0, 1.0);                       //fixed z,fixed x,fixed y,int sprite,fixed frame,float rot,float scale
+        if (sharkBloodFrameNow < 0.95) {
+           sharkBloodFrameNow = sharkBloodFrameNow + SharkBloodPlaySpeed/100;
+           SharkBloodAngleX = SharkBloodAngleX * SharkBloodPlaySpeed;
+           SharkBloodAngleY = SharkBloodAngleY * 1.01;
+        }
+        else
+        {
+           sharkBloodFrameNow = 0.0;
+           sharkBloodNow2 = false;
+           return;
+        }
+      }
+    }
+    if (sharkBloodNow3)
+    {
+      local worm = GetCurrentWorm();
+      if (worm is CWorm)
+      {
+        if (sharkBloodFrameNow < 0.01)
+        {
+           SharkBloodAngleX = RandomFloat(-1.0, 1.0);
+           SharkBloodAngleY = RandomFloat(-1.0, 1.0);
+           SharkBloodSize = RandomFloat(0.5, 1.3);
+           SharkBloodPlaySpeed = 1.1;
+           SharkBloodLife = 1.1;
+           SharkBloodRotation = RandomFloat(0.5, 1.3);
+        }
+        sharkBloodRotationNow = sharkBloodRotationNow + SharkBloodRotation/100;
+        AddSpriteEx(10, worm->PosX + SharkBloodAngleX/10 * SharkBloodLife, worm->PosY + SharkBloodAngleY/10 * SharkBloodLife, 119, sharkBloodFrameNow, sharkBloodRotationNow, SharkBloodSize);
+//        AddSpriteEx(10, worm->PosX, worm->PosY - 10, 119, 0.0, 1.0, 1.0);                       //fixed z,fixed x,fixed y,int sprite,fixed frame,float rot,float scale
+        if (sharkBloodFrameNow < 0.95) {
+           sharkBloodFrameNow = sharkBloodFrameNow + SharkBloodPlaySpeed/100;
+           SharkBloodAngleX = SharkBloodAngleX * SharkBloodPlaySpeed;
+           SharkBloodAngleY = SharkBloodAngleY * 1.01;
+        }
+        else
+        {
+           sharkBloodFrameNow = 0.0;
+           sharkBloodNow3 = false;
+           return;
+        }
+      }
+    }
+    if (sharkBloodNow4)
+    {
+      local worm = GetCurrentWorm();
+      if (worm is CWorm)
+      {
+        if (sharkBloodFrameNow < 0.01)
+        {
+           SharkBloodAngleX = RandomFloat(-1.0, 1.0);
+           SharkBloodAngleY = RandomFloat(-1.0, 1.0);
+           SharkBloodSize = RandomFloat(0.5, 1.3);
+           SharkBloodPlaySpeed = 1.1;
+           SharkBloodLife = 1.1;
+           SharkBloodRotation = RandomFloat(0.5, 1.3);
+        }
+        sharkBloodRotationNow = sharkBloodRotationNow + SharkBloodRotation/100;
+        AddSpriteEx(10, worm->PosX + SharkBloodAngleX/10 * SharkBloodLife, worm->PosY + SharkBloodAngleY/10 * SharkBloodLife, 119, sharkBloodFrameNow, sharkBloodRotationNow, SharkBloodSize);
+//        AddSpriteEx(10, worm->PosX, worm->PosY - 10, 119, 0.0, 1.0, 1.0);                       //fixed z,fixed x,fixed y,int sprite,fixed frame,float rot,float scale
+        if (sharkBloodFrameNow < 0.95) {
+           sharkBloodFrameNow = sharkBloodFrameNow + SharkBloodPlaySpeed/100;
+           SharkBloodAngleX = SharkBloodAngleX * SharkBloodPlaySpeed;
+           SharkBloodAngleY = SharkBloodAngleY * 1.01;
+        }
+        else
+        {
+           sharkBloodFrameNow = 0.0;
+           sharkBloodNow4 = false;
+           return;
+        }
+      }
+    }
+    if (sharkBloodNow5)
+    {
+      local worm = GetCurrentWorm();
+      if (worm is CWorm)
+      {
+        if (sharkBloodFrameNow < 0.01)
+        {
+           SharkBloodAngleX = RandomFloat(-1.0, 1.0);
+           SharkBloodAngleY = RandomFloat(-1.0, 1.0);
+           SharkBloodSize = RandomFloat(0.5, 1.3);
+           SharkBloodPlaySpeed = 1.1;
+           SharkBloodLife = 1.1;
+           SharkBloodRotation = RandomFloat(0.5, 1.3);
+        }
+        sharkBloodRotationNow = sharkBloodRotationNow + SharkBloodRotation/100;
+        AddSpriteEx(10, worm->PosX + SharkBloodAngleX/10 * SharkBloodLife, worm->PosY + SharkBloodAngleY/10 * SharkBloodLife, 119, sharkBloodFrameNow, sharkBloodRotationNow, SharkBloodSize);
+//        AddSpriteEx(10, worm->PosX, worm->PosY - 10, 119, 0.0, 1.0, 1.0);                       //fixed z,fixed x,fixed y,int sprite,fixed frame,float rot,float scale
+        if (sharkBloodFrameNow < 0.95) {
+           sharkBloodFrameNow = sharkBloodFrameNow + SharkBloodPlaySpeed/100;
+           SharkBloodAngleX = SharkBloodAngleX * SharkBloodPlaySpeed;
+           SharkBloodAngleY = SharkBloodAngleY * 1.01;
+        }
+        else
+        {
+           sharkBloodFrameNow = 0.0;
+           sharkBloodNow5 = false;
+           return;
+        }
+      }
+    }
+  }
+}
+
+
+/*
+void CBloodFX::CBloodFX(CWorm* worm, float SharkBloodAngleX, float SharkBloodAngleY, float SharkBloodSize, float SharkBloodPlaySpeed, int SharkBloodLife, int SharkBloodRotation)
+{
+  if(Type == M_DRAWQUEUE)
+  {
+    if (sharkBloodNow)
+    {
+      if (worm is CWorm)
+      {
+        sharkBloodRotationNow = sharkBloodRotationNow + SharkBloodRotation/100;
+        AddSpriteEx(10, worm->PosX + SharkBloodAngleX * SharkBloodLife, worm->PosY + SharkBloodAngleY * SharkBloodLife, 119, sharkBloodFrameNow, sharkBloodRotationNow, SharkBloodSize);                       //fixed z,fixed x,fixed y,int sprite,fixed frame,float rot,float scale
+        SharkBloodAngleX = SharkBloodAngleX * 1.05;
+        SharkBloodAngleY = SharkBloodAngleY * 1.05;
+        if (sharkBloodFrameNow < 0.99) sharkBloodFrameNow = sharkBloodFrameNow + SharkBloodPlaySpeed/100; else sharkBloodNow = false;
+      }
+    }
+  }
+}
+*/
+
+void CSharkChecker::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+        if(Type == M_FRAME)
+	{
+            super;
+	}
+   if (Type == M_DRAWQUEUE)
+   {
+    local worm = GetCurrentWorm();
+    if (worm is CWorm)
+    {
+      if (worm->PosY >= (GS->LevelSY - 650) && worm->PosY <= GS->LevelSY - 45)
+      {
+        if (SharkPlayNow)
+        {
+//           sharkSound->Play(1.0, 1.0, false);
+//           ShowMessage("Ouch! Careful");
+           LastWormPosX = worm->PosX;
+           sharkWayCounter = 0;
+           SharkPlayNow = false;
+        }
+        local spr1 = sharkBodyR->Index;
+        local spr2 = sharkBodyL->Index;
+        local spr;
+        local animationPhase;
+        if (sharkWayCounter2 >= 349) {sharkWayCounter2 = 0;} else {animationPhase = float(sharkWayCounter2)/350;}
+//        local sharkRot = 0;
+//        local ang = (sharkRot / 360 + MATH_HALF_PI) * 6.3;
+        if (sharkWayCounter < 500) {LastWormPosX += 0.1; sharkWayCounter += 1; sharkWayCounter2 += 1; spr = sharkBodyR->Index;}
+        else if (sharkWayCounter < 1500) {LastWormPosX -= 0.1; sharkWayCounter += 1; sharkWayCounter2 += 1; spr = sharkBodyL->Index;}
+        else if (sharkWayCounter < 2000) {LastWormPosX += 0.1; sharkWayCounter += 1; sharkWayCounter2 += 1; spr = sharkBodyR->Index;}
+        else {SharkPlayNow = true; spr = sharkBodyL->Index;}
+        AddSpriteEx(5, LastWormPosX, GS->LevelSY + 65, spr, animationPhase, 0.0, 1);
+  }
+  local tempWormSp = worm->SpY;
+  if (tempWormSp < 1.0) tempWormSp = 1.0;
+  local tempAnimSpeed = worm->SpY;
+  if (tempAnimSpeed < 6) tempAnimSpeed = 6;
+  if (worm->PosY >= GS->LevelSY - tempWormSp*49.95 && worm->PosY <= GS->LevelSY + 40)
+  {
+         if (worm->ObjState != WS_IDLE && worm->ObjState != WS_AIMING && worm->ObjState != WS_WALKING && worm->ObjState != WS_SHOOTINGROPE && worm->ObjState != WS_JUMP && worm->ObjState != WS_JUMPPREPARE)
+         {
+            if (sharkI <= 100)
+            {
+               local sideCoef;
+               local sideCoef2;
+               if (worm->SpX >= 1) {spr3 = sharkHeadL->Index; sideCoef = 0.7; sideCoef2 = 300.0;} else {spr3 = sharkHeadR->Index; sideCoef = -0.7; sideCoef2 = -300.0;}
+               tempAnimSpeed2 = sharkI*tempAnimSpeed/16;
+               AddSpriteEx(5, worm->PosX, GS->LevelSY - tempAnimSpeed2, spr3, sharkI/100.0, sharkI/sideCoef2 - sideCoef, 0.85);
+            }
+            else if (sharkI <= 200)
+            {
+/*               if (sharkBloodNow5 == false)
+               {
+                  sharkBloodNow1 = true;
+                  sharkBloodNow2 = true;
+                  sharkBloodNow3 = true;
+                  sharkBloodNow4 = true;
+                  sharkBloodNow5 = true;
+               }
+*/               local sideCoef;
+               local sideCoef2;
+               if (worm->SpX >= 1) {spr3 = sharkHeadL->Index; sideCoef = 0.2; sideCoef2 = 600.0;} else {spr3 = sharkHeadR->Index; sideCoef = -0.2; sideCoef2 = -600.0;}
+               AddSpriteEx(5, worm->PosX, GS->LevelSY + (sharkI - 100 - tempAnimSpeed2), spr3, 1-sharkI/300.0, sharkI/sideCoef2 - sideCoef, 0.85);
+            }
+            if (sharkI <= 750) {sharkI += 1;} else {sharkI = 0;}
+         }
+  } else sharkI = 0;
+
+  if (worm->PosY >= GS->LevelSY + 10)
+  {
+     local ang;
+     ang = float(worm->PosY - GS->LevelSY) / 150.0;
+     if (ang > 2.0) ang = 0;
+     local spr2 = sharkSink->Index;
+     AddSpriteEx(5, worm->PosX, worm->PosY - 2, spr2, SharkAnimPhase, ang, 1.0);
+     if(SharkAnimPhase > 0.99){SharkAnimPhase = 0.0;}
+     else{SharkAnimPhase = SharkAnimPhase + SharkAnimSpeed;}
+  }
+  }
+  }
+  if (Type == M_TURNBEGIN)
+  {
+     SharkPlayNow = true;
+  }
+// -----------------------------------------//
+    if (Type == M_FRAME)
+    {
+        local worm = GetCurrentWorm();
+        if (worm is CWorm)
+        {
+          local checkNow;
+          local SpYlast;
+          local SpXlast;
+          local sharkCorrection;
+          if (checkNow)
+          {
+              SpYlast = worm->SpY * 49.95;      // lol, but its exactly what we need.
+              SpXlast = worm->SpX;
+              if (SpXlast < 0) SpXlast = SpXlast * (-1);
+              if (SpYlast < 50) SpYlast = 50;
+              sharkCorrection = int(800 - SpYlast)/100;
+//              if (SpYlast < 0) SpYlast = SpYlast* (-1);
+          }
+          if (worm->PosY > (GS->LevelSY - SpYlast + 750/SpYlast - 750/SpYlast*SpYlast/1598.4) && worm->PosY < GS->LevelSY + 40)
+//          if (worm->PosY >= GS->LevelSY - SpYlast - SpXlast && worm->PosY <= GS->LevelSY + 40)
+          {
+           if (worm->ObjState != WS_IDLE && worm->ObjState != WS_AIMING && worm->ObjState != WS_WALKING && worm->ObjState != WS_SHOOTINGROPE && worm->ObjState != WS_JUMP && worm->ObjState != WS_JUMPPREPARE)
+           {
+             Nounter = MakeNumberString("counter: ",sharkIndependentCounter,"");
+             local wormYspeed = MakeNumberString("sharkCorrection: ",sharkCorrection,"");
+             local TicTac = MakeNumberString("TicTac: ",GS->Tick,"");
+//             if (checkNow) GG->WriteToChat(2, wormYspeed, false);
+             checkNow = false;
+             if (sharkIndependentCounter == (30 - sharkCorrection))   //35
+             {
+//                   if (worm->ObjState == WS_ROPING || worm->ObjState == WS_PARACHUTE)
+//                   {
+//                      worm->PosY = GS->LevelSY + 1;
+//                      local Health = GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber);
+//                      GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, Health/2);           //problem with respawning health. its appears to be "1"
+                      worm->SetState(WS_FLYING2);
+//                   }
+//             DoExplosion(worm->PosX, worm->PosY, 1, 1, 0, worm->WormTeam);
+                   local gasshark;
+                   gasshark = new CGas(Root->GetObject(25, 0), RandomInt(worm->PosX-20, worm->PosX+20), RandomInt(worm->PosY-20, worm->PosY+20), 50, worm->WormTeam);
+                   gasshark = new CGas(Root->GetObject(25, 0), RandomInt(worm->PosX-20, worm->PosX+20), RandomInt(worm->PosY-20, worm->PosY+20), 50, worm->WormTeam);
+                   gasshark = new CGas(Root->GetObject(25, 0), RandomInt(worm->PosX-20, worm->PosX+20), RandomInt(worm->PosY-20, worm->PosY+20), 50, worm->WormTeam);
+                   gasshark = new CGas(Root->GetObject(25, 0), RandomInt(worm->PosX-20, worm->PosX+20), RandomInt(worm->PosY-20, worm->PosY+20), 50, worm->WormTeam);
+                   gasshark = new CGas(Root->GetObject(25, 0), RandomInt(worm->PosX-20, worm->PosX+20), RandomInt(worm->PosY-20, worm->PosY+20), 50, worm->WormTeam);
+/*                   gasshark = new CBloodFX();    // AngleX, AngleY, Size, PlaySpeed, Life, Rotation
+                   gasshark = new CBloodFX(RandomFloat(-1.0, 1.0), RandomFloat(-1.0, 1.0), 2.5, 2.0, 2, 1);
+                   gasshark = new CBloodFX(RandomFloat(-1.0, 1.0), RandomFloat(-1.0, 1.0), 1.5, 3.0, 6, 1);
+                   gasshark = new CBloodFX(RandomFloat(-1.0, 1.0), RandomFloat(-1.0, 1.0), 4.5, 1.0, 15, 1);
+                   gasshark = new CBloodFX(RandomFloat(-1.0, 1.0), RandomFloat(-1.0, 1.0), 0.5, 2.0, 12, 1);
+                   gasshark = new CBloodFX(RandomFloat(-1.0, 1.0), RandomFloat(-1.0, 1.0), 2.0, 8.0, 30, 20);
+*/                   worm->SpY = 1;
+             }
+             if (sharkIndependentCounter <= 262) {sharkIndependentCounter += 1;} else {sharkIndependentCounter = 0;}      // 35 in M_FRAME = 100 in M_DRAW.. 262
+//             if (sharkWTF) {sharkIndependentCounter = 0;}
+            }
+          } else {sharkIndependentCounter = 0; checkNow = true;}
+        }
+    }
+    return;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+  if (Type == M_DRAWQUEUE)
+   {
+     if (WormInactive)
+     {
+      local tempWormSp = SpY;
+  if (tempWormSp < 1.0) tempWormSp = 1.0;
+  local tempAnimSpeed = SpY;
+  if (tempAnimSpeed < 6) tempAnimSpeed = 6;
+  if (PosY >= GS->LevelSY - tempWormSp*49.95 && PosY <= GS->LevelSY + 40)
+  {
+         if (ObjState != WS_IDLE && ObjState != WS_AIMING && ObjState != WS_WALKING && ObjState != WS_SHOOTINGROPE && ObjState != WS_JUMP && ObjState != WS_JUMPPREPARE)
+         {
+            if (sharkI <= 100)
+            {
+               local sideCoef;
+               local sideCoef2;
+               if (SpX >= 1) {spr3 = sharkHeadL->Index; sideCoef = 0.7; sideCoef2 = 300.0;} else {spr3 = sharkHeadR->Index; sideCoef = -0.7; sideCoef2 = -300.0;}
+               tempAnimSpeed2 = sharkI*tempAnimSpeed/16;
+               AddSpriteEx(5, PosX, GS->LevelSY - tempAnimSpeed2, spr3, sharkI/100.0, sharkI/sideCoef2 - sideCoef, 0.7);
+            }
+            else if (sharkI <= 200)
+            {
+               local sideCoef;
+               local sideCoef2;
+               if (SpX >= 1) {spr3 = sharkHeadL->Index; sideCoef = 0.2; sideCoef2 = 600.0;} else {spr3 = sharkHeadR->Index; sideCoef = -0.2; sideCoef2 = -600.0;}
+               AddSpriteEx(5, PosX, GS->LevelSY + (sharkI - 100 - tempAnimSpeed2), spr3, 1-sharkI/300.0, sharkI/sideCoef2 - sideCoef, 0.7);
+            }
+            if (sharkI <= 750) {sharkI += 1;} else {sharkI = 0;}
+         }
+  } else sharkI = 0;
+
+  if (PosY >= GS->LevelSY + 10)
+  {
+     local ang;
+     ang = float(PosY - GS->LevelSY) / 150.0;
+     if (ang > 2.0) ang = 0;
+     local spr2 = sharkSink->Index;
+     AddSpriteEx(5, PosX, PosY - 2, spr2, SharkAnimPhase, ang, 1.0);
+     if(SharkAnimPhase > 0.99){SharkAnimPhase = 0.0;}
+     else{SharkAnimPhase = SharkAnimPhase + SharkAnimSpeed;}
+  }
+  }
+  }
+  if (Type == M_TURNEND)
+  {
+     WormInactive = true;
+  }
+  if (Type == M_TURNBEGIN)
+  {
+     WormInactive = false;
+  }
+}

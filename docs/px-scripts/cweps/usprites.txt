@@ -1,0 +1,538 @@
+// PXS SPRITE UNLOADING TEMPLATE
+/*------------------------------------------------------------------------------
+require cweps, utils;
+
+override void cwp_spb::InitGraphic()
+{
+CFile *f;
+//-----------------------------------------------SPB
+f = GetAttachment("sbpicp.png");
+sbpicp = LoadSprite(f, 10, 0);
+f = GetAttachment("sbpicu.png");
+sbpicu = LoadSprite(f, 10, 0);
+f = GetAttachment("sbpicd.png");
+sbpicd = LoadSprite(f, 10, 0);
+f = GetAttachment("sbaimp.png");
+sbaimp = LoadSprite(f, 32, 0);
+f = GetAttachment("sbaimu.png");
+sbaimu = LoadSprite(f, 32, 0);
+f = GetAttachment("sbaimd.png");
+sbaimd = LoadSprite(f, 32, 0);
+f = GetAttachment("spb_whbaz.png");
+whbaz_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("lglow.png");
+lglow_tr = LoadSprite(f, 1, 0);
+                                 
+//                               REQUIRED
+//-----------------------------------------------TRAILS
+f = GetAttachment("blood.png");
+blood_tr = LoadSprite(f, 6, 0);
+
+//                           BLASTER WORM
+//                                SKIPPER
+//                             POGO SHEEP
+//                          BATTERING RAM
+//                          DRILLING CREW
+//                             SUPER WORM
+//                        K.KAZI GLIDERER
+//---------------------------------------
+f = GetAttachment("smrtbt.png");
+smart_tr = LoadSprite(f, 8, 0);
+
+//                          HOMING MORTAR
+//                         S.M.A.R.T BOMB
+//                     S.M.A.R.T.E.R BOMB
+//                             BASKETBALL
+//                      SUPER GRAVEDIGGER
+//                       THROWN MING VASE
+//                          CRAZY CHICKEN
+//                    SUPER CRAZY CHICKEN
+//---------------------------------------
+f = GetAttachment("thmpnt.png");
+thmpn_tr = LoadSprite(f, 9, 0);
+
+//                    SUPER REMOTE ROLLER
+//                    THUMPER NADE STRIKE
+//                   REMOTE ROLLER STRIKE
+//                            RAZOR STORM
+//---------------------------------------
+f = GetAttachment("thmpnct.png");
+thmpc_tr = LoadSprite(f, 8, 0);
+
+//                           THUMPER NADE
+//                    THUMPER NADE STRIKE
+//---------------------------------------
+f = GetAttachment("bumpt.png");
+bumpb_tr = LoadSprite(f, 6, 0);
+
+//                            BUMPER BOMB
+//                      SUPER BUMPER BOMB
+//---------------------------------------
+f = GetAttachment("slamt.png");
+magic_tr = LoadSprite(f, 6, 0);
+
+//                   MAGIC SLAMMER STRIKE
+//---------------------------------------
+f = GetAttachment("explat.png");
+expla_tr = LoadSprite(f, 8, 0);
+
+//                           CLUSTER FRAG
+//                           HOMING ARROW
+//                      EXP. ARROW STRIKE
+//                                 METEOR
+//---------------------------------------
+f = GetAttachment("windat.png");
+winda_tr = LoadSprite(f, 8, 0);
+
+//                          HOMING MORTAR
+//                          MORTAR STRIKE
+//---------------------------------------
+f = GetAttachment("rbndrt.png");
+rbndr_tr = LoadSprite(f, 8, 0);
+
+//                             MULTI-BOLT
+//                      MULTI-BOLT STRIKE
+//---------------------------------------
+f = GetAttachment("firebt.png");
+fireb_tr = LoadSprite(f, 8, 0);
+
+//                               ASCENDER
+//                              DESCENDER
+//                          REMOTE ROLLER
+//                               BOMB-OMB
+//                          BOMB-OMB DROP
+//                         DESCENDER DROP
+//                   REMOTE ROLLER STRIKE
+//---------------------------------------
+f = GetAttachment("stonet.png");
+stone_tr = LoadSprite(f, 7, 0);
+
+//                           CLOUD BUSTER
+//                       STAFF OF JOLTING
+//---------------------------------------
+f = GetAttachment("stafft.png");
+staff_tr = LoadSprite(f, 6, 0);
+
+//                         S.M.A.R.T BOMB
+//                     S.M.A.R.T.E.R BOMB
+//                    SUPER MAGIC SLAMMER
+//---------------------------------------
+f = GetAttachment("ascdt.png");
+asced_tr = LoadSprite(f, 4, 0);
+
+//                               ASCENDER
+//                         SUPER ASCENDER
+//---------------------------------------
+f = GetAttachment("dscdt.png");
+descd_tr = LoadSprite(f, 4, 0);
+
+//                              DESCENDER
+//                        SUPER DESCENDER
+//                         DESCENDER DROP
+//---------------------------------------
+f = GetAttachment("bombbt.png");
+bombb_tr = LoadSprite(f, 7, 0);
+
+//                             MINI-TORCH
+//                               BOMB-OMB
+//---------------------------------------
+f = GetAttachment("swindt.png");
+swind_tr = LoadSprite(f, 9, 0);
+
+//                          MORTAR STRIKE
+//                      SIDEWINDER STRIKE
+//-----------------------------------------------ZOOKS
+f = GetAttachment("spb_grvlr.png");
+grvlr_aim = LoadSprite(f, 8, 0);
+
+//                                GRAVLER
+//                             GRAVLER FD
+//---------------------------------------
+f = GetAttachment("grvlr.png");
+grvlr_bul = LoadSprite(f, 3, 0);
+
+//                             GRAVLER FD
+//---------------------------------------
+f = GetAttachment("grvla.png");
+grvla = LoadSprite(f, 17, 0);
+f = GetAttachment("grvlb.png");
+grvlb = LoadSprite(f, 17, 0);
+f = GetAttachment("grvlc.png");
+grvlc = LoadSprite(f, 17, 0);
+f = GetAttachment("grvld.png");
+grvld = LoadSprite(f, 17, 0);
+
+//                                GRAVLER
+//                         GRAVLER STRIKE
+//---------------------------------------
+f = GetAttachment("hmort.png");
+hmort_bul = LoadSprite(f, 2, 0);
+
+//                          HOMING MORTAR
+//---------------------------------------
+f = GetAttachment("ptrlr.png");
+ptrlr_bul = LoadSprite(f, 6, 0);
+
+//                          PETROL ROCKET
+//---------------------------------------
+f = GetAttachment("spb_blast.png");
+blast_aim = LoadSprite(f, 4, 0);
+f = GetAttachment("bworm.png");
+blast_bul = LoadSprite(f, 4, 0);
+
+//                           BLASTER WORM
+//---------------------------------------
+f = GetAttachment("pignc.png");
+pignc_bul = LoadSprite(f, 4, 0);
+f = GetAttachment("spb_pignc.png");
+pignc_aim = LoadSprite(f, 4, 0);
+
+//                          PIGEON CANNON
+//---------------------------------------
+f = GetAttachment("spb_smart.png");
+smart_aim = LoadSprite(f, 8, 0);
+f = GetAttachment("smrtb.png");
+smart_bul = LoadSprite(f, 11, 0);
+
+//                         S.M.A.R.T BOMB
+//                     S.M.A.R.T.E.R BOMB
+//-----------------------------------------------GUNS
+f = GetAttachment("frplt.png");
+frplt_bul = LoadSprite(f, 6, 0);
+
+//                               PILLAGER
+//-----------------------------------------------NADES
+f = GetAttachment("fraga.png");
+fraga_aim = LoadSprite(f, 1, 0);
+
+//                           FRAG GRENADE
+//---------------------------------------
+f = GetAttachment("fragb.png");
+fragb_aim = LoadSprite(f, 1, 0);
+
+//                           CLUSTER FRAG
+//---------------------------------------
+f = GetAttachment("bskbl.png");
+bskbl_aim = LoadSprite(f, 1, 0);
+
+//                             BASKETBALL
+//---------------------------------------
+f = GetAttachment("bsebl.png");
+bsebl_aim = LoadSprite(f, 1, 0);
+
+//                          BASEBALL BOMB
+//---------------------------------------
+f = GetAttachment("thmpn.png");
+thump_aim = LoadSprite(f, 6, 0);
+
+//                           THUMPER NADE
+//---------------------------------------
+f = GetAttachment("bumpa.png");
+bumpa_aim = LoadSprite(f, 6, 0);
+
+//                            BUMPER BOMB
+//---------------------------------------
+f = GetAttachment("bumpb.png");
+bumpb_aim = LoadSprite(f, 12, 0);
+
+//                      SUPER BUMPER BOMB
+//---------------------------------------
+f = GetAttachment("ionba.png");
+ionba_aim = LoadSprite(f, 12, 0);
+
+//                               ION BOMB
+//---------------------------------------
+f = GetAttachment("ionbb.png");
+ionbb_aim = LoadSprite(f, 12, 0);
+
+//                         SUPER ION BOMB
+//---------------------------------------
+f = GetAttachment("slama.png");
+slama_aim = LoadSprite(f, 6, 0);
+
+//                          MAGIC SLAMMER
+//---------------------------------------
+f = GetAttachment("slamb.png");
+slamb_aim = LoadSprite(f, 6, 0);
+
+//                    SUPER MAGIC SLAMMER
+//---------------------------------------
+f = GetAttachment("grava.png");
+grava_aim = LoadSprite(f, 12, 0);
+
+//                            GRAVEDIGGER
+//---------------------------------------
+f = GetAttachment("gravb.png");
+gravb_aim = LoadSprite(f, 12, 0);
+
+//                      SUPER GRAVEDIGGER
+//---------------------------------------
+f = GetAttachment("sgrva.png");
+sgrva = LoadSprite(f, 12, 0);
+f = GetAttachment("sgrvb.png");
+sgrvb = LoadSprite(f, 1, 0);
+f = GetAttachment("sgrvc.png");
+sgrvc = LoadSprite(f, 1, 0);
+f = GetAttachment("sgrvd.png");
+sgrvd = LoadSprite(f, 1, 0);
+
+//                      SUPER GRAVEDIGGER
+//                            RAZOR STORM
+//-----------------------------------------------BOWS
+f = GetAttachment("spb_crbow.png");
+crbow_aim = LoadSprite(f, 4, 0);
+f = GetAttachment("bolta.png");
+crbow_bul = LoadSprite(f, 6, 0);
+
+//                               CROSSBOW
+//---------------------------------------
+f = GetAttachment("spb_expla.png");
+expla_aim = LoadSprite(f, 1, 0);
+
+//                        EXPLOSIVE ARROW
+//---------------------------------------
+f = GetAttachment("expla.png");
+expla_bul = LoadSprite(f, 1, 0);
+
+//                        EXPLOSIVE ARROW
+//                              REBOUNDER
+//---------------------------------------
+f = GetAttachment("spb_winda.png");
+winda_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("winda.png");
+winda_bul = LoadSprite(f, 6, 0);
+
+//                            WINDY ARROW
+//---------------------------------------
+f = GetAttachment("spb_rebnd.png");
+rebnd_aim = LoadSprite(f, 1, 0);
+
+//                              REBOUNDER
+//---------------------------------------
+f = GetAttachment("spb_homea.png");
+homea_aim = LoadSprite(f, 1, 0);
+
+//                           HOMING ARROW
+//---------------------------------------
+f = GetAttachment("spb_multi.png");
+multi_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("multi.png");
+multi_bul = LoadSprite(f, 12, 0);
+
+//                             MULTI-BOLT
+//---------------------------------------
+f = GetAttachment("multic.png");
+mltbc = LoadSprite(f, 32, 0);
+
+//                           HOMING ARROW
+//                             MULTI-BOLT
+//                      EXP. ARROW STRIKE
+//                      MULTI-BOLT STRIKE
+//---------------------------------------
+f = GetAttachment("spb_fireb.png");
+fireb_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("fireb.png");
+fireb_bul = LoadSprite(f, 6, 0);
+
+//                          WILDFIRE-BOLT
+//---------------------------------------
+f = GetAttachment("spb_shadb.png");
+shadb_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("shadb.png");
+shadb_bul = LoadSprite(f, 6, 0);
+
+//                            SHADOW-BOLT
+//---------------------------------------
+f = GetAttachment("spb_telea.png");
+telea_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("telea.png");
+telea_bul = LoadSprite(f, 8, 0);
+//                             TELE ARROW
+//-----------------------------------------------PRIMALS
+f = GetAttachment("snowb.png");
+snowb_aim = LoadSprite(f, 1, 0);
+
+//                              SNOW BALL
+//---------------------------------------
+f = GetAttachment("spb_sling.png");
+sling_aim = LoadSprite(f, 8, 0);
+
+//                              SLINGSHOT
+//---------------------------------------
+f = GetAttachment("spb_javln.png");
+javln_aim = LoadSprite(f, 12, 0);
+f = GetAttachment("javla.png");
+javln_bul = LoadSprite(f, 12, 0);
+
+//                                JAVELIN
+//---------------------------------------
+f = GetAttachment("spb_ninja.png");
+ninja_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("ninjaa.png");
+ninja_bul = LoadSprite(f, 6, 0);
+
+//                             NINJA STAR
+//---------------------------------------
+f = GetAttachment("spb_staff.png");
+staff_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("staff.png");
+staff_bul = LoadSprite(f, 10, 0);
+
+//                       STAFF OF JOLTING
+//-----------------------------------------------GADGETS
+f = GetAttachment("forbs.png");
+forbs_bul = LoadSprite(f, 8, 0);
+
+//                              FIRE ORBS
+//---------------------------------------
+f = GetAttachment("spb_ether.png");
+ether_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("etherb.png");
+ether_bul = LoadSprite(f, 16, 0);
+
+//                         ETHER BALLOONS
+//---------------------------------------
+f = GetAttachment("girdla.png");
+girdl_bul = LoadSprite(f, 8, 0);
+
+//                        GIRDER LAUNCHER
+//---------------------------------------
+f = GetAttachment("tdyna.png");
+tdyna_aim = LoadSprite(f, 4, 0);
+
+//                        THROWN DYNAMITE
+//---------------------------------------
+f = GetAttachment("tming.png");
+tming_aim = LoadSprite(f, 1, 0);
+
+//                       THROWN MING VASE
+//---------------------------------------
+f = GetAttachment("ascda.png");
+ascda_aim = LoadSprite(f, 10, 0);
+
+//                               ASCENDER
+//---------------------------------------
+f = GetAttachment("ascdb.png");
+ascdb_aim = LoadSprite(f, 10, 0);
+
+//                         SUPER ASCENDER
+//---------------------------------------
+f = GetAttachment("dscda.png");
+dscda_aim = LoadSprite(f, 10, 0);
+
+//                              DESCENDER
+//---------------------------------------
+f = GetAttachment("dscdb.png");
+dscdb_aim = LoadSprite(f, 10, 0);
+
+//                        SUPER DESCENDER
+//---------------------------------------
+f = GetAttachment("rolla.png");
+rolla_aim = LoadSprite(f, 12, 0);
+
+//                          REMOTE ROLLER
+//---------------------------------------
+f = GetAttachment("rollb.png");
+rollb_aim = LoadSprite(f, 12, 0);
+
+//                    SUPER REMOTE ROLLER
+//-----------------------------------------------CRITTERS
+f = GetAttachment("skipr.png");
+skipr_aim = LoadSprite(f, 9, 0);
+
+//                                SKIPPER
+//---------------------------------------
+f = GetAttachment("bombb.png");
+bombb_aim = LoadSprite(f, 15, 0);
+
+//                               BOMB-OMB
+//---------------------------------------
+f = GetAttachment("spb_pogos.png");
+pogos_aim = LoadSprite(f, 1, 0);
+
+//                             POGO SHEEP
+//---------------------------------------
+f = GetAttachment("btram.png");
+btram_aim = LoadSprite(f, 8, 0);
+
+//                          BATTERING RAM
+//---------------------------------------
+f = GetAttachment("cchkn.png");
+cchkn_aim = LoadSprite(f, 4, 0);
+
+//                          CRAZY CHICKEN
+//---------------------------------------
+f = GetAttachment("cchkna.png");
+chkna = LoadSprite(f, 32, 1);
+f = GetAttachment("cchknb.png");
+chknb = LoadSprite(f, 32, 1);
+
+//                    SUPER CRAZY CHICKEN
+//---------------------------------------
+f = GetAttachment("drllc.png");
+drllc_aim = LoadSprite(f, 8, 0);
+
+//                          DRILLING CREW
+//---------------------------------------
+f = GetAttachment("sqwks.png");
+sqwks_aim = LoadSprite(f, 4, 0);
+f = GetAttachment("sqwksa.png");
+sqwka = LoadSprite(f, 32, 1);
+f = GetAttachment("sqwksb.png");
+sqwkb = LoadSprite(f, 32, 1);
+
+//                                SQUAWKS
+//---------------------------------------
+f = GetAttachment("sworm.png");
+sworm_aim = LoadSprite(f, 15, 0);
+f = GetAttachment("sworma.png");
+swrma = LoadSprite(f, 32, 1);
+f = GetAttachment("swormb.png");
+swrmb = LoadSprite(f, 32, 1);
+
+//                             SUPER WORM
+//-------------------------------------------------------
+//-----------------------------------------------OVERRIDE
+SetSpriteOverride(245, blood_tr);
+SetSpriteOverride(246, smart_tr);
+SetSpriteOverride(247, thmpn_tr);
+SetSpriteOverride(248, thmpc_tr);
+SetSpriteOverride(249, bumpb_tr);
+SetSpriteOverride(250, magic_tr);
+SetSpriteOverride(251, expla_tr);
+SetSpriteOverride(252, winda_tr);
+SetSpriteOverride(253, rbndr_tr);
+SetSpriteOverride(254, fireb_tr);
+SetSpriteOverride(255, stone_tr);
+SetSpriteOverride(256, staff_tr);
+SetSpriteOverride(257, asced_tr);
+SetSpriteOverride(258, descd_tr);
+SetSpriteOverride(259, bombb_tr);
+SetSpriteOverride(260, swind_tr);
+
+SetSpriteOverride(445, sbpicp);
+SetSpriteOverride(446, sbpicu);
+SetSpriteOverride(447, sbpicd);
+
+SetSpriteOverride(451, grvla);
+SetSpriteOverride(452, grvlb);
+SetSpriteOverride(453, grvlc);
+SetSpriteOverride(454, grvld);
+SetSpriteOverride(455, sgrva);
+SetSpriteOverride(456, sgrvb);
+SetSpriteOverride(457, sgrvc);
+SetSpriteOverride(458, sgrvd);
+SetSpriteOverride(459, mltbc);
+SetSpriteOverride(460, chkna);
+SetSpriteOverride(461, chknb);
+SetSpriteOverride(462, sqwka);
+SetSpriteOverride(463, sqwkb);
+SetSpriteOverride(464, swrma);
+SetSpriteOverride(465, swrmb);
+
+SetSpriteOverride(534, sbaimp);
+SetSpriteOverride(535, sbaimu);
+SetSpriteOverride(536, sbaimd);
+}
+
+*/

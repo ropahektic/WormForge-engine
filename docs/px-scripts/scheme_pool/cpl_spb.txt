@@ -1,0 +1,151 @@
+require p_sprite_builder, utils;
+
+CSprite* blank;
+CSprite* cpbaz;
+CSprite* cuebl_bul;
+CSprite* rcueb_bul;
+CSprite* hcueb_bul;
+CSprite* cheap_bul;
+CSprite* gcuea;
+CSprite* gcueb;
+CSprite* trail;
+CSprite* lglow;
+
+void cpl_spb::InitGraphic()
+{
+CFile *f;
+f = GetAttachment("blank.png"); blank = LoadSprite(f, 1, 0);
+f = GetAttachment("cpbaz.png"); cpbaz = LoadSprite(f, 1, 0);
+f = GetAttachment("cuebl.png"); cuebl_bul = LoadSprite(f, 1, 0);
+f = GetAttachment("rcueb.png"); rcueb_bul = LoadSprite(f, 1, 0);
+f = GetAttachment("hcueb.png"); hcueb_bul = LoadSprite(f, 6, 0);
+f = GetAttachment("cheap.png"); cheap_bul = LoadSprite(f, 6, 0);
+f = GetAttachment("gcuea.png"); gcuea = LoadSprite(f, 1, 0);
+f = GetAttachment("gcueb.png"); gcueb = LoadSprite(f, 1, 0);
+f = GetAttachment("trail.png"); trail = LoadSprite(f, 10, 0);
+f = GetAttachment("lglow.png"); lglow = LoadSprite(f, 1, 0);
+
+SetSpriteOverride(2, blank);
+SetSpriteOverride(3, blank);
+SetSpriteOverride(4, blank);
+SetSpriteOverride(5, blank);
+SetSpriteOverride(6, blank);
+SetSpriteOverride(7, blank);
+SetSpriteOverride(245, gcuea);
+SetSpriteOverride(246, gcueb);
+SetSpriteOverride(247, trail);
+}
+
+override void CWorm::RenderWorm()
+{
+SetColorMod(GetTeamColorRGB(GetTeamColor(WormTeam)+1), 8);
+AddSpriteEx(13, PosX, PosY, cpbaz->Index, 1.0, 0, 0.8);
+ClearColorMod();
+}
+
+
+
+
+//------------------------------------------------------------------------------
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+if (Type == M_FRAME)
+{
+	if (weap->CheckName("Cue"))
+		{
+		if (cuebl_anim)
+			{
+			local sprite = cuebl_bul->Index;
+			WeapSpriteParams* Params = new WeapSpriteParams;
+			Params->animate = false;
+			new WeapSprite(this, sprite, Params);
+			weap->launch.anim.spriteIndex = 0;
+			cuebl_anim = false;
+			}
+		}
+
+	if (weap->CheckName("Remote Cue"))
+		{
+		if (rcueb_anim)
+			{
+			local sprite = rcueb_bul->Index;
+			WeapSpriteParams* Params = new WeapSpriteParams;
+			Params->animate = false;
+			new WeapSprite(this, sprite, Params);
+			weap->launch.anim.spriteIndex = 0;
+			rcueb_anim = false;
+			}
+		}
+		
+	if (weap->CheckName("Hyper Cue"))
+		{
+		if (hcueb_anim)
+			{
+			local sprite = hcueb_bul->Index;
+			WeapSpriteParams* Params = new WeapSpriteParams;
+			Params->animate = true;
+			Params->anim_speed = 1.00;
+			new WeapSprite(this, sprite, Params);
+			weap->launch.anim.spriteIndex = 0;
+			hcueb_anim = false;
+			}
+		}
+		
+	if (weap->CheckName("Cheap Shot"))
+		{
+		if (cheap_anim)
+			{
+			local sprite = cheap_bul->Index;
+			WeapSpriteParams* Params = new WeapSpriteParams;
+			Params->animate = true;
+			Params->anim_speed = 4.00;
+			new WeapSprite(this, sprite, Params);
+			weap->launch.anim.spriteIndex = 0;
+			cheap_anim = false;
+			}
+		}
+	}
+}
+//------------------------------------------------------------------------------
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+cuebl_anim = true;
+rcueb_anim = true;
+hcueb_anim = true;
+cheap_anim = true;
+}
+//------------------------------------------------------------------------------
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+if(CurWeapon->CheckName("Cue")
+|| CurWeapon->CheckName("Remote Cue")
+|| CurWeapon->CheckName("Hyper Cue")
+|| CurWeapon->CheckName("Guidance Cue")
+|| CurWeapon->CheckName("Cheap Shot")
+|| CurWeapon->CheckName("Ball Launcher"))
+
+	{
+	if (sound == 140 || sound == 194) return;         // FIRE!
+	else if (sound == 177 || sound == 231) return;    // WATCH THIS...
+	else super;
+	}
+else
+	{
+	super;
+	}
+}
+//------------------------------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if(Weap->CheckName("Cue")
+|| Weap->CheckName("Remote Cue")
+|| Weap->CheckName("Hyper Cue")
+|| Weap->CheckName("Guidance Cue")
+|| Weap->CheckName("Cheap Shot")
+|| CurWeapon->CheckName("Ball Launcher"))
+{PlaySound(109,1.0,0.8,1.0);
+PlaySound(109,1.0,0.8,1.0);
+PlaySound(109,1.0,0.8,1.0);}
+super;
+}

@@ -1,0 +1,320 @@
+require utils, pxparticles, pxbullet;
+
+CDevice : CGObject;
+
+CSoundFile* buildsnd;
+CSoundFile* device_break;
+CSoundFile* error;
+
+
+void device_script::InitGraphic()  //After hundreds of dead bunnies, finally i managed to make this thing working
+{
+
+}
+
+void device_script::Init()
+{
+}
+
+void device_script::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("buildingsnd.wav");	buildsnd = new CSoundFile(f);
+	f = GetAttachment("device_break.wav");	device_break = new CSoundFile(f);
+	f = GetAttachment("error.wav");	 error = new CSoundFile(f);
+}
+
+
+CDevice::CDevice(CObject* parent, float x, float y)
+{
+    super(parent, 17, 9);
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+
+    IsMaterial  = true;
+    ColGroup    = 6190; // 236670; //2+4+8+16+32+64+1024+2048+4096+32768+65536+131072;
+    ClType = EObjectClass(71);
+    DumpingA = 0.3;
+    DumpingB = 0.3;
+    DumpingC = 1.0;
+
+    Health = 15;
+    Team = 0;
+
+    AnimPhase = 0.0;
+    AnimPhaseSpeed = 0.0;      //currently for metal box only :D
+    Direction = 0;
+    AnimBool = false;
+
+    ClassType = "Null";
+}
+
+
+void CDevice::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+//basic - death, falling, animphase
+   if(Type == M_FRAME)
+   {
+   Destroy();
+   AntiBlock();
+   if(StrCmp(ClassType,"MetalBox")){AnimPhaseProcess();}
+   }
+
+   if(Type == M_EXPLOSION)  //exp damage handling
+   {
+   TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]);
+   }
+   if(Type == M_GUNEXP)   //gunexp dmg handling
+   {
+   TakeDamage(MData->params[5]);
+   }
+}
+
+
+void CDevice::Collide ( CGObject *obj, int type )
+{
+super;
+if(type == 3 && SpX > 0){SpX = SpX - 1;}
+if(type == 3 && SpX < 0){SpX = SpX + 1;}
+}
+
+void CDevice::Reflect ( CGObject *obj, int type )
+{
+super;
+ if(type == 2 || type == 4)obj->SpX = -1 * obj->SpX;
+ if(type == 1 || type == 3)
+ {
+         if(obj->ClType == OC_Missile)
+         {
+         obj->SpY = -1 * obj->SpY;
+         }
+ }
+}
+
+
+void CDevice::Destroy()
+{
+      if (Health < 1) //Destroying
+      {
+      device_break->Play(1.0,0.0,false);
+      Free(true); return;
+      }
+
+      if(PosY > GS->LevelSY)
+      {
+      Health = 0;
+      }
+}
+
+
+void CDevice::AnimPhaseProcess()
+{
+     if(AnimPhase < 1.0)
+     {
+     AnimPhase = AnimPhase + AnimPhaseSpeed;
+     }
+
+     if(AnimPhase > 0.99)
+     {
+     AnimPhase = 0.0;
+     }
+}
+
+
+void CDevice::AntiBlock()
+{
+    if(GetCurrentWorm() != NullObj && StrCmp(ClassType, "MetalBox") == false)
+    {
+        CGObject *obj;
+     	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(obj != NullObj) continue;
+		if(obj->IsMaterial == false) continue;
+                local mtp = 0;
+
+		if(StrCmp(ClassType, "HoverPad") || StrCmp(ClassType, "JumpPad"))
+		{mtp = 8;}
+		if(StrCmp(ClassType, "Sentry"))
+		{mtp = 12;}
+		if(StrCmp(ClassType, "Disruptor"))
+		{mtp = 15;}
+
+		if(ColMask->Check(PosX, PosY+mtp, obj->ColMask, obj->PosX, obj->PosY))
+		{
+			if(obj->ClType == OC_Worm)
+			{
+				local worm = CWorm(obj);
+				if(worm->WormTeam == worm->WormTeam)
+				{
+                    if(worm->ObjState == WS_JUMP)
+                        {
+                        SpY = -6;
+                        }
+                }
+			}
+		}
+	}
+    }
+}
+
+///////////////////////////////////FIREFINAL_PART///////////////////////////////
+///////////////////////////////////FIREFINAL_PART///////////////////////////////
+///////////////////////////////////FIREFINAL_PART///////////////////////////////
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+ if(Weap->CheckName("Aim on reaction"))
+ {
+ float ang = atan2(Desc->SpY, Desc->SpX);
+ float a;
+ a = ang;
+ DirX = cos(a);
+ DirY = sin(a);
+ TrgX = Desc->X + DirX * 10000.0;
+ TrgY = Desc->Y + DirY * 10000.0;
+ PlayLocalSound(81, 3, 1, 1);
+ AimScript();
+ Root->Timer = 1;
+ }
+
+ if (Weap->CheckName("Construct JumpPad"))
+         {
+                       if(GetTeamMetal() >= 2)
+                       {
+                       WasteMetal(2);
+                       JumpPad = new CJumpPad(Root->GetObject(25, 0), 0, 0);
+                       local Obje = Env->CheckCollision( JumpPad, PosX+28*TurnSide, PosY-3);
+                       JumpPad->PosX = PosX+28*TurnSide;
+                       JumpPad->PosY = PosY-3;
+                       JumpPad->Team = GetTeamNumber(GetCurrentWorm()->WormTeam);
+                       JumpPad->Health = 15;
+                       JumpPad->ClassType = "JumpPad";
+                       SM->MakeSpriter(PosX+28*TurnSide, PosY-3, JumpPad);
+
+                         if(Obje != NullObj)
+                         {
+                                 if(Obje->ClType == OC_Landscape)
+                                 {
+                                 JumpPad->Health = 0;
+                                 ReturnMetal(2);
+                                 ShowMessage("Can't place there!");
+                                 }
+                                 else{buildsnd->Play(1.0,0.0,false);}
+                         }
+                         else{buildsnd->Play(1.0,0.0,false);}
+                       }
+                       else
+                       {
+                       error->Play(1.0, 1.0, false);
+                       ShowMessage("Not enough metal!");
+                       }
+         }
+
+ if (Weap->CheckName("Construct HoverPad"))
+         {
+                       if(GetTeamMetal() >= 2)
+                       {
+                       WasteMetal(2);
+                       HoverPad = new CHoverPad(Root->GetObject(25, 0), 0, 0);
+                       local Obje = Env->CheckCollision( HoverPad, PosX+28*TurnSide, PosY-3);
+                       HoverPad->PosX = PosX+28*TurnSide;
+                       HoverPad->PosY = PosY-3;
+                       HoverPad->Team = GetTeamNumber(GetCurrentWorm()->WormTeam);
+                       HoverPad->Health = 15;
+                       HoverPad->ClassType = "HoverPad";
+                       SM->MakeSpriter(PosX+28*TurnSide, PosY-3, HoverPad);
+
+
+                         if(Obje != NullObj)
+                         {
+                                 if(Obje->ClType == OC_Landscape)
+                                 {
+                                 HoverPad->Health = 0;
+                                 ReturnMetal(2);
+                                 ShowMessage("Can't place there!");
+                                 }
+                                 else{buildsnd->Play(1.0,0.0,false);}
+                         }
+                         else{buildsnd->Play(1.0,0.0,false);}
+                       }
+                       else
+                       {
+                       error->Play(1.0, 1.0, false);
+                       ShowMessage("Not enough metal!");
+                       }
+         }
+
+ if (Weap->CheckName("Construct Sentry"))
+         {
+                       if(GetTeamMetal() >= 6)
+                       {
+                       WasteMetal(6);
+                       Sentry = new CSentry(Root->GetObject(25, 0), 0, 0);
+                       local Obje = Env->CheckCollision( Sentry, PosX+20*TurnSide, PosY-8);
+                       Sentry->PosX = PosX+20*TurnSide;
+                       Sentry->PosY = PosY-8;
+                       Sentry->Team = GetTeamNumber(GetCurrentWorm()->WormTeam);
+                       Sentry->Direction = TurnSide;
+                       Sentry->Health = 40;
+                       Sentry->ClassType = "Sentry";
+                       SM->MakeSpriter(PosX+20*TurnSide, PosY-8, Sentry);
+
+                         if(Obje != NullObj)
+                         {
+                                 if(Obje->ClType == OC_Landscape)
+                                 {
+                                 Sentry->Health = 0;
+                                 ReturnMetal(6);
+        						 ShowMessage("Can't place there!");
+                                 }
+                                 else{buildsnd->Play(1.0,0.0,false);}
+                         }
+                         else{buildsnd->Play(1.0,0.0,false);}
+                       }
+                       else
+                       {
+                       error->Play(1.0, 1.0, false);
+                       ShowMessage("Not enough metal!");
+                       }
+         }
+
+ if (Weap->CheckName("Construct Disruptor"))
+         {
+                       if(GetTeamMetal() >= 4)
+                       {
+                       WasteMetal(4);
+                       Disruptor = new CDisruptor(Root->GetObject(25, 0), 0, 0);
+                       local Obje = Env->CheckCollision( Disruptor, PosX+12*TurnSide, PosY-18);
+                       Disruptor->PosX = PosX+10*TurnSide;
+                       Disruptor->PosY = PosY-16;
+                       Disruptor->Team = GetTeamNumber(GetCurrentWorm()->WormTeam);
+                       Disruptor->Health = 25;
+                       Disruptor->ClassType = "Disruptor";
+                       SM->MakeSpriter(PosX+10*TurnSide, PosY-16, Disruptor);
+
+                         if(Obje != NullObj)
+                         {
+                               if(Obje->ClType == OC_Landscape)
+                               {
+                               Disruptor->Health = 0;
+                               ReturnMetal(4);
+        					   ShowMessage("Can't place there!");
+                               }
+                               else{buildsnd->Play(1.0,0.0,false);}
+                         }
+                         else{buildsnd->Play(1.0,0.0,false);}
+                       }
+                       else
+                       {
+                       error->Play(1.0, 1.0, false);
+                       ShowMessage("Not enough metal!");
+                       }
+         }
+super;
+}

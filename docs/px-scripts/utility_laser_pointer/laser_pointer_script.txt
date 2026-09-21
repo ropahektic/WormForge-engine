@@ -1,0 +1,60 @@
+CSoundFile* laser_sound;
+
+void laser_pointer_script::Init()
+{
+	laser_sound       = new CSoundFile(GetAttachment("laser_sound.wav"));
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    laser_pointer_active = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+ 	if(GetCurrentWorm() != NullObj)
+ 	{
+  		if(GetCurrentWorm() == this && ObjState == WS_AIMING)
+  		{
+    		if(laser_pointer_active == true)
+    		{
+      			if(Type == M_DRAWQUEUE)
+      			{
+      			local LaserLen = 15000;
+      			local ang = (1 - FireAngle) * 3.14159;
+      			if (TurnSide < 0) {ang = 6.28318 - ang;};
+      
+      			MakeLaserRay(this, PosX + sin(ang) * 12, PosY - cos(ang) * 12, 2, ang, LaserLen);
+      			}
+    		}
+  		}
+ 	}
+ 	
+ 	if (Type == M_TURNEND)
+  	{
+    laser_pointer_active = false;
+  	}
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Laser Pointer"))
+    	{
+        if(laser_pointer_active == false)
+        	{
+           	local w = GetCurrentWorm();
+           	w->laser_pointer_active = true;
+           	vol = CalculateSoundVolume(PosX,PosY);
+     		pan = CalculateSoundPan(PosX,PosY);
+           	laser_sound->Play(vol, pan, false);
+        	}
+        else
+        	{
+           	local w = GetCurrentWorm();
+           	w->laser_pointer_active = false;
+        	}
+    	}
+    else super;
+}

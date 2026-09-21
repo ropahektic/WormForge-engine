@@ -1,0 +1,88 @@
+require utils;
+
+CSoundFile* gulpingpotion;
+CSoundFile* magic_sound;
+int potionturns;
+
+void magic_potion_script::Init()
+{
+   gulpingpotion     = new CSoundFile(GetAttachment("gulp.wav"));
+   magic_sound       = new CSoundFile(GetAttachment("infweapon.wav"));
+   potionturns = 4;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+   if(Weap->CheckName("Magic Potion"))
+   {
+      Armor = 0.5; // -50% dmg
+      Damage = 0;
+      vol = CalculateSoundVolume(PosX,PosY);
+      pan = CalculateSoundPan(PosX,PosY);
+      gulpingpotion->Play(vol, pan, false);
+      beginHP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+      ShowMessage("Magic Potion: ON");
+   }
+
+   super;
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+   if(Type == M_FRAME && Armor != 0 && beginHP != GS->Info.GetWormHealth(WormTeam, WormNumber) && GotDamage == 0 && Damage != 0 && int(beginHP-Damage*Armor) > 0)
+   {
+      GS->Info.SetWormHealth(WormTeam, WormNumber, int(beginHP-Damage*Armor));
+      beginHP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+      magic_sound->Play(1.0, 0.0, false);
+      Damage = 0;
+   }
+
+   if(Type == M_FRAME && GotDamage != 0)
+   {
+      Damage = GotDamage;
+   }
+
+   if(Type == M_TURNBEGIN || Type == M_SETWEAPON || Type == M_SETTARGET ||
+      Type == M_SETDELAY || Type == M_SETDELAYB || Type == M_SETBOUNCE ||
+      Type == M_AFTERSHOOT || Type == M_TURNEND)
+   {
+      beginHP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+   }
+
+   super;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  super;
+
+  if(potionturns == 0) return;
+
+  potioncount = potionturns;
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+  super;
+
+  if(potionturns == 0) return;
+
+  for(local i=0; i < Env->Objs.Count; i++)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+    if(obj->ClType != OC_Worm) continue;
+
+    local w = CWorm(obj);
+    if(w != NullObj)
+    {
+      w->potioncount--;
+      if(w->potioncount <= 0)
+      {
+        w->potioncount = potionturns;
+        w->Armor = 0;
+      }
+    }
+  }
+}

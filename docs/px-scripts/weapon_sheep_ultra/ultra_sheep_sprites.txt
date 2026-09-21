@@ -1,0 +1,17 @@
+//List of sprites
+CSprite* ultrasheep1;
+CSprite* ultrasheep2;
+
+void ultra_sheep_sprites::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("ultra sheep 1.png"); 
+   ultrasheep1 = LoadSprite(f, 32, 1);
+   f = GetAttachment("ultra sheep 2.png"); 
+   ultrasheep2 = LoadSprite(f, 32, 1);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(726, ultrasheep1);
+   SetSpriteOverride(727, ultrasheep2);
+}

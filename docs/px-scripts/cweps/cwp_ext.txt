@@ -1,0 +1,54 @@
+require utils;
+
+//--------------------------FIRING-EXTENSION------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+//------------------------------------------------------------------------------
+if(Weap->CheckName("Fire Orbs"))
+{
+Desc->X = Desc->X + 5 * cos(MATH_PI * (FireAngle) - MATH_HALF_PI) * TurnSide;
+Desc->Y = Desc->Y - 5 * sin(MATH_PI * (FireAngle) - MATH_HALF_PI);
+}
+//------------------------------------------------------------------------------
+if(Weap->CheckName("Gravler")
+|| Weap->CheckName("Girder Launcher"))
+{
+Desc->X = Desc->X + 10 * cos(MATH_PI * (FireAngle) - MATH_HALF_PI) * TurnSide;
+Desc->Y = Desc->Y - 10 * sin(MATH_PI * (FireAngle) - MATH_HALF_PI);
+}
+//------------------------------------------------------------------------------
+if(Weap->CheckName("Burst Rifle")
+|| Weap->CheckName("Gatling Gun")
+|| Weap->CheckName("Hotchkiss"))
+{
+Desc->X = Desc->X + 12 * cos(MATH_PI * (FireAngle) - MATH_HALF_PI) * TurnSide;
+Desc->Y = Desc->Y - 12 * sin(MATH_PI * (FireAngle) - MATH_HALF_PI);
+}
+//------------------------------------------------------------------------------
+if(Weap->CheckName("Frag Grenade ")
+|| Weap->CheckName("Super Gravedigger ")
+|| Weap->CheckName("Javelin")
+|| Weap->CheckName("Ninja Star")   // RIPPER
+|| Weap->CheckName("Crossbow")
+|| Weap->CheckName("Crossbow ")
+|| Weap->CheckName("Explosive Arrow")
+|| Weap->CheckName("Explosive Arrow ")
+|| Weap->CheckName("Windy Arrow")
+|| Weap->CheckName("Windy Arrow ")
+|| Weap->CheckName("Rebounder")
+|| Weap->CheckName("Rebounder ")
+|| Weap->CheckName("Homing Arrow")
+|| Weap->CheckName("Homing Arrow ")
+|| Weap->CheckName("Multi-Bolt")
+|| Weap->CheckName("Multi-Bolt ")
+|| Weap->CheckName("Wildfire-Bolt")
+|| Weap->CheckName("Wildfire-Bolt ")
+|| Weap->CheckName("Tele Arrow")
+|| Weap->CheckName("Tele Arrow ")
+|| Weap->CheckName("Fire Pellet")) // PILLAGER
+{
+Desc->X = Desc->X + 15 * cos(MATH_PI * (FireAngle) - MATH_HALF_PI) * TurnSide;
+Desc->Y = Desc->Y - 15 * sin(MATH_PI * (FireAngle) - MATH_HALF_PI);
+}
+super;
+}

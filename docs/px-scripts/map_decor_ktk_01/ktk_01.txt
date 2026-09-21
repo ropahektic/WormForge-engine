@@ -1,0 +1,447 @@
+//map_objects by 0rang3, based on golf zones by PyroMan
+
+require utils;
+
+#ktk_01
+
+$editor
+ 
+ $object ktk_01_butterfly                  // Name your object 1
+  $image "ktk_01_butterfly.png"            // Name of your png file with object
+  $autoname ktk_01_butterfly               // Name for editor
+  $func Spawnktk_01_butterfly              // Name of function
+  $origin -30 -60             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_01_leaves                 // Name your object 2
+  $image "ktk_01_leaves.png"           // Name of your png file with object
+  $autoname ktk_01_leaves              // Name for editor
+  $func Spawnktk_01_leaves             // Name of function
+  $origin -55 -140             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_01_pencils                   // Name your object 3
+  $image "ktk_01_pencils.png"             // Name of your png file with object
+  $autoname ktk_01_pencils                // Name for editor
+  $func Spawnktk_01_pencils               // Name of function
+  $origin -35 -120             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_01_trees_1                  // Name your object 4
+  $image "ktk_01_trees_1.png"            // Name of your png file with object
+  $autoname ktk_01_trees_1               // Name for editor
+  $func Spawnktk_01_trees_1             // Name of function
+  $origin -70 -140             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_01_trees_2                  // Name your object 5
+  $image "ktk_01_trees_2.png"            // Name of your png file with object
+  $autoname ktk_01_trees_2               // Name for editor
+  $func Spawnktk_01_trees_2             // Name of function
+  $origin -75 -170             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_01_yellow_bg                  // Name your object 6
+  $image "ktk_01_yellow_bg.png"            // Name of your png file with object
+  $autoname ktk_01_yellow_bg               // Name for editor
+  $func Spawnktk_01_yellow_bg             // Name of function
+  $origin -50 -100                       // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 100
+  $param Color_G int 100
+  $param Color_B int 100
+  $param Transparency enum 2 No Yes
+ $object_end
+
+$end 
+
+////////////////////////////////////////////////////////////////////////////////
+
+CSpriterktk_01_butterfly : CObject;           
+CSpriterktk_01_leaves : CObject;
+CSpriterktk_01_pencils : CObject;
+CSpriterktk_01_trees_1 : CObject;
+CSpriterktk_01_trees_2 : CObject;
+CSpriterktk_01_yellow_bg : CObject;
+
+CSprite*ktk_01_butterfly;                    
+CSprite*ktk_01_leaves;
+CSprite*ktk_01_pencils;
+CSprite*ktk_01_trees_1;
+CSprite*ktk_01_trees_2;
+CSprite*ktk_01_yellow_bg;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ktk_01::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("ktk_01_butterfly.png");		ktk_01_butterfly = LoadSprite(f, 1, 0);
+    f = GetAttachment("ktk_01_leaves.png");			ktk_01_leaves = LoadSprite(f, 1, 0);
+    f = GetAttachment("ktk_01_pencils.png");		ktk_01_pencils = LoadSprite(f, 1, 0);
+    f = GetAttachment("ktk_01_trees_1.png");		ktk_01_trees_1 = LoadSprite(f, 1, 0);
+    f = GetAttachment("ktk_01_trees_2.png");		ktk_01_trees_2 = LoadSprite(f, 1, 0);
+    f = GetAttachment("ktk_01_yellow_bg.png");		ktk_01_yellow_bg = LoadSprite(f, 1, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// First Object Settings
+
+CSpriterktk_01_butterfly::CSpriterktk_01_butterfly(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(30*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(30*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Second Object Settings
+
+CSpriterktk_01_leaves::CSpriterktk_01_leaves(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(70*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(70*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Third Object Settings
+
+CSpriterktk_01_pencils::CSpriterktk_01_pencils(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(60*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(60*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Fourth Object Settings
+
+CSpriterktk_01_trees_1::CSpriterktk_01_trees_1(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(70*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(70*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Fifth Object Settings
+
+CSpriterktk_01_trees_2::CSpriterktk_01_trees_2(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(85*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(85*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Sixth Object Settings
+
+CSpriterktk_01_yellow_bg::CSpriterktk_01_yellow_bg(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(50*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(50*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Draw First Object 
+
+void CSpriterktk_01_butterfly::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_01_butterfly->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Second Object 
+        
+void CSpriterktk_01_leaves::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_01_leaves->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Third Object 
+
+void CSpriterktk_01_pencils::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_01_pencils->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Fourth Object 
+        
+void CSpriterktk_01_trees_1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_01_trees_1->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Fifth Object 
+        
+void CSpriterktk_01_trees_2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_01_trees_2->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Sixth Object 
+        
+void CSpriterktk_01_yellow_bg::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_01_yellow_bg->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Spawn First Object
+
+void Spawnktk_01_butterfly(CEditorObject* obj)
+{
+  zone = new CSpriterktk_01_butterfly(obj);
+}       
+
+// Spawn Second Object
+
+void Spawnktk_01_leaves(CEditorObject* obj)
+{
+  zone = new CSpriterktk_01_leaves(obj);
+}
+
+// Spawn Third Object
+
+void Spawnktk_01_pencils(CEditorObject* obj)
+{
+  zone = new CSpriterktk_01_pencils(obj);
+}       
+
+// Spawn Forth Object
+
+void Spawnktk_01_trees_1(CEditorObject* obj)
+{
+  zone = new CSpriterktk_01_trees_1(obj);
+}
+
+// Spawn Fifth Object
+
+void Spawnktk_01_trees_2(CEditorObject* obj)
+{
+  zone = new CSpriterktk_01_trees_2(obj);
+}
+
+// Spawn Sixth Object
+
+void Spawnktk_01_yellow_bg(CEditorObject* obj)
+{
+  zone = new CSpriterktk_01_yellow_bg(obj);
+}                                                      

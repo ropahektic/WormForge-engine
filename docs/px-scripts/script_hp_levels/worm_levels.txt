@@ -1,0 +1,335 @@
+// Script by PyroMan                                              
+require utils, utils_steps, utils_pyroman, pxparticles;
+
+CWorm* ShootingOne;   // this will be used to detect who is owner, even when turn ended
+CSprite* level1;
+CSprite* level2;
+CSprite* level3;
+CSprite* level4;
+CSprite* level5;
+CSprite* level6;
+CSprite* level7;                                                  
+CSprite* level8;
+CSprite* level9;
+CSprite* level10;
+CSprite* level_glow_sprite;
+CSprite* level_bar;
+CSoundFile* levelUp1;
+CSoundFile* levelUp2;
+bool UsePyroLebels;
+
+void worm_levels::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("1.png");
+    level1 = LoadSprite(f, 1, 0);
+    f = GetAttachment("2.png");
+    level2 = LoadSprite(f, 1, 0);
+    f = GetAttachment("3.png");
+    level3 = LoadSprite(f, 1, 0);
+    f = GetAttachment("4.png");
+    level4 = LoadSprite(f, 1, 0);
+    f = GetAttachment("5.png");
+    level5 = LoadSprite(f, 1, 0);
+    f = GetAttachment("6.png");
+    level6 = LoadSprite(f, 1, 0);
+    f = GetAttachment("7.png");
+    level7 = LoadSprite(f, 1, 0);
+    f = GetAttachment("8.png");
+    level8 = LoadSprite(f, 1, 0);
+    f = GetAttachment("9.png");
+    level9 = LoadSprite(f, 1, 0);
+    f = GetAttachment("0.png");
+    level10 = LoadSprite(f, 1, 0);
+    f = GetAttachment("level_bar.png");
+    level_bar = LoadSprite(f, 7, 0);
+    f = GetAttachment("level_glow.png");
+    level_glow_sprite = LoadSprite(f, 1, 0);
+    f = GetAttachment("level_up_1.wav");
+    levelUp1 = new CSoundFile(f);
+    f = GetAttachment("level_up_2.wav");
+    levelUp2 = new CSoundFile(f);          
+//
+}
+
+void worm_levels::FirstFrame()
+{
+    UsePyroLebels = false;
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    level = 0;
+//    level_factor = 2.0;  // factor tha affects on explosion impacts and pushing impacts
+    ExplosionFactor = 1.0;
+    hp_multipliyer = 0.2; // change it (using other script in other libs or in schemes) to 0.0 to don`t add HP to worms after dagame
+    WormHealthLimit = 300; // worm`s health limit for stealing set here.
+    total_hp_collected = 0; // total HP overall
+    level_reachment = 60;  // amount of HP to get next level   
+    level_rise_coefficient = 0;
+    level_rise_limit = 10;  // MAX level
+    hp_rise = 3; 
+    hp_limit = 0;    // from beginning
+    hp_limit_rise = 10;
+    hp_at_start;    
+    HP_Label = MakeBitmap(150, 100); 
+    kills = 0;
+    gaveKill = false; 
+    check1 = true;
+    TurnOn = false;  
+    tookFromGun = false;           
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+        local w = GetCurrentWorm();
+        if (w != NullObj) ShootingOne = CWorm(w); 
+    }
+}
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_GUNEXP)
+    {
+//        MData->params[3] = MData->params[3] * ExplosionFactor;
+//        MData->params[4] = MData->params[4] *  ExplosionFactor;       
+        MData->params[5] = MData->GetParameter(5) * ExplosionFactor;
+        tookFromGun = true;
+    }
+    if (Type == M_EXPLOSION)
+    {
+//        MData->params[5] = MData->GetParameter(5) * level_factor; 
+    }
+    if (Type == M_PRETURNSTART)
+    {
+//        checkerer = true;
+        hp_my = GS->Info.GetWormHealth( WormTeam, WormNumber);  // read health once when turn starts
+        if (hp_my < (hp_at_start+hp_limit)) {
+            if (hp_my + hp_rise > hp_at_start + hp_limit) GS->Info.SetWormHealth( WormTeam, WormNumber, hp_at_start + hp_limit);
+            else GS->Info.SetWormHealth( WormTeam, WormNumber, hp_my + hp_rise); 
+        }
+    }
+    if (Type == M_FRAME)
+    {
+       if (UsePyroLebels) DrawLevels();
+       if (UsePyroLebels) LvToggler();
+       if (gframe == 5)
+       {
+           hp_at_start = GS->Info.GetWormHealth( WormTeam, WormNumber);   // health at start of the game
+       }
+/*       if (Root->Timer > 0)             
+       {
+           if (checkerer) {
+               hp_my = GS->Info.GetWormHealth( WormTeam, WormNumber);  // read health once when turn starts
+               ExplosionFactor = 1.0 + level*0.1;
+               if (hp_my < (hp_at_start+hp_limit)) {
+                   if (hp_my + hp_rise > hp_at_start + hp_limit) GS->Info.SetWormHealth( WormTeam, WormNumber, hp_at_start + hp_limit);
+                   else GS->Info.SetWormHealth( WormTeam, WormNumber, hp_my + hp_rise); 
+               }     
+               checkerer = false;
+           }                           
+       }// else if (Root->RetreatTimer < 1) checkerer = true;*/
+    }
+    if (Type == M_FRAME) 
+    {
+       ExplosionFactor = 1.0 + level*0.1;
+       if (ShootingOne != this) 
+       {
+           local hp_my_now = GS->Info.GetWormHealth(WormTeam, WormNumber);
+           if (hp_my_now <= 0 && ShootingOne != NullObj && !gaveKill) {ShootingOne->kills++; gaveKill = true;}
+           else if (hp_my_now > 0) gaveKill = false; 
+           if (hp_my_now != hp_my) {
+               if (hp_my_now < hp_my) {
+                   if (ShootingOne != NullObj) {
+                       if (!tookFromGun){
+                          local extra_damage = hp_my_now*ShootingOne->ExplosionFactor - hp_my_now;
+                          GotDamage += extra_damage;
+                          hp_my_now = hp_my_now - extra_damage;
+                          GS->Info.SetWormHealth(WormTeam, WormNumber, hp_my_now);
+                       }
+                       local hp_now = GS->Info.GetWormHealth( ShootingOne->WormTeam, ShootingOne->WormNumber);
+                       if (hp_now < WormHealthLimit) GS->Info.SetWormHealth( ShootingOne->WormTeam, ShootingOne->WormNumber, hp_now + abs(hp_my_now - hp_my)*hp_multipliyer);
+                       ShootingOne->total_hp_collected += abs(hp_my_now - hp_my);
+                       if ((ShootingOne->total_hp_collected) >= ((ShootingOne->level_reachment + ShootingOne->level_rise_coefficient) * (ShootingOne->level*1.0 + 1.0))) {
+                         if (ShootingOne->level < (level_rise_limit-1))
+                         {
+                           if (ShootingOne->level < 4) levelUp1->Play( 2.3, 1.0, false);
+                           else levelUp2->Play( 2.0, 1.0, false);
+                           DoSpark(25);
+                           ShootingOne->level++;
+//                           ShootingOne->ExplosionFactor += 0.1;
+                           ShootingOne->level_rise_coefficient += 15;
+                           ShootingOne->WormHealthLimit += ShootingOne->WormHealthLimit/10;
+                           ShootingOne->hp_limit += hp_limit_rise;
+                         }
+                       }
+                   }
+                   hp_my = hp_my_now;
+                   tookFromGun = false; 
+               }
+               if (hp_my_now > hp_my) {
+                   hp_my = hp_my_now;
+               }
+           }
+           if (ShootingOne != NullObj) ExplosionFactor = ShootingOne->ExplosionFactor;
+       } else {
+          local hp_my_now = GS->Info.GetWormHealth(WormTeam, WormNumber);
+          if (hp_my_now != hp_my) hp_my = hp_my_now;
+       }
+       if (gframe > 10)
+       { 
+          local hp_my_now = GS->Info.GetWormHealth(WormTeam, WormNumber);
+          if (hp_my_now > (hp_at_start + hp_limit)) hp_limit = hp_my_now - hp_at_start;
+       }
+    }
+    if (Type == M_DRAWQUEUE)
+    {
+        if (total_hp_collected > 0) DrawLevelBar();
+
+        local x = 15;
+        local y = 10;
+        local xt = 3;
+        local scale = 1.25;
+        if (level == 1) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, level2->Index, 0, 0.0, scale);
+        else if (level == 2) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, level3->Index, 0, 0.0, scale);
+        else if (level == 3) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, level4->Index, 0, 0.0, scale);
+        else if (level == 4) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, level5->Index, 0, 0.0, scale);
+        else if (level == 5) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, level6->Index, 0, 0.0, scale);
+        else if (level == 6) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, level7->Index, 0, 0.0, scale);
+        else if (level == 7) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, level8->Index, 0, 0.0, scale);
+        else if (level == 8) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, level9->Index, 0, 0.0, scale);
+        else if (level >= 9 && level < 19) {
+           AddSpriteEx( 5, PosX-xt-(x*TurnSide), PosY-y, level1->Index, 0, 0.0, scale);
+           if (level == 9) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level10->Index, 0, 0.0, scale);
+           if (level == 10) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level1->Index, 0, 0.0, scale);
+           if (level == 11) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level2->Index, 0, 0.0, scale);
+           if (level == 12) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level3->Index, 0, 0.0, scale);
+           if (level == 13) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level4->Index, 0, 0.0, scale);
+           if (level == 14) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level5->Index, 0, 0.0, scale);
+           if (level == 15) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level6->Index, 0, 0.0, scale);
+           if (level == 16) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level7->Index, 0, 0.0, scale);
+           if (level == 17) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level8->Index, 0, 0.0, scale);
+           if (level == 18) AddSpriteEx( 5, PosX+xt-(x*TurnSide), PosY-y, level9->Index, 0, 0.0, scale);
+        }
+        
+    }
+    super;
+}
+
+void CWorm::DrawLevelBar()
+{
+    local koef0 = (total_hp_collected - (level_reachment + level_rise_coefficient)* level*1.0) / ((level_reachment + level_rise_coefficient)* (level*1.0 + 1.0) - (level_reachment + level_rise_coefficient)* level*1.0);
+    local color = ARGB(255, 128, 128, 128);
+    CQuad q;
+    FillSpriteQuad(&q, level_bar->Index, koef0, 0);
+    TransformQuad(&q, 0.0, 1.0 * TurnSide, 1.0, PosX-(3*TurnSide), PosY-7);
+    if (animatedWorm) {for (local i = 0; i < 4; i += 1) q.v[i].color = animColor;}
+    else {
+       for (local i = 0; i < 4; i += 1) {
+          q.v[i].color = color;
+          if (i == 0 && Invisible) q.v[0].color = 120;
+       }
+    }
+    q.blend = 0;
+    RenderQuad(&q, 0); 
+    color = ARGB(200, 128, 128, 128); 
+    AddSpriteQ(3.01, &q, level_bar->Index, koef0, 0);
+    AddSpriteQ(3.01, &q, level_bar->Index, koef0, 0);
+    q.blend = 1;
+    color = ARGB(255, 128, 128, 128);
+    AddSpriteQ(2.99, &q, level_bar->Index, koef0, 0);
+//    local a = 0;
+//    local b = 0;
+//    local hihi = MakeNumberString("",level, "");
+//    AddBitmap( 0, PosX, PosY, HP_Label, 150, 100, 0);
+//    HP_Label->Rect(HP_Label->SX/2 - (18*TurnSide), HP_Label->SY/2-10, HP_Label->SX/2 - (8*TurnSide), HP_Label->SY/2, ARGB(80, 0, 0, 0));
+//    GS->Disp->DrawText(3, HP_Label, HP_Label->SX/2-(13*TurnSide), HP_Label->SY/2-10,hihi, &a, &b);
+}
+
+override void CWorm::RenderLabels()
+{
+//    AddInterfaceBitmap( 0, PosX, PosY-15, HP_Label, 40, 20, 0);   
+    if (UsePyroLebels && ObjState == WS_IDLE) AddBitmap( 0, PosX, PosY-20, HP_Label, 150, 100, 0);
+    else super;
+}
+
+void CWorm::DrawLevels()
+{
+    local color = RGB(251, 245, 114); 
+    local a = 0;
+    local b = 0;
+    local teamname = GetTeamName(WormTeam);
+    local name = GetName();
+    local hp = int(GS->Info.GetWormHealth(WormTeam, WormNumber));
+    hp = DispHealth;
+    
+    HP_Label->Rect(HP_Label->SX/2 - StrLen(teamname)*5, 4, HP_Label->SX/2 + StrLen(teamname)*5, 22, ARGB(127, 0, 0, 0));
+    HP_Label->Rect(HP_Label->SX/2 - StrLen(name)*5, 22, HP_Label->SX/2 + StrLen(name)*5, 38, ARGB(127, 0, 0, 0));
+    HP_Label->Rect(HP_Label->SX/2 - 18, 38, HP_Label->SX/2 + 18, 55, ARGB(127, 0, 0, 0));
+    
+    // Horizontal
+    HP_Label->HLine(HP_Label->SX/2 - StrLen(teamname)*5, HP_Label->SX/2 + StrLen(teamname)*5, 3, color);
+    HP_Label->HLine(HP_Label->SX/2 - StrLen(teamname)*5, HP_Label->SX/2 + StrLen(teamname)*5, 22, color);
+    HP_Label->HLine(HP_Label->SX/2 - StrLen(name)*5, HP_Label->SX/2 + StrLen(name)*5, 22, color);
+    HP_Label->HLine(HP_Label->SX/2 - StrLen(name)*5, HP_Label->SX/2 + StrLen(name)*5, 38, color);
+    HP_Label->HLine(HP_Label->SX/2 - 18, HP_Label->SX/2 + 18, 38, color);
+    HP_Label->HLine(HP_Label->SX/2 - 18, HP_Label->SX/2 + 18, 55, color);
+                          
+    // Vertical
+    HP_Label->VLine(HP_Label->SX/2 - StrLen(teamname)*5, 3, 22, color);
+    HP_Label->VLine(HP_Label->SX/2 + StrLen(teamname)*5, 3, 22, color);
+    HP_Label->VLine(HP_Label->SX/2 - StrLen(name)*5, 22, 38, color);
+    HP_Label->VLine(HP_Label->SX/2 + StrLen(name)*5, 22, 38, color);
+    HP_Label->VLine(HP_Label->SX/2 - 18, 38, 55, color);
+    HP_Label->VLine(HP_Label->SX/2 + 18, 38, 55, color);   
+    
+    GS->Disp->DrawText((8+WormTeam), HP_Label, (HP_Label->SX/2 - StrLen(ItoA(hp))*4), 39, ItoA(hp), &a, &b);     
+    GS->Disp->DrawText((8+WormTeam), HP_Label, (HP_Label->SX/2 - StrLen(name)*4), 21, name, &a, &b);
+    GS->Disp->DrawText((8+WormTeam), HP_Label, (HP_Label->SX/2 - StrLen(teamname)*4), 5, teamname, &a, &b);
+}
+
+void CWorm::DoSpark(int k)        // yyes, do them particles! :D
+{
+    for(int i=0 ; i<k ; i += 1)
+	{
+		p = new PxParticle(level_glow_sprite->Index, ShootingOne->PosX, ShootingOne->PosY);
+		
+        p->SetAngle( 1.23);
+        p->SetAngleSpeed( 25.0);
+        p->SetLifeTime(40);
+		p->GravityFactor(0.25);
+		p->SetRandomVelocity(1.5, 3.8);
+		p->SetAirResistance(0.05);
+		p->SetAlpha(180);
+		s = RandomFloat(0.2,0.4);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.005, 0.005);
+		p->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		p->SetStartColor(255,255 - s,0);
+		p->SetEndColor(255,80 - s,0);
+		
+		p->SetMotionRandomness(0.2);
+	}
+}
+
+void CWorm::LvToggler()
+{
+     if (IsKeyPressed(46)) // "del" key
+     {
+        if (check1)
+        {
+            TurnOn = false;
+        }
+        else TurnOn = true;
+     }
+     else
+     {
+        if (TurnOn) check1 = true;
+        else check1 = false;
+     }     
+}

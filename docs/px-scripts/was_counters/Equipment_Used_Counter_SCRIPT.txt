@@ -1,0 +1,27 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a equipment used-counter to the game (can be used for statistical GUI's)
+
+int equipment_used_counts[6];
+
+void Equipment_Used_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          equipment_used_counts[i] = 0;
+     }
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{  
+     if(type == M_WEAPONFINISHED)
+     {
+          equipment_used_counts[current_worm_team]++;
+     }
+  
+     super;
+}

@@ -1,0 +1,46 @@
+// This script moves objects that went too far off-screen
+
+require utils;
+
+// Event each frame
+override void CTurnGame::Message(CObject* sender, EMType type, int size,
+    CMessageData* data)
+{
+    // Calculations each frame
+    if (type == M_FRAME)
+    {
+        // Iterate through all objects
+        for (local i = 1; i < Env->Objs.Count; i++)
+        {
+            // Check if the found object is a worm or mine
+            local foundObj = CGObject(Env->Objs.Objs[i]);
+            if (foundObj is CWorm || foundObj is CMine) // add CMissile here if you want the script to work for weapons too
+            {
+                // Check the coordinates
+                if (foundObj->PosY < -2000)
+                {
+                    foundObj->PosY = GS->LevelSY - 1000;
+                    foundObj->SpY = 10;
+                    foundObj->SpX = 0;
+                }
+                if (foundObj->PosX < -2000)
+                {
+                    
+					foundObj->PosX = -1999;
+                    foundObj->PosY = GS->LevelSY + 10;
+                    foundObj->SpY = 10;
+                    foundObj->SpX = 0;
+                }
+                if (foundObj->PosX > GS->LevelSX + 2000)
+                {
+
+					foundObj->PosX = GS->LevelSX + 1999;
+                    foundObj->PosY = GS->LevelSY + 10;
+                    foundObj->SpY = 10;
+                    foundObj->SpX = 0;
+                }
+            }
+        }
+    }
+    super;
+}

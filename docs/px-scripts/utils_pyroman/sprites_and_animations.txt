@@ -1,0 +1,41 @@
+int currentSpriteIndex[69];        // 6 teams, 8 worms + 1, coz starts from 0.
+float currentSpriteFrame[69];      // [0] - will work for current active worm, as deafult.
+float currentSpriteX[69]; 
+float currentSpriteY[69];  // this values can differs from worm`s PosX/PosY, like with walking sprite in normal and FastWalking modes.
+
+
+override void CWorm::GetWormAnimState(fixed* x,fixed* y,int* sprite,fixed* frame) {
+super;
+  if (animatedWorm) {             // activates function only when necessary
+    local tempSprite;                      
+    
+    if (*sprite > 300000) tempSprite = int(*sprite/65536 + 57); 
+    else if (*sprite > 200000 && *sprite < 300000) tempSprite = int(*sprite - 262144);
+    else tempSprite = int(*sprite);
+    
+    for (local i = 1; i <= 6; i++) {         // teams
+       for (local j = 1; j <= 8; j++) {      // worms
+          if (GS->Info.Teams[i-1].Worms[j-1].State > 0) {    // if worm exist
+             CWorm* worm = Root->GetObject(2, j + 16*i);
+             if (worm == this) {
+                currentSpriteIndex[i*10+j] = tempSprite;
+                currentSpriteFrame[i*10+j] = *frame / 65536;
+                currentSpriteX[i*10+j] = *x / 65536;
+                currentSpriteY[i*10+j] = *y / 65536;
+             }
+          }
+       }
+    }
+
+    if (CurrentWorm != NullObj && CurrentWorm == this)    // setting default [0] value for current worm
+    {
+      currentSpriteIndex[0] = tempSprite;
+    
+      currentSpriteX[0] = *x / 65536;
+      currentSpriteY[0] = *y / 65536;
+
+      currentSpriteFrame[0] = *frame / 65536;
+    }
+  }
+  if (hideWorm) *sprite = 0;   // best way to hide worm and save all RenderWorm() sub-functions.                          
+}

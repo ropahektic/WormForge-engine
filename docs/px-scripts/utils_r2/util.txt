@@ -1,0 +1,99 @@
+require utils, utils_steps;
+
+void ListRootObjs()
+{
+     for (local i = 0; i < Root->Childs.Count; i++)
+     {
+           GG->WriteToChat( 2, StrCon5(classtoString(Root->Childs.Objs[i]->ClType), " storeIndex: ", itoa(Root->Childs.Objs[i]->StoreIndex), " storeType: ", itoa(Root->Childs.Objs[i]->StoreType)), false);
+     }
+}
+
+void ListEnvObjs()
+{
+     for (local i = 0; i < Env->Objs.Count; i++)
+     {
+           GG->WriteToChat( 3, classtoString(Env->Objs.Objs[i]->ClType), false);
+           
+     }
+}
+
+void messagedatatoString(CMessageData * data)
+{
+     //local clr = RandomInt(1,8);
+     for(int i = 0; i<16 ;i++)
+     {
+         local param = data->params[i];
+         local fparam = data->fparams[i];
+         if(param >= 65536*10)  param = param / 65536;
+         if(fparam >= 65536*10)  fparam = fparam / 65536;
+         
+         GG->WriteToChat(7, StrCon5( StrCon("params[", itoa(i)), StrCon("] = ",itoa(param)), "   ",  StrCon("          fparams[", itoa(i)), StrCon("] = ",itoa(fparam))), false);
+     }
+     GG->WriteToChat( 1, "", false);
+}
+string classtoString (EObjectClass OC)
+{
+        if (OC == OC_Task)        return StrCon("OC_Task ", itoa(int(OC_Task))); 
+   else if (OC == OC_GameTask)    return StrCon("OC_GameTask ", itoa(int(OC_GameTask)));
+   else if (OC == OC_Filter)      return StrCon("OC_Filter ", itoa(int(OC_Filter))); 
+   else if (OC == OC_Collideable) return StrCon("OC_Collideable ", itoa(int(OC_Collideable)));
+   else if (OC == OC_Landscape)   return StrCon("OC_Landscape ", itoa(int(OC_Landscape))); 
+   else if (OC == OC_OilDrum)     return StrCon("OC_OilDrum ", itoa(int(OC_OilDrum)));
+   else if (OC == OC_Mine)        return StrCon("OC_Mine ", itoa(int(OC_Mine))); 
+   else if (OC == OC_Cross)       return StrCon("OC_Cross ", itoa(int(OC_Cross)));
+   else if (OC == OC_Crate)       return StrCon("OC_Crate ", itoa(int(OC_Crate)));
+   else if (OC == OC_Canister)    return StrCon("OC_Canister ", itoa(int(OC_Canister)));
+   else if (OC == OC_Arrow)       return StrCon("OC_Arrow ", itoa(int(OC_Arrow))); 
+   else if (OC == OC_Missile)     return StrCon("OC_Missile ", itoa(int(OC_Missile)));
+   else if (OC == OC_Worm)        return StrCon("OC_Worm ", itoa(int(OC_Worm))); 
+   else if (OC == OC_OldWorm)     return StrCon("OC_OldWorm ", itoa(int(OC_OldWorm)));
+   else if (OC == OC_Fire)        return StrCon("OC_Fire ", itoa(int(OC_Fire))); 
+   else if (OC == OC_DragonBall)  return StrCon("OC_DragonBall ", itoa(int(OC_DragonBall)));
+   else if (OC == OC_Flame)       return StrCon("OC_Flame ", itoa(int(OC_Flame))); 
+   else if (OC == OC_SeaBubble)   return StrCon("OC_SeaBubble ", itoa(int(OC_SeaBubble)));
+   else if (OC == OC_Smoke)       return StrCon("OC_Task ", itoa(int(OC_Task)));
+   else if (OC == OC_AirStrike)   return StrCon("OC_AirStrike ", itoa(int(OC_AirStrike)));
+   else if (OC == OC_Gas)         return StrCon("OC_Gas ", itoa(int(OC_Gas))); 
+   else if (OC == OC_Team)        return StrCon("OC_Team ", itoa(int(OC_Team)));
+   else                           return "EOBjectClass ¿?";
+}
+
+string statetoString(EObjState State)
+{
+    if(State == WS_IDLE) return "WS_IDLE"; else if(State == WS_WALKING) return "WS_WALKING";
+    else if(State == WS_AIMING) return "WS_AIMING"; else if(State == WS_SETPOWER) return "WS_SETPOWER";
+    else if(State == WS_FIRED) return "WS_FIRED"; else if(State == WS_FIRECONT) return "WS_FIRECONT";
+    else if(State == WS_FIREPUNCH) return "WS_FIREPUNCH"; else if(State == WS_DRILLING) return "WS_DRILLING";
+    else if(State == WS_TELEPORTING) return "WS_TELEPORTING"; else if(State == WS_ROPING) return "WS_ROPING";
+    else if(State == WS_BLOWTORCH) return "WS_BLOWTORCH"; else if(State == WS_FLYING2) return "WS_FLYING2";
+    else if(State == WS_AFTERROPE) return "WS_AFTERROPE"; else if(State == WS_JUMPPREPARE) return "WS_JUMPPREPARE";
+    else if(State == WS_SUICIDEBOMBER) return "WS_SUICIDEBOMBER"; else if(State == WS_JETPACK) return "WS_JETPACK";
+    else if(State == WS_POING) return "WS_POING"; else if(State == WS_FLYING) return "WS_FLYING";
+    else if(State == WS_SHOOTINGROPE) return "WS_SHOOTINGROPE"; else if(State == WS_FROZEN) return "WS_FROZEN";
+    else if(State == WS_JUMP) return "WS_JUMP"; else if(State == WS_CONTROL_WEAPON) return "WS_CONTROL_WEAPON";
+    else if(State == WS_BUNGEE) return "WS_BUNGEE"; else if(State == WS_DEATH) return "WS_DEATH";
+    else if(State == WS_PARACHUTE) return "WS_PARACHUTE"; else if(State == WS_REPEATFIRE) return "WS_REPEATFIRE";
+    else if(State == WS_SLIDING) return "WS_SLIDING"; else if(State == WS_SINKING) return "WS_SINKING";
+    else if(State == WS_POWERFLY) return "WS_POWERFLY"; else if(State == WS_DEAD) return "WS_DEAD";     
+}
+
+string messagetoString(EMType Type)
+{
+    if(Type == M_FRAME) return "M_FRAME"; else if(Type == M_DRAWQUEUE) return "M_DRAWQUEUE";
+    else if(Type == M_INPUT) return "M_INPUT"; else if(Type == M_EXPLOSION) return "M_EXPLOSION";
+    else if(Type == M_ENTER) return "M_ENTER"; else if(Type == M_SPACE) return "M_SPACE";
+    else if(Type == M_GUNEXP) return "M_GUNEXP"; else if(Type == M_REBUILDWPANEL) return "M_REBUILDWPANEL";
+else if(Type == M_SHOWMESSAGE) return "M_SHOWMESSAGE"; else if(Type == M_SETTEAM) return "M_SETTEAM";
+else if(Type == M_TURNBEGIN) return "M_TURNBEGIN"; else if(Type == M_DISABLECONTROL) return "M_DISABLECONTROL";
+else if(Type == M_TURNEND) return "M_TURNEND"; else if(Type == M_SKIPTURN) return "M_SKIPTURN";
+else if(Type == M_SETDELAY) return "M_SETDELAY"; else if(Type == M_SETDELAYB) return "M_SSETDELAYB";
+else if(Type == M_SETBOUNCE) return "M_SETBOUNCE"; else if(Type == M_UPDATEWIND) return "M_UPDATEWIND";
+else if(Type == M_SETWORM) return "M_SETWORM"; else if(Type == M_AFTERSHOOT) return "M_AFTERSHOOT";
+else if(Type == M_POISON) return "M_POISON"; else if(Type == M_CHAT) return "M_CHAT";
+else if(Type == M_PXMESSAGE) return "M_PXMESSAGE"; else if(Type == M_PLEFT) return "M_PLEFT";
+else if(Type == M_PRIGHT) return "M_PRIGHT"; else if(Type == M_PUP) return "M_PUP";
+else if(Type == M_PDOWN) return "M_PDOWN"; else if(Type == M_SPACERLS) return "M_SPACERLS";
+else if(Type == M_SETWEAPON) return "M_SETWEAPON"; else if(Type == M_WATERRISE) return "M_WATERRISE";
+else if(Type == M_PRETURNSTART) return "M_PRETURNSTART"; else if(Type == M_SETTARGET) return "M_SETTARGET";
+else return "";    
+}

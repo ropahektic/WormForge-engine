@@ -1,0 +1,59 @@
+
+require pxairstrike;
+
+PxAirstrikeParams *BowlingBallStrikeParams;
+
+void bbstrike::FirstFrame()
+{
+	BowlingBallStrikeParams = new PxAirstrikeParams;
+	BowlingBallStrikeParams->SpeedCompensation = 2.5;
+}
+
+///////////////////////////////////////////////////
+// PxBowlingBallStrike
+
+PxBowlingBallStrike : PxAirstrike
+
+PxBowlingBallStrike::PxBowlingBallStrike(CObject* Parent, CShootDesc* Desc, PxAirstrikeParams* Params)
+{
+	super;
+}
+
+void PxBowlingBallStrike::DropBomb()
+{
+	CShootDesc SDesc;
+	zero(&SDesc);
+	
+	SDesc.Team = Team;
+	SDesc.X = PosX;
+	SDesc.Y = PosY;
+
+	SDesc.SpX = BombSpX;
+	SDesc.SpY = BombSpY;
+	
+	new CBowlingBall(GetObject(25, 0), &SDesc);
+}
+
+void PxBowlingBallStrike::RenderPlane()
+{
+	super;
+}
+
+///////////////////////////////////////////////////
+// CWorm overrides
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Bowling Ball Strike"))
+	{
+		BowlingBallStrikeParams->NumBombs = 3;
+		BowlingBallStrikeParams->BombDistance = 48;
+		BowlingBallStrikeParams->BombSpX = 5;
+		BowlingBallStrikeParams->BombSpY = 0;
+		new PxBowlingBallStrike(GetObject(25, 0), Desc, BowlingBallStrikeParams);
+	}
+	else
+	{
+		super;
+	}
+}

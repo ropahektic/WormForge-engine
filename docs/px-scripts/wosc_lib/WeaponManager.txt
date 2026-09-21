@@ -1,0 +1,80 @@
+int availweapons;
+int availsdetweapons;
+bool removelastweapon;
+bool removelastsdetweapon;
+bool restoreweapons;
+string AutoFireWeapon[71];
+
+
+void WeaponManager::Init()
+{
+  availweapons = 0;
+  availsdetweapons = 0;
+  removelastweapon = false;
+  removelastsdetweapon = false;
+  restoreweapons = false;
+}
+
+// AutoFireWeapon
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+  super;
+
+  local w = GetCurrentWorm();
+  if(w == NullObj) return;
+  if(w->isPlacing) return;
+
+  for(local i=0; i<71; i++)
+    if(AutoFireWeapon[i] != 0) w->FireWeapon( GetWeaponByName(AutoFireWeapon[i]), w->PosX, w->PosY, 0.0, 0.0, 0.0, 0.0, 3000, 1.0, 0.0);
+}
+
+// removelastweapon & removelastsdetweapon
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+
+  if(!removelastweapon && !removelastsdetweapon) return;  
+  if(Type == M_AFTERSHOOT && this == GetCurrentWorm())
+  {
+    if(removelastweapon && CurWeapon->EndsTurn) GS->Info.SetWeaponDelay( GetTeamNumber(WormTeam), CurWeapon->GetWeaponIndex(), CurWeapon->GetPageIndex(), -1);
+    if(removelastsdetweapon && !CurWeapon->EndsTurn) GS->Info.SetWeaponDelay( GetTeamNumber(WormTeam), CurWeapon->GetWeaponIndex(), CurWeapon->GetPageIndex(), -1);
+  }
+}
+
+// availweapons & availsdetweapons
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+
+  if(availweapons == 0 && availsdetweapons == 0) return;  
+  if(Type == M_AFTERSHOOT && this == GetCurrentWorm())
+  {
+    if(availweapons != 0 && TotalShots >= availweapons) RemoveWeapons(1);
+    if(availsdetweapons != 0 && TotalSdetShots >= availsdetweapons) RemoveWeapons(2);
+  }
+}
+
+void CWorm::RemoveWeapons(int type)
+{
+  local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=1; i<68; i++)
+  {
+    local weap = GS->GetWeaponByIndex(1, i);
+    if(weap == NullObj) continue;
+    if(weap->CheckName("Skip Go") || weap->CheckName("Surrender")) continue;
+    if(type == 1 && !weap->EndsTurn) continue;
+    if(type == 2 && weap->EndsTurn) continue;
+    
+    if(GS->Info.Stores[TeamNumber-1].Count[i+2] != 0 && GS->Info.Stores[TeamNumber-1].Delay[i+2] == 0) GS->Info.Stores[TeamNumber-1].Delay[i+2] = -1;
+  }
+}
+
+// restoreweapons
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+  super;
+
+  if(!restoreweapons) return;
+  local TeamNumber = GetTeamNumber(Team);
+  for(local i=0; i<71; i++) if(GS->Info.Stores[TeamNumber-1].Delay[i] == -1) GS->Info.Stores[TeamNumber-1].Delay[i] = 0;
+}

@@ -1,0 +1,30 @@
+// This script kills all worms that are close to water in case of sudden death water rise, making a draw game
+require utils, utility_swimsuit;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    DoRematch = false;
+    super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (!DoRematch && Root->SuddenDeath == true)
+        {
+            if (PosY > Env->Water - 20 && !antisuddened && !swimsuit) // amount at which worms are killed
+            {
+                local wrm = CWorm(this);
+            
+                if (wrm != NullObj)
+                {
+                    wrm->antisuddened = true;
+                    wrm->SetState(WS_DEATH);
+                }
+            }
+        }   
+    }
+
+    super;
+}

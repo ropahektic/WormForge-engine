@@ -1,0 +1,149 @@
+/* 
+
+Made by: DannyB, March 2023
+
+*/
+
+// This script fixes a bug, where weapons are automatically selected, when a weapon is fired or the menus are changed (the weapon setting "Remember" has to be turned off to work). 
+
+require utils;
+
+bool asf_active;
+bool asf_hide_target;
+bool asf_block_selection;
+int asf_block_timer;
+
+void Auto_Selection_Fix_SCRIPT::FirstFrame() 
+{
+     // initialize variables 
+     asf_active = false;
+     asf_hide_target = false;
+     asf_block_selection = false;
+     asf_block_timer = 0;    
+     
+     // make sure the weapon "None" doesn't end the turn (or else the bug fix won't work properly)
+     for(local i = 1; i <= 6; i++)
+     {
+          local wp = GS->GetWeaponByIndex(i, 0);
+          
+          if(wp != NullObj)
+          {
+               if(wp->EndsTurn == false)
+               {
+                    break;
+               }
+               else
+               {
+                    wp->EndsTurn = false;
+               }
+          } 
+          else
+          {
+               break;
+          }      
+     } 
+}
+
+override void CWorm::Message(CObject *sender, EMType type, int msize, CMessageData *mdata)
+{              
+     if(type == M_CHANGEWEAPONPANEL)
+     {
+          if(asf_active == false)
+          {
+               asf_active = true;
+          }
+     } 
+     
+     if(Current_Worm != NullObj)
+     {    
+          if(type == M_FRAME)
+          {
+               if(asf_active == true)
+               {
+                    setWeapon(Current_Worm, "None", false);
+               
+                    if(Current_Worm->ObjState != WS_FIRED)
+                    {   
+                         Current_Worm->ResetWeapon();
+                         
+                         asf_hide_target = true;
+                         
+                         if(Current_Worm->ObjState != WS_JETPACK && Current_Worm->ObjState != WS_ROPING && Current_Worm->ObjState != WS_PARACHUTE && Current_Worm->ObjState != WS_BUNGEE && Current_Worm->ObjState != WS_JUMP)
+                         {
+                              Current_Worm->SetState(WS_IDLE);       
+                         }   
+                    }
+                    
+                    asf_active = false;
+               }
+          }
+     }
+	 
+     if(asf_block_selection == true)
+     {
+          if(asf_block_timer < 100)
+          {
+               asf_block_timer++;
+          }
+          else
+          {
+               asf_block_selection = false;
+               asf_block_timer = 0;
+          }
+     }
+     
+     if(type == M_SETWEAPON)
+     {
+          if(asf_block_selection == true)
+          {
+               return;
+          } 
+          else
+          {
+               if(mdata->params[2] != 0)
+               {
+                    asf_hide_target = false;
+               }
+          }
+     }
+     
+     super;
+}
+
+override void CWorm::ResetWeapon()
+{
+     if(CurWeapon != NullObj)
+     {
+          if(CurWeapon->Remember == false)
+          {
+               asf_block_selection = true;
+               asf_block_timer = 0;
+          }
+     }
+     
+     super;
+}
+
+override void CDDQueue::AddSprite(fixed z, fixed x, fixed y, int unk, int sprite, fixed frame)
+{
+     // perform color overlay
+     if(asf_hide_target == true)
+     {
+          if(sprite > 37 && sprite < 44)
+          {
+               SetColorMod(ARGB(0, 0, 0, 0), 1); // hide the target marker on menu change
+          
+               super;
+               
+               ClearColorMod();
+          }
+          else 
+          {
+               super;
+          }
+     }
+     else
+     {
+          super;
+     }
+}

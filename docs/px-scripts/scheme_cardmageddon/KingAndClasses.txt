@@ -1,0 +1,125 @@
+                         require utils, wosc_lib;
+int PrinceAlive[7];
+int PrinceAlive2[7];
+int PrinceAlive3[7];
+int KingDead[7];
+int KingCheck[7];
+
+
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  super;
+
+  TFclass = "";   
+  CanBeZombie = true;
+  Zombie = false;
+  SpecialZombie = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+
+  if(Type == M_FRAME)
+  {
+    if(StrCmp(TFclass, "")) AutoClassSelection();       
+     if(StrCmp(TFclass, "Infected")) {
+        if(PosY > GS->LevelSY)
+         {
+          CanBeZombie = false;
+           Zombie = false;
+            
+            }
+     
+        if(GS->Info.GetWormHealth(WormTeam,WormNumber) <= 0 && CanBeZombie == true)
+         {
+          
+          GS->Info.SetWormHealth( WormTeam, WormNumber, 40);
+           Zombie = true;
+           TFclass = "Zombie";   
+           CanBeZombie = false;
+           SetName("Zombie");
+           if(CurW == this && CurW != NullObj)
+             {  AddDelays();
+                GiveZombieWeapons();
+             }   
+         }  
+      }
+    
+     if(StrCmp(TFclass, "Zombie")) {  Zombie = true;  CanBeZombie = false;}
+     
+     if(StrCmp(TFclass, "Special Zombie")) {Zombie = true;  CanBeZombie = false; SpecialZombie = true;}
+    
+     if(StrCmp(TFclass, "King"))
+     { if(ObjState == WS_DEAD){ KingDead[WormTeam] = 1; }  }
+     
+     if(StrCmp(TFclass, "Prince"))
+     { PrinceAlive[WormTeam] = 1;  }
+     
+     if(StrCmp(TFclass, "Prince2"))
+     { PrinceAlive2[WormTeam] = 1;  }
+     
+     if(StrCmp(TFclass, "Prince3"))
+     { PrinceAlive3[WormTeam] = 1;  }
+     
+     if(StrCmp(TFclass, "Prince"))
+     {  if(ObjState == WS_DEAD)
+      {  PrinceAlive[WormTeam] = 0;}        
+     } 
+     
+     if(StrCmp(TFclass, "Prince2"))
+     {  if(ObjState == WS_DEAD)
+      {  PrinceAlive2[WormTeam] = 0;}       
+     }
+     
+     if(StrCmp(TFclass, "Prince3"))
+     {  if(ObjState == WS_DEAD)
+      {  PrinceAlive3[WormTeam] = 0;}       
+     }
+     
+      if(KingDead[WormTeam] == 1 && PrinceAlive[WormTeam] == 0 && PrinceAlive2[WormTeam] == 0 && PrinceAlive3[WormTeam] == 0)
+      { Ded();}
+      
+  }
+ 
+}
+
+void CWorm::AutoClassSelection()
+{
+  local name = TFclass;
+  if(KingCheck[WormTeam] == 0)
+  {
+   if(WormNumber == 1)
+    {
+    TFclass = "King";
+    name = TFclass; 
+    SetName(name);
+    KingCheck[WormTeam] = 1;
+    }
+  }
+  
+  
+}
+
+
+void CWorm::Ded()
+{
+    CGObject *eobj; local TeamColor = GetTeamColor(WormTeam);
+    for(local i = 0; i < Env->Objs.Count; i++)
+    {
+      eobj = CGObject(Env->Objs.Objs[i]);
+      
+      if(eobj == NullObj) continue;
+      if(eobj->IsMaterial == false) continue;                         			
+      if(eobj->ClType == OC_Worm)
+      {
+        local worm = CWorm(eobj);
+        if(GetTeamColor(worm->WormTeam) == TeamColor)
+        {
+          GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, 0);
+        } 
+      }
+    }    
+  }

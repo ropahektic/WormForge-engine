@@ -1,0 +1,542 @@
+//map_objects by 0rang3, based on golf zones by PyroMan
+
+require utils;
+
+#ktk_29
+
+$editor
+ 
+ $object ktk_29_beam                  
+  $image "ktk_29_beam.png"            
+  $autoname ktk_29_beam               
+  $func Spawnktk_29_beam              
+  $origin -59 -77             
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_29_bridge                  
+  $image "ktk_29_bridge.png"            
+  $autoname ktk_29_bridge               
+  $func Spawnktk_29_bridge              
+  $origin -79 -82             
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_29_cave                  
+  $image "ktk_29_cave.png"            
+  $autoname ktk_29_cave               
+  $func Spawnktk_29_cave              
+  $origin -275 -298             
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_29_crane                  
+  $image "ktk_29_crane.png"            
+  $autoname ktk_29_crane               
+  $func Spawnktk_29_crane              
+  $origin -150 -282             
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_29_pole                  
+  $image "ktk_29_pole.png"            
+  $autoname ktk_29_pole               
+  $func Spawnktk_29_pole              
+  $origin -152 -300             
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_29_shelter                  
+  $image "ktk_29_shelter.png"            
+  $autoname ktk_29_shelter               
+  $func Spawnktk_29_shelter              
+  $origin -246 -302             
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_29_support                  
+  $image "ktk_29_support.png"            
+  $autoname ktk_29_support               
+  $func Spawnktk_29_support              
+  $origin -85 -171             
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object ktk_29_tree                  
+  $image "ktk_29_tree.png"            
+  $autoname ktk_29_tree               
+  $func Spawnktk_29_tree              
+  $origin -63 -156             
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+$end 
+
+////////////////////////////////////////////////////////////////////////////////
+
+CSpriterktk_29_beam : CObject;          
+CSpriterktk_29_bridge : CObject;          
+CSpriterktk_29_cave : CObject;          
+CSpriterktk_29_crane : CObject;          
+CSpriterktk_29_pole : CObject;          
+CSpriterktk_29_shelter : CObject;          
+CSpriterktk_29_support : CObject;          
+CSpriterktk_29_tree : CObject;          
+
+CSprite*ktk_29_beam;                    
+CSprite*ktk_29_bridge;                    
+CSprite*ktk_29_cave;                    
+CSprite*ktk_29_crane;                    
+CSprite*ktk_29_pole;                    
+CSprite*ktk_29_shelter;                    
+CSprite*ktk_29_support;                    
+CSprite*ktk_29_tree;                    
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ktk_29::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("ktk_29_beam.png");			ktk_29_beam = LoadSprite(f, 1, 0);
+       	f = GetAttachment("ktk_29_bridge.png");			ktk_29_bridge = LoadSprite(f, 1, 0);
+       	f = GetAttachment("ktk_29_cave.png");			ktk_29_cave = LoadSprite(f, 1, 0);
+       	f = GetAttachment("ktk_29_crane.png");			ktk_29_crane = LoadSprite(f, 1, 0);
+       	f = GetAttachment("ktk_29_pole.png");			ktk_29_pole = LoadSprite(f, 1, 0);
+       	f = GetAttachment("ktk_29_shelter.png");		ktk_29_shelter = LoadSprite(f, 1, 0);
+       	f = GetAttachment("ktk_29_support.png");		ktk_29_support = LoadSprite(f, 1, 0);
+       	f = GetAttachment("ktk_29_tree.png");			ktk_29_tree = LoadSprite(f, 1, 0);
+       	
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+CSpriterktk_29_beam::CSpriterktk_29_beam(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(39*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(39*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpriterktk_29_bridge::CSpriterktk_29_bridge(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(41*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(41*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpriterktk_29_cave::CSpriterktk_29_cave(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(149*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(149*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpriterktk_29_crane::CSpriterktk_29_crane(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(141*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(141*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpriterktk_29_pole::CSpriterktk_29_pole(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(150*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(150*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpriterktk_29_shelter::CSpriterktk_29_shelter(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(151*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(151*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpriterktk_29_support::CSpriterktk_29_support(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(85*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(85*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpriterktk_29_tree::CSpriterktk_29_tree(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(78*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(78*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+void CSpriterktk_29_beam::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_29_beam->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpriterktk_29_bridge::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_29_bridge->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpriterktk_29_cave::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_29_cave->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpriterktk_29_crane::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_29_crane->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpriterktk_29_pole::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_29_pole->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpriterktk_29_shelter::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_29_shelter->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpriterktk_29_support::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_29_support->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpriterktk_29_tree::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = ktk_29_tree->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Spawnktk_29_beam(CEditorObject* obj)
+{
+  zone = new CSpriterktk_29_beam(obj);
+}
+
+void Spawnktk_29_bridge(CEditorObject* obj)
+{
+  zone = new CSpriterktk_29_bridge(obj);
+}
+
+void Spawnktk_29_cave(CEditorObject* obj)
+{
+  zone = new CSpriterktk_29_cave(obj);
+}
+
+void Spawnktk_29_crane(CEditorObject* obj)
+{
+  zone = new CSpriterktk_29_crane(obj);
+}
+
+void Spawnktk_29_pole(CEditorObject* obj)
+{
+  zone = new CSpriterktk_29_pole(obj);
+}
+
+void Spawnktk_29_shelter(CEditorObject* obj)
+{
+  zone = new CSpriterktk_29_shelter(obj);
+}
+
+void Spawnktk_29_support(CEditorObject* obj)
+{
+  zone = new CSpriterktk_29_support(obj);
+}
+
+void Spawnktk_29_tree(CEditorObject* obj)
+{
+  zone = new CSpriterktk_29_tree(obj);
+}
+                                                            

@@ -1,0 +1,173 @@
+require utils, fow_darkness;
+
+CLantern : CGObject;
+CSprite* LanternSpr;
+
+void lantern::InitGraphic()
+{
+    CFile *f;
+    
+    f = GetAttachment("lantern.png");
+    LanternSpr = LoadSprite(f, 1, 0);
+}
+
+CLantern::CLantern(CObject* parent, fixed x, fixed y)
+{    
+    super(parent, 2, 2); // 7, 7
+    
+    PosX          = x;
+    PosY          = y;
+    IsMaterial    = true;
+    ClType        = EObjectClass(9966);
+    ColGroup      = 4423679;
+    currentSize  = 0.48;
+    owningTeam   = 0;
+    
+    NextRecalcZPlane = 0;
+	ZPlane = 15;
+	animSeed = GS->Tick;
+	
+	breakable = true;
+    health = 40;
+    ExpDamage = 20;
+}
+
+bool CLantern::ApplyDamage(int dmg)
+{
+   if (breakable == false) return false;
+   health -= dmg;
+   if (health <= 0)
+   {
+      DoExplosion(PosX,PosY, 100, ExpDamage, 0, 0);
+      Free(true);
+      return true;
+   }
+   return false;
+}
+
+void CLantern::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (breakable && (health <= 0)) return;
+if (Type == M_DRAWQUEUE)
+	{
+	currentSize =  0.48 + ((sin((GS->Tick/10)+animSeed)) * 0.02);
+	
+    local Color = GetTeamColor(owningTeam);
+    
+    if (Color == 0){SetColorMod(RGB(230, 40, 40), 8);}
+    if (Color == 1){SetColorMod(RGB(0, 135, 230), 8);}
+    if (Color == 2){SetColorMod(RGB(99, 230, 60), 8);}
+    if (Color == 3){SetColorMod(RGB(230, 230, 83), 8);}
+    if (Color == 4){SetColorMod(RGB(173, 69, 230), 8);}
+    if (Color == 5){SetColorMod(RGB(62, 230, 230), 8);}
+    
+    AddSpriteEx(ZPlane,PosX,PosY - 0,LanternSpr->Index,0.0,0.0,currentSize);
+
+    
+    ClearColorMod();
+
+    if (Sinking == 0)
+        {
+        if(NextRecalcZPlane <= 0)
+			{
+				local matches = 0;
+
+				for(local i = 1; i < Env->Objs.Count; i+=1)
+				{
+					local obj = Env->Objs.Objs[i];
+
+					if(obj == NullObj) continue;
+					if(obj == this) continue;
+					if(obj->ClType == EObjectClass(9966))
+					{
+						local lant = CLantern(obj);
+
+						float dX = lant->PosX - PosX;
+						float dY = lant->PosY - PosY;
+						float r2 = dX*dX + dY*dY;
+
+						if(r2 < 900.0)
+						{
+							if(lant->ZPlane == ZPlane)
+							{
+								lant->ZPlane = lant->ZPlane + 0.1;
+							}
+							matches = matches + 1;
+						}
+					}
+				}
+
+				if(matches == 0)	ZPlane = 15;
+
+				NextRecalcZPlane = 200;
+			}
+			else
+			{
+				NextRecalcZPlane = NextRecalcZPlane - 1;
+			}
+		}
+    }
+    
+if (Type == M_FRAME)
+	{
+    if (Sinking == 1) Free(true);
+    }
+    
+if (breakable)
+     {
+       if (Type == M_EXPLOSION)
+       {
+        local dx = MData->fparams[1] - PosX;
+        local dy = MData->fparams[2] - PosY;
+
+        local dist = dx*dx + dy*dy;
+        local dmgcoef = 1 - dist / (MData->params[4] * MData->params[4] * 4);
+        if (dmgcoef > 0)
+           {
+           if (ApplyDamage(dmgcoef * MData->params[4])) return;
+           }
+       }
+
+       if (Type == M_GUNEXP)
+       {
+        if (ApplyDamage(MData->params[5])) return;
+       }
+     }
+}
+
+override void CDarknessControl::GenerateLSources()
+{
+super;
+  	for (local i = 1; i < Env->Objs.Count; i++)
+  	{
+    local obj = CGObject(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    if (obj->ClType == EObjectClass(9966))
+		{
+    	if (obj != NullObj)
+			{
+    		if (obj->Sinking != 1)
+				{
+    			local team = CLantern(obj)->owningTeam;
+    			if (darkControl->IsTeamVisible(team)){SetLight(obj->PosX, obj->PosY, 50, 110, 0.9);}
+        		}
+        	}
+    	}
+  	}
+}
+   
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+	if (Weap->CheckName("Lantern"))
+	{
+            local lt = new CLantern(Root->GetObject(25, 0),PosX,PosY - 10);
+            local worm = CWorm(this);
+            local wteam = worm->WormTeam;
+            lt->owningTeam = wteam;
+            lt->SpY = (-1.5) + ((worm->SpY * 1.5));
+            if (TurnSide == 1) {lt->SpX = 2 + (worm->SpX);}
+			else lt->SpX = -2 + (worm->SpX);
+    }
+}      

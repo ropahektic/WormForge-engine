@@ -1,0 +1,82 @@
+/* 
+
+Made by: DannyB, February 2023
+
+*/
+
+// This script fixes a bug, where multishot weapons ends the turn or have fixed fire angles, at unwanted times. 
+
+bool msf_active;
+CWeapon* msf_weapon_used;
+bool msf_is_weapon;
+
+void Multiple_Shots_Fix_SCRIPT::FirstFrame() 
+{
+     // initialize variable
+     msf_active = false;
+     msf_weapon_used = NullObj;
+     msf_is_weapon = false;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{        
+     if(Current_Worm != NullObj && CurWeapon != NullObj)
+     {     
+          if(Root->IsTimerActive() == true)
+          {
+               if(type == M_SPACE)
+               {     
+                    if(CurWeapon->NShoots >= 2)
+                    {
+                         if(Current_Worm->nTotalShoots != Current_Worm->nAvalShoots)
+                         {
+                              if(Current_Worm->nTotalShoots == 0)
+                              {
+                                   msf_weapon_used = CurWeapon;
+                                   msf_is_weapon = CurWeapon->IsWeaponCrate;
+                              }
+                              
+                              if((Current_Worm->nTotalShoots + 1) != Current_Worm->nAvalShoots)
+                              {
+                                   CurWeapon->IsWeaponCrate = false;
+                                   
+                                   msf_active = true;    
+                              }
+                              else
+                              {
+                                   CurWeapon->IsWeaponCrate = msf_is_weapon;
+                                   
+                                   msf_active = false;
+                              }
+                         }
+                    }
+               } 
+          }
+		  
+          if(msf_active == true)
+          {
+               if((type == M_FRAME && Current_Worm->nTotalShoots == 0) || type == M_CHANGEWEAPONPANEL || type == M_TURNEND)
+               {   
+                    msf_weapon_used->IsWeaponCrate = msf_is_weapon;
+                    
+                    msf_active = false;
+                    msf_weapon_used = NullObj;
+                    msf_is_weapon = false;
+               }
+          }
+     }
+     
+     super;         
+}
+
+override void CWorm::ResetWeapon()
+{
+     if(msf_active == true)
+     {
+          return;
+     }
+     else
+     {        
+          super;
+     }
+}

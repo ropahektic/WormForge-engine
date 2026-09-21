@@ -1,0 +1,381 @@
+require utils, utils_steps;
+        
+CBitmap32* GUI;
+//CBitmap32* GUI2;
+CInterfaceHandler : CObject;
+string speedx;
+string speedy;
+string curstate;
+string curweap;
+string showmsg;
+int sbnd;
+int snd2;
+int snd3;
+int snd4;
+int wup;
+int wdown;
+int wleft;
+int wright;
+int duma;
+
+void Interface::Init()
+{
+    keySync->AddKey(74); // J
+    keySync->AddKey(75); // K
+}
+
+void Interface::InitGraphic()
+{ 
+    GUI = LoadImage( GetAttachment("panel.png") );
+}
+
+override void ShowMessage(string msg, int lol)
+{
+    showmsg = msg;
+}               
+
+CInterfaceHandler::CInterfaceHandler(CObject* parent)
+{
+    super(parent, GS);   
+    GUIn = MakeBitmap(GUI->SX+20, GUI->SY+5);
+    GUIn2 = MakeBitmap(GUI->SX+70, GUI->SY+5);
+}
+
+void CInterfaceHandler::ListNDraw()
+{
+            CWorm* Worm_Cur = GetCurrentWorm(); 
+            
+               if (Worm_Cur != NullObj)                        
+               {    
+                   local a = 0;
+                   local b = 0;
+                   local color = RGB(251, 245, 114);
+                          
+                   local lsx = GS->landSelectX;
+                   local lsy = GS->landSelectY;
+                   if (lsx & 32768) lsx = lsx | (65535 << 16);
+                   if (lsy & 32768) lsy = lsy | (65535 << 16);       
+                          
+                          if (CamLock)
+                          {
+                              GS->CameraX = Worm_Cur->PosX;
+                              GS->CameraY = Worm_Cur->PosY;
+                          }
+
+                          // Horizontal
+                          GUIn->HLine(0, GUIn->SX - 1, 0, color);
+                          GUIn->HLine(0, GUIn->SX - 1, GUIn->SY - 1, color);
+                          GUIn2->HLine(0, GUIn2->SX - 1, 0, color);
+                          GUIn2->HLine(0, GUIn2->SX - 1, GUIn2->SY - 1, color);
+                          
+                          // Vertical
+                          GUIn->VLine(0, 0, GUIn->SY - 1, color);
+                          GUIn->VLine(GUIn->SX, 0, GUIn->SY - 1, color);
+                          GUIn2->VLine(GUIn2->SX - 1, 0, GUIn2->SY - 1, color);
+
+                          GUIn->Rect(1, 1, GUIn->SX - 2, GUIn->SY - 2, ARGB(127, 0, 0, 0));
+                          GUIn2->Rect(0, 1, GUIn2->SX - 1, GUIn2->SY - 2, ARGB(127, 0, 0, 0));
+                                                                                       
+                                            // Text Desctiptions                          
+                          
+                          GS->Disp->DrawText(4, GUIn, 15, 30, "Current Worm:", &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 40, "Pos. X", &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 50, "Pos. Y", &b, &a);           
+                          GS->Disp->DrawText(8, GUIn, 10, 60, "Speed X", &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 70, "Speed Y", &b, &a);                          
+                          GS->Disp->DrawText(8, GUIn, 10, 80, "Select X", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 90, "Select Y", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 100, "Rope Length", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 110, "Rope Fragments", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 120, "Rope AX", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 130, "Rope AY", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 140, "Health", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 150, "Wind Factor", &b, &a);     
+                          GS->Disp->DrawText(8, GUIn, 10, 160, "GotDamage", &b, &a);     
+                          GS->Disp->DrawText(8, GUIn, 10, 170, "Can Fire", &b, &a);
+ 
+                          GS->Disp->DrawText(4, GUIn, 15, 190, "Display(Disp):", &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 200, "ViewX", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 210, "ViewY", &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 220, "ViewSX", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 230, "ViewSY", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 240, "HalfX", &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 250, "HalfY", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 260, "nSurfaces", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 270, "xRes", &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 280, "yRes", &b, &a);
+                          
+                          GS->Disp->DrawText(4, GUIn, 15, 300, "CTurnGame(Root):", &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 310, "Timer", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 320, "Retreat Timer", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 330, "Match Timer", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 340, "CurWorm", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 350, "CurTeam", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 360, "CurTeamB", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 370, "NextColor", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 380, "cWaterLevel", &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 10, 390, "cTrgWaterLevel", &b, &a);
+                           
+                                                                            
+                          GS->Disp->DrawText(4, GUIn2, 15, 30, "Enviroment(Env):", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 40, "LastObj", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 50, "Last44", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 60, "Last40", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 70, "LastX", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 80, "LastY", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 90, "Water", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 100, "Gravity", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 110, "Wind", &a, &b);
+                                                
+                          GS->Disp->DrawText(4, GUIn2, 15, 130, "GameState(GS):", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 140, "ALevel", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 150, "ShakeX", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 160, "ShakeY", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 170, "ResX", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 180, "ResY", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 190, "LevelSX", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 200, "LevelSY", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 210, "Tick", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 220, "CameraX", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 230, "CameraY", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 240, "ActCameraX", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 250, "ActCameraY", &b, &a);
+                          
+                          GS->Disp->DrawText(4, GUIn2, 15, 270, "Misc:", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 280, "Sound", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 290, "Local Sound", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 300, "Worm Sound", &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 10, 310, "Worm State", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 320, "Click (MK)", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 330, "Frame", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 340, "Cursor X", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 350, "Cursor Y", &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 10, 370, "Fire Angle", &a, &b);
+                                                                                                                      
+                           
+                                               
+                                                // Integer Parametres                                                   
+                                                    
+                          GS->Disp->DrawText(8, GUIn, 100, 40, ItoA(Worm_Cur->PosX), &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 100, 50, ItoA(Worm_Cur->PosY), &b, &a);           
+                          GS->Disp->DrawText(8, GUIn, 100, 60, ftoaEx(Worm_Cur->SpX,5), &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 100, 70, ftoaEx(Worm_Cur->SpY,5), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 80, ItoA(Worm_Cur->SelectX/65536), &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 100, 90, ItoA(Worm_Cur->SelectY/65536), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 100, ItoA(Worm_Cur->RopeLength/65536), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 110, ItoA(Worm_Cur->RopeFragments), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 120, ItoA(Worm_Cur->RopeAX/65536), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 130, ItoA(Worm_Cur->RopeAY/65536), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 140, ItoA(Worm_Cur->TargHealth), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 150, ftoa(Worm_Cur->WindFactor), &b, &a);         
+                          GS->Disp->DrawText(8, GUIn, 100, 160, ItoA(Worm_Cur->GotDamage), &b, &a);         
+                          GS->Disp->DrawText(8, GUIn, 100, 170, BtoA(Worm_Cur->CanFire), &b, &a);
+                          
+                          GS->Disp->DrawText(8, GUIn, 100, 200, ItoA(GS->Disp->ViewX), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 210, ItoA(GS->Disp->ViewY), &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 100, 220, ItoA(GS->Disp->ViewSX), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 230, ItoA(GS->Disp->ViewSY), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 240, ItoA(GS->Disp->halfX), &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 100, 250, ItoA(GS->Disp->halfY), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 260, ItoA(GS->Disp->nSurfaces), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 270, ItoA(GS->Disp->xRes), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 280, ItoA(GS->Disp->yRes), &b, &a);
+                          
+                          GS->Disp->DrawText(8, GUIn, 100, 310, ItoA(Root->Timer), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 320, ItoA(Root->RetreatTimer), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 330, ItoA(MatchTimer), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 340, ItoA(Root->CurWorm), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 350, ItoA(Root->CurTeam), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 360, ItoA(Root->CurTeamB), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 370, ItoA(Root->NextColor), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 380, ItoA(Root->cWaterLevel), &b, &a);
+                          GS->Disp->DrawText(8, GUIn, 100, 390, ItoA(Root->cTrgWaterLevel), &b, &a);
+                                                 
+                          GS->Disp->DrawText(8, GUIn2, 85, 40, ItoA(Env->LastObj), &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 85, 50, ItoA(Env->Last44), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 60, ItoA(Env->Last40), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 70, ItoA(Env->LastX), &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 85, 80, ItoA(Env->LastY), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 90, ItoA(Env->Water), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 100, ftoaEx(Env->Gravity,5), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 110, ftoaEx(Env->Wind,5), &a, &b);
+                          
+                          GS->Disp->DrawText(8, GUIn2, 85, 140, ItoA(GS->ALevel), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 150, ItoA(GS->ShakeX), &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 85, 160, ItoA(GS->ShakeY), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 170, ItoA(GS->ResX), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 180, ItoA(GS->ResY), &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 85, 190, ItoA(GS->LevelSX), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 200, ItoA(GS->LevelSY), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 210, ItoA(GS->Tick), &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 85, 220, ItoA(GS->CameraX), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 230, ItoA(GS->CameraY), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 240, ItoA(GS->ActCameraX), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 250, ItoA(GS->ActCameraY), &b, &a);        
+                          GS->Disp->DrawText(8, GUIn2, 85, 260, ItoA(duma), &b, &a);  
+                          
+                          GS->Disp->DrawText(8, GUIn2, 85, 280, ItoA(snd2), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 290, ItoA(snd3), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 300, ItoA(sbnd), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 310, curstate, &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 320, ItoA(WApp->MK), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 330, ItoA(gframe), &a, &b);
+                          GS->Disp->DrawText(8, GUIn2, 85, 340, ItoA(GS->landSelectX), &b, &a); // lsx
+                          GS->Disp->DrawText(8, GUIn2, 85, 350, ItoA(GS->landSelectY), &b, &a); // lsy
+                  //        GS->Disp->DrawText(8, GUIn2, 85, 370, MatchTimerView(false), &b, &a);
+                  //      GS->Disp->DrawText(8, GUIn2, 85, 380, BtoA(nulobj), &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 360, showmsg, &b, &a);
+                          GS->Disp->DrawText(8, GUIn2, 85, 370, ftoaEx(Worm_Cur->FireAngle,5), &b, &a);
+                 //         GS->Disp->DrawText(8, GUIn2, 85, 380, ItoA(wleft), &b, &a);
+                 //         GS->Disp->DrawText(8, GUIn2, 85, 390, ItoA(wright), &b, &a);
+                          
+              } 
+}
+
+
+void Interface::FirstFrame()
+{
+ new CInterfaceHandler(Root);
+ TurnOn = false;
+ curweap = "Initializing";
+ curstate = "None";
+ showmsg = "Null";
+}
+
+ 
+
+void CInterfaceHandler::Toggler()
+{
+ CWorm *w = GetCurrentWorm();
+ 
+if(w != NullObj)
+ {
+ if (IsKeyPressed(79))     // O
+    {     
+         TurnOn = true;    
+    }
+ if (IsKeyPressed(80))     // P
+    {     
+         TurnOn = false; 
+    }   
+ if (IsKeyPressed(219))     // [
+    {     
+         CamLock = true; 
+    } 
+ if (IsKeyPressed(221))     // ]
+    {     
+         CamLock = false; 
+    }
+ } 
+}
+
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+    super;
+    sbnd = sound;
+}
+
+override void CObject::PlaySound(int SIndex,int UnkB,fixed UnkC,fixed Pan)
+{
+    super;
+    snd2 = SIndex;
+}
+
+override void CGObject::PlayLocalSound(int SIndex,int Unk,fixed Volume,fixed Pan)
+{
+    super;
+    snd3 = SIndex;
+}
+  
+void CInterfaceHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if (Type == M_FRAME)
+    {
+    
+    Toggler();     
+    ListNDraw();
+       
+    }
+ if (Type == M_DRAWQUEUE)
+    {
+     if (TurnOn)
+     {
+      AddInterfaceBitmap(0, (-GS->Disp->xRes / 2) + GUIn->SX / 2,-60,GUIn,130,405,0);
+      AddInterfaceBitmap(0, (-GS->Disp->xRes / 2) + GUIn->SX + 100,-60,GUIn2,200,405,0);
+     }
+    }
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   CWorm *w = GetCurrentWorm();
+   
+   if (w != NullObj)
+   {
+        if (w->ObjState == WS_IDLE) {curstate = "WS_IDLE";};
+        if (w->ObjState == WS_WALKING) {curstate = "WS_WALKING";};
+        if (w->ObjState == WS_AIMING) {curstate = "WS_AIMING";};
+        if (w->ObjState == WS_SETPOWER) {curstate = "WS_SETPOWER";};
+        if (w->ObjState == WS_FIRED) {curstate = "WS_FIRED";};
+        if (w->ObjState == WS_FIRECONT) {curstate = "WS_FIRECONT";};
+        if (w->ObjState == WS_FIREPUNCH) {curstate = "WS_FIREPUNCH";};
+        if (w->ObjState == WS_DRILLING) {curstate = "WS_DRILLING";};
+        if (w->ObjState == WS_TELEPORTING) {curstate = "WS_TELEPORTING";};
+        if (w->ObjState == WS_ROPING) {curstate = "WS_ROPING";};
+        if (w->ObjState == WS_BLOWTORCH) {curstate = "WS_BLOWTORCH";};
+        if (w->ObjState == WS_AFTERROPE) {curstate = "WS_AFTERROPE";};
+        if (w->ObjState == WS_SUICIDEBOMBER) {curstate = "WS_SUICIDEBOMBER";};
+        if (w->ObjState == WS_POING) {curstate = "WS_POING";};
+        if (w->ObjState == WS_SHOOTINGROPE) {curstate = "WS_SHOOTINGROPE";};
+        if (w->ObjState == WS_JUMP) {curstate = "WS_JUMP";};
+        if (w->ObjState == WS_BUNGEE) {curstate = "WS_BUNGEE";};
+        if (w->ObjState == WS_PARACHUTE) {curstate = "WS_PARACHUTE";};
+        if (w->ObjState == WS_SLIDING) {curstate = "WS_SLIDING";};
+        if (w->ObjState == WS_POWERFLY) {curstate = "WS_POWERFLY";};
+        if (w->ObjState == WS_FLYING2) {curstate = "WS_FLYING2";};
+        if (w->ObjState == WS_JUMPPREPARE) {curstate = "WS_JUMPPREPARE";};
+        if (w->ObjState == WS_JETPACK) {curstate = "WS_JETPACK";};
+        if (w->ObjState == WS_FLYING) {curstate = "WS_FLYING";};
+        if (w->ObjState == WS_FROZEN) {curstate = "WS_FROZEN";};
+        if (w->ObjState == WS_CONTROL_WEAPON) {curstate = "WS_CONTROL_WEAPON";};
+        if (w->ObjState == WS_DEATH) {curstate = "WS_DEATH";};
+        if (w->ObjState == WS_REPEATFIRE) {curstate = "WS_REPEATFIRE";};
+        if (w->ObjState == WS_SINKING) {curstate = "WS_SINKING";};
+        if (w->ObjState == WS_DEAD) {curstate = "WS_DEAD";};
+        
+      
+   
+        if (Type == M_FRAME)
+        {   
+    //        if (keySync->KeyPressedNow(74)) PlaySound(404,0,0,1.0);
+    //        if (keySync->KeyPressedNow(75)) FinishRound();
+                      
+            wup = w->PressedUp;
+            wdown = w->PressedDown;
+            wleft = w->PressedLeft;
+            wright = w->PressedRight;
+        }      
+   } 
+   
+super;
+}
+
+override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    
+    if (Type == M_FRAME)
+    {
+        duma = ColGroup;
+    }
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)    // Button lock & desync fix
+{
+super;
+   
+   for (local i = 0; i < 256; i+=1)
+   {
+     keySync->kRStates[i] = false;
+   };
+}

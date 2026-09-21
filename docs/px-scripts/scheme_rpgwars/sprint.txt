@@ -1,0 +1,104 @@
+void sprint::InitGraphic()
+{
+}
+
+void sprint::Init()
+{
+}
+
+void sprint::FirstFrame()
+{
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+//Sprint fields
+CanSprint = false;
+walkframe = 0;  //timer
+wframeact = 8;  //every n frame, less is faster tick = faster speed. def 8
+walkrange = 6;  //range, affects speed. def 6
+walkbool = false;
+
+NextPosX = 0.0;
+NextPosY = 0.0;
+
+super;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(CanSprint == true)
+   {
+      if(Type == M_FRAME)
+      {
+              if(ObjState == WS_WALKING)
+              {
+                          if(walkframe <= wframeact){walkframe = walkframe + 1;}
+                          else
+                          {
+                                      if(DetectPos() == true)
+                                      {
+                                      SetState(WS_IDLE);
+                                      TeleportObject(this, NextPosX, NextPosY, 50, true, 2);
+                                      SetState(WS_WALKING);
+                                      walkframe = 0;
+                                      }
+                          }
+              }
+              else
+              {
+                  if(walkframe > wframeact){walkframe = 0;}
+              }
+      }
+
+      if(Type == M_PLEFT || Type == M_PRIGHT)
+      {
+              if(walkframe > wframeact)
+              {
+              return;
+              }
+      }
+   }
+super;
+}
+
+bool CWorm::DetectPos()
+{
+   float posx1 = 0.0;
+   float posy1 = 0.0;
+
+   local flags = 2;
+   int hitx;
+   int hity;
+   CGObject* hitObject;
+
+   for(local t = 10; t>-10; t--)
+   {
+     hitObject = TraceLine(this, PosX, PosY, PosX+walkrange*TurnSide, PosY+t*5, flags, &hitx, &hity);
+              if(hitObject != NullObj)
+              {
+                continue;
+              }
+              else
+              {
+              posx1 = hitx;
+              posy1 = hity;
+              hitObject = TraceLine(this, posx1, posy1, posx1, posy1+20, flags, &hitx, &hity);
+                        if(hitObject != NullObj)
+                        {
+                          NextPosX = hitx;
+                          NextPosY = hity - 8;
+                        }
+                        else
+                        {
+                          NextPosX = posx1;
+                          NextPosY = posy1+5;
+                        }
+              //GG->WriteToChat( 1, "walkbool true", false);
+              return true;
+              }
+   }
+   //GG->WriteToChat( 1, "walkbool false", false);
+   return false;
+}

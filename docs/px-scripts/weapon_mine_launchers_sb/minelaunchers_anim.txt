@@ -1,0 +1,33 @@
+require utils, p_sprite_builder;
+
+CSprite* mine_launchers_aiming;
+
+WormSprite* MineLaunchWS;
+
+void minelaunchers_anim::InitGraphic() {
+    CFile* f;
+    f = GetAttachment("mine_launchers_aiming.png");
+    mine_launchers_aiming = LoadSprite(f, 1, 0);
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Mine Launcher";
+     sprite = mine_launchers_aiming->Index;
+     Params->hand_rotation = 0.5;
+     Params->fix_flip_rotation = true;
+     Params->hand_radius = 4.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->hand_type = 3;
+     Params->weap_radius = 0.0;
+     Params->hand_scale = 0.8;
+
+     MineLaunchWS = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

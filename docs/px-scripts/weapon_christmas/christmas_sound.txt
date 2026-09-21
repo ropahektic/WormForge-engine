@@ -1,0 +1,15 @@
+CSoundFile* merrychristmas;
+ 
+void christmas_sound::Init()
+{
+	merrychristmas       = new CSoundFile(GetAttachment("Merry Christmas.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Christmas Surprise") || Weap->CheckName("Gift Strike") || Weap->CheckName("Evil Santa"))
+  {  
+             merrychristmas->Play(2.0, 0.0, false);
+  }
+  super;
+}

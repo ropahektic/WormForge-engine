@@ -1,0 +1,279 @@
+require utils;
+
+CSprite* sel;
+CSprite* wepanel;
+string WeaponN[100]; //Name of each weapon
+int WeaponA[100];  //amount of each weapon current player has
+int WeaponC[100]; //cost of each weapon
+int Selection; // currently selected weapon number in buymenu
+int Credits;  //sample
+int Cash[6];  //amount of credits player has at the moment
+bool PlayerBought[6]; //true if player already bought weapons
+int cooldown; //cooldown between button presses
+
+                                                  
+void buymenu::InitGraphic()     
+{
+ local spr1       = GetAttachment("selection.png");             
+ sel     = LoadSprite(spr1, 1, 0);
+ local spr2       = GetAttachment("wa_weaponpanel.png");             
+ wepanel     = LoadSprite(spr2, 1, 0);
+}
+
+void buymenu::Init()    
+{
+cooldown = 0;
+Selection = 0;
+Credits = 200;
+ for(local t = 0;t<99;t++)
+                 {
+                 WeaponN[t] = "Surrender";
+                 WeaponA[t] = 0;
+                 WeaponC[t] = 0;
+                 if(t >= 0 && t <=5){Cash[t] = Credits; PlayerBought[t] = false;}
+                 }
+
+WeaponN[0] = "Jet Pack";
+WeaponC[0] = 9;
+WeaponN[1] = "Low Gravity";
+WeaponC[1] = 11;
+WeaponN[2] = "Fast Walk";
+WeaponC[2] = 1;
+WeaponN[3] = "Laser Sight";
+WeaponC[3] = 1;
+WeaponN[4] = "Invisibility";
+WeaponC[4] = 8;
+WeaponN[5] = "Bazooka";
+WeaponC[5] = 13;
+WeaponN[6] = "Homing Missile";
+WeaponC[6] = 15;
+WeaponN[7] = "Mortar";
+WeaponC[7] = 7;
+WeaponN[8] = "Homing Pigeon";
+WeaponC[8] = 21;
+WeaponN[9] = "Sheep Launcher";
+WeaponC[9] = 22;
+WeaponN[10] = "Grenade";
+WeaponC[10] = 14;
+WeaponN[11] = "Cluster Bomb";
+WeaponC[11] = 13;
+WeaponN[12] = "Banana Bomb";
+WeaponC[12] = 35;
+WeaponN[13] = "Battle Axe";
+WeaponC[13] = 7;
+WeaponN[14] = "Earthquake";
+WeaponC[14] = 10;
+WeaponN[15] = "Shotgun";
+WeaponC[15] = 16;
+WeaponN[16] = "Handgun";
+WeaponC[16] = 7;
+WeaponN[17] = "Uzi";
+WeaponC[17] = 9;
+WeaponN[18] = "Minigun";
+WeaponC[18] = 14;
+WeaponN[19] = "Longbow";
+WeaponC[19] = 10;
+WeaponN[20] = "Fire Punch";
+WeaponC[20] = 7;
+WeaponN[21] = "Dragon Ball";
+WeaponC[21] = 5;
+WeaponN[22] = "Kamikaze";
+WeaponC[22] = 7;
+WeaponN[23] = "Suicide Bomber";
+WeaponC[23] = 4;
+WeaponN[24] = "Prod";
+WeaponC[24] = 3;
+WeaponN[25] = "Dynamite";
+WeaponC[25] = 18;
+WeaponN[26] = "Mine";
+WeaponC[26] = 15;
+WeaponN[27] = "Sheep";
+WeaponC[27] = 18;
+WeaponN[28] = "Aqua Sheep";  
+WeaponC[28] = 23;
+WeaponN[29] = "Mole Bomb";
+WeaponC[29] = 10;
+WeaponN[30] = "Air Strike";
+WeaponC[30] = 14;
+WeaponN[31] = "Napalm Strike";
+WeaponC[31] = 17;
+WeaponN[32] = "Mail Strike";
+WeaponC[32] = 18;
+WeaponN[33] = "Mine Strike";
+WeaponC[33] = 19;
+WeaponN[34] = "Mole Squadron";
+WeaponC[34] = 12;
+WeaponN[35] = "BlowTorch";
+WeaponC[35] = 4;
+WeaponN[36] = "Pneumatic Drill";
+WeaponC[36] = 4;
+WeaponN[37] = "Girder";
+WeaponC[37] = 7;
+WeaponN[38] = "Baseball Bat";
+WeaponC[38] = 9;
+WeaponN[39] = "Girder Starter-Pack";
+WeaponC[39] = 23;
+WeaponN[40] = "Ninja Rope";
+WeaponC[40] = 12;
+WeaponN[41] = "Bungee";
+WeaponC[41] = 5;
+WeaponN[42] = "Parachute";
+WeaponC[42] = 7;
+WeaponN[43] = "Teleport";
+WeaponC[43] = 7;
+WeaponN[44] = "Scales of Justice";
+WeaponC[44] = 13;
+WeaponN[45] = "Super Banana Bomb";
+WeaponC[45] = 36;
+WeaponN[46] = "Holy Hand-Grenade";
+WeaponC[46] = 35;
+WeaponN[47] = "Flame Thrower";
+WeaponC[47] = 15;
+WeaponN[48] = "Salvation Army";
+WeaponC[48] = 31;
+WeaponN[49] = "MB Bomb";
+WeaponC[49] = 28;
+WeaponN[50] = "Petrol Bomb";
+WeaponC[50] = 12;
+WeaponN[51] = "Skunk";
+WeaponC[51] = 11;
+WeaponN[52] = "Priceless Ming Vase";
+WeaponC[52] = 40;
+WeaponN[53] = "French Sheep Strike";
+WeaponC[53] = 42;
+WeaponN[54] = "Mike's Carpet Bomb";
+WeaponC[54] = 28;
+WeaponN[55] = "Mad Cow";
+WeaponC[55] = 30;
+WeaponN[56] = "Old Woman";
+WeaponC[56] = 13;
+WeaponN[57] = "Concrete Donkey";
+WeaponC[57] = 110;
+WeaponN[58] = "Indian Nuclear Test";
+WeaponC[58] = 90;
+WeaponN[59] = "Armageddon";
+WeaponC[59] = 120;
+WeaponN[60] = "Skip Go";
+WeaponC[60] = 999999; 
+WeaponN[61] = "Surrender";
+WeaponC[61] = 999999; 
+WeaponN[62] = "Select Worm";
+WeaponC[62] = 5;
+WeaponN[63] = "Freeze";
+WeaponC[63] = 12;
+WeaponN[64] = "Patsy's Magic Bullet";
+WeaponC[64] = 33;
+}
+
+void buymenu::FirstFrame()
+{
+
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(GetCurrentWorm() != NullObj)
+  {
+       if(PlayerBought[WormTeam-1] == false && GetCurrentWorm() == this)
+       {
+                   if(Type == M_FRAME)
+                   {
+                    if(cooldown > 0){cooldown = cooldown - 1;}
+                    if(PlayerBought[WormTeam-1] == false){Root->Timer = 10000;}
+                   }
+       
+                   if(Type == M_PLEFT)
+                   {
+                           if(Selection != 0 && cooldown == 0)
+                           {
+                           cooldown = 20;
+                           Selection = Selection - 1;
+                           }
+                   return;        
+                   }
+                   
+                   if(Type == M_PRIGHT)
+                   {
+                           if(Selection != 64 && cooldown == 0)
+                           {
+                           cooldown = 20;
+                           Selection = Selection + 1;
+                           }
+                   return;        
+                   }
+                   
+                   if(Type == M_PUP)
+                   {
+                           if(Selection > 4 && cooldown == 0)
+                           {
+                           cooldown = 20;
+                           Selection = Selection - 5;
+                           }
+                   return;        
+                   }
+                   
+                   if(Type == M_PDOWN)
+                   {
+                           if(Selection < 60 && cooldown == 0)
+                           {
+                           cooldown = 20;
+                           Selection = Selection + 5;
+                           }
+                   return;        
+                   }
+                   
+                   if(Type == M_ENTER)
+                   {
+                           if(Cash[WormTeam-1] >= WeaponC[Selection])
+                           {
+                           WeaponA[Selection] = WeaponA[Selection] + 1;
+                           local wep1 = GS->GetWeaponByName(WeaponN[Selection]);
+                           if(wep1 != NullObj){GS->Info.SetWeaponEx(WormTeam, wep1->GetWeaponIndex(), wep1->GetPageIndex(), WeaponA[Selection]);}
+                           Cash[WormTeam-1] = Cash[WormTeam-1] - WeaponC[Selection];
+                           }
+                   return; 
+                   }
+                   
+                   if(Type == M_SPACE)
+                   {
+                   PlayerBought[WormTeam-1] = true;
+                   for(local t = 0;t<99;t++)
+                             {
+                             WeaponA[t] = 0;
+                             }
+                   Root->Timer = 0;
+                   return;        
+                   }
+                   
+                   if(Type == M_DRAWQUEUE)
+                   {
+                           if(PlayerBought[WormTeam-1] == false)
+                           {
+                           DrawBuyMenu();
+                           }
+                   }
+       }
+  }
+super;
+}
+
+void CWorm::DrawBuyMenu()
+{
+ if(DoIKnowHim(this) == true)
+ {
+  local spr1 = wepanel->Index;
+  AddSprite(5,GS->CameraX,GS->CameraY,0,spr1, 0.0);
+  
+  local x = 0;
+  local y = 0;
+  local t = 0;
+  x = GS->CameraX-90;
+  y = GS->CameraY-190;
+  if(Selection != 0){t = Selection/5;}else{t = 0;}
+  y = y + 16 + 29 * t;
+  x = x + 48 + 29 * (Selection - t*5);
+
+  local spr2 = sel->Index;
+  AddSprite(4,x,y,0,spr2, 0.0);
+ }
+}

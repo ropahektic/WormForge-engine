@@ -1,0 +1,237 @@
+                                                                   require utils;
+
+string WeaponName[71];
+int WeaponAPcost[71];
+int APs;
+
+void actionpoints::InitGraphic()     
+{
+
+}
+
+void actionpoints::Init()   
+{
+
+}
+
+void actionpoints::FirstFrame()
+{
+  for(local i = 1; i < 71; i++)
+  {    
+  WeaponName[i] = "";
+  WeaponAPcost[i] = 0;
+  }
+  
+  
+  WeaponName[0] = "Bazooka";
+  WeaponAPcost[0] = 100; 
+  WeaponName[1] = "Mine Launcher";
+  WeaponAPcost[1] = 100;
+  WeaponName[2] = "Fire Punch";
+  WeaponAPcost[2] = 100; 
+  WeaponName[3] = "Shotgun";
+  WeaponAPcost[3] = 100; 
+  WeaponName[4] = "Girder";
+  WeaponAPcost[4] = 100; 
+  WeaponName[5] = "Handgun";
+  WeaponAPcost[5] = 100; 
+  WeaponName[6] = "Draw 1 Weapon";
+  WeaponAPcost[6] = 200; 
+  WeaponName[7] = "Uzi";
+  WeaponAPcost[7] = 100; 
+  WeaponName[8] = "Ninja Rope";
+  WeaponAPcost[8] = 100;
+  WeaponName[9] = "BlowTorch";
+  WeaponAPcost[9] = 100;
+  WeaponName[10] = "Minigun";
+  WeaponAPcost[10] = 100; 
+  WeaponName[11] = "Sheep Launcher";
+  WeaponAPcost[11] = 200;
+  WeaponName[12] = "Teleport";
+  WeaponAPcost[12] = 100;
+  WeaponName[13] = "Sniper Rifle";
+  WeaponAPcost[13] = 100;                     
+  WeaponName[14] = "Spawn Zombie";
+  WeaponAPcost[14] = 200;
+  WeaponName[15] = "Jet Pack";
+  WeaponAPcost[15] = 100;
+  WeaponName[16] = "Super Punch";
+  WeaponAPcost[16] = 100;
+  
+   
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  super;
+    if(Weap->CheckName("Girder") || Weap->CheckName("Teleport"))
+  {  
+    ActionPoints = ActionPoints - 100; 
+    PersonalDelayCheck();     
+  }
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)   
+{
+  paramDelay = 60;        //delay between attacks stat
+  paramAP = 200;         //this is AP stat
+  JumpApCost = 100;       //for each press of enter
+  MoveApCost = 1;         //for each frame press of arrowkeys
+  ActionPoints = paramAP; //this is current AP of the worm. displayed ap /100,  *10 for turntimer
+  WDelay = 0;    //current delay on weapon
+super;    
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{        
+         if(Type == M_PLEFT && (ObjState == WS_IDLE || ObjState == WS_AIMING || ObjState == WS_WALKING))      //arrowkeys pressed
+         {
+           CWorm *ActiveWorm = GetCurrentWorm();
+           if(ActiveWorm != NullObj) 
+           {
+           ActiveWorm->TurnSide = -1;  //if enough AP, move
+           return;
+           }  
+         }
+         
+          if(Type == M_PRIGHT && (ObjState == WS_IDLE || ObjState == WS_AIMING || ObjState == WS_WALKING))      //arrowkeys pressed
+         {
+           CWorm *ActiveWorm = GetCurrentWorm();
+           if(ActiveWorm != NullObj) 
+           {
+           ActiveWorm->TurnSide = 1;  //if enough AP, move
+           return;
+           }             
+         } 
+         
+         
+         if((Type == M_PDOWN || Type == M_PUP) && (ObjState == WS_ROPING || ObjState == WS_SHOOTINGROPE ||ObjState == WS_PARACHUTE || ObjState == WS_BUNGEE))      //rope chute bungee support
+         {
+           super; 
+           return;
+         }    
+         
+         if(Type == M_SPACE && (ObjState == WS_IDLE || ObjState == WS_JUMP || ObjState == WS_JUMPPREPARE || ObjState == WS_AIMING || ObjState == WS_AFTERROPE || ObjState == WS_BUNGEE || ObjState == WS_ROPING || ObjState == WS_PARACHUTE))                                                    //SPACE pressed
+         { 
+                 
+            
+            for(local x = 0; x < 71; x++)
+            {    
+                if(CurWeapon->CheckName(WeaponName[x]))                         //if wep listed in AP cost list
+                {     
+                       if(CurWeapon->CheckName("Mine Launcher") && ActionPoints == 100)
+                        {  super;                                                  
+                           ActionPoints = ActionPoints - WeaponAPcost[x]; 
+                           
+                           PersonalDelayCheck();                                   
+                           WDelay = paramDelay; 
+                        }
+                
+                       if(CurWeapon->CheckName("Shotgun") || CurWeapon->CheckName("Sniper Rifle")) 
+                        {
+                         if (ShotgunCheck[WormTeam] == 0)
+                          { 
+                           if(WeaponAPcost[x] - ActionPoints < 100 && WDelay == 0)
+                           {
+                            super;
+                             if (ShotgunCheck[WormTeam] == 0) 
+                               {  ActionPoints = ActionPoints - 100; 
+                                  ShotgunCheck[WormTeam]++; 
+                               }
+                           }
+                        }    
+                          else if (ShotgunCheck[WormTeam] == 1 && CurWeapon->CheckName("Shotgun"))
+                           { 
+                           super;
+                           ShotgunCheck[WormTeam] = 0; 
+                           }
+                          
+                          else if (ShotgunCheck[WormTeam] == 1 && CurWeapon->CheckName("Sniper Rifle"))
+                           { 
+                           super;
+                           ShotgunCheck[WormTeam]++; 
+                           }
+                           else if (ShotgunCheck[WormTeam] == 2 && CurWeapon->CheckName("Sniper Rifle"))
+                           { 
+                           super;
+                           ShotgunCheck[WormTeam] = 0; 
+                           }
+                          
+                          return; 
+                       }
+                       
+                       else if(WeaponAPcost[x] - ActionPoints < 100 && WDelay == 0)       //if enough AP
+                       {
+                         if(CurWeapon->CheckName("Girder") || CurWeapon->CheckName("Teleport") || CurWeapon->CheckName("Spawn Zombie"))
+                         {
+                          super;
+                          return; 
+                          }
+                           else if(CurWeapon->CheckName("Ninja Rope"))
+                         { 
+                          super;
+                          RopeShot = true;
+                          return; 
+                          
+                         }
+                         
+                         
+                          
+                         else 
+                         {
+                         super;                                                  
+                         ActionPoints = ActionPoints - WeaponAPcost[x];                                   
+                         WDelay = paramDelay; 
+                                                              
+                         }
+                       }
+                    return;                                                     
+                } 
+            }
+            
+         } 
+         
+         if(ObjState == WS_ROPING && RopeShot == true)
+            { 
+               ActionPoints = ActionPoints - 100;                  
+               RopeShot = false;
+               PersonalDelayCheck(); 
+            }  
+         
+         if((Type == M_ENTER || Type == M_BACKSPACE) && (ObjState == WS_IDLE || ObjState == WS_AIMING || ObjState == WS_WALKING))   //jumpkeys pressed
+         {
+            
+           return;
+         } 
+         
+         if(Type == M_FRAME)                      //each frame
+         {
+           if(WDelay != 0){WDelay = WDelay - 1;}   //delay tick    
+           if(GetCurrentWorm() != NullObj)
+             {
+             APs = GetCurrentWorm()->ActionPoints;
+             }
+         }
+         
+super;
+}
+
+
+override int CTurnGame::GetNextTeam()              //between turns stuff
+{
+   for(local i = 1; i < Env->Objs.Count; i+=1)
+   {
+   local obj = Env->Objs.Objs[i];
+   if(obj == NullObj) continue;
+        if(obj->ClType == OC_Worm)
+        {
+        CWorm* warm;
+        warm = obj;
+        warm->ActionPoints = warm->paramAP;        //AP turn recovery
+
+        }
+   }
+
+super;
+}

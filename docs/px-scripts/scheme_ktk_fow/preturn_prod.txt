@@ -1,0 +1,40 @@
+require utils;
+
+bool delayPROD;
+
+override void CWorm::Message(CObject* obj,EMType Type,int MSize,CMessageData* MData)
+{
+local w = GetCurrentWorm();
+
+if(w != NullObj)
+	{
+	local team_number = GetTeamNumber(w->WormTeam);
+
+    local PROD = GetWeaponByName("Prod");
+
+	if(Type == M_TURNEND)
+		{
+	    GS->Info.SetWeaponDelay(team_number, PROD->GetWeaponIndex(), PROD->GetPageIndex(), 0 );
+		}
+
+    if(Type == M_FRAME)
+	    {
+		if(delayPROD == true)
+	    	{
+	        GS->Info.SetWeaponDelay(team_number, PROD->GetWeaponIndex(), PROD->GetPageIndex(), -1 );
+	        delayPROD = false;
+			}
+    	}
+	}
+super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+if (Weap->CheckName("Prod"))
+	{
+	delayPROD = true;
+  	}
+super;
+}

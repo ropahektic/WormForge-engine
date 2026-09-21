@@ -1,0 +1,25 @@
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if(Type == M_FRAME)
+    	{
+        if(ObjState != WS_BUNGEE && GravityFactor == -3)
+      		{
+            GravityFactor = 1;
+            }
+        }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Reversed Bungee"))
+		{
+		GravityFactor = -3;
+		}
+super;
+}

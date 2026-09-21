@@ -1,0 +1,483 @@
+/*****                       SKINCHANGER v1.1                       *****05/09/2014*****/
+/*****    Controls an enemy or ally with the power of your mind     *****by rafa``2*****/
+
+require utils, utils_steps, pxparticles;
+
+#SKINCHANGER
+
+CSprite * sprlooking;
+CSprite * spridling;
+CSoundFile * sndhbeat;
+
+CSkinchanger:CObject
+
+enum SCTYPE = (SCNORMAL, SCHOST, SCCLIENT);
+
+CSkinchanger::CSkinchanger(CWorm * Host, CWorm * Client)
+{
+    super(Root->GetObject(25,0), GS);
+    
+    if(Host == NullObj) return;
+    if(Client == NullObj) return;
+    
+    sc_worm_host = Host;
+    sc_worm_client = Client;
+    sc_team_host = CTeam(GetObject(21,sc_worm_host->WormTeam));
+    if(sc_team_host == NullObj) return;
+    
+    PRegister(&sc_worm_host);
+    PRegister(&sc_worm_client);
+    PRegister(&sc_team_host);
+    
+    sc_host_posx = sc_worm_host->PosX;
+    sc_host_posy = sc_worm_host->PosY;
+    sc_host_turnside = sc_worm_host->TurnSide;
+    
+    sc_worm_host_exist =  false;
+    sc_worm_client_exist = false;
+    sc_team_host_exist = false; 
+    
+    sc_worm_host_gotdamage = false;
+    sc_worm_client_gotdamage = false;
+    sc_worm_client_controlnow = false;
+    sc_turnended = false;
+    sc_worm_host_poisoned = false;
+    sc_delay_before_active = 200;
+    sc_delaying = true;
+    sc_active = false;
+    sc_terminated = false;
+    sc_frame_cont = 1;
+    sc_flag = true;
+    sc_flag2 = true;
+    sc_alt_pressed = false;
+    
+    sc_spr_drawing = false;
+    sc_spr_looking_forward = true;
+    sc_spr_looking_backward = false;
+    sc_spr_idling = false;
+    sc_spr_finishing = false;
+    sc_spr_finished = false;
+    sc_spr_starting = false;
+    
+    sc_spr_frame_direction = 1.0; 
+    sc_spr_frame_pos = 0.0;
+    sc_spr_speed_actual = 0.0;
+    sc_spr_speed_looking = 0.0300;
+    sc_spr_speed_idling = 0.0200;
+    
+    //sc_worm_host_index = sc_team_host->CurWorm;
+    //sc_team_host->CurWorm = -1;
+    sc_team_host->DisableControl = true;
+    sc_team_host->CanSelectWeapons = false;
+    
+    
+    sc_spr_looking_index = sprlooking->Index;
+    sc_spr_idling_index = spridling->Index;
+    
+    sc_spr_zplane = 11;
+    
+    version = 1.1;
+}
+
+void skinchanger::FirstFrame()
+{
+        local SCfilter = CFilter(Root->GetObject(25,0));
+	SCfilter->Allow(M_TURNEND);
+}
+void skinchanger_s::InitGraphic()
+{
+    sprlooking = LoadSprite(GetAttachment("wll.png"), 16, 25);
+    spridling  = LoadSprite(GetAttachment("wil.png"), 20, 25);
+}
+
+void skinchanger_s::Init()
+{
+    sndhbeat = new CSoundFile(GetAttachment("sndhb.wav"));
+    keySync->AddKey(8);   // "BACKSPACE" button
+    keySync->AddKey(13);  // "ENTER" button                
+    keySync->AddKey(18);  // "ALT" button
+    keySync->AddKey(37);  // "LEFT" button
+    keySync->AddKey(38);  // "UP" button  
+    keySync->AddKey(39);  // "RIGHT" button
+    keySync->AddKey(40);  // "DOWN" button
+}
+
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Type == M_FRAME)
+    {        
+        if(sc_type == SCHOST)
+        {
+            bool BACKSPACE = keySync->KeyPressedNow(8);
+            if(BACKSPACE) { Type = M_BACKSPACE; }
+        }
+        if(sc_type == SCCLIENT)
+        {    
+            bool BACKSPACE = keySync->KeyPressedNow(8);            
+            bool ENTER     = keySync->KeyPressedNow(13);
+            bool LEFT      = keySync->KeyPressed(37);   
+            bool UP        = keySync->KeyPressed(38);       
+            bool RIGHT     = keySync->KeyPressed(39);   
+            bool DOWN      = keySync->KeyPressed(40);
+
+            if(LEFT)      { PressedLeft = 1; }
+            if(RIGHT)     { PressedRight = 1; }   
+            if(UP)        { PressedUp = 1; }
+            if(DOWN)      { PressedDown = 1; }
+            if(ENTER)     { Type = M_ENTER; }
+            if(BACKSPACE) { Type = M_BACKSPACE; }
+        }
+    }
+    super;
+}
+
+void CSkinchanger::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Type == M_FRAME)
+    {
+        if(sc_worm_host == NullObj) sc_worm_host_exist = false;
+        else sc_worm_host_exist = true;
+        if(sc_worm_client == NullObj) sc_worm_client_exist = false;
+        else sc_worm_client_exist = true;
+        if(sc_team_host == NullObj) sc_team_host_exist = false;
+        else sc_team_host_exist = true;
+    }
+    
+    if(sc_delaying)
+    {
+        if(Type == M_FRAME)
+        {
+            sc_delay_before_active -= 10;
+            
+            if(sc_delay_before_active <= 0)
+            {
+                if(sc_worm_host_exist && sc_worm_client_exist)
+                {   
+                    sc_delaying = false;
+                    sc_active = true;
+                    sc_worm_host->sc_type = SCHOST;
+                    sc_spr_drawing = true;
+                    sc_worm_host->sc_spr_host_draw = true;                     
+                }
+                else
+                {
+                    Finish();                
+                }
+            }
+        }
+    }
+    
+    if(sc_active)
+    {
+        if(Type == M_DRAWQUEUE)
+        {
+            if(sc_spr_drawing)
+            {
+                if(sc_worm_host_poisoned) SetColorMod(RGB(8,75,0),2);
+
+                if(sc_spr_looking_forward)
+                {
+                    SCAddSprite(sc_spr_looking_index, sc_spr_speed_looking); 
+                }
+
+                if(sc_spr_idling)
+                {
+                    SCAddSprite(sc_spr_idling_index, sc_spr_speed_idling);                      
+                }
+
+                if(sc_spr_looking_backward)
+                {
+                    SCAddSprite(sc_spr_looking_index, sc_spr_speed_looking); 
+                }
+
+                if(sc_worm_host_poisoned) ClearColorMod(); 
+            }
+        }
+        
+        if(Type == M_FRAME)      
+        {                
+            if(sc_worm_host_exist && sc_worm_client_exist)
+            {
+
+                UpdateDrawingParameters();
+
+                bool ALT = keySync->KeyPressedNow(18);     //declaring var bool ??? test porpuse
+
+                if(ALT)
+                { 
+                    sc_alt_pressed = true;
+                }
+
+                bool sc_client_lost_control = LostControl(sc_worm_client);      //declaring var bool ??? test porpuse
+                bool sc_host_lost_control = LostControl(sc_worm_host);          //declaring var bool ??? test porpuse
+
+
+                if((sc_alt_pressed || sc_client_lost_control || sc_host_lost_control) && sc_flag)
+                {
+                    if(sc_host_lost_control )  sc_worm_host_gotdamage = true;
+                    if(sc_client_lost_control) sc_worm_client_gotdamage = true;
+                    ResetSettings();
+                }
+
+                if(sc_frame_cont == 15){
+                    PlayHeartBeat();}
+
+                if(sc_spr_idling && (sc_frame_cont % 250 == 0))
+                { 
+                    SCFX();
+                    PlayHeartBeat();
+                }
+                
+                sc_host_posx = sc_worm_host->PosX;
+                sc_host_posy = sc_worm_host->PosY;
+                sc_host_turnside = sc_worm_host->TurnSide;
+                sc_worm_host->SetState(WS_IDLE);
+
+                if(sc_worm_client_controlnow)
+                    sc_worm_client->sc_type = SCCLIENT;
+                else{
+                    sc_worm_client->sc_type = SCNORMAL;}   
+
+                if(sc_worm_host->SickDamage != 0)
+                    sc_worm_host_poisoned = true;
+                else
+                    sc_worm_host_poisoned = false;
+
+                sc_frame_cont++; 
+                
+                if(Root->Timer <= 0 && sc_flag2)
+                {
+                    sc_turnended = true;                    
+                    ResetSettings();
+                }
+                
+                if(sc_spr_finished)
+                { 
+                    sc_terminated = true;
+                    sc_worm_host->sc_spr_host_draw = false;
+                } 
+
+                if(sc_terminated)
+                {
+                    Finish();
+                }
+            }
+        }   
+   }     
+}
+
+
+void CSkinchanger::SCAddSprite(int sprIndex, float sprspeed)
+{ 
+    sc_spr_speed_actual = sprspeed;
+    if(sc_host_turnside < 0) AddSprite(sc_spr_zplane, sc_host_posx, sc_host_posy, 0, sprIndex, sc_spr_frame_pos);     
+    if(sc_host_turnside > 0) AddSprite(sc_spr_zplane, sc_host_posx, sc_host_posy, 0, sprIndex + 262144, sc_spr_frame_pos);
+}
+
+
+void CSkinchanger::SCFX()
+{
+    PxParticle *P = new PxParticle(85, sc_host_posx, sc_host_posy);
+    PxParticle *Q = new PxParticle(80, sc_host_posx, sc_host_posy);
+    P->SetLifeTime(15);            Q->SetLifeTime(15);
+    P->GravityFactor(-3);          Q->GravityFactor(-3);
+    P->SetMotionRandomness(0.6);   Q->SetMotionRandomness(0.6);
+    P->SetStartAlpha(150);         Q->SetStartAlpha(150);
+    P->SetEndAlpha(225);           Q->SetEndAlpha(225);
+}
+  
+void CSkinchanger::ResetSettings()
+{    
+    sc_worm_client_controlnow = false;
+    
+    if(sc_worm_host_gotdamage)
+     {          
+          sc_spr_idling = false;
+          sc_spr_finished = true;
+     }
+     else if(sc_alt_pressed || sc_worm_client_gotdamage || sc_turnended)
+     {
+         
+         if(sc_spr_starting || sc_spr_finishing)
+         {
+             sc_spr_finished = true;
+             sc_spr_drawing = false;             
+         }
+         
+         sc_spr_frame_pos = 1.0;
+         sc_spr_frame_direction = -1.0;
+         sc_spr_idling = false;
+         sc_spr_looking_backward = true;                     
+     }
+     
+     sc_flag2 = false;
+     sc_flag = false;
+}
+bool CSkinchanger::LostControl(CWorm * w)
+{
+    if(w == NullObj) 
+        return false;
+    if(w->GotDamage != 0 || w->ObjState == WS_SINKING || w->ObjState == WS_DEAD || w->ObjState == WS_DEATH)
+    {
+        return true;
+    }
+    return false;
+}
+
+void CSkinchanger::Finish()
+{
+    if(sc_worm_host){
+        sc_worm_host->sc_type = SCNORMAL;}
+    
+    if(sc_team_host_exist)
+    {
+        //sc_team_host->CurWorm = sc_worm_host_index;
+        sc_team_host->DisableControl = false;
+        sc_team_host->CanSelectWeapons = true;
+    }
+    
+    sc_active = false;
+    
+    PUnregister(&sc_worm_host);
+    PUnregister(&sc_worm_client);
+    PUnregister(&sc_team_host);
+
+    Free(true);
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    sc_type = SCNORMAL;
+    sc_spr_host_draw = false;
+}
+
+override void CWorm::RenderWorm()
+{
+    if(!sc_spr_host_draw) super;  //super;
+}
+
+override void CWorm::RenderLabels()
+{
+    if(!sc_spr_host_draw) super;
+} 
+
+override void CDDQueue::AddSprite(fixed z, fixed x, fixed y, int unk, int sprite, fixed frame)
+{
+    local w = CWorm(GetCurrentWorm());
+    if(w != NullObj)
+    {
+        if(w->sc_spr_host_draw && sprite >= 20 && sprite <= 25)
+             return;
+    }
+    super; 
+}
+
+void CSkinchanger::PlayHeartBeat()
+{
+    vol = CalculateSoundVolume(sc_host_posx,sc_host_posy);
+    pan = CalculateSoundPan(sc_host_posx,sc_host_posy);
+	sndhbeat->Play(vol, pan, false);
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if(Weap->CheckName("Skin Changer"))
+    {
+        local obj;
+        if(TurnSide > 0)
+            obj = SCFindTarget(PosX, PosX + 26, PosY - 15, PosY + 15);
+        else if(TurnSide < 0)
+            obj = SCFindTarget(PosX - 26, PosX, PosY - 15, PosY + 15);
+        if(obj != NullObj)
+        {
+            w = CWorm(obj);
+            if(w->GotDamage == 0)
+                local sc = new CSkinchanger(this, w);
+            else
+            { 
+                for(int i=0; i<4; i++) PlayLocalSound(120, 3, 1, 1);
+                GS->Info.AddWeapon( w->WormTeam, Weap->GetWeaponIndex(), 1);
+            }
+        }
+        else return;       
+    }
+    else super;
+}
+
+CGObject * CWorm::SCFindTarget(int l, int r, int t, int b)
+{
+      for(int i = 0; i < Env->Objs.Count; i++)
+      {
+          local obj = CGObject(Env->Objs.Objs[i]);
+          if(obj == NullObj) continue;
+          if(obj == this) continue;
+          if(obj->ClType != OC_Worm) continue;     
+          w = CWorm(obj);
+          if(w->sc_type == SCCLIENT) continue;          
+          if(obj->IsInBox( l, t, r, b))
+              return obj;
+      }
+      return CGObject(NullObj);
+}
+
+void printM(int i, string str)
+{
+    GG->WriteToChat( i, str, false);
+}
+
+void CSkinchanger::UpdateDrawingParameters()
+{
+       if(sc_spr_drawing)
+       {
+                 sc_spr_frame_pos += sc_spr_speed_actual * sc_spr_frame_direction;
+                 
+                 if(sc_spr_looking_forward)
+                  {
+                      sc_spr_starting = true;
+                      
+                      if(sc_spr_frame_pos > 1.0)
+                      { 
+                           sc_spr_looking_forward = false;
+                           sc_spr_idling = true;
+                           sc_spr_starting = false;
+                           sc_spr_frame_pos = 0.0;
+                           sc_worm_client_controlnow = true;
+                      }
+                  }
+                  
+                  if(sc_spr_idling)
+                  {
+                      
+                      if(sc_spr_frame_pos > 1.0)
+                      {
+                          sc_spr_frame_pos = 1.0;
+                          sc_spr_frame_direction = -1.0;
+                      }       
+     
+                      if(sc_spr_frame_pos < 0.0)
+                      {
+                          sc_spr_frame_pos = 0.0;
+                          sc_spr_frame_direction = 1.0;
+                      } 
+                                           
+                  }
+                  
+                  if(sc_spr_looking_backward)
+                  {
+                      sc_spr_finishing = true;
+                          
+                      if(sc_spr_frame_pos < 0.0)
+                      { 
+                          sc_spr_frame_pos = 0.0;         // desync fix!
+                          sc_spr_frame_direction = 1.0;
+                          sc_spr_looking_backward = false; 
+                          sc_spr_finishing = false;
+                          sc_spr_finished = true;
+                          sc_spr_drawing = false;                             
+                       }
+                  }                  
+         }              
+}

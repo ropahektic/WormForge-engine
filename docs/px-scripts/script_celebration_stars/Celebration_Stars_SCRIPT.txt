@@ -1,0 +1,248 @@
+/* 
+
+Made by: DannyB, August 2022
+
+*/
+
+// This script gives the background stars the same color as winning team.
+
+require utils;
+
+bool CS_Check_Now;
+
+int CS_Winning_Team;
+int CS_Team_Color;
+
+void Celebration_Stars_SCRIPT::FirstFrame()
+{
+     CS_Check_Now = false;
+     
+     CS_Winning_Team = 0;
+     CS_Team_Color = 0;
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{        
+     // Resets the checker
+     if(Type == M_DRAWQUEUE)
+     {
+          if(CS_Check_Now == false)
+          {
+               CS_Check_Now = true;
+          }
+     }		  
+     
+     super;         
+}
+
+override void CTurnGame::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{        
+     if(Root->IsTimerActive() == false)
+     {
+          if(CS_Check_Now == true)
+          {     		   
+	       // Finds out which team has won the game (if any at all)
+               if(IsTeamAlive(1) == true && IsTeamAlive(2) == false && IsTeamAlive(3) == false && IsTeamAlive(4) == false && IsTeamAlive(5) == false && IsTeamAlive(6) == false)
+               {
+                    CS_Winning_Team = 1;
+               }
+               else if(IsTeamAlive(2) == true && IsTeamAlive(1) == false && IsTeamAlive(3) == false && IsTeamAlive(4) == false && IsTeamAlive(5) == false && IsTeamAlive(6) == false)
+               {
+                    CS_Winning_Team = 2;
+               }
+               else if(IsTeamAlive(3) == true && IsTeamAlive(1) == false && IsTeamAlive(2) == false && IsTeamAlive(4) == false && IsTeamAlive(5) == false && IsTeamAlive(6) == false)
+               {
+                    CS_Winning_Team = 3;
+               }
+               else if(IsTeamAlive(4) == true && IsTeamAlive(1) == false && IsTeamAlive(2) == false && IsTeamAlive(3) == false && IsTeamAlive(5) == false && IsTeamAlive(6) == false)
+               {
+                    CS_Winning_Team = 4;
+               }
+               else if(IsTeamAlive(5) == true && IsTeamAlive(1) == false && IsTeamAlive(2) == false && IsTeamAlive(3) == false && IsTeamAlive(4) == false && IsTeamAlive(6) == false)
+               {
+                    CS_Winning_Team = 5;
+               }
+               else if(IsTeamAlive(6) == true && IsTeamAlive(1) == false && IsTeamAlive(2) == false && IsTeamAlive(3) == false && IsTeamAlive(4) == false && IsTeamAlive(5) == false)
+               {
+                    CS_Winning_Team = 6;
+               }
+               else
+               {
+                    CS_Winning_Team = 0;
+               }
+			   
+               // Determines the color of the winning team
+               for(local i = 1; i < Env->Objs.Count; i++)
+               {
+                    local obj = Env->Objs.Objs[i];
+                    
+                    if(obj == NullObj)
+                    {
+                         continue;
+                    }
+                    
+                    if((obj is CWorm) == false)
+                    { 
+                         continue;
+                    }
+                    
+                    CWorm * worm = CWorm(obj);
+			        
+                    if(worm == NullObj) 
+                    {
+                         continue;
+                    }
+					
+                    if(CS_Winning_Team == 1)
+                    {
+                         if(worm->WormTeam == 1)
+                         {
+                              CS_Team_Color = GetTeamColor(worm->WormTeam) + 1;
+                         } 
+                    }
+                    else if(CS_Winning_Team == 2)
+                    {
+                         if(worm->WormTeam == 2)
+                         {
+                              CS_Team_Color = GetTeamColor(worm->WormTeam) + 1;
+                         } 
+                    }
+                    else if(CS_Winning_Team == 3)
+                    {
+                         if(worm->WormTeam == 3)
+                         {
+                              CS_Team_Color = GetTeamColor(worm->WormTeam) + 1;
+                         } 
+                    }
+                    else if(CS_Winning_Team == 4)
+                    {
+                         if(worm->WormTeam == 4)
+                         {
+                              CS_Team_Color = GetTeamColor(worm->WormTeam) + 1;
+                         } 
+                    }
+                    else if(CS_Winning_Team == 5)
+                    {
+                         if(worm->WormTeam == 5)
+                         {
+                              CS_Team_Color = GetTeamColor(worm->WormTeam) + 1;
+                         } 
+                    }
+                    else if(CS_Winning_Team == 6)
+                    {
+                         if(worm->WormTeam == 6)
+                         {
+                              CS_Team_Color = GetTeamColor(worm->WormTeam) + 1;
+                         } 
+                    }
+                    else if(CS_Winning_Team == 0)
+                    {
+                         CS_Team_Color = 0;
+                    }
+               }
+			   
+	       CS_Check_Now = false; 
+          }
+     }		  
+     
+     super;         
+}
+
+override void CDDQueue::AddSprite(fixed z, fixed x, fixed y, int unk, int sprite, fixed frame)
+{
+     // Performs the color overlay
+     if(CS_Team_Color == 1)
+     {
+          if(sprite == 622)
+          {
+               SetColorMod(RGB(255, 0, 0), 8);
+          
+               super;
+               
+               ClearColorMod();
+          }
+          else 
+          {
+               super;
+          }
+     }
+     else if(CS_Team_Color == 2)
+     {
+          if(sprite == 622)
+          {
+               SetColorMod(RGB(0, 0, 255), 8);
+          
+               super;
+               
+               ClearColorMod();
+          }
+          else 
+          {
+               super;
+          }
+     }
+     else if(CS_Team_Color == 3)
+     {
+          if(sprite == 622)
+          {
+               SetColorMod(RGB(0, 255, 0), 8);
+          
+               super;
+               
+               ClearColorMod();
+          }
+          else 
+          {
+               super;
+          }
+     }
+     else if(CS_Team_Color == 4)
+     {
+          if(sprite == 622)
+          {
+               SetColorMod(RGB(255, 255, 0), 8);
+          
+               super;
+               
+               ClearColorMod();
+          }
+          else 
+          {
+               super;
+          }
+     }
+     else if(CS_Team_Color == 5)
+     {
+          if(sprite == 622)
+          {
+               SetColorMod(RGB(255, 0, 255), 8);
+          
+               super;
+               
+               ClearColorMod();
+          }
+          else 
+          {
+               super;
+          }
+     }
+     else if(CS_Team_Color == 6)
+     {
+          if(sprite == 622)
+          {
+               SetColorMod(RGB(0, 255, 255), 8);
+          
+               super;
+               
+               ClearColorMod();
+          }
+          else 
+          {
+               super;
+          }
+     }
+     else if(CS_Team_Color == 0) 
+     {
+          super;
+     }   		  
+}

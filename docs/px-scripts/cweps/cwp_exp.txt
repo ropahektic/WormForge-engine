@@ -1,0 +1,2101 @@
+require p_animation, weapon_valyrianfire, weapon_tazer, utils;
+
+CWorm* SJ_now;
+CAnimationParams* exp_grvlr1;
+CAnimationParams* exp_grvlr2;
+CAnimationParams* exp_grvlr3;
+CAnimationParams* exp_grvlr4;
+CAnimationParams* exp_homem1;
+CAnimationParams* exp_homem2;
+CAnimationParams* exp_homem3;
+CAnimationParams* exp_homem4;
+CAnimationParams* exp_ptrlr1;
+CAnimationParams* exp_ptrlr2;
+CAnimationParams* exp_ptrlr3;
+CAnimationParams* exp_ptrlr4;
+CAnimationParams* exp_blood1;
+CAnimationParams* exp_blood2;
+CAnimationParams* exp_blood3;
+CAnimationParams* exp_blood4;
+CAnimationParams* exp_pigen1;
+CAnimationParams* exp_pigen2;
+CAnimationParams* exp_pigen3;
+CAnimationParams* exp_pigen4;
+CAnimationParams* exp_smrtb1;
+CAnimationParams* exp_smrtb2;
+CAnimationParams* exp_smrtb3;
+CAnimationParams* exp_smrtb4;
+CAnimationParams* exp_cloud;
+CAnimationParams* exp_fragg1;
+CAnimationParams* exp_fragg2;
+CAnimationParams* exp_fragg3;
+CAnimationParams* exp_fragg4;
+CAnimationParams* exp_bskbl;
+CAnimationParams* exp_bsebl1;
+CAnimationParams* exp_bsebl2;
+CAnimationParams* exp_bsebl3;
+CAnimationParams* exp_bsebl4;
+CAnimationParams* exp_thump1;
+CAnimationParams* exp_thump2;
+CAnimationParams* exp_thump3;
+CAnimationParams* exp_thump4;
+CAnimationParams* exp_bumpr1;
+CAnimationParams* exp_bumpr2;
+CAnimationParams* exp_bumpr3;
+CAnimationParams* exp_bumpr4;
+CAnimationParams* exp_ionbb1;
+CAnimationParams* exp_ionbb2;
+CAnimationParams* exp_ionbb3;
+CAnimationParams* exp_ionbb4;
+CAnimationParams* exp_magca1;
+CAnimationParams* exp_magca2;
+CAnimationParams* exp_magca3;
+CAnimationParams* exp_magca4;
+CAnimationParams* exp_magcb1;
+CAnimationParams* exp_magcb2;
+CAnimationParams* exp_magcb3;
+CAnimationParams* exp_magcb4;
+CAnimationParams* exp_grvea1;
+CAnimationParams* exp_grvea2;
+CAnimationParams* exp_grvea3;
+CAnimationParams* exp_grvea4;
+CAnimationParams* exp_grvea5;
+CAnimationParams* exp_grveb1;
+CAnimationParams* exp_grveb2;
+CAnimationParams* exp_grveb3;
+CAnimationParams* exp_grveb4;
+CAnimationParams* exp_crbow;
+CAnimationParams* exp_multi1;
+CAnimationParams* exp_multi2;
+CAnimationParams* exp_multi3;
+CAnimationParams* exp_multi4;
+CAnimationParams* exp_telea1;
+CAnimationParams* exp_telea2;
+CAnimationParams* exp_telea3;
+CAnimationParams* exp_snowb;
+CAnimationParams* exp_stone;
+CAnimationParams* exp_javln;
+CAnimationParams* exp_ninja;
+CAnimationParams* exp_jolts1;
+CAnimationParams* exp_jolts2;
+CAnimationParams* exp_jolts3;
+CAnimationParams* exp_jolts4;
+CAnimationParams* exp_forbs;
+CAnimationParams* exp_ether1;
+CAnimationParams* exp_ether2;
+CAnimationParams* exp_ether3;
+CAnimationParams* exp_ether4;
+CAnimationParams* exp_girdr;
+CAnimationParams* exp_tdyna1;
+CAnimationParams* exp_tdyna2;
+CAnimationParams* exp_tdyna3;
+CAnimationParams* exp_tdyna4;
+CAnimationParams* exp_tming1;
+CAnimationParams* exp_tming2;
+CAnimationParams* exp_tming3;
+CAnimationParams* exp_tming4;
+CAnimationParams* exp_rroll1;
+CAnimationParams* exp_rroll2;
+CAnimationParams* exp_rroll3;
+CAnimationParams* exp_rroll4;
+CAnimationParams* exp_acsed1;
+CAnimationParams* exp_acsed2;
+CAnimationParams* exp_acsed3;
+CAnimationParams* exp_acsed4;
+CAnimationParams* exp_descd1;
+CAnimationParams* exp_descd2;
+CAnimationParams* exp_descd3;
+CAnimationParams* exp_descd4;
+CAnimationParams* exp_bombb1;
+CAnimationParams* exp_bombb2;
+CAnimationParams* exp_bombb3;
+CAnimationParams* exp_bombb4;
+CAnimationParams* exp_pogos1;
+CAnimationParams* exp_pogos2;
+CAnimationParams* exp_pogos3;
+CAnimationParams* exp_pogos4;
+CAnimationParams* exp_btram1;
+CAnimationParams* exp_btram2;
+CAnimationParams* exp_btram3;
+CAnimationParams* exp_btram4;
+CAnimationParams* exp_cchkn1;
+CAnimationParams* exp_cchkn2;
+CAnimationParams* exp_cchkn3;
+CAnimationParams* exp_cchkn4;
+CAnimationParams* exp_sqwks1;
+CAnimationParams* exp_sqwks2;
+CAnimationParams* exp_sqwks3;
+CAnimationParams* exp_sqwks4;
+CAnimationParams* exp_frplt;
+CAnimationParams* exp_torch;
+
+void cwp_exp::FirstFrame()
+{
+exp_grvlr1 = new CAnimationParams;
+exp_grvlr2 = new CAnimationParams;
+exp_grvlr3 = new CAnimationParams;
+exp_grvlr4 = new CAnimationParams;
+exp_homem1 = new CAnimationParams;
+exp_homem2 = new CAnimationParams;
+exp_homem3 = new CAnimationParams;
+exp_homem4 = new CAnimationParams;
+exp_ptrlr1 = new CAnimationParams;
+exp_ptrlr2 = new CAnimationParams;
+exp_ptrlr3 = new CAnimationParams;
+exp_ptrlr4 = new CAnimationParams;
+exp_blood1 = new CAnimationParams;
+exp_blood2 = new CAnimationParams;
+exp_blood3 = new CAnimationParams;
+exp_blood4 = new CAnimationParams;
+exp_pigen1 = new CAnimationParams;
+exp_pigen2 = new CAnimationParams;
+exp_pigen3 = new CAnimationParams;
+exp_pigen4 = new CAnimationParams;
+exp_smrtb1 = new CAnimationParams;
+exp_smrtb2 = new CAnimationParams;
+exp_smrtb3 = new CAnimationParams;
+exp_smrtb4 = new CAnimationParams;
+exp_cloud = new CAnimationParams;
+exp_fragg1 = new CAnimationParams;
+exp_fragg2 = new CAnimationParams;
+exp_fragg3 = new CAnimationParams;
+exp_fragg4 = new CAnimationParams;
+exp_bskbl  = new CAnimationParams;
+exp_bsebl1 = new CAnimationParams;
+exp_bsebl2 = new CAnimationParams;
+exp_bsebl3 = new CAnimationParams;
+exp_bsebl4 = new CAnimationParams;
+exp_thump1 = new CAnimationParams;
+exp_thump2 = new CAnimationParams;
+exp_thump3 = new CAnimationParams;
+exp_thump4 = new CAnimationParams;
+exp_bumpr1 = new CAnimationParams;
+exp_bumpr2 = new CAnimationParams;
+exp_bumpr3 = new CAnimationParams;
+exp_bumpr4 = new CAnimationParams;
+exp_ionbb1 = new CAnimationParams;
+exp_ionbb2 = new CAnimationParams;
+exp_ionbb3 = new CAnimationParams;
+exp_ionbb4 = new CAnimationParams;
+exp_magca1 = new CAnimationParams;
+exp_magca2 = new CAnimationParams;
+exp_magca3 = new CAnimationParams;
+exp_magca4 = new CAnimationParams;
+exp_magcb1 = new CAnimationParams;
+exp_magcb2 = new CAnimationParams;
+exp_magcb3 = new CAnimationParams;
+exp_magcb4 = new CAnimationParams;
+exp_grvea1 = new CAnimationParams;
+exp_grvea2 = new CAnimationParams;
+exp_grvea3 = new CAnimationParams;
+exp_grvea4 = new CAnimationParams;
+exp_grveb1 = new CAnimationParams;
+exp_grveb2 = new CAnimationParams;
+exp_grveb3 = new CAnimationParams;
+exp_grveb4 = new CAnimationParams;
+exp_crbow = new CAnimationParams;
+exp_multi1 = new CAnimationParams;
+exp_multi2 = new CAnimationParams;
+exp_multi3 = new CAnimationParams;
+exp_multi4 = new CAnimationParams;
+exp_telea1 = new CAnimationParams;
+exp_telea2 = new CAnimationParams;
+exp_telea3 = new CAnimationParams;
+exp_snowb = new CAnimationParams;
+exp_stone = new CAnimationParams;
+exp_javln = new CAnimationParams;
+exp_ninja = new CAnimationParams;
+exp_jolts1 = new CAnimationParams;
+exp_jolts2 = new CAnimationParams;
+exp_jolts3 = new CAnimationParams;
+exp_jolts4 = new CAnimationParams;
+exp_forbs = new CAnimationParams;
+exp_ether1 = new CAnimationParams;
+exp_ether2 = new CAnimationParams;
+exp_ether3 = new CAnimationParams;
+exp_ether4 = new CAnimationParams;
+exp_girdr = new CAnimationParams;
+exp_tdyna1 = new CAnimationParams;
+exp_tdyna2 = new CAnimationParams;
+exp_tdyna3 = new CAnimationParams;
+exp_tdyna4 = new CAnimationParams;
+exp_tming1 = new CAnimationParams;
+exp_tming2 = new CAnimationParams;
+exp_tming3 = new CAnimationParams;
+exp_tming4 = new CAnimationParams;
+exp_rroll1 = new CAnimationParams;
+exp_rroll2 = new CAnimationParams;
+exp_rroll3 = new CAnimationParams;
+exp_rroll4 = new CAnimationParams;
+exp_acsed1 = new CAnimationParams;
+exp_acsed2 = new CAnimationParams;
+exp_acsed3 = new CAnimationParams;
+exp_acsed4 = new CAnimationParams;
+exp_descd1 = new CAnimationParams;
+exp_descd2 = new CAnimationParams;
+exp_descd3 = new CAnimationParams;
+exp_descd4 = new CAnimationParams;
+exp_bombb1 = new CAnimationParams;
+exp_bombb2 = new CAnimationParams;
+exp_bombb3 = new CAnimationParams;
+exp_bombb4 = new CAnimationParams;
+exp_pogos1 = new CAnimationParams;
+exp_pogos2 = new CAnimationParams;
+exp_pogos3 = new CAnimationParams;
+exp_pogos4 = new CAnimationParams;
+exp_btram1 = new CAnimationParams;
+exp_btram2 = new CAnimationParams;
+exp_btram3 = new CAnimationParams;
+exp_btram4 = new CAnimationParams;
+exp_cchkn1 = new CAnimationParams;
+exp_cchkn2 = new CAnimationParams;
+exp_cchkn3 = new CAnimationParams;
+exp_cchkn4 = new CAnimationParams;
+exp_sqwks1 = new CAnimationParams;
+exp_sqwks2 = new CAnimationParams;
+exp_sqwks3 = new CAnimationParams;
+exp_sqwks4 = new CAnimationParams;
+exp_frplt = new CAnimationParams;
+exp_torch = new CAnimationParams;
+}
+
+//------------------------EXPLOSION-ANIMATIONS----------------------------------
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+super;
+//------GRAVLER-----------------------------------------------------------------
+if(weap->CheckName("Gravler")
+|| weap->CheckName("Gravler FD")
+|| weap->CheckName("Gravler FD "))
+{
+exp_grvlr1->turns = 1;
+exp_grvlr1->sprite = 605;
+exp_grvlr1->speed = 65;
+exp_grvlr1->scale = 0.75;
+exp_grvlr1->duration = 1;
+exp_grvlr1->ZPlane = 6;
+exp_grvlr1->backwards = false;
+exp_grvlr1->once = true;
+exp_grvlr1->color = ARGB(2,255,255,255);
+exp_grvlr1->blend_type = 6;
+
+exp_grvlr2->turns = 1;
+exp_grvlr2->sprite = 605;
+exp_grvlr2->rot = 180;
+exp_grvlr2->speed = 65;
+exp_grvlr2->scale = 0.75;
+exp_grvlr2->duration = 1;
+exp_grvlr2->ZPlane = 6;
+exp_grvlr2->backwards = false;
+exp_grvlr2->once = true;
+exp_grvlr2->color = ARGB(2,255,255,255);
+exp_grvlr2->blend_type = 6;
+
+exp_grvlr3->turns = 1;
+exp_grvlr3->sprite = 605;
+exp_grvlr3->rot = 90;
+exp_grvlr3->speed = 65;
+exp_grvlr3->scale = 0.75;
+exp_grvlr3->duration = 1;
+exp_grvlr3->ZPlane = 6;
+exp_grvlr3->backwards = false;
+exp_grvlr3->once = true;
+exp_grvlr3->color = ARGB(30,180,180,180);
+exp_grvlr3->blend_type = 6;
+
+exp_grvlr4->turns = 1;
+exp_grvlr4->sprite = 605;
+exp_grvlr4->rot = -90;
+exp_grvlr4->speed = 65;
+exp_grvlr4->scale = 0.75;
+exp_grvlr4->duration = 1;
+exp_grvlr4->ZPlane = 6;
+exp_grvlr4->backwards = false;
+exp_grvlr4->once = true;
+exp_grvlr4->color = ARGB(30,180,180,180);
+exp_grvlr4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_grvlr1);
+new CAnimation(Root, x, y, NullObj, exp_grvlr2);
+new CAnimation(Root, x, y, NullObj, exp_grvlr3);
+new CAnimation(Root, x, y, NullObj, exp_grvlr4);
+}
+//------HOMING-MORTAR-----------------------------------------------------------
+if(weap->CheckName("Homing Mortar")
+|| weap->CheckName("Homing Mortar "))
+{
+PlaySound(46,1.0,1.0,1.0);
+
+exp_homem1->turns = 1;
+exp_homem1->sprite = 605;
+exp_homem1->speed = 65;
+exp_homem1->scale = 0.60;
+exp_homem1->duration = 1;
+exp_homem1->ZPlane = 6;
+exp_homem1->backwards = false;
+exp_homem1->once = true;
+exp_homem1->color = ARGB(2,255,255,255);
+exp_homem1->blend_type = 6;
+
+exp_homem2->turns = 1;
+exp_homem2->sprite = 605;
+exp_homem2->rot = 180;
+exp_homem2->speed = 65;
+exp_homem2->scale = 0.60;
+exp_homem2->duration = 1;
+exp_homem2->ZPlane = 6;
+exp_homem2->backwards = false;
+exp_homem2->once = true;
+exp_homem2->color = ARGB(2,255,255,255);
+exp_homem2->blend_type = 6;
+
+exp_homem3->turns = 1;
+exp_homem3->sprite = 605;
+exp_homem3->rot = 90;
+exp_homem3->speed = 65;
+exp_homem3->scale = 0.60;
+exp_homem3->duration = 1;
+exp_homem3->ZPlane = 6;
+exp_homem3->backwards = false;
+exp_homem3->once = true;
+exp_homem3->color = ARGB(30,0,90,255);
+exp_homem3->blend_type = 6;
+
+exp_homem4->turns = 1;
+exp_homem4->sprite = 605;
+exp_homem4->rot = -90;
+exp_homem4->speed = 65;
+exp_homem4->scale = 0.60;
+exp_homem4->duration = 1;
+exp_homem4->ZPlane = 6;
+exp_homem4->backwards = false;
+exp_homem4->once = true;
+exp_homem4->color = ARGB(30,0,90,255);
+exp_homem4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_homem1);
+new CAnimation(Root, x, y, NullObj, exp_homem2);
+new CAnimation(Root, x, y, NullObj, exp_homem3);
+new CAnimation(Root, x, y, NullObj, exp_homem4); 
+}
+//------PETROL-ROCKET-----------------------------------------------------------
+if(weap->CheckName("Petrol Rocket")
+|| weap->CheckName("Petrol Rocket "))
+{
+exp_ptrlr1->turns = 1;
+exp_ptrlr1->sprite = 605;
+exp_ptrlr1->speed = 65;
+exp_ptrlr1->scale = 0.80;
+exp_ptrlr1->duration = 1;
+exp_ptrlr1->ZPlane = 6;
+exp_ptrlr1->backwards = false;
+exp_ptrlr1->once = true;
+exp_ptrlr1->color = ARGB(2,255,255,255);
+exp_ptrlr1->blend_type = 6;
+
+exp_ptrlr2->turns = 1;
+exp_ptrlr2->sprite = 605;
+exp_ptrlr2->rot = 180;
+exp_ptrlr2->speed = 65;
+exp_ptrlr2->scale = 0.80;
+exp_ptrlr2->duration = 1;
+exp_ptrlr2->ZPlane = 6;
+exp_ptrlr2->backwards = false;
+exp_ptrlr2->once = true;
+exp_ptrlr2->color = ARGB(2,255,255,255);
+exp_ptrlr2->blend_type = 6;
+
+exp_ptrlr3->turns = 1;
+exp_ptrlr3->sprite = 605;
+exp_ptrlr3->rot = 90;
+exp_ptrlr3->speed = 65;
+exp_ptrlr3->scale = 0.80;
+exp_ptrlr3->duration = 1;
+exp_ptrlr3->ZPlane = 6;
+exp_ptrlr3->backwards = false;
+exp_ptrlr3->once = true;
+exp_ptrlr3->color = ARGB(30,255,110,0);
+exp_ptrlr3->blend_type = 6;
+
+exp_ptrlr4->turns = 1;
+exp_ptrlr4->sprite = 605;
+exp_ptrlr4->rot = -90;
+exp_ptrlr4->speed = 65;
+exp_ptrlr4->scale = 0.80;
+exp_ptrlr4->duration = 1;
+exp_ptrlr4->ZPlane = 6;
+exp_ptrlr4->backwards = false;
+exp_ptrlr4->once = true;
+exp_ptrlr4->color = ARGB(30,255,110,0);
+exp_ptrlr4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_ptrlr1);
+new CAnimation(Root, x, y, NullObj, exp_ptrlr2);
+new CAnimation(Root, x, y, NullObj, exp_ptrlr3);
+new CAnimation(Root, x, y, NullObj, exp_ptrlr4);
+}
+//------BLOOD-------------------------------------------------------------------
+if(weap->CheckName("Blaster Worm")
+|| weap->CheckName("Blaster Worm ")
+|| weap->CheckName("Skipper")
+|| weap->CheckName("Drilling Crew")
+|| weap->CheckName("Super Worm"))
+{
+PlaySound(162,1.0,1.0,1.0);
+PlaySound(56,1.0,1.0,1.0);
+
+exp_blood1->turns = 1;
+exp_blood1->sprite = 130;
+exp_blood1->speed = 90;
+exp_blood1->scale = 3.10;
+exp_blood1->duration = 1;
+exp_blood1->ZPlane = 6;
+exp_blood1->backwards = false;
+exp_blood1->once = true;
+exp_blood1->color = ARGB(30,255,0,0);
+exp_blood1->blend_type = 6;
+
+exp_blood2->turns = 1;
+exp_blood2->sprite = 130;
+exp_blood2->rot = 180;
+exp_blood2->speed = 90;
+exp_blood2->scale = 3.10;
+exp_blood2->duration = 1;
+exp_blood2->ZPlane = 6;
+exp_blood2->backwards = false;
+exp_blood2->once = true;
+exp_blood2->color = ARGB(30,255,0,0);
+exp_blood2->blend_type = 6;
+
+exp_blood3->turns = 1;
+exp_blood3->sprite = 130;
+exp_blood3->rot = 90;
+exp_blood3->speed = 90;
+exp_blood3->scale = 3.10;
+exp_blood3->duration = 1;
+exp_blood3->ZPlane = 6;
+exp_blood3->backwards = false;
+exp_blood3->once = true;
+exp_blood3->color = ARGB(30,255,0,0);
+exp_blood3->blend_type = 6;
+
+exp_blood4->turns = 1;
+exp_blood4->sprite = 130;
+exp_blood4->rot = -90;
+exp_blood4->speed = 90;
+exp_blood4->scale = 3.10;
+exp_blood4->duration = 1;
+exp_blood4->ZPlane = 6;
+exp_blood4->backwards = false;
+exp_blood4->once = true;
+exp_blood4->color = ARGB(30,255,0,0);
+exp_blood4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_blood1);
+new CAnimation(Root, x, y, NullObj, exp_blood2);
+new CAnimation(Root, x, y, NullObj, exp_blood3);
+new CAnimation(Root, x, y, NullObj, exp_blood4);
+}
+//------PIGEON-CANNON-----------------------------------------------------------
+if(weap->CheckName("Pigeon Cannon")
+|| weap->CheckName("Pigeon Cannon "))
+{
+PlaySound(43,1.0,1.0,1.0);
+
+exp_pigen1->turns = 1;
+exp_pigen1->sprite = 605;
+exp_pigen1->speed = 65;
+exp_pigen1->scale = 0.95;
+exp_pigen1->duration = 1;
+exp_pigen1->ZPlane = 6;
+exp_pigen1->backwards = false;
+exp_pigen1->once = true;
+exp_pigen1->color = ARGB(2,255,255,255);
+exp_pigen1->blend_type = 6;
+
+exp_pigen2->turns = 1;
+exp_pigen2->sprite = 605;
+exp_pigen2->rot = 180;
+exp_pigen2->speed = 65;
+exp_pigen2->scale = 0.95;
+exp_pigen2->duration = 1;
+exp_pigen2->ZPlane = 6;
+exp_pigen2->backwards = false;
+exp_pigen2->once = true;
+exp_pigen2->color = ARGB(2,255,255,255);
+exp_pigen2->blend_type = 6;
+
+exp_pigen3->turns = 1;
+exp_pigen3->sprite = 605;
+exp_pigen3->rot = 90;
+exp_pigen3->speed = 65;
+exp_pigen3->scale = 0.95;
+exp_pigen3->duration = 1;
+exp_pigen3->ZPlane = 6;
+exp_pigen3->backwards = false;
+exp_pigen3->once = true;
+exp_pigen3->color = ARGB(30,110,90,255);
+exp_pigen3->blend_type = 6;
+
+exp_pigen4->turns = 1;
+exp_pigen4->sprite = 605;
+exp_pigen4->rot = -90;
+exp_pigen4->speed = 65;
+exp_pigen4->scale = 0.95;
+exp_pigen4->duration = 1;
+exp_pigen4->ZPlane = 6;
+exp_pigen4->backwards = false;
+exp_pigen4->once = true;
+exp_pigen4->color = ARGB(30,110,90,255);
+exp_pigen4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_pigen1);
+new CAnimation(Root, x, y, NullObj, exp_pigen2);
+new CAnimation(Root, x, y, NullObj, exp_pigen3);
+new CAnimation(Root, x, y, NullObj, exp_pigen4);
+}
+//------SMART-BOMB--------------------------------------------------------------
+if(weap->CheckName("S.M.A.R.T Bomb")
+|| weap->CheckName("S.M.A.R.T Bomb ")
+|| weap->CheckName("S.M.A.R.T.E.R Bomb")
+|| weap->CheckName("S.M.A.R.T.E.R Bomb "))
+{
+exp_smrtb1->turns = 1;
+exp_smrtb1->sprite = 605;
+exp_smrtb1->speed = 65;
+exp_smrtb1->scale = 0.70;
+exp_smrtb1->duration = 1;
+exp_smrtb1->ZPlane = 6;
+exp_smrtb1->backwards = false;
+exp_smrtb1->once = true;
+exp_smrtb1->color = ARGB(2,255,255,255);
+exp_smrtb1->blend_type = 6;
+
+exp_smrtb2->turns = 1;
+exp_smrtb2->sprite = 605;
+exp_smrtb2->rot = 180;
+exp_smrtb2->speed = 65;
+exp_smrtb2->scale = 0.70;
+exp_smrtb2->duration = 1;
+exp_smrtb2->ZPlane = 6;
+exp_smrtb2->backwards = false;
+exp_smrtb2->once = true;
+exp_smrtb2->color = ARGB(2,255,255,255);
+exp_smrtb2->blend_type = 6;
+
+exp_smrtb3->turns = 1;
+exp_smrtb3->sprite = 605;
+exp_smrtb3->rot = 90;
+exp_smrtb3->speed = 65;
+exp_smrtb3->scale = 0.70;
+exp_smrtb3->duration = 1;
+exp_smrtb3->ZPlane = 6;
+exp_smrtb3->backwards = false;
+exp_smrtb3->once = true;
+exp_smrtb3->color = ARGB(30,255,0,0);
+exp_smrtb3->blend_type = 6;
+
+exp_smrtb4->turns = 1;
+exp_smrtb4->sprite = 605;
+exp_smrtb4->rot = -90;
+exp_smrtb4->speed = 65;
+exp_smrtb4->scale = 0.70;
+exp_smrtb4->duration = 1;
+exp_smrtb4->ZPlane = 6;
+exp_smrtb4->backwards = false;
+exp_smrtb4->once = true;
+exp_smrtb4->color = ARGB(30,255,0,0);
+exp_smrtb4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_smrtb1);
+new CAnimation(Root, x, y, NullObj, exp_smrtb2);
+new CAnimation(Root, x, y, NullObj, exp_smrtb3);
+new CAnimation(Root, x, y, NullObj, exp_smrtb4);
+}
+//------CLOUD-BUSTER------------------------------------------------------------
+if(weap->CheckName("Cloud Buster"))
+{         
+PlaySound(27,1.0,1.2,0.8);
+PlaySound(57,1.0,0.8,0.6);
+
+exp_cloud->turns = 1;
+exp_cloud->sprite = 132;
+exp_cloud->speed = 80;
+exp_cloud->scale = 1.10;
+exp_cloud->duration = 1;
+exp_cloud->ZPlane = 6;
+exp_cloud->backwards = false;
+exp_cloud->once = true;
+exp_cloud->color = ARGB(25,255,255,255);
+exp_cloud->blend_type = 4;
+
+new CAnimation(Root, x, y, NullObj, exp_cloud);
+}
+//------FRAG-GRENADE------------------------------------------------------------
+if (weap->CheckName("Frag Grenade")
+|| weap->CheckName("Frag Grenade ")
+|| weap->CheckName("Cluster Frag")
+|| weap->CheckName("Cluster Frag "))
+{
+exp_fragg1->turns = 1;
+exp_fragg1->sprite = 605;
+exp_fragg1->speed = 65;
+exp_fragg1->scale = 0.70;
+exp_fragg1->duration = 1;
+exp_fragg1->ZPlane = 6;
+exp_fragg1->backwards = false;
+exp_fragg1->once = true;
+exp_fragg1->color = ARGB(2,255,255,255);
+exp_fragg1->blend_type = 6;
+
+exp_fragg2->turns = 1;
+exp_fragg2->sprite = 605;
+exp_fragg2->rot = 180;
+exp_fragg2->speed = 65;
+exp_fragg2->scale = 0.70;
+exp_fragg2->duration = 1;
+exp_fragg2->ZPlane = 6;
+exp_fragg2->backwards = false;
+exp_fragg2->once = true;
+exp_fragg2->color = ARGB(2,255,255,255);
+exp_fragg2->blend_type = 6;
+
+exp_fragg3->turns = 1;
+exp_fragg3->sprite = 605;
+exp_fragg3->rot = 90;
+exp_fragg3->speed = 65;
+exp_fragg3->scale = 0.70;
+exp_fragg3->duration = 1;
+exp_fragg3->ZPlane = 6;
+exp_fragg3->backwards = false;
+exp_fragg3->once = true;
+exp_fragg3->color = ARGB(30,255,0,0);
+exp_fragg3->blend_type = 6;
+
+exp_fragg4->turns = 1;
+exp_fragg4->sprite = 605;
+exp_fragg4->rot = -90;
+exp_fragg4->speed = 65;
+exp_fragg4->scale = 0.70;
+exp_fragg4->duration = 1;
+exp_fragg4->ZPlane = 6;
+exp_fragg4->backwards = false;
+exp_fragg4->once = true;
+exp_fragg4->color = ARGB(30,255,0,0);
+exp_fragg4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_fragg1);
+new CAnimation(Root, x, y, NullObj, exp_fragg2);
+new CAnimation(Root, x, y, NullObj, exp_fragg3);
+new CAnimation(Root, x, y, NullObj, exp_fragg4);
+}
+//------BASKETBALL--------------------------------------------------------------
+if(weap->CheckName("Basketball")
+|| weap->CheckName("Basketball "))
+{
+exp_bskbl->turns = 1;
+exp_bskbl->sprite = smart_tr->Index; 
+exp_bskbl->speed = 100;
+exp_bskbl->scale = 1.30;
+exp_bskbl->duration = 1;
+exp_bskbl->ZPlane = 6;
+exp_bskbl->backwards = false;
+exp_bskbl->once = true;
+exp_bskbl->color = ARGB(255,205,100,0);
+exp_bskbl->blend_type = 4;
+
+new CAnimation(Root, x, y, NullObj, exp_bskbl);
+}
+//------BASEBALL-BOMB-----------------------------------------------------------
+if (weap->CheckName("Baseball Bomb"))
+{
+PlaySound(98,1.0,1.0,1.0);
+ShowMessage("It's GOOD!");
+
+exp_bsebl1->turns = 1;
+exp_bsebl1->sprite = 605;
+exp_bsebl1->speed = 65;
+exp_bsebl1->scale = 0.65;
+exp_bsebl1->duration = 1;
+exp_bsebl1->ZPlane = 6;
+exp_bsebl1->backwards = false;
+exp_bsebl1->once = true;
+exp_bsebl1->color = ARGB(2,255,255,255);
+exp_bsebl1->blend_type = 6;
+
+exp_bsebl2->turns = 1;
+exp_bsebl2->sprite = 605;
+exp_bsebl2->rot = 180;
+exp_bsebl2->speed = 65;
+exp_bsebl2->scale = 0.65;
+exp_bsebl2->duration = 1;
+exp_bsebl2->ZPlane = 6;
+exp_bsebl2->backwards = false;
+exp_bsebl2->once = true;
+exp_bsebl2->color = ARGB(2,255,255,255);
+exp_bsebl2->blend_type = 6;
+
+exp_bsebl3->turns = 1;
+exp_bsebl3->sprite = 605;
+exp_bsebl3->rot = 90;
+exp_bsebl3->speed = 65;
+exp_bsebl3->scale = 0.65;
+exp_bsebl3->duration = 1;
+exp_bsebl3->ZPlane = 6;
+exp_bsebl3->backwards = false;
+exp_bsebl3->once = true;
+exp_bsebl3->color = ARGB(30,255,0,0);
+exp_bsebl3->blend_type = 6;
+
+exp_bsebl4->turns = 1;
+exp_bsebl4->sprite = 605;
+exp_bsebl4->rot = -90;
+exp_bsebl4->speed = 65;
+exp_bsebl4->scale = 0.65;
+exp_bsebl4->duration = 1;
+exp_bsebl4->ZPlane = 6;
+exp_bsebl4->backwards = false;
+exp_bsebl4->once = true;
+exp_bsebl4->color = ARGB(30,255,0,0);
+exp_bsebl4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_bsebl1);
+new CAnimation(Root, x, y, NullObj, exp_bsebl2);
+new CAnimation(Root, x, y, NullObj, exp_bsebl3);
+new CAnimation(Root, x, y, NullObj, exp_bsebl4);
+}
+//------THUMPER-NADE------------------------------------------------------------
+if(weap->CheckName("Thumper Nade"))
+{
+exp_thump1->turns = 1;
+exp_thump1->sprite = 605;
+exp_thump1->speed = 65;
+exp_thump1->scale = 0.70;
+exp_thump1->duration = 1;
+exp_thump1->ZPlane = 6;
+exp_thump1->backwards = false;
+exp_thump1->once = true;
+exp_thump1->color = ARGB(2,255,255,255);
+exp_thump1->blend_type = 6;
+
+exp_thump2->turns = 1;
+exp_thump2->sprite = 605;
+exp_thump2->rot = 180;
+exp_thump2->speed = 65;
+exp_thump2->scale = 0.70;
+exp_thump2->duration = 1;
+exp_thump2->ZPlane = 6;
+exp_thump2->backwards = false;
+exp_thump2->once = true;
+exp_thump2->color = ARGB(2,255,255,255);
+exp_thump2->blend_type = 6;
+
+exp_thump3->turns = 1;
+exp_thump3->sprite = 605;
+exp_thump3->rot = 90;
+exp_thump3->speed = 65;
+exp_thump3->scale = 0.70;
+exp_thump3->duration = 1;
+exp_thump3->ZPlane = 6;
+exp_thump3->backwards = false;
+exp_thump3->once = true;
+exp_thump3->color = ARGB(30,0,255,40);
+exp_thump3->blend_type = 6;
+
+exp_thump4->turns = 1;
+exp_thump4->sprite = 605;
+exp_thump4->rot = -90;
+exp_thump4->speed = 65;
+exp_thump4->scale = 0.70;
+exp_thump4->duration = 1;
+exp_thump4->ZPlane = 6;
+exp_thump4->backwards = false;
+exp_thump4->once = true;
+exp_thump4->color = ARGB(30,0,255,40);
+exp_thump4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_thump1);
+new CAnimation(Root, x, y, NullObj, exp_thump2);
+new CAnimation(Root, x, y, NullObj, exp_thump3);
+new CAnimation(Root, x, y, NullObj, exp_thump4);
+}
+//------BUMPER-BOMB-------------------------------------------------------------
+if(weap->CheckName("Bumper Bomb")
+|| weap->CheckName("Super Bumper Bomb"))
+{
+exp_bumpr1->turns = 1;
+exp_bumpr1->sprite = 605;
+exp_bumpr1->speed = 65;
+exp_bumpr1->scale = 0.75;
+exp_bumpr1->duration = 1;
+exp_bumpr1->ZPlane = 6;
+exp_bumpr1->backwards = false;
+exp_bumpr1->once = true;
+exp_bumpr1->color = ARGB(2,255,255,255);
+exp_bumpr1->blend_type = 6;
+
+exp_bumpr2->turns = 1;
+exp_bumpr2->sprite = 605;
+exp_bumpr2->rot = 180;
+exp_bumpr2->speed = 65;
+exp_bumpr2->scale = 0.75;
+exp_bumpr2->duration = 1;
+exp_bumpr2->ZPlane = 6;
+exp_bumpr2->backwards = false;
+exp_bumpr2->once = true;
+exp_bumpr2->color = ARGB(2,255,255,255);
+exp_bumpr2->blend_type = 6;
+
+exp_bumpr3->turns = 1;
+exp_bumpr3->sprite = 605;
+exp_bumpr3->rot = 90;
+exp_bumpr3->speed = 65;
+exp_bumpr3->scale = 0.75;
+exp_bumpr3->duration = 1;
+exp_bumpr3->ZPlane = 6;
+exp_bumpr3->backwards = false;
+exp_bumpr3->once = true;
+exp_bumpr3->color = ARGB(30,255,80,0);
+exp_bumpr3->blend_type = 6;
+
+exp_bumpr4->turns = 1;
+exp_bumpr4->sprite = 605;
+exp_bumpr4->rot = -90;
+exp_bumpr4->speed = 65;
+exp_bumpr4->scale = 0.75;
+exp_bumpr4->duration = 1;
+exp_bumpr4->ZPlane = 6;
+exp_bumpr4->backwards = false;
+exp_bumpr4->once = true;
+exp_bumpr4->color = ARGB(30,255,80,0);
+exp_bumpr4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_bumpr1);
+new CAnimation(Root, x, y, NullObj, exp_bumpr2);
+new CAnimation(Root, x, y, NullObj, exp_bumpr3);
+new CAnimation(Root, x, y, NullObj, exp_bumpr4);
+}
+//------ION-BOMB----------------------------------------------------------------
+if(weap->CheckName("Ion Bomb")
+|| weap->CheckName("Super Ion Bomb"))
+{
+PlaySound(105,1.0,0.5,1.0);
+PlaySound(105,1.0,0.5,1.0);
+
+exp_ionbb1->turns = 1;
+exp_ionbb1->sprite = 605;
+exp_ionbb1->speed = 65;
+exp_ionbb1->scale = 1.05;
+exp_ionbb1->duration = 1;
+exp_ionbb1->ZPlane = 6;
+exp_ionbb1->backwards = false;
+exp_ionbb1->once = true;
+exp_ionbb1->color = ARGB(25,0,255,0);
+exp_ionbb1->blend_type = 6;
+
+exp_ionbb2->turns = 1;
+exp_ionbb2->sprite = 605;
+exp_ionbb2->rot = 180;
+exp_ionbb2->speed = 65;
+exp_ionbb2->scale = 1.05;
+exp_ionbb2->duration = 1;
+exp_ionbb2->ZPlane = 6;
+exp_ionbb2->backwards = false;
+exp_ionbb2->once = true;
+exp_ionbb2->color = ARGB(25,255,0,0);
+exp_ionbb2->blend_type = 6;
+
+exp_ionbb3->turns = 1;
+exp_ionbb3->sprite = 605;
+exp_ionbb3->rot = 90;
+exp_ionbb3->speed = 65;
+exp_ionbb3->scale = 1.05;
+exp_ionbb3->duration = 1;
+exp_ionbb3->ZPlane = 6;
+exp_ionbb3->backwards = false;
+exp_ionbb3->once = true;
+exp_ionbb3->color = ARGB(25,0,255,255);
+exp_ionbb3->blend_type = 6;
+
+exp_ionbb4->turns = 1;
+exp_ionbb4->sprite = 605;
+exp_ionbb4->rot = -90;
+exp_ionbb4->speed = 65;
+exp_ionbb4->scale = 1.05;
+exp_ionbb4->duration = 1;
+exp_ionbb4->ZPlane = 6;
+exp_ionbb4->backwards = false;
+exp_ionbb4->once = true;
+exp_ionbb4->color = ARGB(25,255,0,255);
+exp_ionbb4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_ionbb1);
+new CAnimation(Root, x, y, NullObj, exp_ionbb2);
+new CAnimation(Root, x, y, NullObj, exp_ionbb3);
+new CAnimation(Root, x, y, NullObj, exp_ionbb4);
+}
+//------MAGIC-SLAMMER-----------------------------------------------------------
+if(weap->CheckName("Magic Slammer"))
+{
+exp_magca1->turns = 1;
+exp_magca1->sprite = 605;
+exp_magca1->speed = 65;
+exp_magca1->scale = 0.75;
+exp_magca1->duration = 1;
+exp_magca1->ZPlane = 6;
+exp_magca1->backwards = false;
+exp_magca1->once = true;
+exp_magca1->color = ARGB(2,255,255,255);
+exp_magca1->blend_type = 6;
+
+exp_magca2->turns = 1;
+exp_magca2->sprite = 605;
+exp_magca2->rot = 180;
+exp_magca2->speed = 65;
+exp_magca2->scale = 0.75;
+exp_magca2->duration = 1;
+exp_magca2->ZPlane = 6;
+exp_magca2->backwards = false;
+exp_magca2->once = true;
+exp_magca2->color = ARGB(2,255,255,255);
+exp_magca2->blend_type = 6;
+
+exp_magca3->turns = 1;
+exp_magca3->sprite = 605;
+exp_magca3->rot = 90;
+exp_magca3->speed = 65;
+exp_magca3->scale = 0.75;
+exp_magca3->duration = 1;
+exp_magca3->ZPlane = 6;
+exp_magca3->backwards = false;
+exp_magca3->once = true;
+exp_magca3->color = ARGB(30,0,110,255);
+exp_magca3->blend_type = 6;
+
+exp_magca4->turns = 1;
+exp_magca4->sprite = 605;
+exp_magca4->rot = -90;
+exp_magca4->speed = 65;
+exp_magca4->scale = 0.75;
+exp_magca4->duration = 1;
+exp_magca4->ZPlane = 6;
+exp_magca4->backwards = false;
+exp_magca4->once = true;
+exp_magca4->color = ARGB(30,0,110,255);
+exp_magca4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_magca1);
+new CAnimation(Root, x, y, NullObj, exp_magca2);
+new CAnimation(Root, x, y, NullObj, exp_magca3);
+new CAnimation(Root, x, y, NullObj, exp_magca4);
+}
+//------SUPER-MAGIC-SLAMMER-----------------------------------------------------
+if(weap->CheckName("Super Magic Slammer"))
+{
+exp_magcb1->turns = 1;
+exp_magcb1->sprite = 605;
+exp_magcb1->speed = 65;
+exp_magcb1->scale = 0.75;
+exp_magcb1->duration = 1;
+exp_magcb1->ZPlane = 6;
+exp_magcb1->backwards = false;
+exp_magcb1->once = true;
+exp_magcb1->color = ARGB(2,255,255,255);
+exp_magcb1->blend_type = 6;
+
+exp_magcb2->turns = 1;
+exp_magcb2->sprite = 605;
+exp_magcb2->rot = 180;
+exp_magcb2->speed = 65;
+exp_magcb2->scale = 0.75;
+exp_magcb2->duration = 1;
+exp_magcb2->ZPlane = 6;
+exp_magcb2->backwards = false;
+exp_magcb2->once = true;
+exp_magcb2->color = ARGB(2,255,255,255);
+exp_magcb2->blend_type = 6;
+
+exp_magcb3->turns = 1;
+exp_magcb3->sprite = 605;
+exp_magcb3->rot = 90;
+exp_magcb3->speed = 65;
+exp_magcb3->scale = 0.75;
+exp_magcb3->duration = 1;
+exp_magcb3->ZPlane = 6;
+exp_magcb3->backwards = false;
+exp_magcb3->once = true;
+exp_magcb3->color = ARGB(30,230,0,60);
+exp_magcb3->blend_type = 6;
+
+exp_magcb4->turns = 1;
+exp_magcb4->sprite = 605;
+exp_magcb4->rot = -90;
+exp_magcb4->speed = 65;
+exp_magcb4->scale = 0.75;
+exp_magcb4->duration = 1;
+exp_magcb4->ZPlane = 6;
+exp_magcb4->backwards = false;
+exp_magcb4->once = true;
+exp_magcb4->color = ARGB(30,230,0,60);
+exp_magcb4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_magcb1);
+new CAnimation(Root, x, y, NullObj, exp_magcb2);
+new CAnimation(Root, x, y, NullObj, exp_magcb3);
+new CAnimation(Root, x, y, NullObj, exp_magcb4);
+}
+//------GRAVEDIGGER-------------------------------------------------------------
+if(weap->CheckName("Gravedigger")
+|| weap->CheckName("Gravedigger "))
+{
+exp_grvea1->turns = 1;
+exp_grvea1->sprite = 605;
+exp_grvea1->speed = 65;
+exp_grvea1->scale = 0.68;
+exp_grvea1->duration = 1;
+exp_grvea1->ZPlane = 6;
+exp_grvea1->backwards = false;
+exp_grvea1->once = true;
+exp_grvea1->color = ARGB(2,255,255,255);
+exp_grvea1->blend_type = 6;
+
+exp_grvea2->turns = 1;
+exp_grvea2->sprite = 605;
+exp_grvea2->rot = 180;
+exp_grvea2->speed = 65;
+exp_grvea2->scale = 0.68;
+exp_grvea2->duration = 1;
+exp_grvea2->ZPlane = 6;
+exp_grvea2->backwards = false;
+exp_grvea2->once = true;
+exp_grvea2->color = ARGB(2,255,255,255);
+exp_grvea2->blend_type = 6;
+
+exp_grvea3->turns = 1;
+exp_grvea3->sprite = 605;
+exp_grvea3->rot = 90;
+exp_grvea3->speed = 65;
+exp_grvea3->scale = 0.68;
+exp_grvea3->duration = 1;
+exp_grvea3->ZPlane = 6;
+exp_grvea3->backwards = false;
+exp_grvea3->once = true;
+exp_grvea3->color = ARGB(30,75,250,0);
+exp_grvea3->blend_type = 6;
+
+exp_grvea4->turns = 1;
+exp_grvea4->sprite = 605;
+exp_grvea4->rot = -90;
+exp_grvea4->speed = 65;
+exp_grvea4->scale = 0.68;
+exp_grvea4->duration = 1;
+exp_grvea4->ZPlane = 6;
+exp_grvea4->backwards = false;
+exp_grvea4->once = true;
+exp_grvea4->color = ARGB(30,75,250,0);
+exp_grvea4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_grvea1);
+new CAnimation(Root, x, y, NullObj, exp_grvea2);
+new CAnimation(Root, x, y, NullObj, exp_grvea3);
+new CAnimation(Root, x, y, NullObj, exp_grvea4);
+}
+//------SUPER-GRAVEDIGGER-------------------------------------------------------
+if(weap->CheckName("Super Gravedigger")
+|| weap->CheckName("Super Gravedigger "))
+{
+exp_grveb1->turns = 1;
+exp_grveb1->sprite = 605;
+exp_grveb1->speed = 65;
+exp_grveb1->scale = 0.70;
+exp_grveb1->duration = 1;
+exp_grveb1->ZPlane = 6;
+exp_grveb1->backwards = false;
+exp_grveb1->once = true;
+exp_grveb1->color = ARGB(2,255,255,255);
+exp_grveb1->blend_type = 6;
+
+exp_grveb2->turns = 1;
+exp_grveb2->sprite = 605;
+exp_grveb2->rot = 180;
+exp_grveb2->speed = 65;
+exp_grveb2->scale = 0.70;
+exp_grveb2->duration = 1;
+exp_grveb2->ZPlane = 6;
+exp_grveb2->backwards = false;
+exp_grveb2->once = true;
+exp_grveb2->color = ARGB(2,255,255,255);
+exp_grveb2->blend_type = 6;
+
+exp_grveb3->turns = 1;
+exp_grveb3->sprite = 605;
+exp_grveb3->rot = 90;
+exp_grveb3->speed = 65;
+exp_grveb3->scale = 0.70;
+exp_grveb3->duration = 1;
+exp_grveb3->ZPlane = 6;
+exp_grveb3->backwards = false;
+exp_grveb3->once = true;
+exp_grveb3->color = ARGB(30,255,0,0);
+exp_grveb3->blend_type = 6;
+
+exp_grveb4->turns = 1;
+exp_grveb4->sprite = 605;
+exp_grveb4->rot = -90;
+exp_grveb4->speed = 65;
+exp_grveb4->scale = 0.70;
+exp_grveb4->duration = 1;
+exp_grveb4->ZPlane = 6;
+exp_grveb4->backwards = false;
+exp_grveb4->once = true;
+exp_grveb4->color = ARGB(30,255,0,0);
+exp_grveb4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_grveb1);
+new CAnimation(Root, x, y, NullObj, exp_grveb2);
+new CAnimation(Root, x, y, NullObj, exp_grveb3);
+new CAnimation(Root, x, y, NullObj, exp_grveb4);
+}
+//------CROSSBOW----------------------------------------------------------------
+if(weap->CheckName("Crossbow")
+|| weap->CheckName("Crossbow "))
+{
+exp_crbow->turns = 1;
+exp_crbow->sprite = 79;
+exp_crbow->speed = 100;
+exp_crbow->scale = 0.45;
+exp_crbow->duration = 1;
+exp_crbow->ZPlane = 6;
+exp_crbow->backwards = false;
+exp_crbow->once = true;
+exp_crbow->color = ARGB(20,0,0,255);
+exp_crbow->blend_type = 4;
+
+new CAnimation(Root, x, y, NullObj, exp_crbow);
+}
+//------MULTI-BOLT--------------------------------------------------------------
+if(weap->CheckName("Multi-Bolt")
+|| weap->CheckName("Multi-Bolt "))
+{
+exp_multi1->turns = 1;
+exp_multi1->sprite = 605;
+exp_multi1->speed = 65;
+exp_multi1->scale = 0.55;
+exp_multi1->duration = 1;
+exp_multi1->ZPlane = 6;
+exp_multi1->backwards = false;
+exp_multi1->once = true;
+exp_multi1->color = ARGB(2,255,255,255);
+exp_multi1->blend_type = 6;
+
+exp_multi2->turns = 1;
+exp_multi2->sprite = 605;
+exp_multi2->rot = 180;
+exp_multi2->speed = 65;
+exp_multi2->scale = 0.55;
+exp_multi2->duration = 1;
+exp_multi2->ZPlane = 6;
+exp_multi2->backwards = false;
+exp_multi2->once = true;
+exp_multi2->color = ARGB(2,255,255,255);
+exp_multi2->blend_type = 6;
+
+exp_multi3->turns = 1;
+exp_multi3->sprite = 605;
+exp_multi3->rot = 90;
+exp_multi3->speed = 65;
+exp_multi3->scale = 0.55;
+exp_multi3->duration = 1;
+exp_multi3->ZPlane = 6;
+exp_multi3->backwards = false;
+exp_multi3->once = true;
+exp_multi3->color = ARGB(30,0,170,0);
+exp_multi3->blend_type = 6;
+
+exp_multi4->turns = 1;
+exp_multi4->sprite = 605;
+exp_multi4->rot = -90;
+exp_multi4->speed = 65;
+exp_multi4->scale = 0.55;
+exp_multi4->duration = 1;
+exp_multi4->ZPlane = 6;
+exp_multi4->backwards = false;
+exp_multi4->once = true;
+exp_multi4->color = ARGB(30,0,170,0);
+exp_multi4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_multi1);
+new CAnimation(Root, x, y, NullObj, exp_multi2);
+new CAnimation(Root, x, y, NullObj, exp_multi3);
+new CAnimation(Root, x, y, NullObj, exp_multi4);
+}
+//------WILDFIRE-BOLT-----------------------------------------------------------
+if(weap != NullObj && (weap->CheckName("Wildfire-Bolt") 
+                   || (weap->CheckName("Wildfire-Bolt "))))
+{
+if(true)
+{
+local w = GetCurrentWorm();
+for(int i = 0; i <= 25; i++)
+{
+CFireDesc fdesc;
+zero(&fdesc);
+if(i % 2 == 0)
+{
+fdesc.X = x + 3 * cos(360 - i * 7.2);
+}
+else
+{
+fdesc.X = x - 3 * cos(360 - i * 7.2) ;
+}
+fdesc.Y = y - 3 * sin(360 - i * 7.2);
+fdesc.Count    = 0;
+fdesc.Unk      = 0;
+fdesc.UnkB     = 1;
+fdesc.UnkD     = 1;
+fdesc.Duration = 3000;
+fdesc.UpPower  = 0;
+fdesc.Damage   = 0;
+if(w == NullObj)
+{
+fdesc.OwnerTeam = 0;
+}
+else
+{
+fdesc.OwnerTeam = w->WormTeam;
+}
+local wfire = new CValyrianFire(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+}
+}
+super;
+}
+//------SNOWBALL----------------------------------------------------------------
+if(weap->CheckName("Snow Ball"))
+{
+PlaySound(35,1.0,1.0,1.0);
+
+exp_snowb->turns = 1;
+exp_snowb->sprite = 132;
+exp_snowb->speed = 120;
+exp_snowb->scale = 1.50;
+exp_snowb->duration = 1;
+exp_snowb->ZPlane = 6;
+exp_snowb->backwards = false;
+exp_snowb->once = true;
+exp_snowb->color = ARGB(30,255,255,255);
+exp_snowb->blend_type = 4;
+
+new CAnimation(Root, x, y, NullObj, exp_snowb);
+}
+//------SLINGSHOT---------------------------------------------------------------
+if(weap->CheckName("SlingShot")
+|| weap->CheckName("Stone Blaster"))
+{
+PlaySound(116,1.0,1.0,1.0);
+
+exp_stone->turns = 1;
+exp_stone->sprite = 80;
+exp_stone->speed = 100;
+exp_stone->scale = 1.20;
+exp_stone->duration = 1;
+exp_stone->ZPlane = 6;
+exp_stone->backwards = false;
+exp_stone->once = true;
+exp_stone->color = ARGB(30,255,255,255);
+exp_stone->blend_type = 4;
+
+new CAnimation(Root, x, y, NullObj, exp_stone);
+}
+//------JAVELIN-----------------------------------------------------------------
+if(weap->CheckName("Javelin"))
+{
+exp_javln->turns = 1;
+exp_javln->sprite = 79;
+exp_javln->speed = 100;
+exp_javln->scale = 0.95;
+exp_javln->duration = 1;
+exp_javln->ZPlane = 6;
+exp_javln->backwards = false;
+exp_javln->once = true;
+exp_javln->color = ARGB(20,255,255,255);
+exp_javln->blend_type = 4;
+
+new CAnimation(Root, x, y, NullObj, exp_javln);
+}
+//------NINJA-STAR--------------------------------------------------------------
+if(weap->CheckName("Ninja Star"))
+{
+exp_ninja->turns = 1;
+exp_ninja->sprite = 79;
+exp_ninja->speed = 100;
+exp_ninja->scale = 0.30;
+exp_ninja->duration = 1;
+exp_ninja->ZPlane = 6;
+exp_ninja->backwards = false;
+exp_ninja->once = true;
+exp_ninja->color = ARGB(20,0,255,0);
+exp_ninja->blend_type = 4;
+
+new CAnimation(Root, x, y, NullObj, exp_ninja);
+}
+//------STAFF-OF-JOLTING--------------------------------------------------------
+if(weap->CheckName("Staff of Jolting"))
+{
+local jolt = new CTazerShot(GetObject(25, 0), this);
+TazerLifeTime = 40;
+TazerLifeTimeAfterHit = 20;
+TazerWormDamage = 15;
+jolt->AddToIgnoreList(SJ_now);
+
+PlaySound(64,1.0,1.0,0.8);
+PlaySound(105,1.0,1.0,1.0);
+
+exp_jolts1->turns = 1;
+exp_jolts1->sprite = 605;
+exp_jolts1->speed = 65;
+exp_jolts1->scale = 0.60;
+exp_jolts1->duration = 1;
+exp_jolts1->ZPlane = 6;
+exp_jolts1->backwards = false;
+exp_jolts1->once = true;
+exp_jolts1->color = ARGB(2,255,255,255);
+exp_jolts1->blend_type = 6;
+
+exp_jolts2->turns = 1;
+exp_jolts2->sprite = 605;
+exp_jolts2->rot = 180;
+exp_jolts2->speed = 65;
+exp_jolts2->scale = 0.60;
+exp_jolts2->duration = 1;
+exp_jolts2->ZPlane = 6;
+exp_jolts2->backwards = false;
+exp_jolts2->once = true;
+exp_jolts2->color = ARGB(2,255,255,255);
+exp_jolts2->blend_type = 6;
+
+exp_jolts3->turns = 1;
+exp_jolts3->sprite = 605;
+exp_jolts3->rot = 90;
+exp_jolts3->speed = 65;
+exp_jolts3->scale = 0.60;
+exp_jolts3->duration = 1;
+exp_jolts3->ZPlane = 6;
+exp_jolts3->backwards = false;
+exp_jolts3->once = true;
+exp_jolts3->color = ARGB(30,0,0,255);
+exp_jolts3->blend_type = 4;
+
+exp_jolts4->turns = 1;
+exp_jolts4->sprite = 605;
+exp_jolts4->rot = -90;
+exp_jolts4->speed = 65;
+exp_jolts4->scale = 0.60;
+exp_jolts4->duration = 1;
+exp_jolts4->ZPlane = 6;
+exp_jolts4->backwards = false;
+exp_jolts4->once = true;
+exp_jolts4->color = ARGB(30,0,0,255);
+exp_jolts4->blend_type = 4;
+
+new CAnimation(Root, x, y, NullObj, exp_jolts1);
+new CAnimation(Root, x, y, NullObj, exp_jolts2);
+new CAnimation(Root, x, y, NullObj, exp_jolts3);
+new CAnimation(Root, x, y, NullObj, exp_jolts4);
+}
+//------FIRE-ORBS---------------------------------------------------------------
+if(weap->CheckName("Fire Orbs"))
+{
+PlaySound(90,1.0,1.0,0.8);
+
+exp_forbs->turns = 1;
+exp_forbs->sprite = 80; 
+exp_forbs->speed = 60;
+exp_forbs->scale = 3.00;
+exp_forbs->duration = 1;
+exp_forbs->ZPlane = 6;
+exp_forbs->backwards = false;
+exp_forbs->once = true;
+exp_forbs->color = ARGB(35,255,175,0);
+exp_forbs->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_forbs);
+}
+//------ETHER-BALLOONS----------------------------------------------------------
+if(weap->CheckName("Ether Balloons"))
+{
+PlaySound(90,1.0,0.6,0.9);
+
+exp_ether1->turns = 1;
+exp_ether1->sprite = 130;
+exp_ether1->speed = 90;
+exp_ether1->scale = 3.25;
+exp_ether1->duration = 1;
+exp_ether1->ZPlane = 6;
+exp_ether1->backwards = false;
+exp_ether1->once = true;
+exp_ether1->color = ARGB(30,0,170,0);
+exp_ether1->blend_type = 6;
+
+exp_ether2->turns = 1;
+exp_ether2->sprite = 130;
+exp_ether2->rot = 180;
+exp_ether2->speed = 90;
+exp_ether2->scale = 3.25;
+exp_ether2->duration = 1;
+exp_ether2->ZPlane = 6;
+exp_ether2->backwards = false;
+exp_ether2->once = true;
+exp_ether2->color = ARGB(30,0,170,0);
+exp_ether2->blend_type = 6;
+
+exp_ether3->turns = 1;
+exp_ether3->sprite = 130;
+exp_ether3->rot = 90;
+exp_ether3->speed = 90;
+exp_ether3->scale = 3.25;
+exp_ether3->duration = 1;
+exp_ether3->ZPlane = 6;
+exp_ether3->backwards = false;
+exp_ether3->once = true;
+exp_ether3->color = ARGB(30,255,255,0);
+exp_ether3->blend_type = 6;
+
+exp_ether4->turns = 1;
+exp_ether4->sprite = 130;
+exp_ether4->rot = -90;
+exp_ether4->speed = 90;
+exp_ether4->scale = 3.25;
+exp_ether4->duration = 1;
+exp_ether4->ZPlane = 6;
+exp_ether4->backwards = false;
+exp_ether4->once = true;
+exp_ether4->color = ARGB(30,255,255,0);
+exp_ether4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_ether1);
+new CAnimation(Root, x, y, NullObj, exp_ether2);
+new CAnimation(Root, x, y, NullObj, exp_ether3);
+new CAnimation(Root, x, y, NullObj, exp_ether4);
+}
+//------GIRDER-LAUNCHER---------------------------------------------------------
+if(weap->CheckName("Girder Launcher"))
+{
+exp_girdr->turns = 1;
+exp_girdr->sprite = 79;
+exp_girdr->speed = 70;
+exp_girdr->scale = 0.55;
+exp_girdr->duration = 1;
+exp_girdr->ZPlane = 6;
+exp_girdr->backwards = false;
+exp_girdr->once = true;
+exp_girdr->color = ARGB(30,150,140,240);
+exp_girdr->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_girdr);
+}
+//------THROWN-DYNAMITE---------------------------------------------------------
+if (weap->CheckName("Thrown Dynamite"))
+{
+exp_tdyna1->turns = 1;
+exp_tdyna1->sprite = 605;
+exp_tdyna1->speed = 65;
+exp_tdyna1->scale = 0.95;
+exp_tdyna1->duration = 1;
+exp_tdyna1->ZPlane = 6;
+exp_tdyna1->backwards = false;
+exp_tdyna1->once = true;
+exp_tdyna1->color = ARGB(2,255,255,255);
+exp_tdyna1->blend_type = 6;
+
+exp_tdyna2->turns = 1;
+exp_tdyna2->sprite = 605;
+exp_tdyna2->rot = 180;
+exp_tdyna2->speed = 65;
+exp_tdyna2->scale = 0.95;
+exp_tdyna2->duration = 1;
+exp_tdyna2->ZPlane = 6;
+exp_tdyna2->backwards = false;
+exp_tdyna2->once = true;
+exp_tdyna2->color = ARGB(2,255,255,255);
+exp_tdyna2->blend_type = 6;
+
+exp_tdyna3->turns = 1;
+exp_tdyna3->sprite = 605;
+exp_tdyna3->rot = 90;
+exp_tdyna3->speed = 65;
+exp_tdyna3->scale = 0.95;
+exp_tdyna3->duration = 1;
+exp_tdyna3->ZPlane = 6;
+exp_tdyna3->backwards = false;
+exp_tdyna3->once = true;
+exp_tdyna3->color = ARGB(30,255,130,0);
+exp_tdyna3->blend_type = 6;
+
+exp_tdyna4->turns = 1;
+exp_tdyna4->sprite = 605;
+exp_tdyna4->rot = -90;
+exp_tdyna4->speed = 65;
+exp_tdyna4->scale = 0.95;
+exp_tdyna4->duration = 1;
+exp_tdyna4->ZPlane = 6;
+exp_tdyna4->backwards = false;
+exp_tdyna4->once = true;
+exp_tdyna4->color = ARGB(30,255,130,0);
+exp_tdyna4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_tdyna1);
+new CAnimation(Root, x, y, NullObj, exp_tdyna2);
+new CAnimation(Root, x, y, NullObj, exp_tdyna3);
+new CAnimation(Root, x, y, NullObj, exp_tdyna4);
+}
+//------THROWN-MING-VASE--------------------------------------------------------
+if(weap->CheckName("Thrown Ming Vase"))
+{
+PlaySound(64,1.0,1.0,1.0);
+
+exp_tming1->turns = 1;
+exp_tming1->sprite = 605;
+exp_tming1->speed = 65;
+exp_tming1->scale = 0.90;
+exp_tming1->duration = 1;
+exp_tming1->ZPlane = 6;
+exp_tming1->backwards = false;
+exp_tming1->once = true;
+exp_tming1->color = ARGB(2,255,255,255);
+exp_tming1->blend_type = 6;
+
+exp_tming2->turns = 1;
+exp_tming2->sprite = 605;
+exp_tming2->rot = 180;
+exp_tming2->speed = 65;
+exp_tming2->scale = 0.90;
+exp_tming2->duration = 1;
+exp_tming2->ZPlane = 6;
+exp_tming2->backwards = false;
+exp_tming2->once = true;
+exp_tming2->color = ARGB(2,255,255,255);
+exp_tming2->blend_type = 6;
+
+exp_tming3->turns = 1;
+exp_tming3->sprite = 605;
+exp_tming3->rot = 90;
+exp_tming3->speed = 65;
+exp_tming3->scale = 0.90;
+exp_tming3->duration = 1;
+exp_tming3->ZPlane = 6;
+exp_tming3->backwards = false;
+exp_tming3->once = true;
+exp_tming3->color = ARGB(30,255,120,0);
+exp_tming3->blend_type = 6;
+
+exp_tming4->turns = 1;
+exp_tming4->sprite = 605;
+exp_tming4->rot = -90;
+exp_tming4->speed = 65;
+exp_tming4->scale = 0.90;
+exp_tming4->duration = 1;
+exp_tming4->ZPlane = 6;
+exp_tming4->backwards = false;
+exp_tming4->once = true;
+exp_tming4->color = ARGB(30,255,120,0);
+exp_tming4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_tming1);
+new CAnimation(Root, x, y, NullObj, exp_tming2);
+new CAnimation(Root, x, y, NullObj, exp_tming3);
+new CAnimation(Root, x, y, NullObj, exp_tming4);
+}
+//------REMOTE-ROLLER-----------------------------------------------------------
+if(weap->CheckName("Remote Roller")
+|| weap->CheckName("Remote Roller ")
+|| weap->CheckName("Super Remote Roller")
+|| weap->CheckName("Super Remote Roller "))
+{
+PlaySound(88,1.0,1.0,1.0);
+
+exp_rroll1->turns = 1;
+exp_rroll1->sprite = 605;
+exp_rroll1->speed = 65;
+exp_rroll1->scale = 0.65;
+exp_rroll1->duration = 1;
+exp_rroll1->ZPlane = 6;
+exp_rroll1->backwards = false;
+exp_rroll1->once = true;
+exp_rroll1->color = ARGB(2,255,255,255);
+exp_rroll1->blend_type = 6;
+
+exp_rroll2->turns = 1;
+exp_rroll2->sprite = 605;
+exp_rroll2->rot = 180;
+exp_rroll2->speed = 65;
+exp_rroll2->scale = 0.65;
+exp_rroll2->duration = 1;
+exp_rroll2->ZPlane = 6;
+exp_rroll2->backwards = false;
+exp_rroll2->once = true;
+exp_rroll2->color = ARGB(2,255,255,255);
+exp_rroll2->blend_type = 6;
+
+exp_rroll3->turns = 1;
+exp_rroll3->sprite = 605;
+exp_rroll3->rot = 90;
+exp_rroll3->speed = 65;
+exp_rroll3->scale = 0.65;
+exp_rroll3->duration = 1;
+exp_rroll3->ZPlane = 6;
+exp_rroll3->backwards = false;
+exp_rroll3->once = true;
+exp_rroll3->color = ARGB(30,255,0,0);
+exp_rroll3->blend_type = 6;
+
+exp_rroll4->turns = 1;
+exp_rroll4->sprite = 605;
+exp_rroll4->rot = -90;
+exp_rroll4->speed = 65;
+exp_rroll4->scale = 0.65;
+exp_rroll4->duration = 1;
+exp_rroll4->ZPlane = 6;
+exp_rroll4->backwards = false;
+exp_rroll4->once = true;
+exp_rroll4->color = ARGB(30,255,0,0);
+exp_rroll4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_rroll1);
+new CAnimation(Root, x, y, NullObj, exp_rroll2);
+new CAnimation(Root, x, y, NullObj, exp_rroll3);
+new CAnimation(Root, x, y, NullObj, exp_rroll4);
+}
+//------ASCENDER----------------------------------------------------------------
+if(weap->CheckName("Ascender")
+|| weap->CheckName("Super Ascender"))
+{
+PlaySound(90,1.0,0.6,1.0);
+
+exp_acsed1->turns = 1;
+exp_acsed1->sprite = 605;
+exp_acsed1->speed = 65;
+exp_acsed1->scale = 0.75;
+exp_acsed1->duration = 1;
+exp_acsed1->ZPlane = 6;
+exp_acsed1->backwards = false;
+exp_acsed1->once = true;
+exp_acsed1->color = ARGB(2,255,255,255);
+exp_acsed1->blend_type = 6;
+
+exp_acsed2->turns = 1;
+exp_acsed2->sprite = 605;
+exp_acsed2->rot = 180;
+exp_acsed2->speed = 65;
+exp_acsed2->scale = 0.75;
+exp_acsed2->duration = 1;
+exp_acsed2->ZPlane = 6;
+exp_acsed2->backwards = false;
+exp_acsed2->once = true;
+exp_acsed2->color = ARGB(2,255,255,255);
+exp_acsed2->blend_type = 6;
+
+exp_acsed3->turns = 1;
+exp_acsed3->sprite = 605;
+exp_acsed3->rot = 90;
+exp_acsed3->speed = 65;
+exp_acsed3->scale = 0.75;
+exp_acsed3->duration = 1;
+exp_acsed3->ZPlane = 6;
+exp_acsed3->backwards = false;
+exp_acsed3->once = true;
+exp_acsed3->color = ARGB(30,0,120,180);
+exp_acsed3->blend_type = 6;
+
+exp_acsed4->turns = 1;
+exp_acsed4->sprite = 605;
+exp_acsed4->rot = -90;
+exp_acsed4->speed = 65;
+exp_acsed4->scale = 0.75;
+exp_acsed4->duration = 1;
+exp_acsed4->ZPlane = 6;
+exp_acsed4->backwards = false;
+exp_acsed4->once = true;
+exp_acsed4->color = ARGB(30,0,120,180);
+exp_acsed4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_acsed1);
+new CAnimation(Root, x, y, NullObj, exp_acsed2);
+new CAnimation(Root, x, y, NullObj, exp_acsed3);
+new CAnimation(Root, x, y, NullObj, exp_acsed4);
+}
+//------DESCENDER---------------------------------------------------------------
+if(weap->CheckName("Descender")
+|| weap->CheckName("Super Descender"))
+{
+PlaySound(90,1.0,0.6,1.0);
+
+exp_descd1->turns = 1;
+exp_descd1->sprite = 605;
+exp_descd1->speed = 65;
+exp_descd1->scale = 0.75;
+exp_descd1->duration = 1;
+exp_descd1->ZPlane = 6;
+exp_descd1->backwards = false;
+exp_descd1->once = true;
+exp_descd1->color = ARGB(2,255,255,255);
+exp_descd1->blend_type = 6;
+
+exp_descd2->turns = 1;
+exp_descd2->sprite = 605;
+exp_descd2->rot = 180;
+exp_descd2->speed = 65;
+exp_descd2->scale = 0.75;
+exp_descd2->duration = 1;
+exp_descd2->ZPlane = 6;
+exp_descd2->backwards = false;
+exp_descd2->once = true;
+exp_descd2->color = ARGB(2,255,255,255);
+exp_descd2->blend_type = 6;
+
+exp_descd3->turns = 1;
+exp_descd3->sprite = 605;
+exp_descd3->rot = 90;
+exp_descd3->speed = 65;
+exp_descd3->scale = 0.75;
+exp_descd3->duration = 1;
+exp_descd3->ZPlane = 6;
+exp_descd3->backwards = false;
+exp_descd3->once = true;
+exp_descd3->color = ARGB(30,140,0,180);
+exp_descd3->blend_type = 6;
+
+exp_descd4->turns = 1;
+exp_descd4->sprite = 605;
+exp_descd4->rot = -90;
+exp_descd4->speed = 65;
+exp_descd4->scale = 0.75;
+exp_descd4->duration = 1;
+exp_descd4->ZPlane = 6;
+exp_descd4->backwards = false;
+exp_descd4->once = true;
+exp_descd4->color = ARGB(30,140,0,180);
+exp_descd4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_descd1);
+new CAnimation(Root, x, y, NullObj, exp_descd2);
+new CAnimation(Root, x, y, NullObj, exp_descd3);
+new CAnimation(Root, x, y, NullObj, exp_descd4);
+}
+//------BOMB-OMB----------------------------------------------------------------
+if(weap->CheckName("Bomb-omb"))
+{
+exp_bombb1->turns = 1;
+exp_bombb1->sprite = 130;
+exp_bombb1->speed = 90;
+exp_bombb1->scale = 3.10;
+exp_bombb1->duration = 1;
+exp_bombb1->ZPlane = 6;
+exp_bombb1->backwards = false;
+exp_bombb1->once = true;
+exp_bombb1->color = ARGB(30,25,25,25);
+exp_bombb1->blend_type = 6;
+
+exp_bombb2->turns = 1;
+exp_bombb2->sprite = 130;
+exp_bombb2->rot = 180;
+exp_bombb2->speed = 90;
+exp_bombb2->scale = 3.10;
+exp_bombb2->duration = 1;
+exp_bombb2->ZPlane = 6;
+exp_bombb2->backwards = false;
+exp_bombb2->once = true;
+exp_bombb2->color = ARGB(30,25,25,25);
+exp_bombb2->blend_type = 6;
+
+exp_bombb3->turns = 1;
+exp_bombb3->sprite = 130;
+exp_bombb3->rot = 90;
+exp_bombb3->speed = 90;
+exp_bombb3->scale = 3.10;
+exp_bombb3->duration = 1;
+exp_bombb3->ZPlane = 6;
+exp_bombb3->backwards = false;
+exp_bombb3->once = true;
+exp_bombb3->color = ARGB(30,25,25,25);
+exp_bombb3->blend_type = 6;
+
+exp_bombb4->turns = 1;
+exp_bombb4->sprite = 130;
+exp_bombb4->rot = -90;
+exp_bombb4->speed = 90;
+exp_bombb4->scale = 3.10;
+exp_bombb4->duration = 1;
+exp_bombb4->ZPlane = 6;
+exp_bombb4->backwards = false;
+exp_bombb4->once = true;
+exp_bombb4->color = ARGB(30,25,25,25);
+exp_bombb4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_bombb1);
+new CAnimation(Root, x, y, NullObj, exp_bombb2);
+new CAnimation(Root, x, y, NullObj, exp_bombb3);
+new CAnimation(Root, x, y, NullObj, exp_bombb4);
+}
+//------POGO-SHEEP--------------------------------------------------------------
+if(weap->CheckName("Pogo Sheep"))
+{
+PlaySound(50,1.0,1.0,1.0);
+PlaySound(56,1.0,1.0,1.0);
+
+exp_pogos1->turns = 1;
+exp_pogos1->sprite = 130;
+exp_pogos1->speed = 90;
+exp_pogos1->scale = 3.75;
+exp_pogos1->duration = 1;
+exp_pogos1->ZPlane = 6;
+exp_pogos1->backwards = false;
+exp_pogos1->once = true;
+exp_pogos1->color = ARGB(30,255,0,0);
+exp_pogos1->blend_type = 6;
+
+exp_pogos2->turns = 1;
+exp_pogos2->sprite = 130;
+exp_pogos2->rot = 180;
+exp_pogos2->speed = 90;
+exp_pogos2->scale = 3.75;
+exp_pogos2->duration = 1;
+exp_pogos2->ZPlane = 6;
+exp_pogos2->backwards = false;
+exp_pogos2->once = true;
+exp_pogos2->color = ARGB(30,255,0,0);
+exp_pogos2->blend_type = 6;
+
+exp_pogos3->turns = 1;
+exp_pogos3->sprite = 130;
+exp_pogos3->rot = 90;
+exp_pogos3->speed = 90;
+exp_pogos3->scale = 3.75;
+exp_pogos3->duration = 1;
+exp_pogos3->ZPlane = 6;
+exp_pogos3->backwards = false;
+exp_pogos3->once = true;
+exp_pogos3->color = ARGB(30,255,0,0);
+exp_pogos3->blend_type = 6;
+
+exp_pogos4->turns = 1;
+exp_pogos4->sprite = 130;
+exp_pogos4->rot = -90;
+exp_pogos4->speed = 90;
+exp_pogos4->scale = 3.75;
+exp_pogos4->duration = 1;
+exp_pogos4->ZPlane = 6;
+exp_pogos4->backwards = false;
+exp_pogos4->once = true;
+exp_pogos4->color = ARGB(30,255,0,0);
+exp_pogos4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_pogos1);
+new CAnimation(Root, x, y, NullObj, exp_pogos2);
+new CAnimation(Root, x, y, NullObj, exp_pogos3);
+new CAnimation(Root, x, y, NullObj, exp_pogos4);
+}
+//------BATTERING-RAM-----------------------------------------------------------
+if(weap->CheckName("Battering Ram"))
+{
+PlaySound(33,1.0,1.0,1.0);
+
+exp_btram1->turns = 1;
+exp_btram1->sprite = 130;
+exp_btram1->speed = 90;
+exp_btram1->scale = 3.50;
+exp_btram1->duration = 1;
+exp_btram1->ZPlane = 6;
+exp_btram1->backwards = false;
+exp_btram1->once = true;
+exp_btram1->color = ARGB(30,25,25,25);
+exp_btram1->blend_type = 6;
+
+exp_btram2->turns = 1;
+exp_btram2->sprite = 130;
+exp_btram2->rot = 180;
+exp_btram2->speed = 90;
+exp_btram2->scale = 3.50;
+exp_btram2->duration = 1;
+exp_btram2->ZPlane = 6;
+exp_btram2->backwards = false;
+exp_btram2->once = true;
+exp_btram2->color = ARGB(30,25,25,25);
+exp_btram2->blend_type = 6;
+
+exp_btram3->turns = 1;
+exp_btram3->sprite = 130;
+exp_btram3->rot = 90;
+exp_btram3->speed = 90;
+exp_btram3->scale = 3.50;
+exp_btram3->duration = 1;
+exp_btram3->ZPlane = 6;
+exp_btram3->backwards = false;
+exp_btram3->once = true;
+exp_btram3->color = ARGB(30,25,25,25);
+exp_btram3->blend_type = 6;
+
+exp_btram4->turns = 1;
+exp_btram4->sprite = 130;
+exp_btram4->rot = -90;
+exp_btram4->speed = 90;
+exp_btram4->scale = 3.50;
+exp_btram4->duration = 1;
+exp_btram4->ZPlane = 6;
+exp_btram4->backwards = false;
+exp_btram4->once = true;
+exp_btram4->color = ARGB(30,25,25,25);
+exp_btram4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_btram1);
+new CAnimation(Root, x, y, NullObj, exp_btram2);
+new CAnimation(Root, x, y, NullObj, exp_btram3);
+new CAnimation(Root, x, y, NullObj, exp_btram4);
+}
+//------CRAZY-CHICKEN-----------------------------------------------------------
+if(weap->CheckName("Crazy Chicken")
+|| weap->CheckName("Super Crazy Chicken"))
+{
+PlaySound(40,1.0,1.0,1.0);
+
+exp_cchkn1->turns = 1;
+exp_cchkn1->sprite = 130;
+exp_cchkn1->speed = 90;
+exp_cchkn1->scale = 3.50;
+exp_cchkn1->duration = 1;
+exp_cchkn1->ZPlane = 6;
+exp_cchkn1->backwards = false;
+exp_cchkn1->once = true;
+exp_cchkn1->color = ARGB(30,255,255,0);
+exp_cchkn1->blend_type = 6;
+
+exp_cchkn2->turns = 1;
+exp_cchkn2->sprite = 130;
+exp_cchkn2->rot = 180;
+exp_cchkn2->speed = 90;
+exp_cchkn2->scale = 3.50;
+exp_cchkn2->duration = 1;
+exp_cchkn2->ZPlane = 6;
+exp_cchkn2->backwards = false;
+exp_cchkn2->once = true;
+exp_cchkn2->color = ARGB(30,255,255,0);
+exp_cchkn2->blend_type = 6;
+
+exp_cchkn3->turns = 1;
+exp_cchkn3->sprite = 130;
+exp_cchkn3->rot = 90;
+exp_cchkn3->speed = 90;
+exp_cchkn3->scale = 3.50;
+exp_cchkn3->duration = 1;
+exp_cchkn3->ZPlane = 6;
+exp_cchkn3->backwards = false;
+exp_cchkn3->once = true;
+exp_cchkn3->color = ARGB(30,255,255,0);
+exp_cchkn3->blend_type = 6;
+
+exp_cchkn4->turns = 1;
+exp_cchkn4->sprite = 130;
+exp_cchkn4->rot = -90;
+exp_cchkn4->speed = 90;
+exp_cchkn4->scale = 3.50;
+exp_cchkn4->duration = 1;
+exp_cchkn4->ZPlane = 6;
+exp_cchkn4->backwards = false;
+exp_cchkn4->once = true;
+exp_cchkn4->color = ARGB(30,255,255,0);
+exp_cchkn4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_cchkn1);
+new CAnimation(Root, x, y, NullObj, exp_cchkn2);
+new CAnimation(Root, x, y, NullObj, exp_cchkn3);
+new CAnimation(Root, x, y, NullObj, exp_cchkn4);
+}
+//------SQUAWKS-----------------------------------------------------------------
+if(weap->CheckName("Squawks"))
+{
+PlaySound(40,1.0,1.0,1.0);
+
+exp_sqwks1->turns = 1;
+exp_sqwks1->sprite = 130;
+exp_sqwks1->speed = 90;
+exp_sqwks1->scale = 3.20;
+exp_sqwks1->duration = 1;
+exp_sqwks1->ZPlane = 6;
+exp_sqwks1->backwards = false;
+exp_sqwks1->once = true;
+exp_sqwks1->color = ARGB(30,0,255,0);
+exp_sqwks1->blend_type = 6;
+
+exp_sqwks2->turns = 1;
+exp_sqwks2->sprite = 130;
+exp_sqwks2->rot = 180;
+exp_sqwks2->speed = 90;
+exp_sqwks2->scale = 3.20;
+exp_sqwks2->duration = 1;
+exp_sqwks2->ZPlane = 6;
+exp_sqwks2->backwards = false;
+exp_sqwks2->once = true;
+exp_sqwks2->color = ARGB(30,0,255,0);
+exp_sqwks2->blend_type = 6;
+
+exp_sqwks3->turns = 1;
+exp_sqwks3->sprite = 130;
+exp_sqwks3->rot = 90;
+exp_sqwks3->speed = 90;
+exp_sqwks3->scale = 3.20;
+exp_sqwks3->duration = 1;
+exp_sqwks3->ZPlane = 6;
+exp_sqwks3->backwards = false;
+exp_sqwks3->once = true;
+exp_sqwks3->color = ARGB(30,0,255,0);
+exp_sqwks3->blend_type = 6;
+
+exp_sqwks4->turns = 1;
+exp_sqwks4->sprite = 130;
+exp_sqwks4->rot = -90;
+exp_sqwks4->speed = 90;
+exp_sqwks4->scale = 3.20;
+exp_sqwks4->duration = 1;
+exp_sqwks4->ZPlane = 6;
+exp_sqwks4->backwards = false;
+exp_sqwks4->once = true;
+exp_sqwks4->color = ARGB(30,0,255,0);
+exp_sqwks4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_sqwks1);
+new CAnimation(Root, x, y, NullObj, exp_sqwks2);
+new CAnimation(Root, x, y, NullObj, exp_sqwks3);
+new CAnimation(Root, x, y, NullObj, exp_sqwks4);
+}
+//------FIRE-PELLET-------------------------------------------------------------
+if(weap->CheckName("Fire Pellet"))
+{
+exp_frplt->turns = 1;
+exp_frplt->sprite = 80; 
+exp_frplt->speed = 90;
+exp_frplt->scale = 1.75;
+exp_frplt->duration = 1;
+exp_frplt->ZPlane = 6;
+exp_frplt->backwards = false;
+exp_frplt->once = true;
+exp_frplt->color = ARGB(35,255,175,0);
+exp_frplt->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_frplt);
+}
+//------MINI-TORCH--------------------------------------------------------------
+if(weap->CheckName("Torch Flame"))
+{
+exp_torch->turns = 1;
+exp_torch->sprite = 80; 
+exp_torch->speed = 150;
+exp_torch->scale = 1.45;
+exp_torch->duration = 1;
+exp_torch->ZPlane = 6;
+exp_torch->backwards = false;
+exp_torch->once = true;
+exp_torch->color = ARGB(20,255,120,0);
+exp_torch->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_torch);
+}
+}

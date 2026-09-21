@@ -1,0 +1,37 @@
+require utils;
+
+int teleportrange;
+
+void teleport_restrictor::Init()
+{
+  teleportrange = 300;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{                          
+     if(type == M_FRAME && teleportrange != 0)
+     {     
+          local cw = GetCurrentWorm();
+          
+          if(cw != NullObj)
+          {
+               if(cw->CurWeapon->CheckName("Teleport") ||
+				  cw->CurWeapon->CheckName("Super Tele"))
+               {
+                    local dx = cw->PosX - GS->landSelectX;
+                    local dy = cw->PosY - GS->landSelectY;
+                                                                                
+                    local distance = sqrt(dx * dx + dy * dy);                    
+                    
+                    if (distance > teleportrange)
+                       {
+                       local angle = atan2(dx, dy);                       
+                       GS->landSelectX = cw->PosX - teleportrange * sin(angle);
+                       GS->landSelectY = cw->PosY - teleportrange * cos(angle);
+                       }                                                  
+               }    
+          }
+     }
+     
+     super;
+}

@@ -1,0 +1,48 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a kill/death-counter to the game (can be used for statistical GUI's)
+
+float kd_counts[6];
+bool kd_update_now;
+
+void KD_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          kd_counts[i] = 0.00;
+     }
+     
+     kd_update_now = false;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{  
+     if(kd_update_now)
+     {
+          for(local i = 0; i <= 5; i++)
+          {
+               if(death_counts[i] != 0)
+               {
+                    kd_counts[i] = kill_counts[i] / death_counts[i];
+               }
+          } 
+          
+          kd_update_now = false;
+     }
+  
+     super;
+}
+
+override void CWorm::SetState(EObjState State)
+{
+     if(State == WS_DEAD)
+     { 
+          kd_update_now = true;
+     }
+     
+     super;
+}

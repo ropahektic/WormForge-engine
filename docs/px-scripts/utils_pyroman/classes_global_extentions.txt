@@ -1,0 +1,94 @@
+// by PyroMan
+
+fixed FireX[50];
+fixed FireY[50];
+CFire *Fire[50];
+bool FireCheck[50];
+bool FireReading;
+
+void classes_global_extentions::Init()
+{
+    FireReading = false;
+}
+
+override void CFire::AddSprite(fixed z,fixed x,fixed y,int unk,int sprite,fixed frame)
+{
+    super;
+    if (!FireReading) return;
+    local check;
+    for (local i = 0; i < 50; i++)
+    {
+      if (!FireCheck[i]) return;
+      if (Fire[i] == NullObj && check)
+      {  
+        Fire[i] = this;
+        FireX[i] = x;
+        FireY[i] = y;
+        check = false;
+        FireCheck[i] = false;
+        break;
+      } else {
+        if (Fire[i] == this)
+        {
+           FireX[i] = x;
+           FireY[i] = y;
+           FireCheck[i] = false;
+//           GG->WriteToChat( 1, ItoA(gframe), false);
+           break;
+        }
+      }
+    }
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (!FireReading) return;
+    if (Type == M_FRAME)
+    {
+        if (gframe % 1) {}
+        else {
+           for (local i = 0; i < 50; i++)
+           {
+              FireCheck[i] = true;
+           }
+        }
+    }
+}
+
+// rebuild weap panel when adding weaps through SetWeaponEx function
+override void CGameInfo::SetWeaponEx(int Color,int Weapon,int Page,int Count)
+{
+    super;
+    local icon = GS->GetWeaponIcon( Page, Weapon);
+    GS->SetWeaponIcon( Page, Weapon, icon);
+}
+
+override int CGameInfo::AddWeaponEx(int Color,int Weapon,int Page,int Count)
+{
+    super;
+    local icon = GS->GetWeaponIcon( Page, Weapon);
+    GS->SetWeaponIcon( Page, Weapon, icon);      
+}  
+
+override void CGameInfo::AddWeapon(int Team,int Weapon,int Count)
+{
+    super;
+
+    local Weap = GS->GetWeaponByIndex(Weapon);
+    if (Weap != NullObj)
+		{
+        local Page = Weap->GetPageIndex();
+        if(Page != NullObj)
+			{
+            local icon = GS->GetWeaponIcon( Page, Weapon);
+            GS->SetWeaponIcon( Page, Weapon, icon);
+            }
+    	}
+    /*
+    local Weap = GS->GetWeaponByIndex(Weapon);
+    local Page = Weap->GetPageIndex();
+    local icon = GS->GetWeaponIcon( Page, Weapon);
+    GS->SetWeaponIcon( Page, Weapon, icon);
+    */
+}

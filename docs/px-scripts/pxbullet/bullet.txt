@@ -1,0 +1,136 @@
+
+require utils, pxparticles;
+
+PxBulletDesc::PxBulletDesc()
+{
+	Damage = 10;
+	Push = 2;
+	Count = 1;
+	Spread = 0.0;
+	Flags = 4332670;
+	Team = 0;
+}
+
+void FireBullets(CObject *parent, CShootDesc *sdesc, PxBulletDesc *bdesc)
+{
+	float ang = atan2(sdesc->SpY, sdesc->SpX);
+	float radiusSqr = bdesc->Damage * bdesc->Damage;
+	float spread = bdesc->Spread;
+	
+	int hitX;
+	int hitY;
+	CGObject *hitObject;
+	int holeSize = bdesc->Damage;
+	
+	if(holeSize < 5) holeSize = 5;
+	
+	for(int i=0 ; i < bdesc->Count ; i+=1)
+	{
+		float a;
+		if(spread == 0.0) 	a = ang;
+		else				a = ang + spread * RandomFloat(-1.0, 1.0);
+		
+		float dirX = cos(a);
+		float dirY = sin(a);
+		
+		float endX = sdesc->X + dirX * 10000.0;
+		float endY = sdesc->Y + dirY * 10000.0;
+		hitObject = TraceLine(parent, sdesc->X, sdesc->Y, endX, endY, bdesc->Flags, &hitX, &hitY);
+		
+		if(hitObject != NullObj)
+		{
+			GG->land->MakeHole(holeSize, hitX, hitY);
+			
+			// Hit effect
+			PxParticle *p;
+			
+			if(hitObject->ClType == OC_Worm)
+			{
+				p = new PxParticle(118, hitX, hitY);
+				p->SetVelocity(0, 1);
+			}
+			else
+			{
+				p = new PxParticle(116, hitX, hitY);
+				p->SetVelocity(0, 0);
+			}
+			p->SetLifeTime(30);
+			p->GravityFactor(0);
+			p->SetAlpha(255);
+			p->SetSize(1, 1);
+			p->SetColor(255,255,255);
+			
+			for(int j=0 ; j<5 ; j+=1)
+			{
+				p = new PxParticle(131, hitX, hitY);
+				p->SetLifeTime(50);
+				p->SetRandomVelocity(2.0, 3.5);
+				p->GravityFactor(-3);
+				p->SetAirResistance(0.2);
+				p->SetAlpha(255);
+				p->SetSize(0.5, 0.5);
+				p->SetColor(255,255,255);
+				p->SetMotionRandomness(1.0);
+			}
+			
+			// Custom damage falloff
+			CMessageData msg;
+			
+			for(i = 0; i < Env->Objs.Count; i += 1)
+			{
+				obj = CGObject(Env->Objs.Objs[i]);
+				if(obj == NullObj) continue;
+				if(obj->ClType == OC_Landscape) continue;
+				
+				float dx = obj->PosX - hitX;
+				float dy = obj->PosY - hitY;
+				float dsqr = dx*dx+dy*dy;
+				
+				if(obj == hitObject || dsqr <= radiusSqr)
+				{
+					float fraction;
+					
+					if(obj == hitObject)
+					{
+						fraction = 1.0;
+					}
+					else
+					{
+						fraction = 1.0 - dsqr / (3*radiusSqr);
+						if(fraction > 1.0) fraction = 1.0;
+					}
+					
+					float dmg = fraction * bdesc->Damage;
+					float force = fraction * bdesc->Push;
+					
+					if(dmg > 0)
+					{
+						float fX;
+						float fY;
+						
+						if(dsqr == 0)
+						{
+							fX = dirX;
+							fY = dirY;
+						}
+						else
+						{
+							float d = sqrt(dsqr);
+							fX = dx/d;
+							fY = dy/d;
+						}
+						
+						msg.params[0]	= 3;
+						msg.fparams[1]	= hitX;
+						msg.fparams[2]	= hitY;
+						msg.fparams[3]	= force * fX;
+						msg.fparams[4]	= force * fY;
+						msg.params[5]	= dmg;
+						msg.params[6]	= bdesc->Team;
+						obj->Message(parent, M_GUNEXP, 1032, &msg);
+					}
+				}
+			}
+		}
+	}
+}

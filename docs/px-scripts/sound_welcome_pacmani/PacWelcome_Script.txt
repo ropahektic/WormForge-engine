@@ -1,0 +1,27 @@
+require utils;
+
+bool        PacWelcome_sayWelcome;
+CSoundFile* PacWelcome_soundWelcome;
+
+void PacWelcome_Script::FirstFrame()
+{
+    PacWelcome_sayWelcome = true;
+}
+
+void PacWelcome_Script::InitGraphic()
+{
+    CFile* file;
+    file = GetAttachment("PacWelcome_soundWelcome.wav");
+    PacWelcome_soundWelcome = new CSoundFile(file);
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+    local worm = GetCurrentWorm();
+    if (Type == M_FRAME && PacWelcome_sayWelcome && worm != NullObj && GS->Tick > 10)
+    {                                                  
+        PacWelcome_sayWelcome = false;
+        PacWelcome_soundWelcome->Play(1.0, 0, true);
+    }
+    super;
+}

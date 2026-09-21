@@ -1,0 +1,152 @@
+require utils;
+
+CSoundFile* sound01;
+CSoundFile* sound02;
+CSoundFile* sound03;
+CSoundFile* sound04;
+CSoundFile* sound05;
+CSoundFile* sound06;
+CSoundFile* sound07;
+CSoundFile* sound08;
+CSoundFile* sound09;
+CSoundFile* sound10;
+CSoundFile* sound11;
+CSoundFile* sound12;
+CSoundFile* sound13;
+CSoundFile* sound14;
+CSoundFile* sound15;
+CSoundFile* sound16;
+
+
+
+void script_crazysounds::Init()
+{
+    keySync->AddKey(96); // 0
+    keySync->AddKey(97); // 1
+    keySync->AddKey(98); // 2
+    keySync->AddKey(99); // 3
+    keySync->AddKey(100); // 4
+    keySync->AddKey(101); // 5
+    keySync->AddKey(102); // 6
+    keySync->AddKey(103); // 7
+    keySync->AddKey(104); // 8
+    keySync->AddKey(105); // 9
+    keySync->AddKey(106); // *
+    keySync->AddKey(107); // +
+    keySync->AddKey(109); // -
+    keySync->AddKey(110); // .
+    keySync->AddKey(111); // /
+    
+    
+    CFile *f;
+    f = GetAttachment("aaah.wav");	sound01 = new CSoundFile(f);
+    f = GetAttachment("airhorn.wav");     sound02 = new CSoundFile(f);
+    f = GetAttachment("bikehorn.wav");        	sound03 = new CSoundFile(f);
+    f = GetAttachment("canshoot.wav");	        sound04 = new CSoundFile(f);
+    f = GetAttachment("dance.wav");          sound05 = new CSoundFile(f);
+    f = GetAttachment("dumbndumber.wav");           sound06 = new CSoundFile(f);
+    f = GetAttachment("cantgtup.wav");        sound07 = new CSoundFile(f);
+    f = GetAttachment("jaw_harp.wav");	        sound08 = new CSoundFile(f);
+    f = GetAttachment("laugh_x.wav");	sound09 = new CSoundFile(f);
+    f = GetAttachment("sucks.wav");	sound10 = new CSoundFile(f);
+    f = GetAttachment("nonono.wav");	sound11 = new CSoundFile(f);
+    f = GetAttachment("oh.wav");	        sound12 = new CSoundFile(f);
+    f = GetAttachment("penclick.wav");	sound13 = new CSoundFile(f);    
+    f = GetAttachment("wasp.wav");	        sound14 = new CSoundFile(f);
+    f = GetAttachment("arnie.wav");	sound15 = new CSoundFile(f);    
+    f = GetAttachment("smokin.wav");	sound16 = new CSoundFile(f);    
+
+    int randomsound;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{            
+    if (Weap->CheckName("Crazy Sounds"))
+    {
+        if (keySync->KeyPressed(96))
+        {
+            sound01->Play(1.2, 0.0, false);
+            ShowMessage("Can't believe you done that to me!"); 
+        }
+        else if (keySync->KeyPressed(97))
+        {
+            sound02->Play(1.2, 0.0, false);
+            ShowMessage("How annoying is that!"); 
+        }
+        
+        else if (keySync->KeyPressed(98))
+        {
+            sound03->Play(1.2, 0.0, false);
+            ShowMessage("Get the HONK outta my way :p"); 
+        }
+        
+        else if (keySync->KeyPressed(99))
+        {
+            sound04->Play(1.2, 0.0, false);
+            ShowMessage("Told you not to do that to me!"); 
+        }
+        else if (keySync->KeyPressed(100))
+        {
+            sound05->Play(1.2, 0.0, false);
+            ShowMessage("Ittts get cocky time!"); 
+        }
+        else if (keySync->KeyPressed(101))
+        {
+            sound06->Play(1.2, 0.0, false);
+            ShowMessage("Whoops!"); 
+        }
+        else if (keySync->KeyPressed(102))
+        {
+            sound07->Play(1.2, 0.0, false);
+            ShowMessage("What a mess!"); 
+        }
+        else if (keySync->KeyPressed(103))
+        {
+            sound08->Play(1.2, 0.0, false);
+            ShowMessage("Boing Poing all of it!"); 
+        }
+        else if (keySync->KeyPressed(104))
+        {
+            sound09->Play(1.2, 0.0, false);
+            ShowMessage("Evil laugh *ha ha*"); 
+        }
+        else if (keySync->KeyPressed(105))
+        {
+            sound10->Play(1.2, 0.0, false);
+            ShowMessage("Come on man..make it quick"); 
+        }
+        else if (keySync->KeyPressed(106))
+        {
+            sound11->Play(1.2, 0.0, false);
+            ShowMessage("NOOOOOOOOOOO");
+        }
+        else if (keySync->KeyPressed(107))
+        {
+            sound12->Play(1.2, 0.0, false);
+            ShowMessage("Sooo close!"); 
+        }
+        else if (keySync->KeyPressed(108))
+        {
+            sound13->Play(1.2, 0.0, false);
+            ShowMessage("Pen Pusher :p");
+        }
+        else if (keySync->KeyPressed(109))
+        {
+            sound14->Play(1.2, 0.0, false);
+            ShowMessage("Buzz off will you!");
+        }
+        else if (keySync->KeyPressed(110))
+        {
+            sound15->Play(1.2, 0.0, false);
+            ShowMessage("Hell yeah!");
+        }
+        else if (keySync->KeyPressed(111))
+        {
+            sound16->Play(1.2, 0.0, false);
+            ShowMessage("That what you get for messing with me!!");
+        }
+        
+    }
+    
+    else super;
+}

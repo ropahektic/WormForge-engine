@@ -1,0 +1,39 @@
+require utils;
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		if (CurWeapon->CheckName("Ghost Grenade"))
+		{
+			local Team = CTeam(GetObject(21, WormTeam));
+			Team->AllowSelectBounce = false;
+			Team->AllowSelectDelay = false;
+                }
+         }
+super;         
+}                
+
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_TURNEND && GG->land->Undestructable == true)
+     {
+     GG->land->Undestructable = false;        
+     }
+super;     
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{ 
+  if(Weap->CheckName("Ghost Grenade"))
+  {  
+     if(GG->land->Undestructable == false)
+        {
+        GG->land->Undestructable = true;        
+        }                    
+  } 
+  super;
+}

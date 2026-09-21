@@ -1,0 +1,43 @@
+
+float CalculateSoundPan(fixed posx, fixed posy)
+{
+	float dx = posx - GS->ActCameraX;
+	float pan;
+	
+	pan = dx * 0.0001;
+	if(pan < -1.0) pan = -1.0;
+	if(pan > 1.0) pan = 1.0;
+	
+	return pan;
+}
+
+float CalculateSoundVolume(fixed posx, fixed posy)
+{
+	float dx = posx - GS->ActCameraX;
+	float dy = posy - GS->ActCameraY;
+	
+	if(dx < 0) dx = -dx;
+	if(dy < 0) dy = -dy;
+	
+	float d = dx + dy; // crude distance, we don't really need that much accuracy right?
+	
+	if(d > 1000)
+	{
+		r = 1.0 - ((d - 1000) / 2000);
+		if(r < 0.0) r = 0.0;
+		
+		return r;
+	}
+	else
+		return 1.0;
+}
+
+CSound *PlaySoundAtPos(CSoundFile *file, fixed posx, fixed posy, float basevol, bool loop)
+{
+	return file->Play(CalculateSoundVolume(posx, posy) * basevol, CalculateSoundPan(posx, posy), loop);
+}
+
+void UpdateSoundPos(CSound *sound, fixed posx, fixed posy, float basevol)
+{
+	sound->Update(CalculateSoundVolume(posx, posy) * basevol, CalculateSoundPan(posx, posy));
+}

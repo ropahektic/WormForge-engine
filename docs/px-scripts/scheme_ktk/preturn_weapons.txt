@@ -1,0 +1,41 @@
+require utils, map_object_ktk_control;
+
+bool delayCC;
+bool more_than_30_sec;
+
+override void CWorm::Message(CObject* obj,EMType Type,int MSize,CMessageData* MData)
+{
+local w = GetCurrentWorm();
+
+if(w != NullObj)
+	{
+	local team_number = GetTeamNumber(w->WormTeam);
+
+    local CC = GetWeaponByName("Crate Collector");
+
+	if(Type == M_TURNEND && more_than_30_sec == true)
+		{
+	    GS->Info.SetWeaponDelay(team_number, CC->GetWeaponIndex(), CC->GetPageIndex(), 0 );
+		}
+
+    if(Type == M_FRAME)
+	    {
+		if(delayCC == true)
+	    	{
+	        GS->Info.SetWeaponDelay(team_number, CC->GetWeaponIndex(), CC->GetPageIndex(), -1 );
+	        delayCC = false;
+			}
+    	}
+	}
+super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+if (Weap->CheckName("Crate Collector"))
+	{
+	delayCC = true;
+  	}
+super;
+}

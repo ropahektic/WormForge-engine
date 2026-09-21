@@ -1,0 +1,17 @@
+require utils;
+
+CSoundFile* themummy;
+ 
+void scarabs_sound::Init()
+{
+	themummy       = new CSoundFile(GetAttachment("The Mummy Theme.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Mummy Scarabs"))
+  {  
+             themummy->Play(0.6, 0.0, false);
+  }
+  super;
+}

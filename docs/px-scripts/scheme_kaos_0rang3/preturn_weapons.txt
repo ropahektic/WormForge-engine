@@ -1,0 +1,22 @@
+require utils;
+
+override void CWorm::Message(CObject* obj,EMType Type,int MSize,CMessageData* MData)
+{
+local w = GetCurrentWorm();
+if(w != NullObj)
+	{
+	local team_number = GetTeamNumber(w->WormTeam);
+	
+    local wc = GetWeaponByName("Wind Changer");
+    local hab = GetWeaponByName("Hot Air Balloon");
+    local wep = GetWeaponByName("Weapon Crate");
+	
+	if(Type == M_TURNEND || Root->Timer == 0)
+	    {
+        GS->Info.SetWeaponEx(team_number, wc->GetWeaponIndex(), wc->GetPageIndex(), 1);
+        GS->Info.SetWeaponEx(team_number, hab->GetWeaponIndex(), hab->GetPageIndex(), 3);
+        GS->Info.SetWeaponEx(team_number, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);
+		}
+	}
+super;
+}

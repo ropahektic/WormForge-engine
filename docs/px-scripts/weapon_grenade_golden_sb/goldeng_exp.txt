@@ -1,0 +1,75 @@
+
+CAnimationParams* exp_goldg1;
+CAnimationParams* exp_goldg2;
+CAnimationParams* exp_goldg3;
+CAnimationParams* exp_goldg4;
+
+void goldeng_exp::FirstFrame()
+{
+exp_goldg1 = new CAnimationParams;
+exp_goldg2 = new CAnimationParams;
+exp_goldg3 = new CAnimationParams;
+exp_goldg4 = new CAnimationParams;
+}
+
+//------------------------EXPLOSION-ANIMATIONS----------------------------------
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+super;
+
+//------GOLDEN-GRENADE----------------------------------------------------------
+if (weap->CheckName("Golden Grenade "))
+{
+exp_goldg1->turns = 1;
+exp_goldg1->sprite = 605;
+exp_goldg1->speed = 65;
+exp_goldg1->scale = 1.45;
+exp_goldg1->duration = 1;
+exp_goldg1->ZPlane = 6;
+exp_goldg1->backwards = false;
+exp_goldg1->once = true;
+exp_goldg1->color = ARGB(2,255,255,255);
+exp_goldg1->blend_type = 6;
+
+exp_goldg2->turns = 1;
+exp_goldg2->sprite = 605;
+exp_goldg2->rot = 180;
+exp_goldg2->speed = 65;
+exp_goldg2->scale = 1.45;
+exp_goldg2->duration = 1;
+exp_goldg2->ZPlane = 6;
+exp_goldg2->backwards = false;
+exp_goldg2->once = true;
+exp_goldg2->color = ARGB(2,255,255,255);
+exp_goldg2->blend_type = 6;
+
+exp_goldg3->turns = 1;
+exp_goldg3->sprite = 605;
+exp_goldg3->rot = 90;
+exp_goldg3->speed = 65;
+exp_goldg3->scale = 1.45;
+exp_goldg3->duration = 1;
+exp_goldg3->ZPlane = 6;
+exp_goldg3->backwards = false;
+exp_goldg3->once = true;
+exp_goldg3->color = ARGB(30,255,200,0);
+exp_goldg3->blend_type = 6;
+
+exp_goldg4->turns = 1;
+exp_goldg4->sprite = 605;
+exp_goldg4->rot = -90;
+exp_goldg4->speed = 65;
+exp_goldg4->scale = 1.45;
+exp_goldg4->duration = 1;
+exp_goldg4->ZPlane = 6;
+exp_goldg4->backwards = false;
+exp_goldg4->once = true;
+exp_goldg4->color = ARGB(30,255,200,0);
+exp_goldg4->blend_type = 6;
+
+new CAnimation(Root, x, y, NullObj, exp_goldg1);
+new CAnimation(Root, x, y, NullObj, exp_goldg2);
+new CAnimation(Root, x, y, NullObj, exp_goldg3);
+new CAnimation(Root, x, y, NullObj, exp_goldg4);
+}
+}

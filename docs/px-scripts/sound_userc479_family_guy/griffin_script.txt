@@ -1,0 +1,152 @@
+require utils;
+
+CSoundFile* stewiesound01;
+CSoundFile* stewiesound02;
+CSoundFile* stewiesound03;
+CSoundFile* stewiesound04;
+CSoundFile* stewiesound05;
+CSoundFile* stewiesound06;
+CSoundFile* stewiesound07;
+CSoundFile* stewiesound08;
+CSoundFile* stewiesound09;
+CSoundFile* stewiesound10;
+CSoundFile* stewiesound11;
+CSoundFile* stewiesound12;
+CSoundFile* stewiesound13;
+CSoundFile* stewiesound14;
+CSoundFile* stewiesound15;
+CSoundFile* stewiesound16;
+
+
+
+void griffin_script::Init()
+{
+    keySync->AddKey(96); // 0
+    keySync->AddKey(97); // 1
+    keySync->AddKey(98); // 2
+    keySync->AddKey(99); // 3
+    keySync->AddKey(100); // 4
+    keySync->AddKey(101); // 5
+    keySync->AddKey(102); // 6
+    keySync->AddKey(103); // 7
+    keySync->AddKey(104); // 8
+    keySync->AddKey(105); // 9
+    keySync->AddKey(106); // *
+    keySync->AddKey(107); // +
+    keySync->AddKey(109); // -
+    keySync->AddKey(110); // .
+    keySync->AddKey(111); // /
+    
+    
+    CFile *f;
+    f = GetAttachment("allislost.wav");	stewiesound01 = new CSoundFile(f);
+    f = GetAttachment("doormat.wav");     stewiesound02 = new CSoundFile(f);
+    f = GetAttachment("dreamkiller.wav");        	stewiesound03 = new CSoundFile(f);
+    f = GetAttachment("gameon.wav");	        stewiesound04 = new CSoundFile(f);
+    f = GetAttachment("gruesome.wav");          stewiesound05 = new CSoundFile(f);
+    f = GetAttachment("jackpot.wav");           stewiesound06 = new CSoundFile(f);
+    f = GetAttachment("pardon.wav");        stewiesound07 = new CSoundFile(f);
+    f = GetAttachment("science.wav");	        stewiesound08 = new CSoundFile(f);
+    f = GetAttachment("sneaky.wav");	stewiesound09 = new CSoundFile(f);
+    f = GetAttachment("startin.wav");	stewiesound10 = new CSoundFile(f);
+    f = GetAttachment("story.wav");	stewiesound11 = new CSoundFile(f);
+    f = GetAttachment("sure.wav");	        stewiesound12 = new CSoundFile(f);
+    f = GetAttachment("therapy.wav");	stewiesound13 = new CSoundFile(f);    
+    f = GetAttachment("ugly.wav");	        stewiesound14 = new CSoundFile(f);
+    f = GetAttachment("whatthehell.wav");	stewiesound15 = new CSoundFile(f);    
+    f = GetAttachment("question.wav");	stewiesound16 = new CSoundFile(f);    
+
+    int randomsound;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{            
+    if (Weap->CheckName("Griffins Sounds"))
+    {
+        if (keySync->KeyPressed(96))
+        {
+            stewiesound01->Play(1.2, 0.0, false);
+            ShowMessage("MEH..I'm fucked"); 
+        }
+        else if (keySync->KeyPressed(97))
+        {
+            stewiesound02->Play(1.2, 0.0, false);
+            ShowMessage("Stop walking over me!"); 
+        }
+        
+        else if (keySync->KeyPressed(98))
+        {
+            stewiesound03->Play(1.2, 0.0, false);
+            ShowMessage("Nooo - I had plans!"); 
+        }
+        
+        else if (keySync->KeyPressed(99))
+        {
+            stewiesound04->Play(1.2, 0.0, false);
+            ShowMessage("GAME ON!"); 
+        }
+        else if (keySync->KeyPressed(100))
+        {
+            stewiesound05->Play(1.2, 0.0, false);
+            ShowMessage("Ewwwww"); 
+        }
+        else if (keySync->KeyPressed(101))
+        {
+            stewiesound06->Play(1.2, 0.0, false);
+            ShowMessage("OHHHH Yeah!!!!"); 
+        }
+        else if (keySync->KeyPressed(102))
+        {
+            stewiesound07->Play(1.2, 0.0, false);
+            ShowMessage("What did you just say?"); 
+        }
+        else if (keySync->KeyPressed(103))
+        {
+            stewiesound08->Play(1.2, 0.0, false);
+            ShowMessage("HA! Beat that :p"); 
+        }
+        else if (keySync->KeyPressed(104))
+        {
+            stewiesound09->Play(1.2, 0.0, false);
+            ShowMessage("Sneaky!"); 
+        }
+        else if (keySync->KeyPressed(105))
+        {
+            stewiesound10->Play(1.2, 0.0, false);
+            ShowMessage("Lmao!"); 
+        }
+        else if (keySync->KeyPressed(106))
+        {
+            stewiesound11->Play(1.2, 0.0, false);
+            ShowMessage("Dood...just let me finish you!");
+        }
+        else if (keySync->KeyPressed(107))
+        {
+            stewiesound12->Play(1.2, 0.0, false);
+            ShowMessage("Hummm hummm"); 
+        }
+        else if (keySync->KeyPressed(108))
+        {
+            stewiesound13->Play(1.2, 0.0, false);
+            ShowMessage("Therapy for those epic turns!");
+        }
+        else if (keySync->KeyPressed(109))
+        {
+            stewiesound14->Play(1.2, 0.0, false);
+            ShowMessage("Ha ha - typical!");
+        }
+        else if (keySync->KeyPressed(110))
+        {
+            stewiesound15->Play(1.2, 0.0, false);
+            ShowMessage("What the F**K!");
+        }
+        else if (keySync->KeyPressed(111))
+        {
+            stewiesound16->Play(1.2, 0.0, false);
+            ShowMessage("Gonna ask you that again :p");
+        }
+        
+    }
+    
+    else super;
+}

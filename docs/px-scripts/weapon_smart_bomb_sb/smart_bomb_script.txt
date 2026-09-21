@@ -1,0 +1,103 @@
+require utils, p_sprite_builder, sprite_curtis_250, sprite_curtis_458;
+
+CSprite* smartb_aiming;
+CSprite* smartb_bullet;
+
+void smart_bomb_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("spb_smartb.png");
+    smartb_aiming = LoadSprite(f, 8, 0);
+    f = GetAttachment("smartb.png");
+    smartb_bullet = LoadSprite(f, 11, 0);
+}
+
+//---------------------------------S.M.A.R.T BOMB-----------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "S.M.A.R.T Bomb";
+     sprite = smartb_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0 ;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 1.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 0.0;
+     Params->animate = true;
+     Params->anim_speed = 1.20;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("S.M.A.R.T Bomb")) {
+         if (smartba_anim) {
+              local sprite = smartb_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.50;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              smartba_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  smartba_anim = true;
+}
+
+//---------------------------------S.M.A.R.T.E.R BOMB-------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "S.M.A.R.T.E.R Bomb";
+     sprite = smartb_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0 ;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 1.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 0.0;
+     Params->animate = true;
+     Params->anim_speed = 1.20;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("S.M.A.R.T.E.R Bomb")) {
+         if (smarterba_anim) {
+              local sprite = smartb_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.50;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              smarterba_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  smarterba_anim = true;
+}

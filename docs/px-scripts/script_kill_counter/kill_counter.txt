@@ -1,0 +1,136 @@
+require utils, utils_steps, pxparticles;
+
+CWorm* ShootingOne;
+CWorm* KilledOne;
+
+CSprite* kill1;
+CSprite* kill2;
+CSprite* kill3;
+CSprite* kill4;
+CSprite* kill5;
+CSprite* kill6;
+CSprite* kill7;
+CSprite* kill8;
+CSprite* kill9;
+CSprite* kill0;
+
+CSprite* kill_glow_sprite;
+
+void kill_counter::FirstFrame()
+{
+}
+
+void kill_counter::InitGraphic()
+{
+CFile* f;
+    f = GetAttachment("1.png");
+    kill1 = LoadSprite(f, 1, 0);
+    f = GetAttachment("2.png");
+    kill2 = LoadSprite(f, 1, 0);
+    f = GetAttachment("3.png");
+    kill3 = LoadSprite(f, 1, 0);
+    f = GetAttachment("4.png");
+    kill4 = LoadSprite(f, 1, 0);
+    f = GetAttachment("5.png");
+    kill5 = LoadSprite(f, 1, 0);
+    f = GetAttachment("6.png");
+    kill6 = LoadSprite(f, 1, 0);
+    f = GetAttachment("7.png");
+    kill7 = LoadSprite(f, 1, 0);
+    f = GetAttachment("8.png");
+    kill8 = LoadSprite(f, 1, 0);
+    f = GetAttachment("9.png");
+    kill9 = LoadSprite(f, 1, 0);
+    f = GetAttachment("0.png");
+    kill0 = LoadSprite(f, 1, 0);
+    
+    f = GetAttachment("kill_glow.png");
+    kill_glow_sprite = LoadSprite(f, 1, 0);
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    kills = 0;
+    gaveKill = false;
+    killed = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+        local w = GetCurrentWorm();
+        if (w != NullObj) ShootingOne = CWorm(w);
+    }
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if (Type == M_FRAME)
+    	{
+       	if (ShootingOne != this)
+       		{
+       		if(GS->Info.GetWormHealth(WormTeam, WormNumber) == 0 && killed == false)
+            	{
+            	KilledOne = CWorm(this);
+            	killed = true;
+            	}
+       
+           	local hp_my_now = GS->Info.GetWormHealth(WormTeam, WormNumber);
+           	if (hp_my_now <= 0 && ShootingOne != NullObj && !gaveKill) //&& KilledOne != NullObj
+		   		{
+				ShootingOne->kills = ShootingOne->kills + 1 + KilledOne->kills;
+				DoSpark(25);
+				gaveKill = true;
+				}
+           	else if (hp_my_now > 0) gaveKill = false;
+       		}
+    	}
+    
+    if (Type == M_DRAWQUEUE)
+    	{
+    	local x = 15;
+        local y = 10;
+        local scale = 0.75;
+        
+        if (kills == 1) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill1->Index, 0, 0.0, scale);
+        else if (kills == 2) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill2->Index, 0, 0.0, scale);
+        else if (kills == 3) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill3->Index, 0, 0.0, scale);
+        else if (kills == 4) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill4->Index, 0, 0.0, scale);
+        else if (kills == 5) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill5->Index, 0, 0.0, scale);
+        else if (kills == 6) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill6->Index, 0, 0.0, scale);
+        else if (kills == 7) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill7->Index, 0, 0.0, scale);
+        else if (kills == 8) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill8->Index, 0, 0.0, scale);
+        else if (kills == 9) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill9->Index, 0, 0.0, scale);
+        else if (kills > 9) AddSpriteEx( 5, PosX-(x*TurnSide), PosY-y, kill0->Index, 0, 0.0, scale);
+    	}
+    super;
+}
+
+void CWorm::DoSpark(int k)
+{
+    for(int i=0 ; i<k ; i += 1)
+	{
+		p = new PxParticle(kill_glow_sprite->Index, ShootingOne->PosX, ShootingOne->PosY);
+
+        p->SetAngle( 1.23);
+        p->SetAngleSpeed( 25.0);
+        p->SetLifeTime(40);
+		p->GravityFactor(0.25);
+		p->SetRandomVelocity(1.5, 3.8);
+		p->SetAirResistance(0.05);
+		p->SetAlpha(180);
+		s = RandomFloat(0.2,0.4);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.005, 0.005);
+		p->SetBlendMode(1);
+
+		s = RandomInt(0, 50);
+		p->SetStartColor(255,255 - s,0);
+		p->SetEndColor(255,80 - s,0);
+
+		p->SetMotionRandomness(0.2);
+	}
+}

@@ -1,0 +1,3556 @@
+require utils, map_object_respawn, weapon_bowlingball, utility_fan, weapon_magnet, script_trueshopping, map_object_user_heli_race_media;
+
+#TRAPS
+// Upgrated by PyroMan.
+
+$editor
+
+ $object CustomLibTask
+  $origin -15 -15
+  $image "state_ch_ico.png"
+  $func SpawnCustomLibTask
+  $radius 17
+  $param ObjTask int 17
+  $param MakeOnce bool false
+  $param EachNFrames int 5
+  $param WeapGravity int 100
+  $param ProximityZone objectt Zone
+ $object_end
+
+ $object Spriterz
+  $origin -13 -15
+  $image "edspritez.png"
+  $func AddSpriterz
+  $param SpriteName string "No Sprite"
+  $param Lock_X_axis bool false
+  $param Lock_Y_axis bool false
+  $param MoveToWorm bool false
+  $param FrameNum int 1
+  $param AnimSpeed int 100
+  $param ZPlane int 5
+  $param PlayOnce bool false
+  $param PlayBackwards bool false
+  $param ProximityZone objectt Zone
+  $radius 17
+ $object_end
+
+ $object WA_Spriter
+  $origin -13 -15
+  $image "edspritez_wa.png"
+  $func AddWA_Spriter
+  $param SpriteNum int 135
+  $param AnimSpeed int 15
+  $param ZPlane int 5
+  $param RotationAngle int 0
+  $param Scale int 100
+  $param PlayOnce bool false
+  $param PlayBackwards bool false
+  $param PlayWaSound int 0
+  $param ProximityZone objectt Zone
+  $radius 17
+ $object_end
+
+ $object Spriter_1by1
+  $origin -13 -15
+  $image "edspritez_wa.png"
+  $autoname Spr_1by1_
+  $func AddSpriter_1by1
+  $param SpriteNum int 135
+  $param AnimSpeed int 15
+  $param ZPlane int 5
+  $param RotationAngle int 0
+  $param Scale int 100
+  $param PlayOnce bool false
+  $param PlayBackwards bool false
+  $param PlayWaSound int 0
+  $param Order int 0
+  $param ProximityZone objectt Zone
+  $radius 17
+ $object_end
+
+ $object Tail
+  $origin -13 -15
+  $image "edspritez_tail.png"
+  $func AddTail
+  $param SpriteNum int 135
+  $param AttachToWorm bool false
+  $param SNumToAttach int 64
+  $param AnimSpeed int 15
+  $param ZPlane int 5
+  $param ProximityZone objectt Zone
+  $radius 17
+ $object_end
+
+ $editor
+ $object CrateSupplyZ
+  $origin -15 -15
+  $image "eddrumz.png"
+  $func SpawnCrateSupplyZ
+  $radius 17
+  $param CrateType enum 3 Health Weapon OilDrum
+  $param Health int 50
+  $param CreateAtGStart bool false
+  $param ClearEachTurn bool false
+  $param OilSnap bool false
+  $param ProximityZone objectt Zone
+ $object_end
+
+ $object Trap
+  $origin -15 -15
+  $image "edtrap.png"
+  $func SpawnTrap
+  $radius 17
+  $param Type enum 7 Bazooka Grenades Mortar HomingMissile Mine Firework1 Firework2
+  $param Angle angle 0
+  $param Force int 0
+  $param Spread int 0
+  $param Delay int 1
+  $param ShootDelay int 1
+  $param ShootOnceNOW bool false
+  $param GrenadeTimer int 5000
+  $param ProximityZone objectt Zone
+  $param IsBadSphere bool false
+  $param EndAngle angle 0
+  $param nAngles int 0
+
+  $param MineSensorRadius int 48
+  $param MineDamage int 50
+  $param MineFuse int 1000
+  $param MineRemoveOnTurn bool true
+  $param MineDestroyTimer int 200
+
+ $object_end
+
+ $object Zone
+  $origin -15 -15
+  $image "edzone.png"
+  $radius 17
+  $autoname Zone
+  $func SpawnZone
+  $param Size area 50 50
+  $param ActiveWormOnly bool true
+  $param EachNFrames int 5
+ $object_end
+
+ $object GameControl
+  $origin -15 -15
+  $image "edgcontrol.png"
+  $radius 17
+  $func SpawnGControl
+  $param NoWind bool false
+  $param NoWaiting bool false
+  $param ForceHealth int 0
+  $param EnableRespawn bool false
+  $param RespawnDelay int 0
+  $param Lifes int 1
+  $param MaxHealth int 0
+ $object_end
+
+ $object WormSupply
+  $origin -13 -15
+  $image "edworm.png"
+  $radius 17
+  $func SpawnWormSupply
+  $param ProximityZone objectt Zone
+  $param OffsetXPerWorm int 16;
+ $object_end
+
+ $object WormCheckpoint
+  $origin -13 -15
+  $image "edworm.png"
+  $radius 17
+  $func SpawnWormCheckpoint
+  $param ProximityZone objectt Zone
+  $param Order int 1
+ $object_end
+
+ $object Teleport
+  $origin -15 -15
+  $image "edcross.png"
+  $radius 17
+  $func SpawnTeleport
+  $autoname Tport
+  $param LinkedTo objectt Teleport
+  $param IsToRightSide bool true
+  $param ExitOnly bool false
+  $param TeleportMissiles bool true
+  $param TrapTeleport bool false
+  $param Size area 50 50
+  $param Color color 0 0 0
+  $param HighlightSize int 20
+  $param LandTeleport bool false
+ $object_end
+
+$end
+
+//Sound files here
+
+CSoundFile* goodluck;
+CSoundFile* airplane;
+CSoundFile* sound_wind;
+CSoundFile* sound_nonono;
+CSoundFile* sound_haha;
+CSoundFile* sound_grenade;
+
+
+
+
+void trapsobjs::InitGraphic()
+{
+  local f = GetAttachment("goodluck.wav");
+  goodluck = new CSoundFile(f);
+
+  local f = GetAttachment("airplane.wav");
+  airplane = new CSoundFile(f);
+
+  local f = GetAttachment("wind.wav");
+  sound_wind = new CSoundFile(f);
+
+  local f = GetAttachment("no_no_no.wav");
+  sound_nonono = new CSoundFile(f);
+
+  local f = GetAttachment("haha.wav");
+  sound_haha = new CSoundFile(f);
+
+  local f = GetAttachment("brunomars_grenade.wav");
+  sound_grenade = new CSoundFile(f);
+
+
+}
+
+
+CFilter* gTrapParent;
+bool gNoWaiting;
+
+/*
+void trapsobjs::Init()
+{
+  keySync->AddKey(83); // S button
+  keySync->AddKey(82); // R button
+  keySync->AddKey(89); // Y button
+  keySync->AddKey(33); // PageUp button (close chat)
+  keySync->AddKey(34); // PageDown button (open chat)
+}
+*/
+
+void trapsobjs::InitSMap()
+{  //50 is a random number. Don't look for meaning of life here.
+  filter = new CFilter(Root, 50);
+  filter->ForbidAll();
+  filter->Allow(M_FRAME);
+  filter->Allow(M_DRAWQUEUE);
+
+  gTrapParent = filter;
+
+  gControl = CEGameControl(NullObj);
+};
+
+CTrap : CObject;
+CZone : CObject;
+CEGameControl : CObject;
+CWormSupply : CObject;
+CWormCheckpoint : CObject;
+CMapTeleport : CObject;
+CSpriterz : CObject;
+CWA_Spriter : CObject;
+CTail : CObject;
+CCrateSupplyZ : CObject;
+CCustomLibTask : CObject;
+CSpriter_1by1 : CObject;
+
+CWormCheckpoint* gCheckpoints[54];
+fixed gStartPosX[54];
+fixed gStartPosY[54];
+string gWormNames[54];
+int gAliveWorms[9];
+int spr0;
+int fc[0];
+bool moving;
+CEGameControl* gControl;
+
+
+//CSoundFile* checkpointPassSound;
+CSoundFile* spriteSound;
+
+//void trapsobjs::InitGraphic()
+//{
+//  local f = GetAttachment("checkpoint_pyroman3.wav");
+//  checkpointPassSound = new CSoundFile(f);
+//}
+
+CZone* SearchForZone(string ZName)
+{
+  for (local i = 0; i < gTrapParent->Childs.Count; i += 1)
+  {
+    local obj = CZone(gTrapParent->Childs.Objs[i]);
+    if (obj is CZone)
+    {
+      if (StrCmp(obj->zone_name, ZName))
+      {
+        return obj;
+      };
+    };
+  };
+  return NullObj;
+};
+
+CZone::CZone(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  pr_x1 = aobj->PosX;
+  pr_x2 = aobj->PosX + aobj->GetInt("Size");
+  pr_y1 = aobj->PosY;
+  pr_y2 = aobj->PosY + aobj->GetInt2("Size");
+  AcitveWormOnly = aobj->GetBool("ActiveWormOnly");
+  fps = aobj->GetInt("EachNFrames");
+
+  active = false;
+  activator = CGObject(NullObj);
+  timer = 0;
+  zone_name = StrSave(aobj->GetName());
+};
+
+void CZone::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  timer += 1;
+  if (timer % fps) return;        //performance
+
+  active = false;
+
+  if (AcitveWormOnly)
+  {
+    local obj = GetCurrentWorm();
+    if (obj == NullObj) return;
+    if (pr_x1 < obj->PosX && pr_x2 > obj->PosX)
+    {
+      if (pr_y1 < obj->PosY && pr_y2 > obj->PosY)
+      {
+        active = true;
+        activator = obj;
+      };
+    };
+    return;
+  };
+
+  for (local i = 1; i < Env->Objs.Count; i += 1)
+  {
+    local obj = CWorm(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    if (obj->ClType != OC_Worm) continue;
+
+    if (pr_x1 < obj->PosX && pr_x2 > obj->PosX)
+    {
+      if (pr_y1 < obj->PosY && pr_y2 > obj->PosY)
+      {
+        active = true;
+        activator = obj;
+        break;
+      };
+    };
+  };
+};
+
+CTrap::CTrap(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  zone = CZone(NullObj);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+  Angle = aobj->GetAngle("Angle");
+  EndAngle = aobj->GetAngle("EndAngle");
+
+  Force = aobj->GetInt("Force");
+  Spread = aobj->GetInt("Spread");
+  Delay = aobj->GetInt("Delay");
+
+  ShootNow = aobj->GetBool("ShootOnceNOW");
+
+  MineSensorRadius = aobj->GetInt("MineSensorRadius");
+  MineDamage = aobj->GetInt("MineDamage");
+  MineFuse = aobj->GetInt("MineFuse");
+  MineRemoveOnTurn = aobj->GetBool("MineRemoveOnTurn");
+  MineDestroyTimer = aobj->GetInt("MineDestroyTimer");
+
+  ShootDelay = aobj->GetInt("ShootDelay");
+  ZoneName = StrSave(aobj->GetString("ProximityZone"));
+  gTimer = aobj->GetInt("GrenadeTimer");
+  isBadSphere = aobj->GetBool("IsBadSphere");
+  nAngles = aobj->GetInt("nAngles");
+  curAngle = 0;
+
+  if (StrCmp(aobj->GetString("Type"), "Bazooka"))
+  {
+    Type = 1;
+  };
+  if (StrCmp(aobj->GetString("Type"), "Grenades"))
+  {
+    Type = 2;
+  };
+  if (StrCmp(aobj->GetString("Type"), "Mortar"))
+  {
+    Type = 3;
+  };
+  if (StrCmp(aobj->GetString("Type"), "HomingMissile"))
+  {
+    Type = 4;
+  };
+  if (StrCmp(aobj->GetString("Type"), "Mine"))
+  {
+    Type = 5;
+  };
+  if (StrCmp(aobj->GetString("Type"), "Firework1"))
+  {
+    Type = 6;
+  };
+  if (StrCmp(aobj->GetString("Type"), "Firework2"))
+  {
+    Type = 7;
+  };
+  timer = 0;
+  timer2 = 0;
+  timer3 = 0;
+  timerToDisable = 60;
+  active = false;
+};
+
+CMissile* Missile_HTarget;
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+   alwaysHomeTarget = Missile_HTarget;
+   Missile_HTarget = CGObject(NullObj);
+   super;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+   {
+     if (alwaysHomeTarget != NullObj)
+     {
+       if (GS->GetRandom() % 5 == 2)
+       {
+         initdesc.AddX = alwaysHomeTarget->PosX;
+         initdesc.AddY = alwaysHomeTarget->PosY;
+       }
+     }
+   }
+   super;
+}
+
+void CTrap::Shoot()
+{
+  CShootDesc sdesc;
+  zero(&sdesc);
+
+  sdesc.X = PosX;
+  sdesc.Y = PosY;
+
+  local fSpread = (Spread / 180.0) * 3.141;
+
+  local da = Angle + srandom_b() * fSpread;
+  if (isBadSphere)
+  {
+    local daa = (EndAngle - Angle) / nAngles;
+    da = daa * curAngle + Angle;
+
+    sdesc.X += Spread * sin(da);
+    sdesc.Y -= Spread * cos(da);
+
+    curAngle += 1;
+    if (curAngle > nAngles) curAngle = 0;
+  };
+
+  local dx = sin(da) * (Force + srandom_b() * Force * 0.1);
+  local dy = -cos(da) * (Force + srandom_b() * Force * 0.1);
+
+  sdesc.SpX = dx;
+  sdesc.SpY = dy;
+  sdesc.Delay = gTimer;
+
+  local ldata;
+
+  if (Type == 5)
+  {
+    CMineParams MParams;
+    MParams.Prefuse = 0;
+    MParams.Flags = 60;
+    MParams.Bias = 0;
+    MParams.Damage = MineDamage;
+    MParams.BlastPower = 100;
+    MParams.Fuse = MineFuse; //20 frames
+    MParams.Radius = MineSensorRadius;
+    MParams.Unknown = 0;
+
+    local Mine = new CMine(Root->GetObject(25, 0), &MParams, &sdesc, false, 0);
+    Mine->autoTurnDestruct = MineRemoveOnTurn;
+    Mine->autoDestroyTimer = MineDestroyTimer;
+    return;
+  }
+
+  if (Type == 1)
+    ldata = GetWeaponByName("Bazooka");
+  if (Type == 2)
+    ldata = GetWeaponByName("Grenade");
+  if (Type == 3)
+    ldata = GetWeaponByName("Mortar");
+  if (Type == 4)
+  {
+    ldata = GetWeaponByName("Homing Missile");
+    sdesc.AddX = zone->activator->PosX;
+    sdesc.AddY = zone->activator->PosY;
+  };
+
+  if (ldata == NullObj) return;
+
+  if (Type == 4) Missile_HTarget = zone->activator;
+
+  if (Type == 6)
+    ldata = GetWeaponByName("Sheep Launcher");   // Firework1 in obj enum
+  if (Type == 7)
+    ldata = GetWeaponByName("Banana Bomb");    // Firework2 in obj enum
+
+  local missile = new CMissile(Root->GetObject(25, 0), &ldata->launch, &sdesc);
+};
+
+void CTrap::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+
+  if (Root->IsTimerActive() == false)
+  {
+    if (timerToDisable <= 0)
+    {
+      return;
+    } else {
+      timerToDisable -= 1;
+    };
+  } else {
+    timerToDisable = 60;
+  };
+  if (zone == NullObj)
+  {
+    zone = SearchForZone(ZoneName);
+    return;
+  };
+
+  if (ShootNow)
+  {
+     if (zone->active)
+     {
+        if (timer3 == 0)
+        {
+           Shoot();
+           timer3 = 1;
+        }
+     } else {
+            timer3 = 0;
+            }
+  } else {
+    if (active == false)                           //the following code is complex
+    {                                              //because it supports pre-delay,
+      if (zone->active)                            //shooting delay, and post-delay
+      {                                            //lol.
+        timer += 1;
+        if (timer == ShootDelay)
+        {
+          active = true;
+          curAngle = 0;
+//          ShowMessage("I M ACTIVATED ASDASDASD!");
+          timer2 = 0;
+        };
+      } else {
+        timer = 0;
+      };
+    } else {
+      if (timer2 > Delay)
+      {
+        timer2 = 0;
+        Shoot();
+      } else {
+        timer2 += 1;
+      }
+    };
+
+    if (zone->active == false)
+    {
+      timer -= 1;
+      if (timer <= 0)
+      {
+        active = false;
+        timer = 0;
+        timer2 = 0;
+      };
+    };
+  };
+};
+
+CEGameControl::CEGameControl(CEditorObject* aobj)
+{
+  gControl = this;
+  super(gTrapParent, GS);
+  noWind = aobj->GetBool("NoWind");
+  gNoWaiting = aobj->GetBool("NoWaiting");
+  Health = aobj->GetInt("ForceHealth");
+  MaxHealth = aobj->GetInt("MaxHealth");
+  if (Health > 0)
+  {
+    for (local i = 1; i <= 6; i+=1)
+    {
+      for (local j = 1; j <= 8; j+=1)
+      {
+        if (Root->GetObject(2, j + i * 16))
+        {
+          GS->Info.SetWormHealth(i, j, Health);
+        };
+      };
+    };
+  };
+
+  if (Root->GetObject(2, 1 + 16))
+  {
+     WormsHealth = GS->Info.GetWormHealth(1, 1);
+  };
+
+  for (local i = 0; i < 48; i += 1) gCheckpoints[i] = NullObj;
+
+  respawn = aobj->GetBool("EnableRespawn");
+  nlifes = aobj->GetInt("Lifes");
+  rDelay = aobj->GetInt("RespawnDelay");
+
+  if (respawn)
+  {
+    rControl->Enable(rDelay);
+  }
+  cInitialized = false;
+};
+
+void CEGameControl::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  if (noWind)
+  {
+    Env->Wind = 0;
+  };
+
+  if (cInitialized == false)
+  {
+    for (local j = 1; j <= 6; j += 1)
+    {
+      gAliveWorms[j] = 0;
+      for (local i = 1; i <= 8; i += 1)
+      {
+        local objWorm = CWorm(Root->GetObject(2, i + j * 16));
+        if (objWorm)
+        {
+          local wIndex = i + j * 8 - 9;
+          gStartPosX[wIndex] = objWorm->PosX;
+          gStartPosY[wIndex] = objWorm->PosY;
+          rControl->SetRespawnPosition(i, j, objWorm->PosX, objWorm->PosY);
+          gWormNames[wIndex] = objWorm->GetName();
+          gAliveWorms[j] += 1;
+        };
+      };
+    };
+    cInitialized = true;
+  };
+};
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (gControl== NullObj) return super;
+    if(gControl->MaxHealth == 0) return super;
+    if(Type == M_FRAME)
+    {
+        local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+        if (HP > gControl->MaxHealth)
+            GS->Info.SetWormHealth(WormTeam, WormNumber, gControl->MaxHealth);
+    }
+    super;
+}
+
+CWormSupply::CWormSupply(CEditorObject* obj)
+{
+  super(gTrapParent, GS);
+  ZoneName = StrSave(obj->GetString("ProximityZone"));
+  zone = CZone(NullObj);
+  PosX = obj->PosX;
+  PosY = obj->PosY;
+  offX = obj->GetInt("OffsetXPerWorm");
+  TeamsDone = new bool[6]; //it's only working way..
+  for (local i = 0; i <= 6; i+=1) TeamsDone[i] = false;
+};
+
+void CWormSupply::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  if (zone == NullObj)
+  {
+    zone = SearchForZone(ZoneName);
+    return;
+  };
+  if (zone->active == false) return;
+
+  local worm = CWorm(zone->activator);
+  if (worm is CWorm)
+  {
+    local tindex = worm->WormTeam;
+    if (TeamsDone[tindex]) return;
+    local windex = GetFreeWormIndex(tindex);
+    if (windex <= 0) return;
+    ShowMessage("You've got new worm!");
+    local newWorm = RessurectWorm(windex, tindex, PosX, PosY);
+    TeamsDone[tindex] = true;
+    PosX += offX;
+  };
+};
+
+CWormCheckpoint::CWormCheckpoint(CEditorObject* obj)
+{
+  super(gTrapParent, GS);
+  ZoneName = StrSave(obj->GetString("ProximityZone"));
+  zone = CZone(NullObj);
+  PosX = obj->PosX;
+  PosY = obj->PosY;
+  order = obj->GetInt("Order");
+//  orderCheck = order+1;
+};
+
+void CWormCheckpoint::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  if (zone == NullObj)
+  {
+    zone = SearchForZone(ZoneName);
+    return;
+  };
+  if (zone->active == false) return;
+  local wormObj = CWorm(zone->activator);
+  if (wormObj is CWorm)
+  {
+    local wIndex = wormObj->WormTeam * 8 + wormObj->WormNumber;
+    if (wIndex > 54) return;   // 54 against 48 to fix 5 players cp problem (teams: 6*8 = 48 max; worms: 6 max; total max: 48+6 = 54, according to formula above.) so now cp will work for 6 players.
+    if (wIndex < 0) return;
+
+    if (gCheckpoints[wIndex] == NullObj || gCheckpoints[wIndex]->order < order)
+    {
+      if (gCheckpoints[wIndex] != NullObj)
+      {
+       PlaySound(104, 10, 0.80, 1.0);
+//       ShowMessage("Saved! Hahaha ;D");
+       ShowMessage("Checkpoint! ;D");
+//       orderCheck--;
+      } else if (order == 1) {PlaySound(104, 10, 0.80, 1.0); ShowMessage("Checkpoint! ;D");}
+      gCheckpoints[wIndex] = this;
+      rControl->SetRespawnPosition(wormObj->WormNumber, wormObj->WormTeam, PosX - 5, PosY - 15);
+    }
+  }
+}
+
+
+CMapTeleport::CMapTeleport(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  pr_x1 = aobj->PosX;
+  pr_x2 = aobj->PosX + aobj->GetInt("Size");
+  pr_y1 = aobj->PosY;
+  pr_y2 = aobj->PosY + aobj->GetInt2("Size");
+  isRight = aobj->GetBool("IsToRightSide");
+  isExit = aobj->GetBool("ExitOnly");
+  tpMissiles = aobj->GetBool("TeleportMissiles");
+  trapTeleport = aobj->GetBool("TrapTeleport");
+  landTeleport = aobj->GetBool("LandTeleport");
+
+  if (isExit) landTeleport = false;
+
+  hSize = aobj->GetInt("HighlightSize") / 2;
+  hColor = aobj->GetInt("Color");
+  hX = 0; hY = 0; hTraced = false;
+
+  hSize = (pr_x2 - pr_x1) / 2;
+
+
+
+  if (isRight)
+  {
+    tp_x = int(pr_x1 + ((pr_x2 - pr_x1) / 3) * 2);
+  } else {
+    tp_x = int(pr_x1 + (pr_x2 - pr_x1) / 3);
+  };
+
+  tp_y = int((pr_y1 + pr_y2) / 2);
+
+  timer = 0;
+  waiting = false;
+  LinkedTo = StrSave(aobj->GetString("LinkedTo"));
+  t_name = StrSave(aobj->GetName());
+  linked = CMapTeleport(NullObj);
+
+  if (landTeleport)
+  {
+    touchSensor = new CTouchSensor(this, pr_x1, pr_y1, pr_x2 - pr_x1, pr_y2 - pr_y1);
+  }
+};
+
+void CMapTeleport::TeleportObject(CGObject* obj)
+{
+ if (obj->ColMask->Check(linked->tp_x, linked->tp_y, CGObject(Env->Objs.Objs[0])->ColMask, 0, 0))
+ {
+    GG->land->MakeHole( 15, linked->tp_x, linked->tp_y);
+ }
+
+ if (obj->ClType == OC_Worm)
+ {
+  waiting = true;
+  linked->waiting = true;
+
+  local worm = CWorm(obj);
+
+  if (worm->ObjState == WS_WALKING) worm->SetState(WS_IDLE);
+  if (worm->ObjState == WS_ROPING) worm->SetState(WS_IDLE);
+
+  worm->PosX = linked->tp_x;
+  worm->PosY = linked->tp_y;
+  if (isRight == linked->isRight)
+  {
+    worm->SpX = -worm->SpX;
+    worm->TurnSide = -worm->TurnSide;
+  }
+ } else {
+     obj->PosX = linked->tp_x;
+     obj->PosY = linked->tp_y;
+     if (isRight == linked->isRight) obj->SpX = -obj->SpX;
+ }
+}
+
+void CMapTeleport::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type == M_TOUCHSENSOR_COLLIDE)
+  {
+    if (linked != NullObj)
+    {
+       local ts = CTouchSensor(sender);
+       local activator = ts->activator;
+       if (activator->ClType != OC_Worm)
+       {
+         if (!tpMissiles || (activator->ClType != OC_Missile)) return;
+       } else {
+         if (!trapTeleport && (activator != GetCurrentWorm())) return;
+       }
+       if (timer <= 0)
+       {
+          MData->params[0] = 1; //disable collision
+       }
+    }
+    return;
+  }
+  if (Type == M_TOUCHSENSOR)
+  {
+     if (linked == NullObj) return;
+
+     if (timer > 0)
+     {
+       timer = 2;
+       return;
+     }
+
+     local ts = CTouchSensor(sender);
+     local activator = ts->activator;
+
+     if (activator->ClType != OC_Worm)
+     {
+       if (!tpMissiles || (activator->ClType != OC_Missile)) return;
+     }  else {
+       if (!trapTeleport && (activator != GetCurrentWorm())) return;
+     }
+
+     TeleportObject(activator);
+
+     if (activator->ClType == OC_Worm)
+     {
+       ts->noCollide = true;
+     } else {
+       ts->noCollide = false;
+     }
+
+     timer = 2;
+     linked->timer = 2;
+     return;
+  }
+  if (Type == M_DRAWQUEUE)
+  {
+
+     if (hTraced && hSize > 0 && hColor != 0)
+     {
+        CQuad q;
+        q.blend = 0; q.tex = 0;
+        q.v[0].x = hX - hSize;
+        q.v[0].y = hY;
+        q.v[1].x = hX - hSize;
+        q.v[1].y = hY - 20;
+        q.v[2].x = hX + hSize;
+        q.v[2].y = hY - 20;
+        q.v[3].x = hX + hSize;
+        q.v[3].y = hY;
+
+        cAdd = int( float(random() * 25) ) << 24;
+
+        q.v[0].color = hColor | $A0000000 + cAdd;
+        q.v[1].color = hColor & $00FFFFFF;
+        q.v[2].color = hColor & $00FFFFFF;            //hColor & $00FFFFFF
+        q.v[3].color = hColor | $A0000000 + cAdd;
+        AddSpriteQ(26, &q, 0, 0, 0);
+     }
+  }
+
+  if (Type != M_FRAME) return;
+  if (linked == NullObj)
+  {
+    if (StrCmp(LinkedTo, "")) return;
+    for (local i = 0; i < gTrapParent->Childs.Count; i += 1)
+    {
+      local obj = CMapTeleport(gTrapParent->Childs.Objs[i]);
+      if (obj is CMapTeleport)
+      {
+        if (StrCmp(obj->t_name, LinkedTo))
+        {
+          linked = obj;
+          linked->linked = this;
+          if (hColor != 0)
+          {
+            linked->hColor = hColor;
+          } else if (linked->hColor != 0)
+          {
+            hColor = linked->hColor;
+          }
+          break;
+        }
+      }
+    }
+    return;
+  }
+
+  if (landTeleport)
+  {
+    if (timer > 0) timer--;
+    return;
+  }
+
+  if (!hTraced)
+  {
+     if (hColor != 0 && hSize != 0)
+     {
+        local fx = (pr_x1 + pr_x2) / 2;
+        local fy = (pr_y1 + pr_y2) / 2;
+        local obj = TraceLine(NullObj, fx,  fy, fx, fy + 40, -1, &hX, &hY);
+        hTraced = true;
+        hY += 2;
+        if (obj == NullObj) hSize = 0;
+     }
+  }
+
+  if (isExit)
+  {
+    waiting = false;
+    return;
+  }
+
+
+  if (trapTeleport)
+  {
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local w = CWorm(Env->Objs.Objs[i]);
+        if (w == NullObj) continue;
+        if (w->ClType != OC_Worm) continue;         //faster than IS operator, btw.
+
+        if (pr_x1 < w->PosX && pr_x2 > w->PosX && pr_y1 < w->PosY && pr_y2 > w->PosY)
+        {
+          TeleportObject(w);
+        }
+     }
+     return;
+  }
+
+  if (tpMissiles)
+  {
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local m = CMissile(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+        if (m->ClType != OC_Missile) continue;         //faster than IS operator, btw.
+
+        if (pr_x1 < m->PosX && pr_x2 > m->PosX && pr_y1 < m->PosY && pr_y2 > m->PosY)
+        {
+          if (m->tLastTeleport != this)
+          {
+            m->tLastTeleport = linked;
+            TeleportObject(m);
+          }
+        } else {
+          if (m->tLastTeleport == this) m->tLastTeleport = NullObj;
+        }
+
+     }
+  }
+
+  local worm = GetCurrentWorm();
+  if (worm == NullObj)
+  {
+     waiting = true;
+     return;
+  }
+  if (pr_x1 < worm->PosX && pr_x2 > worm->PosX)
+  {
+    if (pr_y1 < worm->PosY && pr_y2 > worm->PosY)
+    {
+      if (waiting == false && linked->waiting == false)
+      {
+            TeleportObject(worm);
+            PlaySound(67, 10, 1, 1);
+      }
+      return;
+    }
+  }
+  waiting = false;
+}
+/////////////////////////////////////////////////////////////
+//                   Sprites starts here                   //
+/////////////////////////////////////////////////////////////
+CSpriterz::CSpriterz(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  ZoneName = StrSave(aobj->GetString("ProximityZone"));
+  zone = CZone(NullObj);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+
+  SName = "No Sprite";
+  SprName = aobj->GetString("SpriteName");
+  PosXL = aobj->GetBool("Lock_X_axis");
+  PosYL = aobj->GetBool("Lock_Y_axis");
+  PlayOnce = aobj->GetBool("PlayOnce");
+  PlayBackwards = aobj->GetBool("PlayBackwards");
+  playnow =  true;
+  MoveToWorm = aobj->GetBool("MoveToWorm");
+
+  FrameNum = aobj->GetInt("FrameNum");
+
+  local as = aobj->GetInt("AnimSpeed");
+  as = float(as)/1000.0;
+  AnimationSpeed = 0.0;     // aobj->GetInt("AnimSpeed") / 100;
+  AnimationSpeed = as;
+  AnimationPhase = 0.0;
+  checkLoop = 0;
+
+  ZPlane = aobj->GetInt("ZPlane");
+  CSpritez* Spritez;
+};
+
+void AddSpriterz(CEditorObject* obj)
+{
+ new CSpriterz(obj);
+}
+
+
+void CSpriterz::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (zone == NullObj)
+   {
+     zone = SearchForZone(ZoneName);
+     return;
+   };
+ if (zone->active == false)
+ {
+     AnimationPhase = 0.0;
+     playnow = true;
+     checkLoop = 0;
+     return;
+ }
+
+   local worm = CWorm(zone->activator);
+   if (worm is CWorm)
+   {
+   if(Type == M_DRAWQUEUE)
+   {
+      if (playnow)
+      {
+         if(Spritez == NullObj)
+         {
+            local spr11       = GetAttachment(SprName);
+            Spritez     = LoadSprite(spr11, FrameNum, 0);
+         }
+         if(Spritez != NullObj)
+         {
+            local spr1 = Spritez->Index;
+            if (PosXL)
+            {
+                PosY = worm->PosY;
+            }
+            if (PosYL)
+            {
+                PosX = worm->PosX;
+            }
+            if (MoveToWorm)
+            {
+                PosX = worm->PosX;
+                PosY = worm->PosY;
+            }
+                AddSprite(ZPlane,PosX,PosY,0,spr1,AnimationPhase);
+         }
+      }
+   }
+  }
+   if(Type == M_FRAME)
+   {
+      if (PlayBackwards)
+      {
+          if (checkLoop == 0) {AnimationPhase = AnimationPhase + AnimationSpeed;}
+          if(AnimationPhase > 0.99){ if(checkLoop == 0) {AnimationPhase = AnimationPhase - AnimationSpeed; checkLoop = 1;}}
+          if (checkLoop == 1) { AnimationPhase = AnimationPhase - AnimationSpeed;}
+          if(checkLoop == 1){ if(AnimationPhase <= 0.00){AnimationPhase = AnimationPhase + AnimationSpeed; if (PlayOnce){checkLoop = -1; playnow = false;}else{checkLoop = 0;}}}
+      } else
+      {
+          if(AnimationPhase > 0.99){AnimationPhase = 0.0; if (PlayOnce)playnow = false;}
+          else if (playnow){AnimationPhase = AnimationPhase + AnimationSpeed;}
+      }
+   }
+}
+
+/////////////////////////////////////////////////////////////
+//                   Sprites ends here                     //
+/////////////////////////////////////////////////////////////
+
+CWA_Spriter::CWA_Spriter(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  ZoneName = StrSave(aobj->GetString("ProximityZone"));
+  zone = CZone(NullObj);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+
+  ang1 = aobj->GetInt("RotationAngle");
+  ang = (ang1 / 360 + MATH_HALF_PI) * 6.3;
+  scl = aobj->GetInt("Scale");
+  scl = float(scl)/100.0;
+  if (ang > 0) rotate = true;
+  if (scl < 1) scale = true;
+  SprNum = aobj->GetInt("SpriteNum");
+  PlayOnce = aobj->GetBool("PlayOnce");
+  PlayBackwards = aobj->GetBool("PlayBackwards");
+  playnow =  true;
+  waSoundNum = aobj->GetInt("PlayWaSound");
+  if (waSoundNum == 0) {playSound = false;} else playSound = true;
+  playSoundNow = playSound;
+  checkLoop = 0;
+
+  local as = aobj->GetInt("AnimSpeed");
+  as = float(as)/1000.0;
+  AnimationSpeedT = 0.0;     // aobj->GetInt("AnimSpeed") / 100;
+  AnimationSpeedT = as;
+  AnimationPhaseT = 0.0;
+
+  ZPlane = aobj->GetInt("ZPlane");
+  CWA_Spriter* WA_Spriter;
+};
+
+
+void AddWA_Spriter(CEditorObject* obj)
+{
+ new CWA_Spriter(obj);
+}
+
+
+void CWA_Spriter::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (zone == NullObj)
+   {
+     zone = SearchForZone(ZoneName);
+     return;
+   }
+ if (zone->active == false)
+ {
+     AnimationPhaseT = 0.0;
+     playnow = true;
+     playSoundNow = true;
+     checkLoop = 0;
+     return;
+ }
+   local worm = CWorm(zone->activator);
+   if (worm is CWorm)
+   {
+      if(Type == M_DRAWQUEUE)
+      {
+         if (playnow)
+         {
+            if (rotate || scale)
+            { AddSpriteEx(ZPlane,PosX,PosY,SprNum,AnimationPhaseT,ang,scl);
+            } else AddSprite(ZPlane,PosX,PosY,0,SprNum,AnimationPhaseT);
+         }
+         if (playSound) {if (playSoundNow) PlaySound(waSoundNum, 10, 1, 1); playSoundNow = false;}
+      }
+   }
+   if(Type == M_FRAME)
+   {
+      if (PlayBackwards)
+      {
+          if (checkLoop == 0) {AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;}
+          if(AnimationPhaseT > 0.99){ if(checkLoop == 0) {AnimationPhaseT = AnimationPhaseT - AnimationSpeedT; checkLoop = 1;}}
+          if (checkLoop == 1) { AnimationPhaseT = AnimationPhaseT - AnimationSpeedT;}
+          if(checkLoop == 1){ if(AnimationPhaseT <= 0.00){AnimationPhaseT = AnimationPhaseT + AnimationSpeedT; if (PlayOnce){checkLoop = -1; playnow = false;}else{checkLoop = 0;}}}
+      } else
+      {
+          if(AnimationPhaseT > 0.99){AnimationPhaseT = 0.0; if (PlayOnce)playnow = false;}
+          else if (playnow){AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;}
+      }
+   }
+}
+
+CTail::CTail(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  ZoneName = StrSave(aobj->GetString("ProximityZone"));
+  zone = CZone(NullObj);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+
+  SprNum = aobj->GetInt("SpriteNum");
+  SprNumA = aobj->GetInt("SNumToAttach");
+  attached = aobj->GetBool("AttachToWorm");
+//  FrameNum = aobj->GetInt("FNumIfAttach");
+
+  local as = aobj->GetInt("AnimSpeed");
+  as = float(as)/1000.0;
+  AnimationSpeedT = 0.0;     // aobj->GetInt("AnimSpeed") / 100;
+  AnimationSpeedT = as;
+  AnimationPhaseT = 0.0;
+
+  ZPlane = aobj->GetInt("ZPlane");
+  CTail* Tail;
+};
+
+
+void AddTail(CEditorObject* obj)
+{
+ new CTail(obj);
+}
+
+void CTail::work()
+{
+  if (moving)
+  {
+  if (attached)
+  {
+      if (tailer > 0)
+      {
+      PosX0 = PosXA;
+      PosY0 = PosYA;
+      AddSprite(ZPlane,PosX0,PosY0,0,SprNumA,AnimationPhaseT);
+      } else
+      {
+      PosX0 = 0;
+      PosY0 = 0;
+      }
+  } else if (attached == false)
+  {
+  if (disabler > 50)
+  {
+  PosX1 = tailPosX;
+  PosY1 = tailPosY;
+  PosX2 = tailPosX1;
+  PosY2 = tailPosY1;
+  PosX3 = tailPosX2;
+  PosY3 = tailPosY2;
+  PosX4 = tailPosX3;
+  PosY4 = tailPosY3;
+  PosX5 = tailPosX4;
+  PosY5 = tailPosY4;
+  PosX6 = tailPosX5;
+  PosY6 = tailPosY5;
+  PosX7 = tailPosX6;
+  PosY7 = tailPosY6;
+  PosX8 = tailPosX7;
+  PosY8 = tailPosY7;
+  PosX9 = tailPosX8;
+  PosY9 = tailPosY8;
+  PosX10 = tailPosX9;
+  PosY10 = tailPosY9;
+  }
+
+///*
+       if (disabler >= 500)
+       {AddSprite(ZPlane,PosX1,PosY1,0,SprNum,AnimationPhaseT);}
+       if (disabler > 450)
+       {AddSprite(ZPlane,PosX2,PosY2,0,SprNum,AnimationPhaseT+0.50);}
+       if (disabler > 400)
+       {AddSprite(ZPlane,PosX3,PosY3,0,SprNum,AnimationPhaseT+0.90);}
+       if (disabler > 350)
+       {AddSprite(ZPlane,PosX4,PosY4,0,SprNum,AnimationPhaseT+0.40);}
+       if (disabler > 300)
+       {AddSprite(ZPlane,PosX5,PosY5,0,SprNum,AnimationPhaseT+0.60);}
+       if (disabler > 250)
+       {AddSprite(ZPlane,PosX6,PosY6,0,SprNum,AnimationPhaseT+0.30);}
+       if (disabler > 200)
+       {AddSprite(ZPlane,PosX7,PosY7,0,SprNum,AnimationPhaseT+0.70);}
+       if (disabler > 150)
+       {AddSprite(ZPlane,PosX8,PosY8,0,SprNum,AnimationPhaseT+0.20);}
+       if (disabler > 100)
+       {AddSprite(ZPlane,PosX9,PosY9,0,SprNum,AnimationPhaseT+0.80);}
+       if (disabler > 50)
+       {AddSprite(ZPlane,PosX10,PosY10,0,SprNum,AnimationPhaseT+0.10);}
+       if (tailer == 0)
+       {disabler -= 1;
+           if (disabler < 50)
+           {
+             disabler = 0;
+             tailPosX = 0;
+             tailPosY = 0;
+             tailPosX1 = 0;
+             tailPosY1 = 0;
+             tailPosX2 = 0;
+             tailPosY2 = 0;
+             tailPosX3 = 0;
+             tailPosY3 = 0;
+             tailPosX4 = 0;
+             tailPosY4 = 0;
+             tailPosX5 = 0;
+             tailPosY5 = 0;
+             tailPosX6 = 0;
+             tailPosY6 = 0;
+             tailPosX7 = 0;
+             tailPosY7 = 0;
+             tailPosX8 = 0;
+             tailPosY8 = 0;
+             tailPosX9 = 0;
+             tailPosY9 = 0;
+             return;
+           }
+       }
+//*/
+/*
+       AddSprite(ZPlane,PosX1,PosY1,0,SprNum,RandomFloat(0.0,1.0));
+       AddSprite(ZPlane,PosX2,PosY2,0,SprNum,RandomFloat(0.0,1.0));
+       AddSprite(ZPlane,PosX3,PosY3,0,SprNum,RandomFloat(0.0,1.0));
+       AddSprite(ZPlane,PosX4,PosY4,0,SprNum,RandomFloat(0.0,1.0));
+       AddSprite(ZPlane,PosX5,PosY5,0,SprNum,RandomFloat(0.0,1.0));
+       AddSprite(ZPlane,PosX6,PosY6,0,SprNum,RandomFloat(0.0,1.0));
+       AddSprite(ZPlane,PosX7,PosY7,0,SprNum,RandomFloat(0.0,1.0));
+       AddSprite(ZPlane,PosX8,PosY8,0,SprNum,RandomFloat(0.0,1.0));
+       AddSprite(ZPlane,PosX9,PosY9,0,SprNum,RandomFloat(0.0,1.0));
+       AddSprite(ZPlane,PosX10,PosY10,0,SprNum,RandomFloat(0.0,1.0));
+*/
+  }
+  }
+};
+
+void CTail::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (zone == NullObj)
+   {
+     zone = SearchForZone(ZoneName);
+     return;
+   }
+ if (zone->active == false)
+ {
+     AnimationPhaseT = 0.0;
+     tailer = 0;
+     work();
+     return;
+ }
+   local worm = CWorm(zone->activator);
+   if (worm is CWorm)
+   {
+      if(Type == M_DRAWQUEUE)
+      {
+             if (worm->IsMoving())
+             { moving = true;
+             } else { moving = false; }
+             if (attached)
+             {
+                 if (tailer == 0)
+                 {
+                     if (SprNumA == 64 || SprNumA == 61 || SprNumA == 65 || SprNumA == 152 || SprNumA == 153 || SprNumA == 154 || SprNumA == 155 || SprNumA == 156 || SprNumA == 157 || SprNumA == 656 || SprNumA == 657 || SprNumA == 675 || SprNumA == 676)
+                     {
+                         PlaySound(50, 10, 1, 1);
+                     }
+                 }
+                 PosXA = worm->PosX;
+                 PosYA = worm->PosY;
+                 work();
+                 AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;
+                 tailer = 1;
+             } else if (attached == false)
+             {
+                 disabler = 500;
+                 if (tailer == 1)
+                 {
+                     tailPosX = worm->PosX;
+                     tailPosY = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 10)
+                 {
+                     tailPosX1 = worm->PosX;
+                     tailPosY1 = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 20)
+                 {
+                     tailPosX2 = worm->PosX;
+                     tailPosY2 = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 30)
+                 {
+                     tailPosX3 = worm->PosX;
+                     tailPosY3 = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 40)
+                 {
+                     tailPosX4 = worm->PosX;
+                     tailPosY4 = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 50)
+                 {
+                     tailPosX5 = worm->PosX;
+                     tailPosY5 = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 60)
+                 {
+                     tailPosX6 = worm->PosX;
+                     tailPosY6 = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 70)
+                 {
+                     tailPosX7 = worm->PosX;
+                     tailPosY7 = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 80)
+                 {
+                     tailPosX8 = worm->PosX;
+                     tailPosY8 = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 90)
+                 {
+                     tailPosX9 = worm->PosX;
+                     tailPosY9 = worm->PosY;
+                     tailer += 1;
+                 }
+                 if (tailer == 100)
+                 {
+                     tailer = 0;
+                 }
+                 tailer += 1;
+                 work();
+             }
+      }
+   }
+}
+
+void CCrateSupplyZ::Spawn()
+{
+  CCrateDesc cDesc;
+  zero(&cDesc);
+  cDesc.X = PosX;
+  cDesc.Y = PosY;
+  cDesc.type = CrateType;
+
+  if (CrateType == CT_HEALTH)
+    cDesc.health = Health;
+
+  if (CrateType == CT_WEAPON || CrateType == CT_UTILITY)
+  {
+    cDesc.wType = WCT_RANDOM;
+  }
+  if (oil == 0)
+  {
+  spawnee = new CCrate(Root, &cDesc, DT_NONE);
+  } else
+  drumee = new COilDrum(Root->GetObject(25, 0), PosX, PosY, snap);
+
+}
+
+CCrateSupplyZ::CCrateSupplyZ(CEditorObject* obj)
+{
+   super(Root, GS);
+   ZoneName = StrSave(obj->GetString("ProximityZone"));
+   zone = CZone(NullObj);
+
+   PosX = obj->PosX;
+   PosY = obj->PosY;
+
+   snap = obj->GetBool("OilSnap");
+   ClearEachTurn = obj->GetBool("ClearEachTurn");
+   Health = obj->GetInt("Health");
+   if (StrCmp(obj->GetString("CrateType"), "Health")) CrateType = CT_HEALTH; oil = 0;
+   if (StrCmp(obj->GetString("CrateType"), "Weapon")) CrateType = CT_WEAPON; oil = 0;
+   if (StrCmp(obj->GetString("CrateType"), "OilDrum")) oil = 1;
+   //fields
+
+
+   spawnee = CCrate(NullObj);
+   drumee = COilDrum(NullObj);
+   if (obj->GetBool("CreateAtGStart"))Spawn();                    // - spawn when game starts
+}
+
+void CCrateSupplyZ::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_TURNEND)
+   {
+       if (ClearEachTurn)
+       {
+           if (spawnee != NullObj) Root->DoExplosion(spawnee->PosX,spawnee->PosY,10,10,1,0);
+           if (drumee != NullObj) Root->DoExplosion(drumee->PosX,drumee->PosY,10,10,1,0);
+       }
+   }
+   if (zone == NullObj)
+   {
+     zone = SearchForZone(ZoneName);
+     return;
+   };
+ if (zone->active == false)
+ {
+   timer = 0;
+   return;
+ }
+ local worm = CWorm(zone->activator);
+ if (worm is CWorm)
+ {
+    if (spawnee == NullObj)
+    {
+      if (timer == 0)
+      {
+          Spawn();
+          timer = 1;
+      }
+    }
+ }
+};
+
+CCustomLibTask::CCustomLibTask(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  ZoneName = StrSave(aobj->GetString("ProximityZone"));
+  zone = CZone(NullObj);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+
+  TaskNow = aobj->GetInt("ObjTask");
+  MakeOnce = aobj->GetBool("MakeOnce");
+  fps = aobj->GetInt("EachNFrames");
+  playnow = true;
+
+// FOR ARROWS:
+  ShootX = 0;       // set X position to shot
+  ShootY = 0;        // set Y position to shot
+
+  admg = 25;     // damage
+
+  ShootSX = 0.0;        // combination of these 2 is angle and power :)))
+  ShootSY = -10.0;
+
+  gravArrow = 0.25;
+  noStick = true;
+  MakeNow = true;
+// end  arrows
+
+// FOR MINES:
+    m_prefuse = 0;
+    m_flags = 60;
+    m_bias = 0;
+    m_damage = 45;
+    m_blastPower = 100;
+    m_fuse = 3000; //20 frames
+    m_radius = 30;
+    m_unknown = 0;
+    m_removeOnTurn = false;
+    m_destroyTimer = 200;
+// end mines
+
+// FOR WEAPON
+    weapNum = 1;
+    g_timer = 3000;
+    targ_X = 0;
+    targ_Y = 0;
+    w_grav = aobj->GetInt("WeapGravity");
+    DoIt = true;
+    ExplTimer = 9000;
+// end weapon
+
+// FOR FIREWORKS
+    fi = 0;
+    fn = 1;
+    fcheck = true;
+
+
+  timer = 0;
+  timerToDisable = 60;
+  timerToEnable = 0;
+  explosionTimer = 0;
+
+}
+
+bool CCustomLibTask::MakeFirework2()
+{
+    CShootDesc SDesc;
+    zero(&SDesc);
+
+    SDesc.Team = 1;
+    SDesc.Worm = 0;
+
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+
+    SDesc.SpX = ShootSX;
+    SDesc.SpY = ShootSY;
+//    SDesc.AddX = w_targX;
+//    SDesc.AddY = w_targY;
+
+    local weapon;
+    local firework6;
+//    local firework1;
+    local firework4;
+
+//    if (weapNum == 1) {firework1 = GetWeaponByName("Banana Bomb"); firework1->launch.gravityFactor = w_grav; firework1->launch.explodeOnSpace = false; firework1->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &firework1->launch, &SDesc); if (firework1->launch.gravityFactor != 100) firework1->launch.gravityFactor = 100; if (firework1->launch.timeBeforeExplosion != 20000) firework1->launch.timeBeforeExplosion = 20000;}
+    if (weapNum == 2) {firework6 = GetWeaponByName("Sheep Launcher"); firework6->launch.gravityFactor = w_grav; weapon = new CMissile(Root->GetObject(25, 0), &firework6->launch, &SDesc); if (firework6->launch.gravityFactor != 100) firework6->launch.gravityFactor = 100;}
+    if (weapNum == 3) {firework4 = GetWeaponByName("Holy Hand-Grenade"); firework4->launch.gravityFactor = w_grav; firework4->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &firework4->launch, &SDesc); if (firework4->launch.gravityFactor != 100) firework4->launch.gravityFactor = 100; if (firework4->launch.timeBeforeExplosion != 9000) firework4->launch.timeBeforeExplosion = 9000;}
+}
+
+bool CCustomLibTask::MakeFirework()
+{
+    CShootDesc SDesc;
+    zero(&SDesc);
+
+    SDesc.Team = 1;
+    SDesc.Worm = 0;
+
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+
+    SDesc.SpX = ShootSX;
+    SDesc.SpY = ShootSY;
+    SDesc.AddX = w_targX;
+    SDesc.AddY = w_targY;
+
+    local weapon;
+    local firework3data;
+    local firework2;
+    local firework1;
+
+    if (weapNum == 1) {firework1 = GetWeaponByName("Banana Bomb"); firework1->launch.gravityFactor = w_grav; firework1->launch.explodeOnSpace = false; SDesc.Delay = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &firework1->launch, &SDesc); if (firework1->launch.gravityFactor != 100) firework1->launch.gravityFactor = 100;}
+    if (weapNum == 2) {firework2 = GetWeaponByName("Earth Quake"); firework2->launch.gravityFactor = w_grav; weapon = new CMissile(Root->GetObject(25, 0), &firework2->launch, &SDesc); if (firework2->launch.gravityFactor != 100) firework2->launch.gravityFactor = 100;}
+    if (weapNum == 3) {firework3data = GetWeaponByName("Cluster Bomb"); SDesc.Delay = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &firework3data->launch, &SDesc); if (firework3data->launch.gravityFactor != 100) firework3data->launch.gravityFactor = 100;} //if (firework3data->launch.timeBeforeExplosion != 9000) firework3data->launch.timeBeforeExplosion = 9000;}
+}
+
+bool CCustomLibTask::MakeSheepShot()
+{
+    CShootDesc SDesc;
+    zero(&SDesc);
+
+    SDesc.Team = 1;
+    SDesc.Worm = 0;
+
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+
+    SDesc.SpX = ShootSX;
+    SDesc.SpY = ShootSY;
+    SDesc.AddX = w_targX;
+    SDesc.AddY = w_targY;
+
+    local sdata;
+    local weapon;
+    local petroldata;
+
+    if (weapNum == 1) {sdata = GetWeaponByName("Sheep"); sdata->launch.gravityFactor = w_grav; sdata->launch.explodeOnSpace = false; sdata->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &sdata->launch, &SDesc); if (sdata->launch.gravityFactor != 100) sdata->launch.gravityFactor = 100; if (sdata->launch.timeBeforeExplosion != 20000) sdata->launch.timeBeforeExplosion = 20000;}
+    if (weapNum == 2) {sdata = GetWeaponByName("Sheep Launcher"); sdata->launch.gravityFactor = w_grav; sdata->launch.explodeOnSpace = false; weapon = new CMissile(Root->GetObject(25, 0), &sdata->launch, &SDesc); if (sdata->launch.gravityFactor != 100) sdata->launch.gravityFactor = 100;}
+    if (weapNum == 3) {petroldata = GetWeaponByName("Petrol Bomb"); petroldata->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &petroldata->launch, &SDesc); if (petroldata->launch.gravityFactor != 100) petroldata->launch.gravityFactor = 100; if (petroldata->launch.timeBeforeExplosion != 9000) petroldata->launch.timeBeforeExplosion = 9000;}
+
+//    weapon = new CMissile(Root->GetObject(25, 0), &sdata->launch, &SDesc);
+//    if (sdata->launch.gravityFactor != 100) sdata->launch.gravityFactor = 100;
+}
+
+bool CCustomLibTask::MakeMissileShot()
+{
+    CShootDesc SDesc;
+    zero(&SDesc);
+
+    SDesc.Team = 1;
+    SDesc.Worm = 0;
+
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+
+    SDesc.SpX = ShootSX;
+    SDesc.SpY = ShootSY;
+    SDesc.AddX = w_targX;
+    SDesc.AddY = w_targY;
+
+    local ldata;
+    local missile;
+
+    if (weapNum == 1) ldata = GetWeaponByName("Homing Pigeon");
+    if (weapNum == 2) ldata = GetWeaponByName("Homing Missile");
+    if (weapNum == 3) ldata = GetWeaponByName("Patsy's Magic Bullet");
+
+    missile = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+}
+
+bool CCustomLibTask::MakeWeaponShot()
+{
+    CShootDesc SDesc;
+    zero(&SDesc);
+
+    SDesc.Team = 1;
+    SDesc.Worm = 0;
+
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+
+    SDesc.SpX = ShootSX;
+    SDesc.SpY = ShootSY;
+
+    local ldata;
+    local weapon;
+
+    if (weapNum == 1) ldata = GetWeaponByName("Bazooka"); ldata->launch.gravityFactor = w_grav;
+    if (weapNum == 2) ldata = GetWeaponByName("Grenade"); ldata->launch.gravityFactor = w_grav; SDesc.Delay = g_timer;
+    if (weapNum == 3) ldata = GetWeaponByName("Cluster Bomb");
+
+    weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+    if (ldata->launch.gravityFactor != 100) ldata->launch.gravityFactor = 100;
+}
+
+bool CCustomLibTask::MakeMine()
+{
+    CShootDesc SDesc;
+    zero(&SDesc);
+
+    SDesc.Team = 1;
+    SDesc.Worm = 0;
+
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+
+    SDesc.SpX = ShootSX;
+    SDesc.SpY = ShootSY;
+
+    CMineParams MParams;
+    MParams.Prefuse = m_prefuse;
+    MParams.Flags = m_flags;
+    MParams.Bias = m_bias;
+    MParams.Damage = m_damage;
+    MParams.BlastPower = m_blastPower;
+    MParams.Fuse = m_fuse; //20 frames
+    MParams.Radius = m_radius;
+    MParams.Unknown = m_unknown;
+
+    local Mine;
+
+    Mine = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+    Mine->autoTurnDestruct = m_removeOnTurn;
+    Mine->autoDestroyTimer = m_destroyTimer;
+}
+
+bool CCustomLibTask::MakeArrow()
+{
+    local dmg = admg;     // damage
+
+//    powaX = ShootSX;        // combination of these 2 are angle and power :)))
+//    powaY = ShootSY;
+//                       Visual Extrapolation:
+//
+//                             X:1,Y:-1
+//                               *
+//                               |
+//                 X:-1,Y:1 *\       /* X:1,Y:-1
+//
+//              X:-1,Y:0 *---          ---* X:1,Y:0
+//
+//                          /        \
+//               X:-1,Y:-1 *     |    * X:1,Y:1
+//                               *
+//                            X:0,Y:0
+// Other words:
+//            (X:10.0,Y:0.0)=90_degree.      (Y:10.0,X:0.0)=0_degree. (X:10.0,Y:10.0)=135_degree. (X:10.0,Y:-10.0)=45_degree
+//            (X:-10,Y:0.0)=-90_degree(270). etc
+
+    CShootDesc SDesc;
+    zero(&SDesc);
+
+    SDesc.Team = 1;
+    SDesc.Worm = 0;
+
+    SDesc.X = ShootX;   // set X position to shot
+    SDesc.Y = ShootY;   // set Y position to shot
+
+    SDesc.SpX = ShootSX;
+    SDesc.SpY = ShootSY;
+
+    local arrow;
+
+
+    arrow = new CArrow(Root->GetObject(25, 0), &admg, &SDesc);
+    if (CGObject(arrow)->IsValid())
+    {
+      arrow->GravityFactor = gravArrow;
+      arrow->DontStick = noStick;
+    }
+    return true;
+
+};
+
+
+void CCustomLibTask::HandleObject(CGObject* obj)
+{
+//            if (TaskNow == 1){obj->SetState(WS_IDLE);}
+//            if (TaskNow == 2){obj->SetState(WS_WALKING);}
+//            if (TaskNow == 3){obj->SetState(WS_AIMING);}
+//            if (TaskNow == 4){obj->SetState(WS_SETPOWER);}
+//            if (TaskNow == 5){obj->SetState(WS_FIRED);}
+//            if (TaskNow == 6){obj->SetState(WS_FIRECONT);}
+//            if (TaskNow == 7){obj->SetState(WS_FIREPUNCH);}
+//            if (TaskNow == 8){obj->SetState(WS_DRILLING);}
+//            if (TaskNow == 9){obj->SetState(WS_TELEPORTING);}
+//            if (TaskNow == 10){obj->SetState(WS_ROPING);}
+//            if (TaskNow == 11){obj->SetState(WS_BLOWTORCH);}
+//            if (TaskNow == 12){obj->SetState(WS_AFTERROPE);}
+//            if (TaskNow == 13){obj->SetState(WS_SUICIDEBOMBER);}
+//            if (TaskNow == 14){obj->SetState(WS_POING);}
+//            if (TaskNow == 15){obj->SetState(WS_SHOOTINGROPE);}
+//            if (TaskNow == 16){obj->SetState(WS_JUMP);}
+            if (TaskNow == 17){if(obj->ObjState != WS_BUNGEE){playnow = true;} obj->SetState(WS_BUNGEE);/*addTrail(obj);*/}//if(playnow){PlayLocalSound(157,10,1,1); playnow = false;}}
+            if (TaskNow == 18){obj->SetState(WS_PARACHUTE);}
+//            if (TaskNow == 19){obj->SetState(WS_SLIDING);}
+//            if (TaskNow == 20){obj->SetState(WS_POWERFLY);}
+//            if (TaskNow == 21){obj->SetState(WS_FLYING2);}
+//            if (TaskNow == 22){obj->SetState(WS_JUMPPREPARE);}
+//            if (TaskNow == 23){obj->SetState(WS_JETPACK);}
+//            if (TaskNow == 24){obj->SetState(WS_FLYING);}
+            if (TaskNow == 25){obj->SetState(WS_FROZEN);}
+//            if (TaskNow == 26){obj->SetState(WS_CONTROL_WEAPON);}
+              if (TaskNow == 27){obj->SetState(WS_DEATH);}
+//            if (TaskNow == 28){obj->SetState(WS_REPEATFIRE);}
+//            if (TaskNow == 29){obj->SetState(WS_SINKING);}
+//            if (TaskNow == 30){obj->SetState(WS_DEAD);}
+        if (TaskNow > 30 && TaskNow < 60)
+        {
+            if (TaskNow == 31){if(obj->ObjState == WS_BUNGEE){/*obj->SetState(WS_PARACHUTE);*/ return;}else{obj->SetState(WS_DEATH);}}
+            if (TaskNow == 32){obj->DoExplosion(2705,150,10,10,1,0); ShowMessage("OilDrum destroyed");}
+            if (TaskNow == 33){if (ShootX >= 6280 || ShootX < 5700){ShootX = 5700; i = 0;} ShootX = 5700 + i; i += 20; ShootY = 800; ShootSX = 0.0; ShootSY = -10.0; gravArrow = 0.25; noStick = true; MakeArrow(); }
+            if (TaskNow == 34){LookAtMe(7379, 220, 1); ShootX = 7560; ShootY = 227; ShootSX = 0.0; ShootSY = -10.0; gravArrow = 0.0; noStick = false; MakeArrow(); ShootX = 7560; ShootY = 770; MakeArrow();}
+            if (TaskNow == 35){DoExplosion(7560,133,5,5,1,0); DoExplosion(7560,140,5,5,1,0); DoExplosion(7560,147,5,5,1,0); DoExplosion(7560,154,5,5,1,0); DoExplosion(7560,161,5,5,1,0); DoExplosion(7560,168,5,5,1,0); DoExplosion(7560,175,5,5,1,0); DoExplosion(7560,182,5,5,1,0); DoExplosion(7560,189,5,5,1,0); DoExplosion(7560,196,5,5,1,0); DoExplosion(7560,203,5,5,1,0); DoExplosion(7560,210,5,5,1,0); DoExplosion(7560,217,5,5,1,0); DoExplosion(7560,224,5,5,1,0); DoExplosion(7560,231,5,5,1,0);} //if (exY >= 233 || exY < 133){exY = 233;}obj->DoExplosion(7560,exY,5,5,1,0); exY -=7;
+            if (TaskNow == 36){DoExplosion(7560,623,5,5,1,0); DoExplosion(7560,630,5,5,1,0); DoExplosion(7560,637,5,5,1,0); DoExplosion(7560,644,5,5,1,0); DoExplosion(7560,651,5,5,1,0); DoExplosion(7560,658,5,5,1,0); DoExplosion(7560,665,5,5,1,0); DoExplosion(7560,672,5,5,1,0); DoExplosion(7560,679,5,5,1,0); DoExplosion(7560,686,5,5,1,0); DoExplosion(7560,693,5,5,1,0); DoExplosion(7560,700,5,5,1,0); DoExplosion(7560,707,5,5,1,0); DoExplosion(7560,714,5,5,1,0); DoExplosion(7560,721,5,5,1,0); DoExplosion(7560,728,5,5,1,0); DoExplosion(7560,735,5,5,1,0); DoExplosion(7560,742,5,5,1,0); DoExplosion(7560,749,5,5,1,0); DoExplosion(7560,756,5,5,1,0); DoExplosion(7560,763,5,5,1,0); DoExplosion(7560,770,5,5,1,0);} //if (exY >= 770 || exY < 623){exY = 770;}obj->DoExplosion(7560,exY,5,5,1,0); exY -=7;
+            if (TaskNow == 37){ShootX = 4900; ShootY = 1260; ShootSX = -10.0; ShootSY = RandomFloat(-3.0,3.0); gravArrow = 0.10; noStick = true; admg = 10; MakeArrow();}
+            if (TaskNow == 38){ShootX = 800; ShootY = 2630; ShootSX = 0.0; ShootSY = -10.0; weapNum = 1; MakeWeaponShot();}
+            if (TaskNow == 39){ShootX = 960; ShootY = 2630; ShootSX = 0.0; ShootSY = -10.0; weapNum = 2; g_timer = 2000; MakeWeaponShot();}
+            if (TaskNow == 40){ShootX = 780; ShootY = 2630; ShootSX = 0.0; ShootSY = -10.0; weapNum = 3; w_targX = 800; w_targY = 2630; MakeMissileShot();}
+            if (TaskNow == 41){ShootX = 7610; ShootY = 840; ShootSX = 0.0; ShootSY = 1.0; w_targX = 7570; w_targY = 1800; weapNum = 1; MakeMissileShot();}
+            if (TaskNow == 42){if (DoIt) {ShootX = 7060; ShootY = 1650; ShootSX = 2.0; ShootSY = -14.0; weapNum = 3; ExplTimer = 1350; MakeSheepShot(); DoIt = false;} else {ShootX = 7350; ShootY = 1650; ShootSX = -2.0; ShootSY = -14.0; weapNum = 3; ExplTimer = 1350; MakeSheepShot(); DoIt = true;}}
+            if (TaskNow == 43){ShootX = 7101; ShootY = 1759; ShootSX = 0.0; ShootSY = 5.0; gravArrow = 0.0; noStick = false; MakeArrow();}
+            if (TaskNow == 44){ShootX = 7258; ShootY = 1680; ShootSX = 5.0; ShootSY = 0.0; gravArrow = 0.0; noStick = false; MakeArrow();}
+            if (TaskNow == 45){ShootX = 5850; ShootY = 1705; ShootSX = 2.75; ShootSY = 0.0; weapNum = 1; ExplTimer = 9000; MakeSheepShot(); PlaySound(50, 10, 0.90, 1.10);}
+            if (TaskNow == 46){ShootX = 5850; ShootY = 1700; ShootSX = 3.25; ShootSY = 0.0; weapNum = 1; MakeWeaponShot();}
+            if (TaskNow == 47){if (fc == 0 || fc == 1) {if (fc == 0){fc = 1; ShowMessage("8 left"); PlaySound(54, 10, 1, 1);}} else if (fc != 0){ShowMessage("Fail"); PlaySound(125, 10, 1, 1); fc = 0;}}
+            if (TaskNow == 48){if (fc == 1 || fc == 2) {if (fc == 1){ShowMessage("7 left"); fc = 2; PlaySound(54, 10, 1, 1);}} else if (fc != 0){ShowMessage("Fail"); PlaySound(125, 10, 1, 1); fc = 0;}}
+            if (TaskNow == 49){if (fc == 2 || fc == 3) {if (fc == 2){ShowMessage("6 left"); fc = 3; PlaySound(54, 10, 1, 1);}} else if (fc != 0){ShowMessage("Fail"); PlaySound(125, 10, 1, 1); fc = 0;}}
+            if (TaskNow == 50){if (fc == 3 || fc == 4) {if (fc == 3){ShowMessage("5 left"); fc = 4; PlaySound(54, 10, 1, 1);}} else if (fc != 0){ShowMessage("Fail"); PlaySound(125, 10, 1, 1); fc = 0;}}
+            if (TaskNow == 51){if (fc == 4 || fc == 5) {if (fc == 4){ShowMessage("4 left"); fc = 5; PlaySound(54, 10, 1, 1);}} else if (fc != 0){ShowMessage("Fail"); PlaySound(125, 10, 1, 1); fc = 0;}}
+            if (TaskNow == 52){if (fc == 5 || fc == 6) {if (fc == 5){ShowMessage("3 left"); fc = 6; PlaySound(54, 10, 1, 1);}} else if (fc != 0){ShowMessage("Fail"); PlaySound(125, 10, 1, 1); fc = 0;}}
+            if (TaskNow == 53){if (fc == 6 || fc == 7) {if (fc == 6){ShowMessage("2 left"); fc = 7; PlaySound(54, 10, 1, 1);}} else if (fc != 0){ShowMessage("Fail"); PlaySound(125, 10, 1, 1); fc = 0;}}
+            if (TaskNow == 54){if (fc == 7 || fc == 8) {if (fc == 7){ShowMessage("1 left"); fc = 8; PlaySound(54, 10, 1, 1);}} else if (fc != 0){ShowMessage("Fail"); PlaySound(125, 10, 1, 1); fc = 0;}}
+            if (TaskNow == 55){if (fc == 8) {Root->Timer = 15000; ShowMessage("Well done!"); DoExplosion(7260, 1680, 10, 10, 1, 0); DoExplosion(7270, 1680, 10, 10, 1, 0); DoExplosion(7280, 1680, 10, 10, 1, 0); DoExplosion(7290, 1680, 10, 10, 1, 0); DoExplosion(7300, 1680, 10, 10, 1, 0); fc = 0;  PlaySound(6, 10, 1, 1);} else if (fc != 0){ShowMessage("Fail"); PlaySound(125, 10, 1, 1); fc = 0;}}
+            if (TaskNow == 56){ShootX = 7258; ShootY = 1680; ShootSX = 5.0; ShootSY = 0.0; gravArrow = 0.0; noStick = false; MakeArrow();}
+            if (TaskNow == 57){ShootX = 3200; ShootY = 1385; ShootSX = RandomFloat(0.10, 4.25); ShootSY = 0.0; weapNum = 1; MakeWeaponShot(); ShootSX = RandomFloat(0.10, 4.25); MakeWeaponShot(); ShootSX = RandomFloat(0.10, 4.25); MakeWeaponShot(); ShootSX = RandomFloat(0.10, 4.25); MakeWeaponShot(); ShootSX = RandomFloat(0.10, 4.25); MakeWeaponShot(); ShootSX = RandomFloat(0.10, 4.25); MakeWeaponShot(); ShootSX = RandomFloat(0.10, 4.25); MakeWeaponShot(); ShootSX = RandomFloat(0.10, 4.25); MakeWeaponShot(); ShootSX = RandomFloat(0.10, 4.25); MakeWeaponShot();}
+            if (TaskNow == 58){ShootX = 2450; ShootY = 15; ShootSX = 16.3; ShootSY = -12.3; weapNum = 3; g_timer = 1000; MakeWeaponShot(); ShootX = 2500; g_timer = 1050; MakeWeaponShot(); ShootX = 2550; g_timer = 1100; MakeWeaponShot(); ShootX = 2600; g_timer = 1150; MakeWeaponShot(); ShootX = 2650; g_timer = 1200; MakeWeaponShot(); ShootX = 2700; g_timer = 1250; MakeWeaponShot(); ShootX = 2750; g_timer = 1300; MakeWeaponShot(); ShootX = 2800; g_timer = 1350; MakeWeaponShot(); ShootX = 2850; g_timer = 1400; MakeWeaponShot(); ShootX = 2900; g_timer = 1450; MakeWeaponShot(); ShootX = 3000; g_timer = 1500; MakeWeaponShot();}
+        }
+//////////////////////////////////  FIREWORKS!  ///////////////////////////////////////
+        if (TaskNow > 58)
+        {
+            if (TaskNow == 60)     // Fireworks (all)
+            {
+                if (floop == 0)
+                {
+                    if (fcheck) {Root->Timer = 30000; fcheck = false;}
+                    ShootX = 8372 + fi;
+                    if (ShootX <= 8762 && ShootX >= 8372)
+                    {
+                        ShootY = 1367;
+                        ShootSX = RandomFloat(9.5,10.5);
+                        ShootSY = RandomFloat(-16.5,-19.0);
+                        weapNum = 1;
+                        ExplTimer = 1000;
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi += 78;
+                    } else {
+                    fi += 78 *3.75;
+                    if (fi >= 1014)
+                    {
+                        fi = 1014;
+                        floop = 1;
+                    }
+                    return;
+                    }
+                }
+                if (floop == 1)
+                {
+                    ShootX = 8372 + fi;
+                    if (ShootX <= 9386 && ShootX >= 8996)
+                    {
+                        ShootY = 1367;
+                        ShootSX = RandomFloat(-9.5,-10.5);
+                        ShootSY = RandomFloat(-16.5,-19.0);
+                        weapNum = 2;
+                        ExplTimer = 1000;
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi -= 78;
+                    } else {
+                    fi -= 78 *2.5;
+                    if (fi <= 0)
+                    {
+                        fi = 0;
+                        floop = 2;
+                    }
+                    return;
+                    }
+                }
+                if (floop == 2)
+                {
+                    ShootX = 8372 + fi;
+                    if (ShootX <= 9386 && ShootX >= 8372)
+                    {
+                        ShootY = 1367;
+                        ShootSX = RandomFloat(0.0,0.0);
+                        ShootSY = RandomFloat(-13.5,-15.0);
+                        weapNum = 3;
+                        ExplTimer = 1000;
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi += 78 *2;
+                    } else {
+                    if (fcheck)
+                    {
+                        fn = 3;
+                        fcheck = false;
+                    }
+                    fn--;
+                    if (fn <= 0)
+                    {
+                        fi = 78 *6;
+                        fn = 1;
+                        floop = 3;
+                        fcheck = true;
+                    }
+                    return;
+                    }
+                }
+                if (floop == 3)
+                {
+                    ShootX = 8372 + fi;
+                    if (ShootX <= 9386 && ShootX >= 8372)
+                    {
+                        ShootY = 1367;
+                        ShootSX = RandomFloat((3.5 + fn),(4.5 + fn));
+                        ShootSY = RandomFloat(-16.5,-19.0);
+                        ExplTimer = 1000;
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi += 78 *fn;
+                        ShootX = 8372 + fi;
+                        ShootSX = RandomFloat((-3.5 - fn),(-4.5 - fn));
+                        ShootSY = RandomFloat(-16.5,-19.0);
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi -= 78 *fn;
+                        fi -= 78;
+                        fn += 2;
+                        if (weapNum != 3) weapNum = 3; else weapNum = 1;
+                    } else {
+                    if (fcheck)
+                    {
+                        fn = 0;
+                        fcheck = false;
+                    }
+                    fn++;
+                    if (fn >= 3)
+                    {
+                        fi = 78 *6;
+                        fn = 1;
+                        floop = 4;
+                        fcheck = true;
+                    }
+                    return;
+                    }
+                }
+                if (floop == 4)
+                {
+                    ShootX = 8372 + fi;
+                    if (ShootX <= 9386 && ShootX >= 8372)
+                    {
+                        ShootY = 1367;
+                        ShootSX = RandomFloat((1.5 + fn),(2.5 + fn));
+                        ShootSY = RandomFloat(-16.5,-25.0);
+                        ExplTimer = 1000;
+                        weapNum = 3;
+                        MakeFirework2();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi += 78 *fn;
+                        ShootX = 8372 + fi;
+                        ShootSX = RandomFloat((-1.5 - fn),(-2.5 - fn));
+                        ShootSY = RandomFloat(-16.5,-25.0);
+                        MakeFirework2();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi -= 78 *fn;
+                        fi -= 78;
+                        fn += 2;
+                        if (fn == 15)
+                        {
+                            PlaySound(44, 10, 1.0, 1.5);
+                            fi = 1020;
+                            ShowMessage("Good Game!");
+                            fcheck = true;
+                            ShootX = 8372 + 78*7;
+                            ShootSX = 2.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*8;
+                            ShootSX = -2.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*6;
+                            ShootSX = 4.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*9;
+                            ShootSX = -4.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*5;
+                            ShootSX = 6.5;
+                            MakeFirework2();
+                            weapNum = 2;
+                            ShootSY = RandomFloat(16.5,25.0);
+                            MakeFirework2();
+                            ShootX = 8372 + 78*10;
+                            ShootSX = -6.5;
+                            weapNum = 3;
+                            ShootSY = RandomFloat(-16.5,-25.0);
+                            MakeFirework2();
+                            weapNum = 2;
+                            ShootSY = RandomFloat(16.5,25.0);
+                            MakeFirework2();
+                            ShootX = 8372 + 78*4;
+                            ShootSX = 8.5;
+                            weapNum = 3;
+                            ShootSY = RandomFloat(-16.5,-25.0);
+                            MakeFirework2();
+                            ShootX = 8372 + 78*11;
+                            ShootSX = -8.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*3;
+                            ShootSX = 10.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*12;
+                            ShootSX = -10.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*2;
+                            ShootSX = 12.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*13;
+                            ShootSX = -12.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*1;
+                            ShootSX = 14.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*14;
+                            ShootSX = -14.5;
+                            MakeFirework2();
+                        }
+//                        if (weapNum != 3) weapNum = 3; else weapNum = 1;
+                    } else {
+                    if (fcheck)
+                    {
+                        fn = 0;
+                        fcheck = false;
+                    }
+                    fn++;
+                    if (fn >= 4)
+                    {
+                        fi = 0;
+                        fn = 1;
+                        floop = 0;
+                        fcheck = true;
+                    }
+                    return;
+                    }
+                }
+            }
+            if (TaskNow == 61)      //f1
+            {
+                ShootX = 8372 + fi;
+                if (ShootX <= 8762 && ShootX >= 8372)
+                {
+                    ShootY = 1367;
+                    ShootSX = RandomFloat(9.5,10.5);
+                    ShootSY = RandomFloat(-16.5,-19.0);
+                    weapNum = 1;
+                    ExplTimer = 1000;
+                    MakeFirework();
+                    PlaySound(44, 10, 1.0, 0.9);
+                    fi += 78;
+                } else {
+                    fi = 0;
+                }
+            }
+            if (TaskNow == 62)       //f2
+            {
+                ShootX = 8372 + fi;
+                if (ShootX <= 8762 && ShootX >= 8372)
+                {
+                    ShootY = 1367;
+                    ShootSX = RandomFloat(9.5,10.5);
+                    ShootSY = RandomFloat(-16.5,-19.0);
+                    weapNum = RandomInt(1, 3);
+                    ExplTimer = 1000;
+                    MakeFirework();
+                    PlaySound(44, 10, 1.0, 0.9);
+                    fi += 78;
+                } else {
+                    fi = 0;
+                }
+            }
+            if (TaskNow == 63)      //f3
+            {
+                ShootX = 8372 + fi;
+                if (ShootX <= 9386 && ShootX >= 8372)
+                {
+                        if (fcheck) {fi = 78 *6; fn = 1; fcheck = false;}
+                        ShootY = 1367;
+                        ShootSX = RandomFloat((1.5 + fn),(2.5 + fn));
+                        ShootSY = RandomFloat(-16.5,-25.0);
+                        ExplTimer = 1000;
+                        weapNum = 3;
+                        MakeFirework2();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi += 78 *fn;
+                        ShootX = 8372 + fi;
+                        ShootSX = RandomFloat((-1.5 - fn),(-2.5 - fn));
+                        ShootSY = RandomFloat(-16.5,-25.0);
+                        MakeFirework2();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi -= 78 *fn;
+                        fi -= 78;
+                        fn += 2;
+                } else {
+                        fi = 78*6;
+                        fn = 1;
+                        fcheck = true;
+                }
+            }
+            if (TaskNow == 64)      //f4
+            {
+                ShootX = 8372 + fi;
+                if (ShootX <= 9386 && ShootX >= 8372)
+                {
+                        if (fcheck) {fi = 0; fn = 13; fcheck = false;}
+                        ShootY = 1367;
+                        ShootSX = RandomFloat((1.5 + fn),(2.5 + fn));
+                        ShootSY = RandomFloat(-16.5,-25.0);
+                        ExplTimer = 1000;
+                        weapNum = 1;
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi += 78 *fn;
+                        ShootX = 8372 + fi;
+                        ShootSX = RandomFloat((-1.5 - fn),(-2.5 - fn));
+                        ShootSY = RandomFloat(-16.5,-25.0);
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi -= 78 *fn;
+                        fi += 78;
+                        fn -= 2;
+                } else {
+                        fi = 0;
+                        fn = 1;
+                        fcheck = true;
+                }
+            }
+            if (TaskNow == 65)      //f5
+            {
+                ShootX = 8372 + fi;
+                if (ShootX <= 9386 && ShootX >= 8372)
+                {
+                        ShootY = 1367;
+                        ShootSX = 0.0;
+                        ShootSY = RandomFloat(-15.5,-17.0);
+                        weapNum = RandomInt(1, 3);
+                        ExplTimer = 1000;
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi += 78 *2;
+                } else {
+                        fi = 0;
+                }
+            }
+            if (TaskNow == 66)      //f6
+            {
+                ShootX = 8372 + fi;
+                if (ShootX <= 9386 && ShootX >= 8372)
+                {
+                        ShootY = 1367;
+                        ShootSX = 0.0;
+                        ShootSY = 10.0;
+                        weapNum = 2;
+                        ExplTimer = 1000;
+                        MakeFirework2();
+//                        PlaySound(44, 10, 1.0, 0.9);
+                        fi += 78 *2;
+                } else {
+                        fi = 0;
+                }
+            }
+            if (TaskNow == 67)      //f7
+            {
+                    ShootX = 8372 + fi;
+                    if (ShootX <= 9386 && ShootX >= 8996)
+                    {
+                        ShootY = 1367;
+                        ShootSX = RandomFloat(-9.5,-10.5);
+                        ShootSY = RandomFloat(-16.5,-19.0);
+                        weapNum = 2;
+                        ExplTimer = 1000;
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi -= 78;
+                    } else {
+                        fi = 1014;
+                    }
+            }
+            if (TaskNow == 68)      //f8
+            {
+                 ShootX = 8372 + fi;
+                    if (ShootX <= 9386 && ShootX >= 8372)
+                    {
+                        ShootY = 1367;
+                        ShootSX = 0.0;
+                        ShootSY = RandomFloat(-13.5,-15.0);
+                        weapNum = 3;
+                        ExplTimer = 1000;
+                        MakeFirework();
+                        PlaySound(44, 10, 1.0, 0.9);
+                        fi += 78 *2;
+                    } else {
+                    fi = 0;
+                    }
+            }
+            if (TaskNow == 69)      //f9
+            {
+                            PlaySound(44, 10, 1.0, 1.5);
+                            ExplTimer = 1000;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootY = 1367;
+                            weapNum = 1;
+                            ShootX = 8372 + 78*7;
+                            ShootSX = 2.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*8;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -2.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*6;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 4.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*9;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -4.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*5;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 6.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*10;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -6.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*4;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 8.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*11;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -8.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*3;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 10.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*12;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -10.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*2;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 12.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*13;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -12.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*1;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 14.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*0;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 14.5;
+                            MakeFirework();
+            }
+            if (TaskNow == 70)      //f10
+            {
+                            PlaySound(44, 10, 1.0, 1.5);
+                            ExplTimer = 1000;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootY = 1367;
+                            weapNum = 2;
+                            ShootX = 8372 + 78*7;
+                            ShootSX = 2.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*8;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -2.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*6;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 4.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*9;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -4.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*5;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 6.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*10;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -6.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*4;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 8.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*11;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -8.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*3;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 10.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*12;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -10.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*2;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 12.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*13;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -12.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*1;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 14.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*0;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 14.5;
+                            MakeFirework();
+            }
+            if (TaskNow == 71)      //f11
+            {
+                            PlaySound(44, 10, 1.0, 1.5);
+                            ExplTimer = 1000;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootY = 1367;
+                            weapNum = 3;
+                            ShootX = 8372 + 78*7;
+                            ShootSX = 2.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*8;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -2.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*6;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 4.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*9;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -4.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*5;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 6.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*10;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -6.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*4;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 8.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*11;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -8.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*3;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 10.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*12;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -10.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*2;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 12.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*13;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -12.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*1;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 14.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*0;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 14.5;
+                            MakeFirework();
+            }
+            if (TaskNow == 72)      //f12
+            {
+                            PlaySound(44, 10, 1.0, 1.5);
+                            ExplTimer = 1000;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootY = 1367;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootX = 8372 + 78*7;
+                            ShootSX = 2.5;
+                            MakeFirework();
+                            ShootX = 8372 + 78*8;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -2.5;
+                            weapNum = RandomInt(1, 3);
+                            MakeFirework();
+                            ShootX = 8372 + 78*6;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 4.5;
+                            weapNum = RandomInt(1, 3);
+                            MakeFirework();
+                            ShootX = 8372 + 78*9;
+                            ShootSX = -4.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*5;
+                            ShootSX = 6.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*10;
+                            ShootSX = -6.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*4;
+                            ShootSX = 8.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*11;
+                            ShootSX = -8.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*3;
+                            ShootSX = 10.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*12;
+                            ShootSX = -10.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*2;
+                            ShootSX = 12.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*13;
+                            ShootSX = -12.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*1;
+                            ShootSX = 14.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+                            ShootX = 8372 + 78*0;
+                            ShootSX = 14.5;
+                            weapNum = RandomInt(1, 3);
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            MakeFirework();
+            }
+            if (TaskNow == 73)      //f13
+            {
+                            PlaySound(44, 10, 1.0, 1.5);
+                            ExplTimer = 1000;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootY = 1367;
+                            weapNum = 3;
+                            ShootX = 8372 + 78*7;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 2.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*8;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -2.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*6;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 4.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*9;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -4.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*5;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 6.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*10;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -6.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*4;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 8.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*11;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -8.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*3;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 10.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*12;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -10.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*2;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 12.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*13;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = -12.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*1;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 14.5;
+                            MakeFirework2();
+                            ShootX = 8372 + 78*0;
+                            ShootSY = RandomFloat(-13.5,-15.0);
+                            ShootSX = 14.5;
+                            MakeFirework2();
+            }
+            if (TaskNow == 74)      //f14
+            {
+                            TaskNow = RandomInt(61, 72);
+            }
+            if (TaskNow==100)
+            {
+            goodluck->Play(1.0, 1.0, false);
+            ShowMessage("Good Luck!");
+           playNow = false;
+            }
+            if (TaskNow==105)
+            {
+            sound_nonono->Play(1.0, 1.0, false);
+            ShowMessage("Don't go that way......");
+           playNow = false;
+            }
+
+            if (TaskNow==101)
+            {
+            ShowMessage("I did try to warn you! :p");
+            sound_haha->Play(1.0, 1.0, false);
+            playNow = false;
+
+            }
+            if (TaskNow==102)
+            {
+            ShowMessage("Wait for right time to move!");
+            }
+            if (TaskNow==103)
+            {
+            airplane->Play(1.0, 1.0, false);
+            ShowMessage("Mr T hates flying!");
+           playNow = false;
+            }
+            if (TaskNow==104)
+            {
+            sound_wind->Play(1.0, 1.0, false);
+            ShowMessage("Watch out for the Wind!");
+           playNow = false;
+            }
+            if (TaskNow==106)
+            {
+            ShowMessage("I'd slow if I were you :p");
+            }
+            if (TaskNow==107)
+            {
+            ShowMessage("Don't crash into the pixel!");
+            }
+            if (TaskNow==108)
+            {
+            sound_grenade->Play(1.0, 1.0, false);
+            ShowMessage("Bruno Mars...woop woop!");
+           playNow = false;
+            }
+            if (TaskNow==109)
+            {
+            ShowMessage("Just watch where you're going - hee hee!");
+            }
+            if (TaskNow==110)
+            {
+            ShowMessage("Something isn't quite right here..just watch it!");
+            }
+            if (TaskNow==111)
+            {
+            ShowMessage("Don't touch the lines here...you'll regret it :p");
+            }
+            if (TaskNow==112)
+            {
+            ShowMessage("Hide behind the wall in front of turret - don't get hit!");
+            }
+            if (TaskNow==113)
+            {
+            ShowMessage("Come on - you can do it!!");
+            sound_haha->Play(1.0, 1.0, false);
+            playNow = false;
+
+            }
+
+
+
+        }
+//            if (TaskNow == 56){AddSpr = new CWA_Spriter; AddSpr->PosX=6455; AddSpr->PosY=2400;  AddSpr->SprNum=64; AddSpr->ZPlane=16; AddSpr->ZoneName=ZoneName;}
+
+}
+
+void CCustomLibTask::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_TOUCHSENSOR)
+  {
+    if (timerToDisable <= 0) return;
+    if (timerToEnable > 0) return;
+    local activator = CTouchSensor(sender)->activator;
+    HandleObject(activator);
+  }
+  if (Type != M_FRAME) return;
+  if (Root->IsTimerActive() == false)
+  {
+    if (timerToDisable <= 0)
+    {
+      timerToEnable = 13;
+      return;
+    } else {
+      timerToDisable -= 1;
+    }
+  } else {
+    timerToDisable = 60;
+  }
+  timer += 1;
+  if (timerToEnable > 0)
+  {
+    timerToEnable -= 1;
+    return;
+  }
+
+  if (timer % fps) return;        //performance
+
+ if (zone == NullObj)
+   {
+     zone = SearchForZone(ZoneName);
+     return;
+   }
+ if (zone->active == false)
+ {
+     MakeNow = true;
+     return;
+ }
+
+//  if (Type == M_TOUCHSENSOR)
+//  {
+//    if (timerToDisable <= 0) return;
+//    if (timerToEnable > 0) return;
+//    local activator = CTouchSensor(sender)->activator;
+//    HandleObject(activator);
+//  }
+
+     local obj = CWorm(zone->activator);
+     if (obj is CWorm)
+     {
+        if (MakeOnce)
+        {
+            if(MakeNow)
+            {
+                HandleObject(obj);
+                MakeNow = false;
+            }
+        }
+        else
+        {
+            HandleObject(obj);
+        }
+     }
+};
+
+CSpriter_1by1::CSpriter_1by1(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  ZoneName = StrSave(aobj->GetString("ProximityZone"));
+  zone = CZone(NullObj);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+
+  order = aobj->GetInt("Order");
+//  checkOrder = 0;
+  ang1 = aobj->GetInt("RotationAngle");
+  ang = (ang1 / 360 + MATH_HALF_PI) * 6.3;
+  scl = aobj->GetInt("Scale");
+  scl = float(scl)/100.0;
+  if (ang > 0) rotate = true;
+  if (scl < 1) scale = true;
+  SprNum = aobj->GetInt("SpriteNum");
+  PlayOnce = aobj->GetBool("PlayOnce");
+  PlayBackwards = aobj->GetBool("PlayBackwards");
+  playnow =  true;
+  waSoundNum = aobj->GetInt("PlayWaSound");
+  if (waSoundNum == 0) {playSound = false;} else playSound = true;
+  playSoundNow = playSound;
+  checkLoop = 0;
+
+  local as = aobj->GetInt("AnimSpeed");
+  as = float(as)/1000.0;
+  AnimationSpeedT = 0.0;     // aobj->GetInt("AnimSpeed") / 100;
+  AnimationSpeedT = as;
+  AnimationPhaseT = 0.0;
+
+  ZPlane = aobj->GetInt("ZPlane");
+  CSpriter_1by1* Spriter_1by1;
+};
+
+
+void AddSpriter_1by1(CEditorObject* obj)
+{
+ new CSpriter_1by1(obj);
+}
+
+
+void CSpriter_1by1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (zone == NullObj)
+   {
+     zone = SearchForZone(ZoneName);
+     return;
+   }
+ if (zone->active == false)
+ {
+     AnimationPhaseT = 0.0;
+     playnow = true;
+     playSoundNow = true;
+     checkLoop = 0;
+     return;
+ }
+   local worm = CWorm(zone->activator);
+   if (worm is CWorm)
+   {
+      if(Type == M_DRAWQUEUE)
+      {
+         if (order == fc)
+        {
+                 if (playnow)
+                 {
+                     if (rotate || scale)
+                     { AddSpriteEx(ZPlane,PosX,PosY,SprNum,AnimationPhaseT,ang,scl);
+                     } else AddSprite(ZPlane,PosX,PosY,0,SprNum,AnimationPhaseT);
+                 }
+                 if (playSound) {if (playSoundNow) PlaySound(waSoundNum, 10, 1, 1); playSoundNow = false;}
+        }
+      }
+   }
+   if(Type == M_FRAME)
+   {
+      if (PlayBackwards)
+      {
+          if (checkLoop == 0) {AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;}
+          if(AnimationPhaseT > 0.99){ if(checkLoop == 0) {AnimationPhaseT = AnimationPhaseT - AnimationSpeedT; checkLoop = 1;}}
+          if (checkLoop == 1) { AnimationPhaseT = AnimationPhaseT - AnimationSpeedT;}
+          if(checkLoop == 1){ if(AnimationPhaseT <= 0.00){AnimationPhaseT = AnimationPhaseT + AnimationSpeedT; if (PlayOnce){checkLoop = -1; playnow = false;}else{checkLoop = 0;}}}
+      } else
+      {
+          if(AnimationPhaseT > 0.99){AnimationPhaseT = 0.0; if (PlayOnce)playnow = false;}
+          else if (playnow){AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;}
+      }
+   }
+}
+
+
+void SpawnCustomLibTask(CEditorObject* obj)
+{
+  cls = new CCustomLibTask(obj);
+};
+
+void SpawnCrateSupplyZ(CEditorObject* obj)
+{
+  cs = new CCrateSupplyZ(obj);
+};
+void SpawnTrap(CEditorObject* obj)
+{
+  trap = new CTrap(obj);
+};
+void SpawnZone(CEditorObject* obj)
+{
+  zone = new CZone(obj);
+};
+void SpawnGControl(CEditorObject* obj)
+{
+  gc = new CEGameControl(obj);
+};
+void SpawnWormSupply(CEditorObject* obj)
+{
+  gc = new CWormSupply(obj);
+};
+void SpawnWormCheckpoint(CEditorObject* obj)
+{
+  gc = new CWormCheckpoint(obj);
+};
+void SpawnTeleport(CEditorObject* obj)
+{
+  gc = new CMapTeleport(obj);
+};
+
+//////////////////////////////////
+//EXTRA EDITOR OBJECTS
+//////////////////////////////////
+
+$editor
+
+ $object CustomTeamHealth
+  $origin -15 -15
+  $image "edcthealth.png"
+  $radius 17
+  $func SpawnCTHealth
+  $param Team int 1
+  $param Worm1Health int 0
+  $param Worm2Health int 0
+  $param Worm3Health int 0
+  $param Worm4Health int 0
+  $param Worm5Health int 0
+  $param Worm6Health int 0
+  $param Worm7Health int 0
+  $param Worm8Health int 0
+ $object_end
+
+ $object CrateSupplyEx
+  $origin -15 -15
+  $image "edcrate.png"
+  $func SpawnCrateSupplyEx
+  $radius 17
+  $param Weapon string "Bazooka"
+  $param Amount int 1
+  $param Delay int 1
+  $param Page int 1 //unnecessary?
+ $object_end
+
+ $object BowlingBall
+  $origin -16 -16
+  $image "edbowlingball.png"
+  $func SpawnBBall
+  $radius 17
+ $object_end
+
+ $object Fan
+  $origin -14 -20
+  $image "edfan.png"
+  $func SpawnFan
+  $radius 21
+  $param FanForce int 3
+  $param UnsafeMode bool false
+  $param FacesRight bool true
+ $object_end
+
+ $object ElectroMagnet
+  $origin -13 -13
+  $image "edmagnet.png"
+  $func SpawnMagnet
+  $radius 14
+  $param Repel bool true
+  $param Range radius 170
+ $object_end
+
+ $object PurchaseItem
+  $origin -32 -40
+  $image "edshop.png"
+  $radius 41
+  $func SpawnItemShop
+  $param ShopID int 1
+  $param PurchaseZone objectt Zone
+  $param Limit int 1
+  $param Stock1 objectt ItemStock
+  $param Stock2 objectt ItemStock
+  $param Stock3 objectt ItemStock
+  $param Stock4 objectt ItemStock
+  $param Stock5 objectt ItemStock
+  $param Stock6 objectt ItemStock
+  $param Stock7 objectt ItemStock
+  $param Stock8 objectt ItemStock
+  $param Stock9 objectt ItemStock
+  $param Stock10 objectt ItemStock
+  $param Stock11 objectt ItemStock
+  $param Stock12 objectt ItemStock
+  $param Stock13 objectt ItemStock
+  $param Stock14 objectt ItemStock
+  $param Stock15 objectt ItemStock
+  $param Stock16 objectt ItemStock
+  $param Stock17 objectt ItemStock
+  $param Stock18 objectt ItemStock
+  $param Stock19 objectt ItemStock
+  $param Stock20 objectt ItemStock
+ $object_end
+
+ $object ItemStock
+  $origin -8 -8
+  $image "edshopitem.png"
+  $radius 17
+  $autoname IStock
+  $func SpawnItemStock
+  $param Weapon string "Bazooka"
+  $param Amount int 1
+  $param Page int 1 //unnecessary?
+  $param CoinPrice int 1
+  $param DiamondPrice int 1
+ $object_end
+
+
+ $object CoinBonus
+  $origin -15 -15
+  $image "edcross.png"
+  $radius 17
+  $func SpawnCoinBonus
+  $param SmallBonus int 1
+  $param PerXDamage int 10
+  $param BetterBonus int 5
+  $param PerYDamage int 75
+  $param HugeBonus int 10
+  $param PerZDamage int 150
+ $object_end
+$end
+
+//////////////////////////////////
+//Classes..
+CTHealthControl : CObject;
+CCrateSupplyEx : CObject;
+CBBallSpawn : CObject;
+CFanSpawn : CObject;
+CMagnetSpawn : CObject;
+CShopInterface : CObject;
+CItemStock : CObject;
+CCoinBonus : CObject;
+CTHealthControl* hControl;
+CFilter* gTrapParent2;
+CSoundFile* PurchaseSound;
+string shop_weapname[201];
+string shop_obj2name[201];
+int shop_Page[201];
+int shop_Amount[201];
+int shop_Price[201];
+int shop_Price2[201];
+CWeapon* shop_ActualWeap[201];
+int initialhp[70];
+
+//////////////////////////////////
+
+void extraobjs::Init()
+{
+    keySync->AddKey(66); //Sync B
+    keySync->AddKey(78); //Sync N
+}
+
+void extraobjs::InitSMap() //I'm not sure what this does, I'll leave it here anyway.
+{
+  filter = new CFilter(Root, 50);
+  filter->ForbidAll();
+  filter->Allow(M_FRAME);
+  filter->Allow(M_DRAWQUEUE);
+
+  gTrapParent2 = filter;
+
+  hControl = CTHealthControl(NullObj);
+};
+
+//////////////////////////////////
+
+CItemStock* SearchForStock(string Name)
+{
+  for (local i = 0; i < gTrapParent2->Childs.Count; i += 1)
+  {
+    obj = CItemStock(gTrapParent2->Childs.Objs[i]);
+    if (obj is CItemStock)
+    {
+      if (StrCmp(obj->my_name, Name))
+      {
+        return obj;
+      };
+    };
+  };
+  return NullObj;
+};
+
+CTHealthControl::CTHealthControl(CEditorObject* aobj) //Team Health Control
+{
+  hControl = this;
+  super(gTrapParent2, GS);
+	CHTeam = aobj->GetInt("Team");
+	W1Health = aobj->GetInt("Worm1Health");
+	W2Health = aobj->GetInt("Worm2Health");
+	W3Health = aobj->GetInt("Worm3Health");
+	W4Health = aobj->GetInt("Worm4Health");
+	W5Health = aobj->GetInt("Worm5Health");
+	W6Health = aobj->GetInt("Worm6Health");
+	W7Health = aobj->GetInt("Worm7Health");
+	W8Health = aobj->GetInt("Worm8Health");
+
+        //Set Worm Health values individually:
+
+        if (Root->GetObject(2, 1+ CHTeam * 16))
+           if (W1Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 1, W1Health);
+	if (Root->GetObject(2, 2+ CHTeam * 16))
+	   if (W2Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 2, W2Health);
+	if (Root->GetObject(2, 3+ CHTeam * 16))
+	   if (W3Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 3, W3Health);
+	if (Root->GetObject(2, 4+ CHTeam * 16))
+           if (W4Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 4, W4Health);
+	if (Root->GetObject(2, 5+ CHTeam * 16))
+           if (W5Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 5, W5Health);
+	if (Root->GetObject(2, 6+ CHTeam * 16))
+           if (W6Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 6, W6Health);
+	if (Root->GetObject(2, 7+ CHTeam * 16))
+           if (W7Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 7, W7Health);
+	if (Root->GetObject(2, 8+ CHTeam * 16))
+           if (W8Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 8, W8Health);
+
+  if (Root->GetObject(2, 1 + 16)) //??
+  {
+     WormsHealth = GS->Info.GetWormHealth(1, 1); //Remove?
+  };
+};
+
+void CCrateSupplyEx::Spawn() //Spawn Crate
+{
+ if (GotWeap == true && OnHold == false) {
+  //GetWeaponByName won't work here, GotWeap&OnHold are a workaround
+  CCrateDesc cDesc;
+  zero(&cDesc);
+  cDesc.X = PosX;
+  cDesc.Y = PosY;
+  cDesc.type = CrateType;
+  cDesc.wType = WCT_DEFINED;
+  cDesc.weapon = 100 * Page + Weapon->GetWeaponIndex();
+  cDesc.amount = Amount;
+
+  spawnee = new CCrate(Root, &cDesc, DT_NONE);
+  timer = Delay;
+  }
+ else OnHold = true;
+}
+
+CCrateSupplyEx::CCrateSupplyEx(CEditorObject* obj) //CrateSupply Extended
+{
+   super(Root, GS);
+
+   PosX = obj->PosX;
+   PosY = obj->PosY;
+
+   Delay = obj->GetInt("Delay");
+   CrateType = CT_WEAPON;
+   WeapName = obj->GetString("Weapon");
+   Amount = obj->GetInt("Amount");
+   Page = obj->GetInt("Page");
+
+   timer = Delay;
+   OnHold = false; //Will get your CWeapon soon
+   GotWeap = false;
+
+   spawnee = CCrate(NullObj);
+   Spawn();
+}
+
+CItemStock::CItemStock(CEditorObject* obj) //Item Stock
+{
+ super(gTrapParent2, GS);
+ my_name = StrSave(obj->GetName());
+ st_weapname = obj->GetString("Weapon");
+ st_Page = obj->GetInt("Page");
+ st_Amount = obj->GetInt("Amount");
+ st_Price = obj->GetInt("CoinPrice");
+ st_Price2 = obj->GetInt("DiamondPrice");
+}
+
+CShopInterface::CShopInterface(CEditorObject* obj) //Shop Interface
+{
+   super(Root, GS);
+
+   myX = obj->PosX;
+   myY = obj->PosY;
+   StockNum = obj->GetInt("Limit"); //How many items are sold here?
+   ZoneName = StrSave(obj->GetString("PurchaseZone")); //Link
+   MyShopID = (obj->GetInt("ShopID"))-1; //My Unique ID
+
+   GotSound = false; //Will get your CSound soon
+   GotStock = false; //Which weapons are we selling?
+   SelWeap = 1;      //Currently selected weapon
+
+   for(local i = (MyShopID*20)+1; i <= (MyShopID*20)+20; i ++)
+   {
+      //Get our ItemStocks' names so we can find them later.
+      shop_obj2name[i] = StrSave(obj->GetString(StrCon("Stock",ItoA(i-(MyShopID*20)))));
+   }
+
+   sm = new CBuyInterface(GetObject(25, 0)); //Create BuyInterface
+   sm->PosX = myX;                           //to draw stuff for us..
+   sm->PosY = myY;
+   sm->ReadyToGo = false;
+
+   sm->StockNum = StockNum;
+   sm->SelWeap = SelWeap;
+}
+
+CCoinBonus::CCoinBonus(CEditorObject* obj) //Coin Bonus
+{
+   super(Root, GS);
+
+   sbcoins = obj->GetInt("SmallBonus");    //Player will receive SmallBonus
+   bbcoins = obj->GetInt("BetterBonus");   //amount of coins N times;
+   hbcoins = obj->GetInt("HugeBonus");
+
+   sbdamage = obj->GetInt("PerXDamage");   // N = TotalDamage/X
+   bbdamage = obj->GetInt("PerYDamage");
+   hbdamage = obj->GetInt("PerZDamage");   //Same is valid for Better and Huge
+                                           //bonuses.
+
+   lastteam = -1;
+
+   for (local j = 1; j <= 6; j += 1) //Every Team
+   {
+   for (local i = 1; i <= 8; i += 1) //Every Worm
+   {
+   initialhp[i + j*10] = 0;                       //derp
+   }
+   }
+
+}
+
+CBBallSpawn::CBBallSpawn(CEditorObject* obj) //Bowling Ball Spawn
+{
+   super(Root, GS);
+
+   bx = obj->PosX;
+   by = obj->PosY;
+
+  DidSpawn = false;
+}
+
+CFanSpawn::CFanSpawn(CEditorObject* obj) //Fan Spawn
+{
+   super(Root, GS);
+
+   bx = obj->PosX;
+   by = obj->PosY;
+   FForce = obj->GetInt("FanForce");
+   if (FForce > 5)
+      FForce = 5;
+   Unsafe = obj->GetBool("UnsafeMode");
+   if (Unsafe)
+      FMode = 1;
+   else
+      FMode = 0;
+   FRight = obj->GetBool("FacesRight");
+   if (FRight)
+      TSide = 1;
+   else
+      TSide = -1;
+  DidSpawn = false;
+}
+
+CMagnetSpawn::CMagnetSpawn(CEditorObject* obj) //Electromagnet Spawn
+{
+   super(Root, GS);
+
+   bx = obj->PosX;
+   by = obj->PosY;
+   Rep = obj->GetBool("Repel");
+   Range = obj->GetInt("Range");
+   if (!Rep)
+      Polarity = -1;
+   else
+      Polarity = 1;
+   DidSpawn = false;
+}
+
+void CBBallSpawn::DoSpawn() //Actually spawn the Bowling Ball
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+
+     SDesc.Team = 1; //Any would do, really.
+     SDesc.X = bx;
+     SDesc.Y = by;
+     SDesc.SpX = 0;
+     SDesc.SpY = 0;
+
+     local BBall = new CBowlingBall(Root->GetObject(25, 0), &SDesc); //Hooray!
+}
+
+void CFanSpawn::DoSpawn() //Actually spawn the Fan
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+
+     SDesc.Team = 0;
+     SDesc.X = bx;
+     SDesc.Y = by;
+     SDesc.SpX = 0;
+     SDesc.SpY = 0;
+
+     local Fan = new PxFan(GetObject(25, 0), &SDesc, FForce, FMode, TSide);
+     Fan->TurnsRemaining = 32000; //Gotta last for some time!
+     Fan->MaxHealth = 32000; //Gotta endure some explosions!
+     Fan->Health = 32000; //Yeah
+}
+
+void CMagnetSpawn::DoSpawn() //Actually spawn the Magnet.
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+
+     SDesc.Team = 0;
+     SDesc.X = bx;
+     SDesc.Y = by;
+     SDesc.SpX = 0;
+     SDesc.SpY = 0;
+
+     local Magnet = new CMagnet(GetObject(25, 0), &SDesc, 1, Polarity);
+     Magnet->TurnsRemaining = 32000; //Gotta last for some time as well!
+     Magnet->IgnoreDamage = true; //Damage? What damage?
+     Magnet->MaxRange = Range;
+
+}
+
+void CCoinBonus::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (Type == M_TURNBEGIN) //Get all health values at turn start
+     {                        //to compare with previous turn's.
+        local coinbonus = 0;
+        local totaldamage = 0;
+        for (local j = 1; j <= 6; j += 1) //Every Team
+        {
+        for (local i = 1; i <= 8; i += 1) //Every Worm
+        {
+            local objWorm = CWorm(Root->GetObject(2, i + j * 16));
+            if (objWorm)
+            {
+               local curhealth = GS->Info.GetWormHealth(j, i);
+               if ((j != lastteam) && (lastteam != -1)) //No bonus for friendly fire!
+               {
+                 if (curhealth<initialhp[i + j * 10]) { //Ouch, that hurt.
+                  totaldamage += initialhp[i + j * 10]-curhealth; //Bonus!
+                 }
+               }
+               initialhp[i + j * 10] = curhealth; //Got it!
+            }
+            else //It might have died.
+            {
+              if (initialhp[i + j * 10] > 0) //Did it really die?
+             {
+                if ((j != lastteam) && (lastteam != -1)) //No bonus for suiciding!
+                {
+                totaldamage += initialhp[i + j * 10]; //Bonus for you!
+                }
+                initialhp[i + j * 10] = 0; //Reset the HP anyways
+             }
+            }
+        }
+        }
+        if ((totaldamage>=sbdamage) && (lastteam > 0)) { //Eligible for Small Bonus?
+           local minibonus = (totaldamage/sbdamage)*sbcoins;
+           local megabonus = 0;
+           local gigabonus = 0;
+           if (totaldamage >= bbdamage) { //Eligible for Better Bonus?!
+              megabonus = (totaldamage/bbdamage)*bbcoins;
+              if (totaldamage >= hbdamage) { //Eligible for HUGE Bonus?!!
+                 gigabonus = (totaldamage/hbdamage)*hbcoins;
+              }
+           }
+           local wep = GS->GetWeaponByName("Gold Coin");
+           GS->Info.AddWeaponEx(lastteam,wep->GetWeaponIndex(),wep->GetPageIndex(),minibonus);
+           //Compliment player and display bonus values
+           if (gigabonus>0)
+           {ShowMessage(StrCon(StrCon(StrCon(StrCon("Awesome! ",GetTeamName(lastteam))," got "),ItoA(minibonus+megabonus+gigabonus))," coins!"));}
+           else if (megabonus>0)
+           {ShowMessage(StrCon(StrCon(StrCon(StrCon("Nice! ",GetTeamName(lastteam))," got "),ItoA(minibonus+megabonus))," coins!"));}
+           else
+           {ShowMessage(StrCon(StrCon(StrCon(GetTeamName(lastteam)," got "),ItoA(minibonus+megabonus+gigabonus))," coins."));}
+        }
+     }
+     if (Type == M_TURNEND) //Which team has just played?
+     {
+        lastteam = Root->CurTeam;
+     }
+}
+
+void CShopInterface::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+
+     if (Type == M_FRAME)
+     {
+      if (GotSound) //Got our CSound already? Ready to work!
+      {
+      if (zone == NullObj) //We actually have a link
+        {
+        zone = SearchForZone(ZoneName); //Where is it?
+        return;
+        }
+      else {
+           if (GotStock)
+           { //We have our weapons!
+           if (zone->active) //Worm detected!
+           {
+            CWorm *ActWorm = GetCurrentWorm();
+            if(ActWorm != NullObj) {
+                if (keySync->KeyPressedNow(66)) { //B Pressed, attempting to buy!
+                   local wep = GS->GetWeaponByName("Gold Coin");
+                   local wep2 = GS->GetWeaponByName("Diamond");
+                   //Got enough money?
+                   if (GS->Info.AddWeaponEx(Root->CurTeam,wep->GetWeaponIndex(),wep->GetPageIndex(),0) >= shop_Price[(MyShopID*20)+SelWeap] && GS->Info.AddWeaponEx(Root->CurTeam,wep2->GetWeaponIndex(),wep2->GetPageIndex(),0) >= shop_Price2[(MyShopID*20)+SelWeap] )
+                   {
+                   ShowMessage("Succesfully bought!");
+                   SoundObj = CSound(NullObj);
+	           PurchaseSound->Play(1.0, 0.0, false);
+                   GS->Info.AddWeaponEx(Root->CurTeam,wep->GetWeaponIndex(),wep->GetPageIndex(),-shop_Price[(MyShopID*20)+SelWeap]);
+                   GS->Info.AddWeaponEx(Root->CurTeam,wep2->GetWeaponIndex(),wep2->GetPageIndex(),-shop_Price2[(MyShopID*20)+SelWeap]);
+                   GS->Info.AddWeaponEx(Root->CurTeam,shop_ActualWeap[(MyShopID*20)+SelWeap]->GetWeaponIndex(),shop_Page[(MyShopID*20)+SelWeap],shop_Amount[(MyShopID*20)+SelWeap]);
+                   }
+                   else {
+                   ShowMessage("Not enough coins/diamonds!");
+                   }
+                }
+                else if (keySync->KeyPressedNow(78)) { //N Pressed, next Weapon please
+                 if (SelWeap<StockNum) SelWeap+=1;
+                 else SelWeap = 1;
+                        //Update our loyal interface
+                        sm->SelWeap = SelWeap;
+                        sm->Weap = shop_weapname[(MyShopID*20)+SelWeap];
+                        sm->OrigName = shop_weapname[(MyShopID*20)+SelWeap];
+                        sm->MyWeap = shop_ActualWeap[(MyShopID*20)+SelWeap];
+                        sm->Amount = shop_Amount[(MyShopID*20)+SelWeap];
+                        sm->CPrice = shop_Price[(MyShopID*20)+SelWeap];
+                        sm->DPrice = shop_Price2[(MyShopID*20)+SelWeap];
+                        sm->Page = shop_Page[(MyShopID*20)+SelWeap];
+                        sm->Updated = true;
+                }
+            }
+           }
+           }
+           else
+           { //No Stock
+             obj2 = SearchForStock(shop_obj2name[(MyShopID*20)+1]); //At least one has to exist.
+             if (obj2 != NullObj) {
+             for(local i = (MyShopID*20)+1; i <= (MyShopID*20)+20; i ++)
+             {
+              obj2 = SearchForStock(shop_obj2name[i]);
+              if (obj2 != NullObj) {
+                shop_weapname[i] = obj2->st_weapname; //Filling our arrays...
+                shop_Page[i] = obj2->st_Page;
+                shop_Amount[i] = obj2->st_Amount;
+                shop_Price[i] = obj2->st_Price;
+                shop_Price2[i] = obj2->st_Price2;
+                shop_ActualWeap[i] = GS->GetWeaponByName(shop_weapname[i]);
+                }
+                else {
+                shop_weapname[i] = "Bazooka"; //Default values
+                shop_Page[i] = 1;
+                shop_Amount[i] = 1;
+                shop_Price[i] = 1;
+                shop_Price2[i] = 0;
+                }
+             }
+              GotStock=true;
+              sm->SelWeap = SelWeap; //Keep our BuyInterface updated!
+              sm->Weap = shop_weapname[(MyShopID*20)+SelWeap];
+              sm->OrigName = shop_weapname[(MyShopID*20)+SelWeap];
+              sm->Amount = shop_Amount[(MyShopID*20)+SelWeap];
+              sm->CPrice = shop_Price[(MyShopID*20)+SelWeap];
+              sm->DPrice = shop_Price2[(MyShopID*20)+SelWeap];
+              sm->Page = shop_Page[(MyShopID*20)+SelWeap];
+              sm->ReadyToGo = true;
+             }
+             else {
+              ShowMessage("No ITEMSTOCK found!");
+             }
+           }
+      }
+      }
+      else {
+      //There we go, our cash register sound effect
+      CFile *f;
+      f = GetAttachment("kaching.wav");
+      PurchaseSound = new CSoundFile(f);
+      GotSound=true;
+      }
+     }
+}
+
+void CBBallSpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (DidSpawn == false) //Haven't spawned yet?
+     {
+      if (Type == M_FRAME) //Time to do so!
+      {
+       DoSpawn();
+       DidSpawn = true;
+      }
+     }
+}
+
+void CFanSpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (DidSpawn == false) //Haven't spawned yet?
+     {
+      if (Type == M_FRAME) //Time to do so!
+      {
+       DoSpawn();
+       DidSpawn = true;
+      }
+     }
+}
+
+void CMagnetSpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (DidSpawn == false) //Haven't spawned yet?
+     {
+      if (Type == M_FRAME) //Time to do so!
+      {
+       DoSpawn();
+       DidSpawn = true;
+      }
+     }
+}
+
+void CCrateSupplyEx::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_TURNEND)
+   {
+     if (spawnee == NullObj)
+     {
+       if (timer <= 0)
+       {
+         Spawn();
+       } else
+       timer--;
+     } else timer = Delay;
+   }
+   if (Type == M_FRAME)
+   {
+   if (GotWeap == false)
+     {
+     Weapon = GS->GetWeaponByName(WeapName); //Now we've got the weapon!
+     GotWeap = true;
+     }
+   else if (OnHold == true)
+     {
+      OnHold = false; //Ready to spawn..
+      Spawn();
+     }
+   }
+}
+
+//Spawn stuff.
+///////////////////////////
+
+void SpawnCrateSupplyEx(CEditorObject* obj)
+{
+  cs = new CCrateSupplyEx(obj);
+};
+
+void SpawnCTHealth(CEditorObject* obj)
+{
+  ct = new CTHealthControl(obj);
+};
+
+void SpawnBBall(CEditorObject* obj)
+{
+  bbobj = new CBBallSpawn(obj);
+};
+
+void SpawnFan(CEditorObject* obj)
+{
+  fanobj = new CFanSpawn(obj);
+};
+
+void SpawnMagnet(CEditorObject* obj)
+{
+  magobj = new CMagnetSpawn(obj);
+};
+
+void SpawnItemShop(CEditorObject* obj)
+{
+  si = new CShopInterface(obj);
+};
+
+void SpawnCoinBonus(CEditorObject* obj)
+{
+  cb = new CCoinBonus(obj);
+};
+
+void SpawnItemStock(CEditorObject* obj)
+{
+  is = new CItemStock(obj);
+};
+
+/////////////////////////////////

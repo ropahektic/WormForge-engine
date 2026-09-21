@@ -1,0 +1,19 @@
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+     if (Weap->CheckName("Team Freeze"))
+     {
+         for (local i = 1; i < Env->Objs.Count; i++)
+         {
+            local foundObj = CWorm(Env->Objs.Objs[i]);
+            if (foundObj != NullObj && foundObj is CWorm)
+            {
+                if (foundObj->LabelColor == LabelColor && foundObj->ObjState != WS_FROZEN)
+                {
+                    foundObj->SetState(WS_FROZEN);
+                }
+            }
+        }
+     }
+     
+     else super;
+}

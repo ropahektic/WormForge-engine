@@ -1,0 +1,172 @@
+// By PyroMan.
+
+require utils, utils_steps, utils_pyroman, p_sprite_builder;
+
+CSoundFile* missile_launch;
+CMissile* nuke_rocket;
+
+void nuke_rocket_script::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("missile_launch_audio.wav");
+    missile_launch = new CSoundFile(f);
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    im_cnuke = false;
+    nr_first = false;
+    nr_timer = 53;     // 1.1-1.2 second
+}
+
+void CMissile::MakeNuke(int ClPosX, int ClPosY, int spx, int spy)                             // Nuke
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+     SDesc.Team = ClWT;
+     SDesc.Worm = ClWN;
+     SDesc.X = ClPosX;
+     SDesc.Y = ClPosY;
+     SDesc.SpX = spx;
+     SDesc.SpY = spy;
+     SDesc.Delay = 0;
+     local ldata;
+     ldata = GetWeaponByName("Nuke Rocket");  
+     if (ldata == NullObj) ldata = GetWeaponByName("Cluster Bomb");   
+     if (ldata == NullObj) ldata = GetWeaponByName("Grenade");      
+     if (ldata == NullObj) ldata = GetWeaponByName("Dynamite");    
+     if (ldata == NullObj) ldata = GetWeaponByName("Holy Hand-Grenade");    
+     if (ldata == NullObj) return;
+     ldata->launch.explosion.damage = 0;     
+     ldata->launch.explosion.bias = 50;     
+     ldata->launch.explosion.pushPower = 70;    
+     ldata->launch.sound.soundIndex = 0;
+     ldata->launch.timeBeforeExplosion = 1600;
+     ldata->launch.explosion.damage = 0;
+     ldata->launch.countdownFrom = 0;  
+     ldata->launch.explodeInto = WExplode_Clustlets;
+     CNuke = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+     CNuke->im_cnuke = true;
+     CNuke->im_nuke_child = true;
+     ldata->launch.explodeInto = WExplode_Nothing;
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    super;
+    if (nr_first)
+    {
+         missile_launch->Play( 1.0, 1.0, false);
+         MakeNuke(PosX, PosY, SpX, SpY);
+    }
+    if (im_cnuke)
+    {
+       PlaySound(85, 1.0, 1.0, 1.0);
+       PlaySound(70, 1.0, 1.0, 1.0);   // louder please :D
+       DoExplosion(x, y, 40, 40, 0, ClWT);
+       DoExplosion(x, y, 40, 40, 0, ClWT);
+    }
+}
+
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (nr_first)     // first nuke rocket, that stand on ground and fusing
+        {
+           imCheckMis = this;
+           if (not_too_much_particles) do_sprite_trail_effects(81, PosX, PosY+15); //106
+           if (gframe % 10) {} else PlaySound(66, 1.0, 1.0, 0.85);
+        }
+        if (im_cnuke)    // flying nuke rocket
+        {
+          imCheckMis = this;
+          if (nr_timer > 0)
+          {
+           if (not_too_much_particles) do_sprite_trail_effects(75, PosX, PosY+15);
+           if (not_too_much_particles) do_sprite_trail_effects(75, PosX, PosY+25);
+           SpY -= RandomFloat(0.3, 0.8);
+           if (gframe % 2)
+           {
+             SpX += RandomFloat(-0.3, 0.3);
+           }
+           for (local i = 0; i < Env->Objs.Count; i++)
+           {
+               local obj = CGObject(Env->Objs.Objs[i]);
+               if (obj == NullObj) continue;
+               if (obj is CWorm || obj is COilDrum || obj is CMine || obj is CCrate || obj is CArrow || obj is CMissile || obj is CBawlingBall)
+               {
+                   if (obj->PosX < PosX + 17 && obj->PosX > PosX - 17 && obj->PosY < PosY + 17 && obj->PosY > PosY-17)
+                   {
+                      obj->SpX = SpX;
+                      obj->SpY = SpY;
+                   }
+               }
+           }
+           nr_timer--;
+          } 
+          else {
+            if (SpY < 0) SpY += 0.2;        // we need slow down rocket, but don`t need fake gravity effect.
+          }
+        }
+                         
+    }                                    
+    super;
+}
+
+/*
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+local worm = GetCurrentWorm();
+
+    if (Type == M_FRAME)
+    {
+      if (worm != NullObj)
+      {
+        if (worm->CurWeapon->CheckName("Nuke Rocket"))
+        {
+           if (TimeToFire < 1) CanFire = true;
+           if (TimeToFire > 0) TimeToFire--;
+        }
+      } 
+    }
+    super;
+}
+*/
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Nuke Rocket"))
+    {
+        CheckParticlesNumber();
+        ClWT = WormTeam;
+        ClWN = WormNumber;
+        CShootDesc SDesc;
+        zero(&SDesc);
+        SDesc.Team = ClWT;
+        SDesc.Worm = ClWN;
+        SDesc.X = PosX;
+        SDesc.Y = PosY;
+//        SDesc.SpX = SpX+0.5*TurnSide;
+//        SDesc.SpY = SpY-0.5;
+        SDesc.SpX = Desc->SpX;    // lol.
+        SDesc.SpY = Desc->SpY;
+        SDesc.Delay = 0;
+        local ldata;
+        ldata = GetWeaponByName("Nuke Rocket");
+        ldata->launch.sound.soundIndex = 66;      // 66
+        ldata->launch.timeBeforeExplosion = 3000;
+        ldata->launch.explosion.damage = 0;
+        ldata->launch.countdownFrom = 0;  
+        ldata->launch.explodeInto = WExplode_Nothing;
+        nuke_rocket = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+        nuke_rocket->nr_first = true;
+        //TimeToFire = 5;         // it needs a time to proceed everything!! spamming this rocket every frame will cause desynch
+        //CanFire = false;
+        return;
+    }
+    super;
+}

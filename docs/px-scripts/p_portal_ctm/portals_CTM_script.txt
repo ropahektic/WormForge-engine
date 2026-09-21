@@ -1,0 +1,15 @@
+require utils, p_portalgun2;
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   local checker;
+   if (checker)
+   {
+      if (Type == M_FRAME)
+      {
+          disable_all_portals = true;
+          checker = false;
+      }
+   }
+   super;
+}

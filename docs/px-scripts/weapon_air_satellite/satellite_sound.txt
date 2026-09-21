@@ -1,0 +1,15 @@
+CSoundFile* satellitecrashing;
+ 
+void satellite_sound::Init()
+{
+	satellitecrashing       = new CSoundFile(GetAttachment("Satellite Crashing Down.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Satellite Crash"))
+  {  
+             satellitecrashing->Play(1.84, 0.0, false);
+  }
+  super;
+}

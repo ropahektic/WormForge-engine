@@ -1,0 +1,27 @@
+/* 
+
+Made by: DannyB, April 2023
+
+*/
+
+// This script adds a crate-counter to the game (can be used for statistical GUI's)
+
+int crate_counts[6];
+
+void Crate_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          crate_counts[i] = 0;
+     }
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{  
+     if(type == M_CRATECOLLECTED)
+     {
+          crate_counts[current_worm_team]++;
+     } 
+  
+     super;
+}

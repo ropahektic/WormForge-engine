@@ -1,0 +1,22 @@
+CSprite* arrown;
+
+void no_arrows::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("transparent50.png");
+   arrown = LoadSprite(f, 1, 0);
+
+
+   SetSpriteOverride(20, arrown);
+   SetSpriteOverride(21, arrown);
+   SetSpriteOverride(22, arrown);
+   SetSpriteOverride(23, arrown);
+   SetSpriteOverride(24, arrown);
+   SetSpriteOverride(25, arrown);
+   SetSpriteOverride(26, arrown);
+   SetSpriteOverride(27, arrown);
+   SetSpriteOverride(28, arrown);
+   SetSpriteOverride(29, arrown);
+   SetSpriteOverride(30, arrown);
+   SetSpriteOverride(31, arrown);
+}

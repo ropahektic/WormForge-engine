@@ -1,0 +1,119 @@
+require utils, p_sprite_builder, sprite_curtis_250, sprite_curtis_251, sprite_curtis_259;
+
+CSprite* remoter_aiming;
+CSprite* sremoter_aiming;
+
+void rr_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("remoter.png");
+    remoter_aiming = LoadSprite(f, 12, 0);
+    f = GetAttachment("sremoter.png");
+    sremoter_aiming = LoadSprite(f, 12, 0);
+}
+
+//---------------------------------REMOTE ROLLER (THROW)----------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Remote Roller";
+     sprite = remoter_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -14.1;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     Params->animate = true;
+     Params->anim_speed = 1.15;
+     Params->dont_rotate_with_angle = true;
+     Params->hand_ang_if_static = 0.4;
+     Params->ang_if_static = 0.0;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+//---------------------------------REMOTE ROLLER (CROSSHAIR)------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Remote Roller ";
+     sprite = remoter_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.15;
+     Params->hand_radius = -14.1;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     Params->animate = true;
+     Params->anim_speed = 1.2;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+//---------------------------------SUPER REMOTE ROLLER (THROW)----------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Super Remote Roller";
+     sprite = sremoter_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.15;
+     Params->hand_radius = -16.5;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     Params->animate = true;
+     Params->anim_speed = 1.2;
+     Params->dont_rotate_with_angle = true;
+     Params->hand_ang_if_static = 0.4;
+     Params->ang_if_static = 0.0;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+//---------------------------------SUPER REMOTE ROLLER (CROSSHAIR)------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Super Remote Roller ";
+     sprite = sremoter_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.15;
+     Params->hand_radius = -16.0;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     Params->animate = true;
+     Params->anim_speed = 1.2;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

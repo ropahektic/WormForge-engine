@@ -1,0 +1,34 @@
+require utils, p_sprite_builder, sprite_curtis_249;
+
+CSprite* blasterw_aiming;
+
+void blaster_worm_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("spb_blasterw.png");
+    blasterw_aiming = LoadSprite(f, 4, 0);
+}
+
+//---------------------------------BLASTER WORM-------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Blaster Worm";
+     sprite = blasterw_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 1.40;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

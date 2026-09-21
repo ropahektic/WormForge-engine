@@ -1,0 +1,17 @@
+require utils;
+
+$editor
+ $object OilDrum
+  $origin -13 -17
+  $image "eddrum.png"
+  $func SpawnDrum
+  $radius 19
+ $object_end
+$end
+
+void SpawnDrum(CEditorObject* obj)
+{
+  local x = obj->PosX;
+  local y = obj->PosY;
+  local Drum = new COilDrum(Root->GetObject(25, 0), x, y, false);
+};

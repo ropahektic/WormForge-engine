@@ -1,0 +1,321 @@
+require utils;
+
+#RESPAWN_CONTROL
+
+CRespawnControl* rControl;      
+
+void respawn_man_s::Init()
+{
+  rControl = new CRespawnControl;
+}
+
+void CWorm::notifyRessurection()
+{
+}
+
+void CWorm::notifyDeath(bool sank)
+{
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{                   
+  if (!rControl->enabled)
+  {
+    super;
+    return;
+  }
+  for (local ti = 0; ti < rControl->nSTeams; ti++)
+  {   
+     local team = rControl->STeams[ti];
+     if (rControl->teams[team].nWorms == 0)
+     {
+       rControl->TurnTeam(team);
+     }
+  }          
+  rControl->TurnTeam(Team);    
+  super;   
+}
+
+override int CTurnGame::GetNextTeam()
+{                     
+  local nt = super;       
+  if (!rControl->enabled) return nt;  
+  if (!rControl->initialized) return nt;
+  
+  WriteToLog(MakeNumberString("Getnextteam : ", int(nt), ""));
+//  ShowMessage(StrCon(MakeNumberString("Team ", nt, " nnWorms "), ItoA(rControl->teams[nt].nWorms) ) );
+//  if (nt != rControl->lastTeam)
+//  {
+//    rControl->lastTeam = nt;
+    
+//  }
+
+  if (rControl->teams[nt].skipTurn) return GetNextTeam();
+
+  if (rControl->nSTeams2 == 0) rControl->nSTeams = 0;
+  
+  if (rControl->teams[nt].nWorms == 0)
+  {
+    if (rControl->nSTeams2 < 8)
+    {
+      local tm = rControl->nSTeams2;
+      rControl->STeams[tm] = nt;
+      rControl->nSTeams2 += 1; 
+      rControl->nSTeams += 1;
+    } else {
+      rControl->TurnTeam(nt);
+    }
+    return GetNextTeam();
+  }
+  rControl->nSTeams2 = 0;
+  return nt;
+}
+
+override int CTeam::GetNextWorm()
+{                        
+  WriteToLog("CTeam::GetNextWorm()");
+  local nw = super;   
+  if (rControl->enabled == false) return nw;   
+  WriteToLog(MakeNumberString("GetNextWorm W : ", int(nw), ""));
+  WriteToLog(MakeNumberString("GetNextWorm T : ", int(Index), ""));
+
+  local w = CWorm(Root->GetObject(2, 16 * Index + nw));
+  if (w->imGhost)
+  {
+    CurWorm = nw;
+    return GetNextWorm();
+  }
+  
+  return nw;
+}
+
+override void CWorm::Free(bool FreeMem)
+{             
+  WriteToLog("CWorm::Free()");
+  if (rControl->enabled)
+  {
+     notifyDeath(PosY > Env->Water);
+     local i2 = WormTeam * 8 + WormNumber - 9;
+     rControl->worms[i2].isAlive = false;
+     rControl->worms[i2].delay = rControl->rDelay;
+     rControl->teams[WormTeam].nWorms -= 1;
+  }
+  if ((rControl->teams[WormTeam].nGhosts == 0) && rControl->enabled && rControl->teams[WormTeam].enabled)
+  {
+    for (local worm = 1; worm <= 8; worm++)
+    {
+      ShowMessage("GHOST");
+      local i2 = WormTeam * 16 + worm;
+      local w = Root->GetObject(2, i2);
+      if ( w == NullObj )
+      {
+        rControl->putGhost(WormTeam, worm);
+        rControl->teams[WormTeam].nGhosts += 1;
+        break;
+      }
+    }
+  }
+  super;
+}
+
+
+CRespawnControl::CRespawnControl()
+{
+  WriteToLog("Respawn Control Enabled");   
+  initialized = false;
+  enabled = false;
+  rDelay = 0;
+  worms = new CRespawnState[48];
+  teams = new CRespawnTeam[7]; 
+//  teams[7].enabled = true;
+  STeams = new int[16]; 
+  lastTeam = -1;
+  nSTeams = 0;
+  nSTeams2 = 0;
+//  Zero = 0; //temporary workaround of EAX bug // fixed
+  for (local team = 1; team <= 6; team += 1)
+  {   
+    teams[team].enabled = false;
+    teams[team].skipTurn = false;
+  }
+}
+
+void CRespawnControl::putGhost(int team, int worm)
+{
+  local w = RessurectWormEx(worm, team, -1000, -1000, "immaghost", 1);
+  if (w == NullObj) return;
+  GS->Info.SetWormHealth(team, worm, 1);
+  w->imGhost = true;
+  teams[team].nGhosts += 1;
+//  ShowMessage(StrCon(MakeNumberString("Team ", team, " got a ghost "), ItoA(worm) ) );
+}
+
+void CRespawnControl::SetRespawnPosition(int worm, int team, fixed x, fixed y)
+{
+  worms[team * 8 + worm - 9].X = x; 
+  worms[team * 8 + worm - 9].Y = y;
+}
+
+void CRespawnControl::Enable(int delay)
+{
+  enabled = true;
+  rDelay = delay;
+  for (local i = 1; i <= 6; i += 1)
+  {
+    teams[i].enabled = true;
+  }                 
+}
+
+void CRespawnControl::SetWinner(int winClr)
+{
+      local w = GetCurrentWorm();
+      if (w != NullObj && GetTeamColor(w->WormTeam) != winClr)
+      {
+        Root->DoExplosion(w->PosX, w->PosY, 100, 8, 1, 1);
+      }
+      
+      
+   for (local team = 1; team <= 6; team++)
+   {
+     if (GetTeamColor(team) == winClr) continue;
+     DisableTeam(team);
+     for (local worm = 1; worm <= 8; worm++)
+     {
+        GS->Info.SetWormHealth(team, worm, 0);
+        GS->Info.Teams[team-1].Worms[worm-1].State = 135;
+     }
+   }
+}
+
+void CRespawnControl::Disable()
+{          
+  for (local team = 1; team <= 6; team++)
+  {
+        DisableTeam(team);
+  }                                           
+  enabled = false;
+}
+
+void CRespawnControl::DisableTeam(int team)
+{                  
+  teams[team].enabled = false;                             
+    for (local worm = 1; worm <= 8; worm++)
+    {
+        local i = team * 16 + worm;  
+        local w = CWorm(Root->GetObject(2, i));
+        if (w != NullObj)
+        {
+           if (w->imGhost)
+           {                      
+             GS->Info.SetWormHealth(team, worm, 0);
+             GS->Info.Teams[team-1].Worms[worm-1].State = 135;
+             w->Free(true);
+             teams[team].nGhosts -= 1;
+           }
+        }        
+    }
+}
+
+void CRespawnControl::TurnTeam(int team)
+{                              
+    if (!teams[team].enabled) return;
+    for (local worm = 1; worm <= 8; worm++)
+    {
+        local i = team * 16 + worm;
+        local i2 = team * 8 + worm - 9;
+        if (worms[i2].wasAlive == false) continue;
+        worms[i2].delay -= 1;
+        if (worms[i2].delay >= 0) continue;        
+        local w = CWorm(Root->GetObject(2, i));
+        if (w != NullObj)
+        {
+           if (w->imGhost)
+           {
+             w->Free(true);
+             w = CWorm(NullObj);
+             teams[team].nGhosts -= 1;
+           }
+        }        
+        if (w == NullObj)
+        {              
+//          WriteToLog("Respawned");
+//          ShowMessage(StrCon("Respawned : ", worms[i2].wName ) );
+//          RessurectWorm(worm, team, worms[i2].X, worms[i2].Y);   
+          RessurectWormEx(worm, team, worms[i2].X, worms[i2].Y,worms[i2].wName, worms[i2].health); 
+          w = CWorm(Root->GetObject(2, i));
+          w->notifyRessurection();
+          worms[i2].isAlive = true;
+          teams[team].nWorms += 1;
+        }       
+    }
+}
+
+void CRespawnControl::Think()
+{                                                    
+//  WriteToLog(MakeNumberString("Think respawn control : ", int(initialized), ""));
+  if (!initialized)
+  {
+//    WriteToLog(MakeNumberString("Initializing respawn control : ", rDelay, ""));
+    for (local team = 1; team <= 6; team++)
+    {             
+//      WriteToLog(MakeNumberString("Team processing : ", team, ""));
+      local nWorms = 0;
+      for (local worm = 1; worm <= 8; worm++)
+      {
+        local i = team * 16 + worm;
+        local i2 = team * 8 + worm - 9;
+        local w = CWorm(Root->GetObject(2, i));
+        if (w)
+        {                           
+          worms[i2].wasAlive = true;  
+          worms[i2].health = GS->Info.GetWormHealth(team, worm);
+          worms[i2].isAlive = true;
+          worms[i2].X = w->PosX;
+          worms[i2].Y = w->PosY;
+          worms[i2].delay = 0;
+          worms[i2].wName = w->GetName();
+          nWorms += 1;
+        } else {
+          worms[i2].wasAlive = false;
+        }
+      }               
+      WriteToLog(MakeNumberString("Team worms : ", nWorms, ""));
+      teams[team].nWorms = nWorms;
+      teams[team].nGhosts = 0;
+      if (nWorms > 0 && nWorms < 8) putGhost(team, 8);
+    }
+    initialized = true;
+  }
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  super;
+  imGhost = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (imGhost) return;
+  super;              
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (rControl->enabled && Type == M_FRAME) rControl->Think();       
+  super;
+  if (Type != M_FRAME) return; 
+  
+if (Root->IsTimerActive())
+//  if (Type == M_TURNEND)
+  { 
+    if (rControl->enabled && rControl->rDelay == 0)
+    {
+       for (local i = 1; i <= 6; i++)
+       {
+         if (i != Root->CurTeam)
+          rControl->TurnTeam(i);
+       } 
+    }
+  }  
+}

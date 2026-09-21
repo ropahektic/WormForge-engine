@@ -1,0 +1,216 @@
+require utils;
+
+$editor
+ $object Portal
+  $origin -50 -50
+  $image "port1.png"
+  $radius 30
+  $param Move bool false
+  $param Rad int 30  
+  $func SpawnPortal
+  $param OwnIndex int 1             
+  $param DestIndex int 2
+  $param Team int 0
+ $object_end  
+$end
+
+CPortal : CGObject;
+
+CSprite* PortalSprite1;
+CSprite* PortalSprite2;
+CSprite* PortalSprite3;
+CSprite* PortalSprite4;
+CSprite* PortalSprite5;
+CSprite* PortalSprite6;
+//CSprite* PortalSprite6;
+//CSound* PortalSound1;
+
+void portal::InitGraphic()
+{
+    local PG1     = GetAttachment("port1.png");
+    PortalSprite1 = LoadSprite(PG1, 1, 0);
+    local PG2     = GetAttachment("port2.png");
+    PortalSprite2 = LoadSprite(PG2, 1, 0);
+    local PG3     = GetAttachment("port3.png");
+    PortalSprite3 = LoadSprite(PG3, 1, 0);
+    local PG4     = GetAttachment("port4.png");
+    PortalSprite4 = LoadSprite(PG4, 1, 0);
+    local PG5     = GetAttachment("port5.png");
+    PortalSprite5 = LoadSprite(PG5, 1, 0);
+    local PG6     = GetAttachment("port6.png");
+    PortalSprite6 = LoadSprite(PG6, 1, 0);
+}
+
+CPortal::CPortal(CObject* parent, fixed x, fixed y)
+{    
+    
+    super(parent, 17, 9); 
+    PosX = x;
+    PosY = y;
+    CirclePosX  = PosX - 50;
+    CirclePosY  = PosY;
+    DoTeleport  = true;
+    
+    PortSprite1 = PortalSprite1;
+    PortSprite2 = PortalSprite2;
+    PortSprite3 = PortalSprite3;
+    PortSprite4 = PortalSprite4;
+    PortSprite5 = PortalSprite5;
+    PortSprite6 = PortalSprite6;
+
+    IsMaterial  = false;
+    ClType      = EObjectClass(935);
+    ang1        = 0.0;
+    ang2        = 0.0;
+    ang3        = 0.0;
+    ang4        = 0.0;
+    angrot      = 0.0;
+    TimeFr      = 0;
+    TimeSec     = 5;
+    FlashScale  = 0.0;
+    }
+
+void SpawnPortal(CEditorObject* edobj)
+ {
+    local x = edobj->PosX;
+    local y = edobj->PosY;
+    local p = new CPortal(Root->Store->GetObject(25, 0), x, y);
+    p->Rad  = edobj->GetInt("Rad");
+    p->InIndex = edobj->GetInt("OwnIndex");
+    p->OutIndex = edobj->GetInt("DestIndex");  
+    p->Move  = edobj->GetBool("Move");
+    p->Team  = edobj->GetInt("Team");
+ }
+
+
+
+
+void CPortal::CheckNPort()
+
+{
+  if (DoTeleport == true)
+  {   
+   for (local i = 1; i < Env->Objs.Count; i+=1)
+     { 
+     
+     
+     local Obj = Env->Objs.Objs[i]; 
+     local Target = CGObject(Obj); 
+     if (Obj == NullObj) continue;
+     if (Obj->ClType == EObjectClass(935)) continue;
+     local TX  = Target->PosX - PosX;
+     local TY  = Target->PosY - PosY;
+     local dobj = sqrt(TX * TX + TY * TY); 
+     
+      if (dobj <= Rad)
+      {
+       for (local i = 1; i < Env->Objs.Count; i+=1)
+        {
+          local Port = CPortal(Env->Objs.Objs[i]);
+          if ((Port is CPortal) == false) continue;
+          if (Port->InIndex == OutIndex) 
+          {
+             if (Target->RopeAttached > 0)
+             {
+                Target->RopeAttached =0;
+                Target->SetState(WS_AFTERROPE);
+             }
+             Port->DoTeleport = false;
+             DoTeleport = false;
+             Target->PosX = Port->PosX; 
+             Target->PosY = Port->PosY;
+             
+          
+          }
+         }
+      
+      }
+    }
+   } 
+}    
+
+void CPortal::Cooldown()
+{
+ if (DoTeleport == false)
+    {             
+    TimeFr = TimeFr + 1;
+        if (TimeFr == 50)
+           {
+             TimeSec    = TimeSec - 1;
+             TimeFr     = 0;
+           }   
+        if (TimeSec == 0)
+           {
+             DoTeleport = true;
+             TimeSec    = 5;
+             FlashScale  = 0.4;
+           }                   
+     }        
+}
+
+
+
+void CPortal::Movement()
+{
+if (Move == true)
+          {    
+          angrot = angrot + 0.025;
+   
+          PosX = 50 * cos(angrot) + CirclePosX; 
+          PosY = 50 * sin(angrot) + CirclePosY;           
+          if ( angrot >= 6.283)
+           { 
+             angrot = 0 ;
+           }
+          }
+}
+
+void CPortal::Animation()
+{
+         local spr1 = PortSprite1->Index;    
+         local spr2 = PortSprite2->Index; 
+         local spr3 = PortSprite3->Index;  
+         local spr4 = PortSprite4->Index;
+         local spr5 = PortSprite5->Index;
+         local spr6 = PortSprite6->Index;
+
+         ang1 = ang1 + 0.025;
+         ang2 = ang2 + 0.008;
+         ang3 = ang3 - 0.003;
+         ang4 = ang4 - 0.010;
+         if (DoTeleport == true)
+         {
+         AddSpriteEx(0, PosX, PosY, spr1, 0, ang1, 0.6);
+         }
+         AddSpriteEx(0, PosX, PosY, spr2, 0, ang2, 0.5);
+         AddSpriteEx(0, PosX, PosY, spr3, 0, ang3, 0.57);
+         AddSpriteEx(0, PosX, PosY, spr4, 0, ang4, 0.4);   
+         if (DoTeleport == false)
+         {                            
+           AddSpriteEx(0, PosX, PosY, spr6, 0, ang1, 0.6);
+           if (FlashScale <= 1.5)              
+              {                
+                AddSpriteEx(0, PosX, PosY, spr5, 0, ang1, FlashScale); 
+                FlashScale = FlashScale + 0.01;             
+              }
+         }
+}
+
+
+
+void CPortal::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+   {    
+         
+          Cooldown()  ;
+          CheckNPort();
+          Movement()  ;
+   }
+  
+   if (Type == M_DRAWQUEUE)
+   {
+          Animation() ;
+   }
+   super;
+}

@@ -1,0 +1,310 @@
+require utils, particles;
+
+#MAPTELEPORTS
+
+$editor
+ 
+ $object Teleport
+  $origin -15 -15
+  $image "telep.png"
+  $radius 17
+  $func SpawnTeleport     
+  $autoname Tport
+  $param LinkedTo objectt Teleport
+  $param IsToRightSide bool true
+  $param ExitOnly bool false
+  $param TeleportMissiles bool true
+  $param TrapTeleport bool false
+  $param Size area 50 50
+  $param Color color 0 0 0
+  $param HighlightSize int 20   
+  $param LandTeleport bool false
+ $object_end
+ 
+$end
+
+CFilter* gTeleParent;
+
+void mapteleport::InitSMap()
+{  //50 is a random number. Don't look for meaning of life here.
+  filter = new CFilter(Root, 50);
+  filter->ForbidAll();
+  filter->Allow(M_FRAME);
+  filter->Allow(M_DRAWQUEUE);  
+  
+  gTeleParent = filter;
+};
+
+CMapTeleport : CObject;
+
+CMapTeleport::CMapTeleport(CEditorObject* aobj)
+{
+  super(gTeleParent, GS);
+  pr_x1 = aobj->PosX;
+  pr_x2 = aobj->PosX + aobj->GetInt("Size");
+  pr_y1 = aobj->PosY;
+  pr_y2 = aobj->PosY + aobj->GetInt2("Size"); 
+  isRight = aobj->GetBool("IsToRightSide");     
+  isExit = aobj->GetBool("ExitOnly");
+  tpMissiles = aobj->GetBool("TeleportMissiles"); 
+  trapTeleport = aobj->GetBool("TrapTeleport");  
+  landTeleport = aobj->GetBool("LandTeleport");
+  
+  if (isExit) landTeleport = false;
+  
+  hSize = aobj->GetInt("HighlightSize") / 2;   
+  hColor = aobj->GetInt("Color");
+  hX = 0; hY = 0; hTraced = false;
+  
+  hSize = (pr_x2 - pr_x1) / 2;
+  
+  
+  
+  if (isRight)
+  {
+    tp_x = int(pr_x1 + ((pr_x2 - pr_x1) / 3) * 2);
+  } else {                         
+    tp_x = int(pr_x1 + (pr_x2 - pr_x1) / 3);
+  };
+   
+  tp_y = int((pr_y1 + pr_y2) / 2);
+   
+  timer = 0;
+  waiting = false;
+  LinkedTo = StrSave(aobj->GetString("LinkedTo"));
+  t_name = StrSave(aobj->GetName());
+  linked = CMapTeleport(NullObj);
+  
+  if (landTeleport)
+  {
+    touchSensor = new CTouchSensor(this, pr_x1, pr_y1, pr_x2 - pr_x1, pr_y2 - pr_y1);
+  }
+};
+
+void CMapTeleport::TeleportObject(CGObject* obj)
+{               
+ if (obj->ColMask->Check(linked->tp_x, linked->tp_y, CGObject(Env->Objs.Objs[0])->ColMask, 0, 0))
+ {
+    GG->land->MakeHole( 15, linked->tp_x, linked->tp_y);
+ }
+ 
+ if (obj->ClType == OC_Worm)
+ {
+  waiting = true;
+  linked->waiting = true;
+        
+  local worm = CWorm(obj);
+  
+  if (worm->ObjState == WS_WALKING) worm->SetState(WS_IDLE);    
+  if (worm->ObjState == WS_ROPING) worm->SetState(WS_IDLE);
+        
+  worm->PosX = linked->tp_x;
+  worm->PosY = linked->tp_y;
+  if (isRight == linked->isRight) 
+  {
+    worm->SpX = -worm->SpX;
+    worm->TurnSide = -worm->TurnSide;
+  }
+ } else {
+     obj->PosX = linked->tp_x;
+     obj->PosY = linked->tp_y;
+     if (isRight == linked->isRight) obj->SpX = -obj->SpX;
+ }
+}
+
+void CMapTeleport::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type == M_TOUCHSENSOR_COLLIDE)
+  {
+    if (linked != NullObj)
+    {
+       local ts = CTouchSensor(sender);
+       local activator = ts->activator;
+       if (activator->ClType != OC_Worm)
+       {
+         if (!tpMissiles || (activator->ClType != OC_Missile)) return;
+       } else {
+         if (!trapTeleport && (activator != GetCurrentWorm())) return;
+       }         
+       if (timer <= 0)
+       {
+          MData->params[0] = 1; //disable collision
+       }
+    }
+    return;
+  }
+  if (Type == M_TOUCHSENSOR)
+  {
+     if (linked == NullObj) return;
+     
+     if (timer > 0)
+     {
+       timer = 2;
+       return;
+     }
+     
+     local ts = CTouchSensor(sender);
+     local activator = ts->activator;
+     
+     if (activator->ClType != OC_Worm)
+     {
+       if (!tpMissiles || (activator->ClType != OC_Missile)) return;
+     }  else {
+       if (!trapTeleport && (activator != GetCurrentWorm())) return;
+     }         
+            
+     TeleportObject(activator);
+     
+     if (activator->ClType == OC_Worm)
+     {
+       ts->noCollide = true;
+     } else {
+       ts->noCollide = false;
+     }
+     
+     timer = 2;
+     linked->timer = 2;
+     return;
+  }
+  if (Type == M_DRAWQUEUE)
+  {
+     
+     if (hTraced && hSize > 0 && hColor != 0)
+     {                
+        CQuad q;
+        q.blend = 0; q.tex = 0;
+        q.v[0].x = hX - hSize;
+        q.v[0].y = hY;      
+        q.v[1].x = hX - hSize;
+        q.v[1].y = hY - 20;
+        q.v[2].x = hX + hSize;
+        q.v[2].y = hY - 20;
+        q.v[3].x = hX + hSize;
+        q.v[3].y = hY;
+        
+        cAdd = int( float(random() * 25) ) << 24;
+        
+        q.v[0].color = hColor | $A0000000 + cAdd;  
+        q.v[1].color = hColor & $00FFFFFF;
+        q.v[2].color = hColor & $00FFFFFF;            //hColor & $00FFFFFF
+        q.v[3].color = hColor | $A0000000 + cAdd;
+        AddSpriteQ(26, &q, 0, 0, 0);
+     }
+  }
+  
+  if (Type != M_FRAME) return;
+  if (linked == NullObj)
+  {
+    if (StrCmp(LinkedTo, "")) return;
+    for (local i = 0; i < gTeleParent->Childs.Count; i += 1)
+    {
+      local obj = CMapTeleport(gTeleParent->Childs.Objs[i]);
+      if (obj is CMapTeleport)
+      {
+        if (StrCmp(obj->t_name, LinkedTo))
+        {
+          linked = obj;
+          linked->linked = this;
+          if (hColor != 0)
+          {
+            linked->hColor = hColor;
+          } else if (linked->hColor != 0)
+          {
+            hColor = linked->hColor;
+          }
+          break;
+        }
+      }
+    }
+    return;
+  }
+  
+  if (landTeleport) 
+  {
+    if (timer > 0) timer--;
+    return;
+  }
+  
+  if (!hTraced)
+  {
+     if (hColor != 0 && hSize != 0)
+     {             
+        local fx = (pr_x1 + pr_x2) / 2;
+        local fy = (pr_y1 + pr_y2) / 2;
+        local obj = TraceLine(NullObj, fx,  fy, fx, fy + 40, -1, &hX, &hY);
+        hTraced = true;
+        hY += 2;
+        if (obj == NullObj) hSize = 0;
+     }
+  }
+  
+  if (isExit) 
+  {
+    waiting = false;
+    return;
+  }
+  
+  
+  if (trapTeleport)
+  {           
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local w = CWorm(Env->Objs.Objs[i]);
+        if (w == NullObj) continue;
+        if (w->ClType != OC_Worm) continue;         //faster than IS operator, btw.
+
+        if (pr_x1 < w->PosX && pr_x2 > w->PosX && pr_y1 < w->PosY && pr_y2 > w->PosY)
+        {
+          TeleportObject(w);
+        }
+     }
+     return;
+  }
+  
+  if (tpMissiles)
+  {
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local m = CMissile(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+        if (m->ClType != OC_Missile) continue;         //faster than IS operator, btw.
+
+        if (pr_x1 < m->PosX && pr_x2 > m->PosX && pr_y1 < m->PosY && pr_y2 > m->PosY)
+        {
+          if (m->tLastTeleport != this)
+          {
+            m->tLastTeleport = linked;  
+            TeleportObject(m);
+          }
+        } else {
+          if (m->tLastTeleport == this) m->tLastTeleport = NullObj;
+        }
+        
+     }
+  }
+  
+  local worm = GetCurrentWorm();
+  if (worm == NullObj) 
+  {
+     waiting = true;
+     return;
+  }
+  if (pr_x1 < worm->PosX && pr_x2 > worm->PosX)
+  {
+    if (pr_y1 < worm->PosY && pr_y2 > worm->PosY)
+    {
+      if (waiting == false && linked->waiting == false)
+      {        
+            TeleportObject(worm);
+      }
+      return;
+    }
+  }
+  waiting = false;
+}
+
+
+void SpawnTeleport(CEditorObject* obj)
+{
+  gc = new CMapTeleport(obj);
+};

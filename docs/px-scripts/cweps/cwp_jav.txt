@@ -1,0 +1,229 @@
+//  SCRIPT BY ZED
+//  COLLISION FIXES BY RAFA``2
+
+require utils;
+
+CBitmap32* BoltBmp;
+CBitmap32* JavlBmp;
+CBitmap32* NinjBmp;
+CBitmap32* GirdBmp;
+CSoundFile* wormh_snd;
+CSoundFile* crbow_snd;
+CSoundFile* ninja_snd;
+
+void cwp_jav::InitGraphic()
+{	
+local spr   = GetAttachment("boltb.png");
+BoltBmp     = LoadImage(spr);
+local spr   = GetAttachment("javlb.png");
+JavlBmp     = LoadImage(spr);
+local spr   = GetAttachment("ninjab.png");
+NinjBmp     = LoadImage(spr);
+local spr   = GetAttachment("girdlb.png");
+GirdBmp     = LoadImage(spr);
+}
+
+void cwp_jav::FirstFrame()
+{
+CFile *f;
+f = GetAttachment("wormh_snd.wav");
+wormh_snd = new CSoundFile(f);
+f = GetAttachment("crbow_snd.wav");
+crbow_snd = new CSoundFile(f);
+f = GetAttachment("ninja_snd.wav");
+ninja_snd = new CSoundFile(f);
+}
+//------------------------------------------------------------------------------
+void CMissile::JavDmg(CGObject* target)
+{
+local damage = 1;
+
+if(weap->CheckName("Crossbow") 
+|| weap->CheckName("Crossbow "))
+{damage = 10;}
+
+if(weap->CheckName("Javelin"))
+{damage = 20;}
+
+if(weap->CheckName("Ninja Star"))
+{damage = 5;}
+
+if(weap->CheckName("Girder Launcher"))
+{damage = 5;}
+
+target->SpX = SpX/4;
+target->SpY = SpY/4;
+
+CMessageData msgdamage;
+msgdamage.params[0] = 3;
+msgdamage.params[1] = PosX;
+msgdamage.params[2] = PosY;
+
+if(trg is CWorm)
+{
+msgdamage.params[3] = 0;
+msgdamage.params[4] = 0;
+
+if(weap->CheckName("Crossbow")
+|| weap->CheckName("Crossbow ")
+|| weap->CheckName("Javelin")
+|| weap->CheckName("Ninja Star")
+|| weap->CheckName("Girder Launcher"))
+{wormh_snd->Play(1.0,0.0,false);}
+}
+else
+{
+msgdamage.params[3] = SpX/2;
+msgdamage.params[4] = SpY/2;
+}
+if(trg is PxSentryLaser
+|| trg is PxSentryGun
+|| trg is PxFan
+|| trg is CBowlingBall
+|| trg is CTrampoline
+|| trg is CMagnet
+|| trg is CMine)
+{
+msgdamage.params[3] = 0;
+msgdamage.params[4] = 0;
+
+if(weap->CheckName("Crossbow")
+|| weap->CheckName("Crossbow "))
+{crbow_snd->Play(1.0,0.0,false);}
+
+if(weap->CheckName("Javelin"))
+{PlaySound(28,1.0,1.0,1.0);}
+
+if(weap->CheckName("Ninja Star"))
+{ninja_snd->Play(1.0,0.0,false);}
+
+if(weap->CheckName("Girder Launcher"))
+{PlaySound(30,1.0,0.6,1.0);}
+}
+else
+{
+msgdamage.params[3] = SpX/2;
+msgdamage.params[4] = SpY/2;
+}
+msgdamage.params[5] = damage;
+msgdamage.params[6] = 0;
+target->Message(NullObj, M_GUNEXP, 1032, &msgdamage);
+}
+//------------------------------------------------------------------------------
+void CMissile::JavStick(fixed x, fixed y)
+{
+if(weap->CheckName("Crossbow")
+|| weap->CheckName("Crossbow "))
+{local bmp = BoltBmp;}
+
+if(weap->CheckName("Javelin"))
+{local bmp = JavlBmp;}
+
+if(weap->CheckName("Ninja Star"))
+{local bmp = NinjBmp;}
+
+if(weap->CheckName("Girder Launcher"))
+{local bmp = GirdBmp;}
+
+local top = bmp->top;
+int mtp = 0;
+
+if(SpX == 0.0 && SpY < 0.0){mtp = 0;}
+if(SpX > 0.0 && SpY == 0.0){mtp = 8;}
+if(SpX == 0.0 && SpY > 0.0){mtp = 16;}
+if(SpX < 0.0 && SpY == 0.0){mtp = 24;}
+if(SpX > 0.0 && SpY < 0.0)
+{
+mtp = 3*SpX/sqrt(SpY*SpY);
+if(mtp>7){mtp = 7;}
+if(mtp<0){mtp = 0;}
+}
+if(SpX > 0.0 && SpY > 0.0)
+{
+mtp = 8+3*SpY/SpX;
+if(mtp>15){mtp = 15;}
+}
+if(SpX < 0.0 && SpY > 0.0)
+{
+mtp = 16+3*sqrt(SpX*SpX)/SpY;
+if(mtp>23){mtp = 23;}
+}
+if(SpX < 0.0 && SpY < 0.0)
+{
+mtp = 24+3*sqrt(SpY*SpY)/sqrt(SpX*SpX);
+if(mtp>31){mtp = 31;}
+}
+
+top = mtp*60;
+bmp->top = top;
+bmp->bottom = bmp->top+60;
+GG->land->Draw(bmp, x-30, y-(30+bmp->top));
+}
+
+//------------------------------------------------------------------------------
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+if(weap->CheckName("Crossbow")
+|| weap->CheckName("Crossbow ")
+|| weap->CheckName("Javelin")
+|| weap->CheckName("Ninja Star")
+|| weap->CheckName("Girder Launcher") == true)
+{
+CGObject *javob;
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+javob = CGObject(Env->Objs.Objs[i]);
+if(javob == this) continue;
+if(javob == NullObj) continue;
+if(javob->IsMaterial == false) continue;
+if(javob->ClType == OC_Worm
+|| javob->ClType == OC_Mine
+|| javob->ClType == OC_Crate
+|| javob->ClType == OC_OilDrum
+|| javob->ClType == EObjectClass(70)    //  MAGNET
+|| javob->ClType == EObjectClass(71)    //  BOWLINGBALL
+|| javob->ClType == EObjectClass(73)    //  SENTRY
+|| javob->ClType == EObjectClass(74)    //  FAN
+|| javob->ClType == EObjectClass(935))  //  TRAMPOLINE
+{
+local trg = CGObject(javob);
+
+int javofs = 20;
+
+if(javob->ClType == OC_Crate)          javofs = 23;
+if(javob->ClType == EObjectClass(935)) javofs = 50;
+
+if(x > trg->PosX-javofs && x < trg->PosX+javofs
+&& y > trg->PosY-javofs && y < trg->PosY+javofs)
+{
+JavDmg(trg);
+return;
+}
+}
+}
+if(GetCurrentWorm() != NullObj)
+{
+if(x > GetCurrentWorm()->PosX-25 && x < GetCurrentWorm()->PosX+25
+&& y > GetCurrentWorm()->PosY-25 && y < GetCurrentWorm()->PosY+25)
+{
+JavDmg(GetCurrentWorm());
+return;
+}
+}
+JavStick(x,y);  
+if(weap->CheckName("Crossbow")
+|| weap->CheckName("Crossbow "))
+{crbow_snd->Play(1.0,0.0,false);}
+
+if(weap->CheckName("Javelin"))
+{PlaySound(28,1.0,1.0,1.0);
+PlaySound(13,1.0,1.0,1.0);}
+
+if(weap->CheckName("Ninja Star"))
+{ninja_snd->Play(1.0,0.0,false);}
+
+if(weap->CheckName("Girder Launcher"))
+{PlaySound(112,1.0,1.0,1.0);}
+}
+super;
+}

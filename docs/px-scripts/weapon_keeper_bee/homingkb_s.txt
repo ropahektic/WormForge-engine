@@ -1,0 +1,129 @@
+require utils;
+
+keeperbeeM : CMissile   
+
+/*        //This is the stupidest way to avoid using FireFinal lol
+override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+ if (ldata->windFactor == 6767)
+ {
+ ldata->windFactor = 0;
+ 
+ beeteam = sdata->Team;
+ 
+ new keeperbeeM(Root->GetObject( 25, 0 ), ldata, sdata);
+ return;
+ }
+ 
+ super;
+} */
+
+keeperbeeM::keeperbeeM(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata, int bbteam, CWorm* launcher)
+{     
+   beeMSprite = beeBaseSprite->Index; 
+   ownerworm = launcher;
+   imBeeM = true;
+   beeFrame = 0;
+   tbteam = bbteam; 
+   ZPlane = 10.0;
+   if (launcher!=NullObj) tbteam = launcher->WormTeam;
+   
+   if (abeeTeam!=0 && tbteam == 0)  tbteam = abeeTeam;  // man.
+   
+   super(Root->GetObject( 25, 0), ldata, sdata);
+        
+   if (PosX != sdata->X || PosY !=sdata->Y)
+    { 
+        PosX = sdata->X;    //Terrain on face.
+        PosY = sdata->Y;
+        Free(true);         //Bee Spawn code is here before freeing object.
+    }
+}  
+
+void keeperbeeM::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;        
+ if (Type == M_DRAWQUEUE)
+   {
+      DrawTheBee(beeFrame);
+   }
+ if (Type == M_FRAME)
+   {                  
+      beeFrame++; if (beeFrame>=3) beeFrame = 0; //double the speed than the other one
+   }  
+}
+  
+void keeperbeeM::DrawTheBee(int bframe)
+{
+   int faceDir;
+   if (SpX >0)
+      faceDir = 1;
+   else
+      faceDir = 0;
+   
+   if(faceDir == 0)
+   {
+     AddSpriteEx(ZPlane+0.03, PosX, PosY, 262144 + beeMSprite, bframe, 0, 0.93);
+   }
+   else
+   {
+     AddSpriteEx(ZPlane+0.03, PosX, PosY, beeMSprite, bframe, 0, 0.93);
+   }  
+}
+
+void keeperbeeM::Free(bool FreeMem)
+{
+ if (FreeMem)
+ {  
+      GG->land->ApplyMask(4,PosX+5,PosY-22);   
+      GG->land->ApplyMask(4,PosX,PosY-22);    
+      GG->land->ApplyMask(4,PosX+5,PosY-5);   
+      GG->land->ApplyMask(4,PosX+5,PosY-3);   
+      GG->land->ApplyMask(4,PosX+5,PosY-15);  
+      GG->land->ApplyMask(4,PosX,PosY-5);   
+      GG->land->ApplyMask(4,PosX-5,PosY-5);
+      GG->land->ApplyMask(4,PosX,PosY-15);  
+      GG->land->ApplyMask(4,PosX-5,PosY-15);    
+      GG->land->ApplyMask(4,PosX-5,PosY-20);  
+      abeeTeam = tbteam;
+      local w = CWorm(NullObj);
+      if (ownerworm!=NullObj) {w = ownerworm; abeeTeam = ownerworm->WormTeam; tbteam = ownerworm->WormTeam; }
+      createBee(PosX, PosY-10, tbteam, w);
+ }
+   super;
+}    
+   
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+ if (Weap->CheckName( "Homing Keeper Bee" ))
+  {        
+   CWeaponLaunch* beeL = &Weap->launch;   
+   abeeTeam = Desc->Team;
+   beecms = new keeperbeeM(Root->GetObject( 25, 0 ), beeL, Desc, Desc->Team, this);
+   
+   return;
+  }    
+ else super;
+}       
+
+
+override void keeperbeeM::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+         if (keeperbmAnim) {
+              local sprite = beemisspr->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 4.00;
+              new WeapSprite(this, sprite, Params);
+              //weap->launch.anim.spriteIndex = 0;
+              keeperbmAnim = false;
+         
+     }
+  }
+}
+
+override keeperbeeM::keeperbeeM(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata, int bbteam, CWorm* launcher){
+super;
+  keeperbmAnim = true;
+}         

@@ -1,0 +1,53 @@
+CSprite* spot_bullet;
+
+void spot_hider_anim::InitGraphic() {
+    CFile* f;
+    f = GetAttachment("spot_hider_bullet.png");
+    spot_bullet = LoadSprite(f, 10, 0);
+    //f = GetAttachment("spot_bullet.png");
+    //spot_bullet = LoadSprite(f, 1, 0);
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Spot Hider";
+     sprite = spot_bullet->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 0.8;
+     Params->hand_radius = 20.0;
+     Params->hand_rotation = 1.0;
+     Params->hand_radial_rotation = 1.0;
+     Params->weap_radial_rotation = 0.9;
+     Params->weap_rotation = -3.0;
+     Params->weap_radius = 10.0;
+
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Spot Hider")) {
+         if (spot_anim) {
+            local sprite = spot_bullet->Index;
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            Params->animate = true;
+     		Params->anim_speed = 0.75;
+     		new WeapSprite(this, sprite, Params);
+            weap->launch.anim.spriteIndex = 0;
+            spot_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  spot_anim = true;
+}

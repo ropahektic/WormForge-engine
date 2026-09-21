@@ -1,0 +1,53 @@
+require utils_steps;
+CSprite* dicespr;
+CSoundFile* dice_roll;
+
+void dice::InitGraphic()
+{
+    dicespr = LoadSprite(GetAttachment("dice.png"), 6, 1);
+}
+
+void dice::Init()
+{
+dice_roll = new CSoundFile(GetAttachment("dice_roll.wav"));
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (diceact)
+        {
+            if (gframe < dicemid) diceframe = RandomInt(0,5)*0.198;
+            
+            if (gframe >= diceend)
+            {
+                diceact = false;
+            }
+        }
+    }
+    
+    if (Type == M_DRAWQUEUE)
+    {
+        if (diceact)
+        {
+            AddSprite(10,PosX,PosY-80,0,dicespr->Index,diceframe);
+        }
+    }
+    
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Dice"))
+    {
+        diceact = true;
+        dicestart = gframe;
+        dicemid = dicestart + 50;
+        diceend = dicestart + 200;
+        dice_roll->Play(1.0, 0.0, false);
+    }
+    
+    else super;
+}

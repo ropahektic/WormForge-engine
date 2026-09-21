@@ -1,0 +1,47 @@
+CSprite* digging_cluster_aiming;                                                                                                 
+                                                                                 
+void digging_cluster_anim::InitGraphic() {
+    CFile* f;                                                                    
+    f = GetAttachment("digging_cluster_bullet.png");                             
+    digging_cluster_aiming = LoadSprite(f, 1, 0);                                
+                            
+}                                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+///////......................................................................\\\\\\
+//
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Digging Cluster Bomb";                                               
+     sprite = digging_cluster_aiming->Index;                                     
+     Params->hand_radius = 18.0;                                                         
+     Params->weap_rotation =  0.5;
+     Params->weap_radius = 9.0;
+     Params->hand_type = 1;                              
+                                                 
+     local WA = new WormSprite(weapName, sprite, Params);
+    }                                                                            //
+  }                                                                              //
+}                                                                                //
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;                                                                           //
+  if (Type == M_FRAME){                                                          //
+     if (weap->CheckName("Digging Cluster Bomb")) {                                
+         if (digging_cluster_anim2) {                                              
+            local sprite = digging_cluster_aiming->Index;                      
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);              
+            weap->launch.anim.spriteIndex = 0;
+            digging_cluster_anim2 = false;                                         
+         } 
+     }                                                                                                                                                                                                                          
+  }                                                                              //
+}                                                                                //
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           //
+  digging_cluster_anim2 = true;                                                    
+}                                                                                //

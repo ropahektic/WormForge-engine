@@ -1,0 +1,27 @@
+CSoundFile* jawstheme;
+CSprite* torpedo;
+
+void naval_replace::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("Submarine Torpedo.png");
+   torpedo = LoadSprite(f, 0, 1);
+   SetSpriteOverride(721, torpedo);
+}
+ 
+void naval_replace::Init()
+{
+	jawstheme       = new CSoundFile(GetAttachment("Jaws Theme.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Naval Warfare"))
+  {  
+             jawstheme->Play(2.5, 0.0, false);
+  }
+  super;
+}
+
+
+

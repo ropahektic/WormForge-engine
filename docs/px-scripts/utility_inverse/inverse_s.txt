@@ -1,0 +1,135 @@
+//by rafa''2
+
+require utils, script_super_sheep_control;
+
+CSprite * sprTwirl;
+
+void inverse_s::InitGraphic()
+{
+    sprTwirl = LoadSprite(GetAttachment("twirl.png"), 1, 0);
+}
+
+void inverse_s::Init()
+{
+    keySync->AddKey(37);  // "LEFT" button
+    keySync->AddKey(38);  // "UP" button  
+    keySync->AddKey(39);  // "RIGHT" button
+    keySync->AddKey(40);  // "DOWN" button 
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    inverted = false;
+    invertedplaying= false;
+    inversesprframe = 0.0;
+    inversecontrollingwep = false;
+    super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{ 
+     if(inverted)
+     {   
+         if(Type == M_TURNBEGIN)
+         {
+            invertedplaying = true;
+         }
+         if(Type == M_DRAWQUEUE)
+             {
+				 // If you experience crashes with this lib, try removing drawing function below
+				 // If you wish to fix any possible crashes, look at balloon and climb script for examples
+				 
+				 SetColorMod(ARGB(200,255,255,255),1);  //ARGB(225,0,0,0),0)
+                 AddSpriteEx( 17, PosX, PosY, sprTwirl->Index, inversesprframe, -GS->Tick * 0.04 * TurnSide , 0.85);
+                 ClearColorMod();
+                 
+             }
+         if(invertedplaying)
+         {
+             
+             if(PressedLeft == 1) 
+             {
+                 PressedLeft = 0;
+                 PressedRight = 1;
+             }
+             else if(PressedRight == 1)
+             { 
+                 PressedRight = 0;
+                 PressedLeft = 1;
+             }
+             else if(PressedUp == 1)
+             { 
+                 PressedUp = 0;
+                 PressedDown = 1;
+             }
+             else if(PressedDown == 1)
+             { 
+                 PressedDown = 0;
+                 PressedUp = 1;
+             }     
+             if(Type == M_TURNEND)
+             {
+                 inverted = false;
+                 invertedplaying = false;
+                 inversecontrollingwep = false;
+             }
+             if(Type == M_FRAME)
+             {
+                   inversesprframe += 0.00185;
+                   if(inversesprframe >= 1.0) 
+                     inversesprframe = 0.0;
+             }
+        }
+   }  
+     super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if(Weap->CheckName("Inverse") || Weap->CheckName("Scare"))
+    {
+        if(TurnSide > 0)
+            local obj = InverseFindTarget(PosX, PosX + 28, PosY - 15, PosY + 15);
+        else if(TurnSide < 0)
+            local obj = InverseFindTarget(PosX - 28, PosX, PosY - 15, PosY + 15);
+        else return;
+        if(obj != NullObj)
+        {
+             CWorm * w = CWorm(obj);
+             w->inverted = true;
+             PlayLocalSound(20, 3, 1, 1);
+        }
+        else return;        
+    }
+    else if(Weap->CheckName("Super Sheep") ||
+            Weap->CheckName("Aqua Sheep") ||
+            Weap->CheckName("Squawks") ||
+            Weap->CheckName("Queen Bee") ||
+            Weap->CheckName("Rodeo Sheep") ||
+            Weap->CheckName("Ultra Sheep") ||
+            Weap->CheckName("Ghost Sheep") ||
+            Weap->CheckName("Farting Sheep") ||
+            Weap->CheckName("Precision Flying Sheep") ||
+            Weap->CheckName("Super Queen Bee"))
+    {
+        inversecontrollingwep = true;
+        super;
+    }
+    else super;
+}
+
+CGObject * CWorm::InverseFindTarget(int l, int r, int t, int b)
+{
+      for(int i = 0; i < Env->Objs.Count; i++)
+      {
+          local obj = CGObject(Env->Objs.Objs[i]);
+          if(obj == NullObj) continue;
+          if(obj == this) continue;
+          if(obj->ClType != OC_Worm) continue;     
+          w = CWorm(obj);
+          if(w->inverted) continue;
+          if(obj->IsInBox( l, t, r, b))
+              return obj;
+      }
+      return CGObject(NullObj);
+}

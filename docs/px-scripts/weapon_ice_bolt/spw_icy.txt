@@ -1,0 +1,216 @@
+require utils, utils_steps;
+
+CBitmap32* IcyaBmp;
+CSoundFile* icya_snd;
+CArrow* arw_icy;
+
+bool iarrow;
+bool iforce;
+
+void spw_icy::InitGraphic()
+{
+local spr = GetAttachment("icyaw.png");
+IcyaBmp   = LoadImage(spr);
+}
+
+void spw_icy::FirstFrame()
+{
+CFile *f;
+f = GetAttachment("icya_snd.wav");
+icya_snd = new CSoundFile(f);
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+if(weap->CheckName("Ice Bolt") == true)
+	{
+	CGObject *icyaob;
+	for(int i = 0; i < Env->Objs.Count; i += 1)
+		{
+		icyaob = CGObject(Env->Objs.Objs[i]);
+		if(icyaob == this) continue;
+		if(icyaob == NullObj) continue;
+		if(icyaob->IsMaterial == false) continue;
+		if(icyaob->ClType == OC_Worm
+		|| icyaob->ClType == OC_Mine
+		|| icyaob->ClType == OC_Crate
+		|| icyaob->ClType == OC_OilDrum
+		|| icyaob->ClType == EObjectClass(70)
+		|| icyaob->ClType == EObjectClass(71)
+		|| icyaob->ClType == EObjectClass(73)
+		|| icyaob->ClType == EObjectClass(74)
+		|| icyaob->ClType == EObjectClass(935))
+			{
+			trg = CGObject(icyaob);
+
+			int icyofs = 20;
+
+			if(icyaob->ClType == OC_Crate) icyofs = 23;
+			if(icyaob->ClType == EObjectClass(935)) icyofs = 50;
+
+			if(x > trg->PosX-icyofs && x < trg->PosX+icyofs
+			&& y > trg->PosY-icyofs && y < trg->PosY+icyofs)
+				{
+				IcyDmg(trg);
+				super;
+				return;
+				}
+			}
+		}
+
+	if(GetCurrentWorm() != NullObj)
+		{
+		if(x > GetCurrentWorm()->PosX-25 && x < GetCurrentWorm()->PosX+25
+		&& y > GetCurrentWorm()->PosY-25 && y < GetCurrentWorm()->PosY+25)
+			{
+			IcyDmg(GetCurrentWorm());
+			super;
+			return;
+			}
+		}
+
+	IcyStick(x,y);
+	icya_snd->Play(1.0,0.0,false);
+	}
+super;
+}
+
+void CMissile::IcyDmg(CGObject* target)
+{
+local damage = 1;
+
+if(weap->CheckName("Ice Bolt") == true){damage = 7;}
+
+target->SpX = SpX/4;
+target->SpY = SpY/4;
+
+CMessageData msgdamage;
+msgdamage.params[0] = 3;
+msgdamage.params[1] = PosX;
+msgdamage.params[2] = PosY;
+
+if(target is PxSentryLaser
+|| target is PxSentryGun
+|| target is PxFan
+|| target is CBowlingBall
+|| target is CTrampoline
+|| target is CMagnet
+|| target is CMine
+|| target is CWorm)
+	{
+	msgdamage.params[3] = 0;
+	msgdamage.params[4] = 0;
+	icya_snd->Play(1.0,0.0,false);
+	}
+else
+	{
+	msgdamage.params[3] = SpX/2;
+	msgdamage.params[4] = SpY/2;
+	}
+
+msgdamage.params[5] = damage;
+msgdamage.params[6] = 0;
+target->Message(NullObj, M_GUNEXP, 1032, &msgdamage);
+}
+
+void CMissile::IcyStick(fixed x, fixed y)
+{
+local bmp = IcyaBmp;
+local top = bmp->top;
+int mtp = 0;
+
+if(SpX == 0.0 && SpY < 0.0){mtp = 0;}
+if(SpX > 0.0 && SpY == 0.0){mtp = 8;}
+if(SpX == 0.0 && SpY > 0.0){mtp = 16;}
+if(SpX < 0.0 && SpY == 0.0){mtp = 24;}
+
+if(SpX > 0.0 && SpY < 0.0)
+{
+mtp = 3*SpX/sqrt(SpY*SpY);
+if(mtp>7){mtp = 7;}
+if(mtp<0){mtp = 0;}
+}
+
+if(SpX > 0.0 && SpY > 0.0)
+{
+mtp = 8+3*SpY/SpX;
+if(mtp>15){mtp = 15;}
+}
+
+if(SpX < 0.0 && SpY > 0.0)
+{
+mtp = 16+3*sqrt(SpX*SpX)/SpY;
+if(mtp>23){mtp = 23;}
+}
+
+if(SpX < 0.0 && SpY < 0.0)
+{
+mtp = 24+3*sqrt(SpY*SpY)/sqrt(SpX*SpX);
+if(mtp>31){mtp = 31;}
+}
+
+top = mtp*60;
+bmp->top = top;
+
+bmp->bottom = bmp->top+60;
+GG->land->Draw(bmp, x-30, y-(30+bmp->top));
+}
+//------------------------------------------------------------------------------
+
+
+
+override void CArrow::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+	{
+	if (iforce == true)
+		{
+		iforce = false;
+		arw_icy = this;
+		iarrow = false;
+		}
+	}
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if (Type == M_GUNEXP)
+		{
+		if (iforce)
+			{
+			iforce = false;
+			solidify = true;
+			}
+
+		if (arw_icy != NullObj)
+			{
+			if (sender == arw_icy)
+				{
+				solidify = true;
+				}
+			}
+		}
+	
+	if (Type == M_FRAME)
+		{
+		if (solidify)
+			{
+			if (ObjState != WS_FROZEN) SetState(WS_FROZEN);
+			solidify = false;
+			}
+		}
+super;
+}
+//------------------------------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if(Weap->CheckName("Ice Bolt"))
+	{
+	Desc->X = Desc->X + 15 * cos(MATH_PI * (FireAngle) - MATH_HALF_PI) * TurnSide;
+	Desc->Y = Desc->Y - 15 * sin(MATH_PI * (FireAngle) - MATH_HALF_PI);
+    iforce = true;
+	iarrow = true;
+	}
+super;
+}

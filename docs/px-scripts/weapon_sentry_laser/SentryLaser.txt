@@ -1,0 +1,1333 @@
+//- SENTRY LASER GUN v1.3 made by rafa``2 31/07/2014
+//- Most of the code taken from sentrygun and lasergun by _Killburn   
+//- New behavior, sprites and sounds by rafa``2 
+//- Destroys moving missiles or mines in a radius of x pixels
+
+//- v1.3 26/09/15 -- fixed buffalo_of_lies sound after being disintegrated
+
+require utils, pxparticles, weapon_gun_lasergun, weapon_lightning, weapon_tazer, weapon_bowlingball, weapon_buffalo, weapon_air_bunker_buster;
+
+#WEAPON_SENTRYLASER
+
+CSprite* sentryLaserBaseSprite;
+CSprite* sentryLaserBodySprite;
+CSprite* sentryLaserBarrelSprite;
+
+CSoundFile* sentryLaserPlaceSound;
+CSoundFile* sentryLaserRotateSound;
+CSoundFile* sentryLaserRotateStartSound;
+CSoundFile* sentryLaserRotateEndSound;
+CSoundFile* sentryLaserAlertSound;
+CSoundFile* sentryLaserDisinSound;
+
+void SentryLaser::FirstFrame()
+{
+	sentryLaserPlaceSound       = new CSoundFile(GetAttachment("sentrylaserplace.wav"));
+	sentryLaserRotateSound      = new CSoundFile(GetAttachment("sentrylaserloop.wav"));
+	sentryLaserRotateStartSound = new CSoundFile(GetAttachment("sentrylaserstart.wav"));
+	sentryLaserRotateEndSound   = new CSoundFile(GetAttachment("sentrylaserend.wav"));
+	sentryLaserAlertSound       = new CSoundFile(GetAttachment("sentrylaserbeep.wav"));
+	sentryLaserDisinSound       = new CSoundFile(GetAttachment("sentrylaserdisin.wav"));
+}  
+
+void SentryLaser::InitGraphic()
+{
+	sentryLaserBaseSprite 	        = LoadSprite(GetAttachment("sentrylaserbase.png"), 1, 0);       
+	sentryLaserBodySprite 	        = LoadSprite(GetAttachment("sentrylaserbody.png"), 1, 0); 
+	sentryLaserBarrelSprite 	= LoadSprite(GetAttachment("sentrylaserbarrel.png"), 1, 0);
+}
+
+PxSentryLaser : CMine
+
+PxSentryLaser::PxSentryLaser(CObject* Parent, CShootDesc* Desc)
+{
+	SensorRadius = 300.0;
+	SensorMinRadius = 0.0;
+	
+	// Gun parameters
+	Ammunition = 4;
+	FramesPerShot = 6;	
+         
+	// Turret parameters
+	TurretRotationSpeedIdle = 0.5;  //0.5
+	TurretRotationSpeedActive = 5.0;  //5
+	TurretIdleSweepAngle = 10.0;
+	TurretOffsetX = 0;
+	TurretOffsetY = -15;  //-15
+	
+	// Health parameters
+	MaxHealth = 35;
+	Health = MaxHealth;
+	ExplosionDamage = 50;
+	ExplosionBlast = 100;
+	
+	// Physics parameters
+	
+	BounceMultiplierX = 0.0;
+	BounceMultiplierY = 1.0;
+	
+	// Number of frames to wait after activating before being able to fire
+	DelayBeforeFiring = 20;//60
+	
+	// INTERNAL PARAMETERS
+	
+	TurretScale = 0.8;//0.8;
+	
+	// Sprites
+	SpriteBase = sentryLaserBaseSprite->Index;
+	SpriteBody = sentryLaserBodySprite->Index;
+	SpriteBarrel = sentryLaserBarrelSprite->Index;
+	AnimSpeed = 0.2;
+	
+	// Private
+	StunTurnsRemaining = 0;
+	SensorRadiusSqr = 0.0;
+	SensorMinRadiusSqr = 0.0;
+	
+	AnimCycle = 0.0;
+	
+	BaseOffsetX = 0;
+	BaseOffsetY = 2;
+	BarrelOffsetX = 17;
+	BarrelOffsetY = 0;
+	MuzzleOffsetX = 14;
+	MuzzleOffsetY = 0;
+		
+	Ammo = Ammunition;
+	TurretActive = true;
+	Target = NullObj;
+	ShootTimer = 0;
+	ActivateTimer = 0;
+	SentryBeepTimer = 0;
+	
+	SentryBeepMinDelay = 20;
+	
+	Planted = false;
+	Removed = false;
+	Firing = false;
+	LongRotation = false;
+	SentryEMPed = false;
+	
+	LostTarget = false;
+	LastTargetX = 0.0;
+	LastTargetY = 0.0;
+		
+	NextRecalcZPlane = 0;
+	ZPlane = 10.0;
+	
+	OwnerTeam = Desc->Team;
+	
+	CMineParams MParams;
+	zero(&MParams);
+
+	MParams.Prefuse = 0;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Radius = 0;
+	MParams.Fuse = 70;
+	MParams.Damage = 48;
+	MParams.BlastPower = 100;
+	
+	SetLayerOverride(LAYER_OILDRUM);
+	SetMaskIndexOverride(3);
+	
+	super(Parent, &MParams, Desc, false, 0);
+	ClType = EObjectClass(73);
+	
+        if(Desc->SpX < 0)
+            BaseSide = -1;
+	else
+            BaseSide =  1;
+	
+	//      180
+	//       |
+        // 270 - + - 90
+	//       |
+	//       0
+	SweepDir =  1;
+	TurretSide = BaseSide;
+        IdleTargetAngle = 180.0 - 90.0 * TurretSide ;//180.0;    
+	DisabledTargetAngle = IdleTargetAngle - 45.0 * TurretSide;  //IdleTargetAngle - 135.0 * TurretSide;
+	TurretAngle = IdleTargetAngle;
+	TargetAngle = IdleTargetAngle;
+	RotationSpeed = TurretRotationSpeedIdle;
+        
+        ShootX = 0.0;
+        ShootY = 0.0;
+             
+	LaserRay = CLaserRayS(NullObj);
+	
+	RotateSoundObj = CSound(NullObj);
+	RotateStartSoundObj = CSound(NullObj);
+	
+	version = 1.3;
+}
+
+void PxSentryLaser::Collide(CGObject* Obj, int type)
+{
+	if(Obj  == CGObject(NullObj)) return;
+        
+        if(Obj->ClType == OC_Landscape && Planted == false)
+	{
+		SpX = 0;
+		SpY = 0;
+		Planted = true;
+		
+		if(sentryLaserPlaceSound != CSound(NullObj))
+	        {
+		    sentryLaserPlaceSound->Play(1.0, 0.0, false);
+		}
+		return;
+	}
+	
+	SpX = SpX * BounceMultiplierX;
+	SpY = SpY * BounceMultiplierY;
+	
+	super;
+}
+
+void PxSentryLaser::Stun(int turns)
+{
+	StunTurnsRemaining = turns;
+	if(turns > 0) TurretActive = false;
+}
+
+void PxSentryLaser::TakeExplosionDamage(fixed x, fixed y, int dmg)
+{
+	if(dmg == 0) return;
+	
+	float fdmg = dmg;
+	float dx = PosX - x;
+	float dy = PosY - y;
+	
+	float distsqr = dx*dx + dy*dy;
+	float fdmgsqr = fdmg*fdmg*4.0;
+	
+	fdmg = (1.0 - distsqr/fdmgsqr) * fdmg;
+	dmg = fdmg;
+	
+	if(dmg > 0) TakeDamage(0, dmg);
+}
+
+void PxSentryLaser::TakeDamage(int type, int dmg)
+{
+	if(type == 10)
+	{
+		fixed fdmg = dmg;
+		fdmg = Health * fdmg / 100.0;
+		dmg = fdmg;
+	}
+	
+	Health -= dmg;
+	
+	TurretActive = false;
+}
+
+void PxSentryLaser::StartRotatingSound()
+{
+	if(LongRotation) return;
+	
+	LongRotation = true;
+	
+        RotateStartSoundObj = sentryLaserRotateStartSound->Play(0.95, 0.0, false);
+        
+}
+
+void PxSentryLaser::StopRotatingSound()
+{
+	if(LongRotation == false) return;
+	
+	LongRotation = false;
+	
+	if(RotateStartSoundObj != CSound(NullObj))
+	{
+		RotateStartSoundObj->Stop();
+		RotateStartSoundObj = CSound(NullObj);
+	}
+	if(RotateSoundObj != CSound(NullObj))
+	{
+		RotateSoundObj->Stop();
+		RotateSoundObj = CSound(NullObj);
+	}
+	if(sentryLaserRotateEndSound != CSound(NullObj))
+	{
+	    sentryLaserRotateEndSound->Play(0.95, 0.0, false);
+        }
+}
+
+// Called when the object is destroyed
+void PxSentryLaser::Explode()
+{
+	if(Removed) return;
+	
+	DoExplosion(PosX,PosY-20, ExplosionBlast, ExplosionDamage, 0, 0);
+	
+	SpeedDivider = 1000;
+	SpX = 0.0;
+	SpY = 0.0;
+	GravityFactor = 0.0;
+	IsMaterial = false;
+	Stopped = 1;
+	
+	if(RotateStartSoundObj != CSound(NullObj))
+	{
+		RotateStartSoundObj->Stop();
+		RotateStartSoundObj = CSound(NullObj);
+	}
+	if(RotateSoundObj != CSound(NullObj))
+	{
+		RotateSoundObj->Stop();
+		RotateSoundObj = CSound(NullObj);
+	}
+}
+
+// Renders the object
+void PxSentryLaser::Draw()
+{
+	float baseX = PosX + BaseOffsetX;
+	float baseY = PosY + BaseOffsetY;
+	
+	// Base
+	if(BaseSide < 0)
+	{
+		AddSpriteEx(ZPlane+0.03, baseX, baseY, 262144 + SpriteBase, 0, 0, TurretScale);
+	}
+	else
+	{
+		AddSpriteEx(ZPlane+0.03, baseX, baseY, SpriteBase, 0, 0, TurretScale);
+	}
+	
+	// Body
+	float ang = (90 - TurretAngle) * 3.141593 / 180.0;
+	
+	float r;
+	float g;
+	float b;
+	
+	int TeamColor;
+	
+	if (OwnerTeam < 1) { TeamColor = 0; }
+	else { TeamColor = GetTeamColor(OwnerTeam) + 1; }
+	
+        if      (TeamColor == 1) { r = 0.65; g = 0.15; b = 0.15; }
+	else if (TeamColor == 2) { r = 0.15; g = 0.15; b = 0.65; }
+	else if (TeamColor == 3) { r = 0.15; g = 0.65; b = 0.15; }
+	else if (TeamColor == 4) { r = 0.55; g = 0.55; b = 0.15; }
+	else if (TeamColor == 5) { r = 0.55; g = 0.15; b = 0.55; }
+	else if (TeamColor == 6) { r = 0.15; g = 0.55; b = 0.55; }
+	else { r = 0.5; g = 0.5; b = 0.5; }
+	
+	
+	if(Sinking)
+	{
+		r = r * (90.0 / 255.0);
+		g = g * (90.0 / 255.0);
+		b = b * (240.0 / 255.0);
+		ClearColorMod();
+	}
+	
+	SetColorMod(RGB(r * 255.0, g * 255.0, b * 255.0), 6);
+	
+	if(TurretSide < 0)
+		AddSpriteEx(ZPlane, baseX+TurretScale*TurretOffsetX, baseY+TurretScale*TurretOffsetY, 262144 + SpriteBody, 0, ang+MATH_PI, TurretScale);
+	else
+		AddSpriteEx(ZPlane, baseX+TurretScale*TurretOffsetX, baseY+TurretScale*TurretOffsetY, SpriteBody, 0, ang, TurretScale);
+	
+	ClearColorMod();
+	
+	if(Sinking)
+	{
+		SetColorMod(RGB(90, 90, 240), 6);
+	}
+	
+	// Barrels
+	float realBarrelOffsetX = BarrelOffsetX;
+	float realBarrelOffsetY = BarrelOffsetY;
+	if(Firing)
+	{
+		realBarrelOffsetX = realBarrelOffsetX + 2.0 * sin(0.5 * GS->Tick);
+	} 
+        float barrelX = baseX + TurretScale*(TurretOffsetX + cos(ang)*realBarrelOffsetX - sin(ang)*BarrelOffsetY);
+	float barrelY = baseY + TurretScale*(TurretOffsetY + sin(ang)*realBarrelOffsetX - cos(ang)*BarrelOffsetY);
+	
+	AddSpriteEx(ZPlane+0.02, barrelX, barrelY, SpriteBarrel, 0, ang, TurretScale);
+	
+	ShootX = barrelX;
+	ShootY = barrelY;
+}
+
+bool PxSentryLaser::IsTargetVisible(CGObject *target)
+{
+	int hitX;
+	int hitY;
+	if(TraceLine(this, PosX + BaseOffsetX + TurretScale*TurretOffsetX, PosY + BaseOffsetY + TurretScale*TurretOffsetY,
+		target->PosX, target->PosY, 2, &hitX, &hitY) == NullObj)
+		return true;
+	else
+		return false;
+}
+
+
+
+void PxSentryLaser::TurretThink()
+{
+	float TurretX = PosX + BaseOffsetX + TurretScale*TurretOffsetX;
+	float TurretY = PosY + BaseOffsetY + TurretScale*TurretOffsetY;
+        int hitX;
+	int hitY;
+	
+	if(TurretActive)
+	{
+		// Looking for targets
+		if(Target == NullObj)
+		{
+			if(SensorRadiusSqr == 0.0 && SensorMinRadiusSqr == 0.0)
+			{
+				SensorRadiusSqr = SensorRadius * SensorRadius;
+				SensorMinRadiusSqr = SensorMinRadius * SensorMinRadius;
+			 }
+			float best_distance;
+			
+			for(int i = 1; i < Env->Objs.Count; i+=1)
+			{
+				local obj = CGObject(Env->Objs.Objs[i]);
+				
+				if(obj == NullObj) continue;
+				
+				// if it's a missile...
+				if(obj->ClType == OC_Missile || obj->ClType == OC_Mine|| obj->ClType == OC_Arrow || obj is PxBunkerBuster || obj is CBowlingBall) 
+				{     
+                                        int team;
+                                        
+                                        if(obj->ClType == OC_Missile)
+                                        { 
+                                            CMissile * missile = CMissile(obj);
+                                            team = missile->initdesc.Team;
+                                        }
+                                        else if(obj->ClType == OC_Mine)
+                                        {
+                                            CMine * mine = CMine(obj);
+                                            team =  mine->ShootData.Team;
+                                        }
+                                        else if(obj->ClType == OC_Arrow)
+                                        { 
+                                            w = GetCurrentWorm();
+                                            CArrow * arrow = CArrow(obj);
+                                            if(w == CWorm(NullObj)) continue;
+                                            arrow->TeamIndex =  w->WormTeam;
+                                            team = arrow->TeamIndex;
+                                        }
+                                        else if(obj is PxBunkerBuster)
+                                        {
+                                            PxBunkerBuster * bunk = PxBunkerBuster(obj);
+                                            team =  bunk->Team;
+                                        }
+                                        else if(obj is CBowlingBall)
+                                        {
+                                            CBowlingBall * bb = CBowlingBall(obj);
+                                            team =  bb->ShootData.Team;
+                                        }
+                                        else continue; 
+					// if it's not friendly...
+					if(OwnerTeam < 1 || GetTeamColor(team) != GetTeamColor(OwnerTeam))
+					{	
+                                                // if it's moving...
+						if(obj->SpX != 0 || obj->SpY != 0)
+						{
+							float dx = obj->PosX - TurretX;
+							float dy = obj->PosY - TurretY;
+							float d = dx*dx + dy*dy;
+							
+							// if it's inside the sentry's detection radius...
+							if(d <= SensorRadiusSqr && d >= SensorMinRadiusSqr)
+							{
+								// if it's visible...
+								
+								if(IsTargetVisible(obj))
+								{
+									// -> potential target
+									if(Target == NullObj || d < best_distance)
+									{
+										// in the end, only the closest potential target will be selected
+										Target = obj;
+										best_distance = d;
+										
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			if(Target != NullObj)
+			{
+				// Got a target, make a beeping sound
+				//PlayLocalSound(88, 5, 2.0, 1.0, &Snd);
+				if(SentryBeepTimer <= 0)
+				{
+					sentryLaserAlertSound->Play(1.0, 0.0, false);    
+					SentryBeepTimer = SentryBeepMinDelay;
+				}
+				
+				ActivateTimer = DelayBeforeFiring;
+			}
+		}
+		
+		if(Target == NullObj)
+		{
+			// Idle
+			TargetAngle = IdleTargetAngle + SweepDir * TurretIdleSweepAngle;
+			LostTarget = false;
+			RotationSpeed = TurretRotationSpeedIdle;
+		}
+		else
+		{
+			// Tracking (TODO)
+			if(IsTargetVisible(Target))
+			{
+				LostTarget = false;
+				TargetAngle = (atan2(Target->PosX - TurretX, Target->PosY - TurretY) * 180.0) / 3.141593;
+			}
+			else
+			{
+				if(LostTarget == false)
+				{
+					LastTargetX = Target->PosX;
+					LastTargetY = Target->PosY;
+					StopFiring();
+				}
+				LostTarget = true;
+				TargetAngle = (atan2(LastTargetX - TurretX, LastTargetY - TurretY) * 180.0) / 3.141593;
+			}
+			if(TargetAngle < 0.0) TargetAngle += 360.0;
+			if(TargetAngle > 360.0) TargetAngle -= 360.0;
+			RotationSpeed = TurretRotationSpeedActive;
+		}
+	}
+	else
+	{
+		// Disabled
+		TargetAngle = DisabledTargetAngle;
+		Target = NullObj;
+		StopFiring();
+		RotationSpeed = TurretRotationSpeedIdle;
+	}
+	
+	// Rotate the turret towards the target angle
+	float speed = TargetAngle - TurretAngle;
+	
+	if(RotateStartSoundObj != CSound(NullObj) && RotateStartSoundObj->isAlive() == false)
+	{
+		RotateStartSoundObj->Stop();
+		RotateStartSoundObj = CSound(NullObj);
+		
+		RotateSoundObj = sentryLaserRotateSound->Play(0.95, 0.0, true);
+	}
+	
+	if(TurretActive && Target != NullObj)
+	{
+		if(speed >= 2*RotationSpeed || speed <= -2*RotationSpeed)
+		{
+			StartRotatingSound();
+		}
+		else
+		{
+			StopRotatingSound();
+		}
+	}
+	else
+	{
+		StopRotatingSound();
+	}
+	
+	if(ActivateTimer > 0) ActivateTimer = ActivateTimer - 1;
+	if(SentryBeepTimer > 0) SentryBeepTimer = SentryBeepTimer - 1;
+	
+	if(speed >= RotationSpeed)
+	{
+		TurretAngle += RotationSpeed;
+		StopFiring();
+	}
+	else if(speed <= -RotationSpeed)
+	{
+		TurretAngle -= RotationSpeed;
+		StopFiring();
+	}
+	else
+	{
+		TurretAngle = TargetAngle;
+		
+		if(TurretActive)
+		{
+			if(Target == NullObj)
+			{
+				// If the target angle has been reached while the turret is idle, reverse the sweep direction
+				// so it looks like the sentry is scanning the area
+				SweepDir = -SweepDir;
+			}
+			else
+			{
+				if(LostTarget)
+				{
+					Target = NullObj;
+				}
+				else
+				{
+					if(ActivateTimer <= 0) StartFiring();
+				}
+			}
+		}
+	}
+	
+	// Turret rotated over itself, change the sentry's idle target angle so the turret faces the other way when it goes back to idle
+	if((180 - TurretAngle) * TurretSide < 0)
+	{
+		TurretSide = -TurretSide;
+		IdleTargetAngle = 180.0  - 90.0 * TurretSide;
+	        DisabledTargetAngle = IdleTargetAngle - 45.0 * TurretSide;
+	}
+	
+	// Firing
+	if(Firing)
+	{
+		AnimCycle = AnimCycle + AnimSpeed;
+		if(AnimCycle >= 1.0) AnimCycle -= 1.0;
+			
+		if(ShootTimer <= 0)
+		{				
+			if(Target != NullObj)
+			{
+                            //GG->WriteToChat(OwnerTeam, ftoa(PosX), false);
+                            LaserRay = new CLaserRayS(GetObject(25, 0), this);
+		        }
+		        else return;
+			
+			ShootTimer = FramesPerShot;
+			Ammo = Ammo - 1;
+			if(Ammo <= 0)
+			{
+				StopFiring();
+				TurretActive = false;
+			}
+		}
+		ShootTimer = ShootTimer - 1;
+	}
+}
+
+void PxSentryLaser::StartFiring()
+{
+	if(Firing) return;
+	
+	Firing = true;
+	ShootTimer = 0;
+}
+
+void PxSentryLaser::StopFiring()
+{
+	if(Firing == false) return;
+	Firing = false;
+}
+
+void PxSentryLaser::OnTurnBegin(int Team)
+{
+	// Reload the turret and activate it
+	Target = NullObj;
+	
+	if(StunTurnsRemaining > 0)
+	{
+		if(Team == OwnerTeam) StunTurnsRemaining = StunTurnsRemaining - 1;
+	}
+	else
+	{
+		TurretActive = true;
+		Ammo = Ammunition;
+	}
+}
+
+void PxSentryLaser::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	// Drawing operations are done here
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Removed) return;
+		
+		if(Sinking)	SetColorMod(RGB(90, 90, 240), 6);
+		
+		Draw();
+		
+		if(Sinking) ClearColorMod();
+		
+		// Recalculate Z plane periodically to make sure magnets are drawn properly when overlapping each other
+		if(NextRecalcZPlane <= 0)
+		{
+			local matches = 0;
+			
+			for(local i = 1; i < Env->Objs.Count; i+=1)
+			{
+				local obj = Env->Objs.Objs[i];
+				
+				if(obj == NullObj) continue;
+				if(obj == this) continue;
+				if(obj is PxSentryLaser)
+				{
+					local sentry = PxSentryLaser(obj);
+							
+					float dX = sentry->PosX - PosX;
+					float dY = sentry->PosY - PosY;
+					float r2 = dX*dX + dY*dY;
+						
+					if(r2 < 900.0)
+					{
+						if(sentry->ZPlane == ZPlane)
+						{
+							sentry->ZPlane = sentry->ZPlane + 0.1;
+						}
+						matches = matches + 1;
+					}
+				}
+			}
+			
+			if(matches == 0)	ZPlane = 10;
+			
+			NextRecalcZPlane = 200;
+		}
+		else
+		{
+			NextRecalcZPlane = NextRecalcZPlane - 1;
+		}
+		
+		return;
+	}
+	
+	// Damage handling
+	if(Removed==false)
+	{
+		if(Type == M_EXPLOSION)
+		{
+			TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]);
+		}
+		else if(Type == M_GUNEXP)
+		{
+			TakeDamage(MData->params[0], MData->params[5]);
+		}
+		else if(Type == EMType(1000))
+		{
+			if(MData->params[0] == 0)
+			{
+				// Changes sentry teams
+				OwnerTeam = MData->params[1];
+				TurretActive = false;
+			}
+		}
+	}
+	
+	super;
+	
+	// This is done every frame (derp)
+	if(Type == M_FRAME)
+	{
+		if(Removed)
+		{
+			Free(true);
+			return;
+		}
+		else
+		{
+			if(Sinking)
+			{
+				TurretActive = false;
+			}
+			
+			TurretThink();
+			
+			if(Health <= 0)
+			{
+				Explode();
+				Removed = true;
+			}
+		}
+	}
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+	super;
+	
+	for(local i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = Env->Objs.Objs[i];
+		
+		if(obj == NullObj) continue;
+		if(obj is PxSentryLaser)
+		{
+			PxSentryLaser *sentry = PxSentryLaser(obj);
+			sentry->OnTurnBegin(Team);
+		}
+	}
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Sentry Laser"))
+	{
+		local ang = (1 - FireAngle) * 3.14159;
+		if (TurnSide < 0)
+		{
+			ang = 6.28318 - ang;
+		}
+		
+		CShootDesc SDesc;
+		zero(&SDesc);
+
+		local BaseForce = 0.3;
+		
+		SDesc.Team = WormTeam;
+		SDesc.X = PosX;
+		SDesc.Y = PosY;
+		SDesc.SpX = SpX * 0.5 + TurnSide * BaseForce;
+		SDesc.SpY = SpY * 0.5 - 0.15;
+		
+		new PxSentryLaser(GetObject(25, 0), &SDesc);
+	}
+	else
+	{
+		super;
+	}
+}
+///////////////////////////////////////////////////
+// CLaserRay
+
+CLaserRayS : CObject;
+
+CLaserRayS::CLaserRayS(CObject *parent, PxSentryLaser* owner)
+{
+	super(parent, GS);
+	
+        ClType = OC_AirStrike;
+	
+	SentryOwner = owner;
+ 	LaserTarget = SentryOwner->Target;
+        if(Validate()) return;
+        
+        PRegister(&SentryOwner);	
+	
+	LifeTime = 10;
+	
+	Dead = false;
+	Removed = false;
+	
+        PosX = 0;
+        PosY = 0;
+        GlowX = 0;
+        GlowY = 0;
+        DirX = 0.0;
+        DirY = 0.0;
+	UpdatePosDir();
+	
+	ShouldDrawBeam = false;
+	
+	Hit = false;
+	HitX = PosX;
+	HitY = PosY;
+	
+	FramesBetweenShots = 3;
+	FrameCounter = 0;
+	
+	BeamSize = float(1.0);
+	BeamMaxSize = float(1.0);
+	BeamMinSize = float(0.5);
+	BeamFadeSpeed = float(0.07);
+	
+	LastFireAngle = fixed(1000.0);
+	LastDirX = DirX;
+	LastDirY = DirY;
+	
+	if (SentryOwner->OwnerTeam < 1)
+	{
+		TeamColor = 0;
+	}
+	else
+	{
+		TeamColor = GetTeamColor(SentryOwner->OwnerTeam) + 1;
+	}
+	
+        R = 0;
+        G = 0;
+        B = 0;
+        
+        if      (TeamColor == 1) { R = 255; }
+	else if (TeamColor == 2) { B = 255; }
+	else if (TeamColor == 3) { G = 255; }
+	else if (TeamColor == 4) { R = 255; G = 255; }
+	else if (TeamColor == 5) { R = 255; B = 255; }
+	else if (TeamColor == 6) { G = 255; B = 255; }
+	else { R = 125; G = 125; B = 125; }
+	
+	LaserAngle = SentryOwner->TurretAngle * MATH_PI / 180.0;
+	
+	DamageColMask =   CMASK_WORM_ON_TERRAIN
+					| CMASK_WORM_USING_WEAPON
+					| CMASK_WORM_IN_MIDAIR
+					| CMASK_WORM_ON_ROPE
+					| CMASK_WORM_FROZEN
+					| CMASK_MINE
+					| CMASK_CRATE
+					| CMASK_DONORCARD
+					| CMASK_OILDRUM
+					| CMASK_OTHERWEAPON
+					| CMASK_SKIMMING;
+					
+	
+	SoundObj = CSound(NullObj);
+	PlaySoundAtPos(laserStartSound, PosX, PosY, 0.8, false);
+	
+	
+}
+
+bool CLaserRayS::Validate ()
+{
+    if(SentryOwner == PxSentryLaser(NullObj)) return true;
+    if(LaserTarget == CGObject(NullObj)) return true;
+    return false;
+}
+void CLaserRayS::UpdatePosDir()
+{
+	if(Validate()) return;
+	              
+	float ang = LaserAngle; //angulo en radianes
+        
+        if(SentryOwner->TurretSide < 0) 
+	{
+		ang = MATH_TWO_PI - ang;
+	}
+	
+	DirX = sin(ang) * SentryOwner->TurretSide;
+	DirY = cos(ang);
+	
+        PosX = SentryOwner->ShootX + 6.0 * DirX;
+        PosY = SentryOwner->ShootY + 6.0 * DirY;
+        	
+	GlowX = PosX;
+	GlowY = PosY;
+}
+
+void CLaserRayS::PerformTrace(bool damage, bool update, float dirX, float dirY)
+{	
+        if(Validate()) return;
+        
+        CGObject *lastObject = this;
+	
+	int x = PosX;
+	int y = PosY;
+	
+	int endX  = LaserTarget->PosX; //2048.0   
+	int endY  = LaserTarget->PosY;               
+	
+	int terrainHitX;
+	int terrainHitY;
+	
+	// Perform a terrain-only trace
+	lastObject = TraceLine(this, x, y, endX, endY, CMASK_TERRAIN+CMASK_OTHERWEAPON+CMASK_MINE+CMASK_ARROW , &terrainHitX, &terrainHitY);
+                
+	if(damage && lastObject != CGObject(NullObj))
+	{
+		// If the laser should deal damage and if we hit anything
+		if(Hit && (DirX == LastDirX) && (DirY == LastDirY))
+		{
+			// Use the line tracer module to cut into terrain (this makes sure we have nice smooth cuts)
+			int xt;
+			int yt;
+			
+			LineTracer->Start(HitX, HitY, terrainHitX, terrainHitY);
+			
+			while(LineTracer->Finished() == false)
+			{
+				LineTracer->NextPoint(&xt, &yt);
+				GG->land->MakeHole(4, xt, yt);
+			}
+		}
+		else
+		{
+			// If we changed our aim in the meantime, don't perform clean cuts
+			// (it looks nice at close range but tends to cut way too much terrain at long range)
+			GG->land->MakeHole(4, terrainHitX, terrainHitY);
+		}
+		
+		// Particle effects!
+                //FX_HitTerrain(terrainHitX, terrainHitY);
+		
+	}
+	
+	// Update the hit position (they will be used for rendering the beam)
+	if(update)
+	{
+		HitX = terrainHitX;
+		HitY = terrainHitY;
+		float dx = HitX - PosX;
+		float dy = HitY - PosY;
+		
+		if(lastObject != CGObject(NullObj))
+			Hit = true;
+		else
+			Hit = false;
+		
+		// Don't render the beam if the impact point is too close
+		if((dx*dx+dy*dy) > (SentryOwner->SensorMinRadius*SentryOwner->SensorMinRadius))
+			ShouldDrawBeam = true;
+		else
+			ShouldDrawBeam = false; 
+	}
+	
+	// Don't do further processing if this is a no-damage trace
+	if(damage == false) return;
+        
+        // Find entities which are touching the beam and damage them
+	lastObject = this;
+	
+	while(lastObject != CGObject(NullObj))
+	{
+		lastObject = TraceMask(lastObject, laserColMask, x, y, terrainHitX, terrainHitY, DamageColMask, &x, &y);
+                
+                
+		if(lastObject != CGObject(NullObj))
+		{
+                     DoLaserDamage(lastObject, x, y, dirX, dirY);
+		}
+	}
+        
+        Disintegrate();
+	
+}
+
+void CLaserRayS::Disintegrate()
+{       
+
+        if(LaserTarget == CGObject(NullObj)) return;
+        
+        if(LaserTarget is CMine || LaserTarget is CMissile || LaserTarget is CArrow || LaserTarget is PxBunkerBuster || LaserTarget is CBowlingBall || LaserTarget is CBuffalo)
+        {  
+            FX_InitialBurst();
+            FX_BarrelFlash();
+            FX_MuzzleSparks();
+            FX_Disintegrate(LaserTarget->PosX, LaserTarget->PosY);        
+            FX_HitObject(LaserTarget->PosX, LaserTarget->PosY);
+            FX_HitTerrain(LaserTarget->PosX, LaserTarget->PosY);
+            
+            if(LaserTarget is PxBunkerBuster)
+            {
+                PxBunkerBuster * bb = PxBunkerBuster(LaserTarget);
+                if(bb->Drilling) 
+                    bb->StopDigging();
+            }
+            else if(LaserTarget is CBowlingBall)
+            {
+                 CBowlingBall * bb = CBowlingBall(LaserTarget);
+                 bb->Sleep();
+                 GS->ShakeX = 0.0;
+                 GS->ShakeY = 0.0;
+            }
+            else if(LaserTarget is CBuffalo)
+            {
+                 CBuffalo * Buffalo = CBuffalo(LaserTarget);
+             
+                 if(Buffalo->BL_Manager != NullObj)
+                 {
+                      //Buffalo->BL_Manager->Free(true);
+                      Buffalo->BL_Manager->BL_Dead = true;
+                 }    
+            }
+            
+            LaserTarget->Free(true);
+            LaserTarget = CGObject(NullObj);          
+            sentryLaserDisinSound->Play(2.0, 0.0, false);
+        }
+}
+
+void CLaserRayS::DoLaserDamage(CGObject *obj, int x, int y, float dirX, float dirY)
+{
+	if(obj == CGObject(NullObj))  return;
+	if(PxSentryLaser(obj) == SentryOwner) return;
+	
+	CMessageData msg;
+	
+	msg.params[0]	= 1; // fire damage
+	msg.fparams[1]	= x;
+	msg.fparams[2]	= y;
+	msg.fparams[3]	= dirX;
+	msg.fparams[4]	= dirY;
+	msg.params[6]	= SentryOwner->OwnerTeam;
+	
+        if(obj->Layer == LAYER_MINE || obj->Layer == LAYER_CRATE || obj->Layer == LAYER_DONORCARD || obj->Layer == LAYER_OILDRUM )
+	{
+            msg.params[5]   = 20; // Oil drums should take more damage
+	}
+	else if(obj->ClType == OC_Worm)
+	{
+	    msg.params[5]   = 10;
+	}
+	else return;
+        obj->Message(this, M_GUNEXP, 1032, &msg);
+        FX_HitObject(x + 3*dirX, y + 3*dirY);
+}
+
+void CLaserRayS::Stop()
+{
+	Dead = true;	
+	PlaySoundAtPos(laserEndSound, PosX, PosY, 0.8, false);
+}
+
+void CLaserRayS::Free(bool heap)
+{
+	if(SentryOwner != PxSentryLaser(NullObj))
+	{
+		SentryOwner->LaserRay = CLaserRayS(NullObj);
+	}
+	
+	PUnregister(&SentryOwner);
+	Removed = true;
+	super;
+}
+
+void CLaserRayS::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{	
+        if(Type == M_DRAWQUEUE)
+	{
+                if(Dead) return;
+		
+		if(SoundObj != CSound(NullObj))
+		{
+			UpdateSoundPos(SoundObj, PosX, PosY, 0.8);
+		}
+		
+                float width = 4.0 * BeamSize;    //8.0
+		float glowsize = 0.5 * BeamSize;     //0.5
+	        int col = RGB(R, G, B);
+  	        CQuad q;
+  	        
+	
+		if(ShouldDrawBeam)
+		{
+			StartTexturedBeam(this, 10, laserBeamTex->Index, 0.0, 8);
+			TexturedBeamPoint(GlowX, GlowY, width, 0.0, col);
+			TexturedBeamPoint(HitX, HitY, width, 1.0, col);
+			EndTexturedBeam();
+		}
+		
+		if(Hit)
+		{
+		        int i;
+		        q.blend = 1;
+                        for(i=0 ; i<4 ; i+=1) q.v[i].color = col;
+			glowsize = 0.4 * BeamSize;
+			FillSpriteQuad(&q, laserGlowSprite->Index, 0, 0);
+			TransformQuad(&q, 0, glowsize, glowsize, HitX, HitY);
+			AddSpriteQ(10, &q, laserGlowSprite->Index, 0, 64); 
+		}
+		
+		return; 
+	}
+	
+	if(Type == M_FRAME)
+	{
+		
+                if(Removed) return;
+		
+		if(Dead)
+		{
+			if(LifeTime <= 0) Free(true);
+			return;
+		}
+		
+		if(SentryOwner == PxSentryGun(NullObj) || LifeTime <= 0)
+		{
+			Stop();
+			return;
+		}
+                        
+		BeamSize = BeamSize - BeamFadeSpeed;
+		if(BeamSize < BeamMinSize)
+		{
+			BeamSize = BeamMaxSize;
+		}
+		
+		UpdatePosDir();	
+               
+		if(FrameCounter <= 0)
+		{
+			FrameCounter = FramesBetweenShots;
+			PerformTrace(true, true, DirX, DirY);
+		}	
+		else
+		{
+			FrameCounter = FrameCounter - 1;
+			PerformTrace(false, false, DirX, DirY);
+		}
+		
+		LifeTime = LifeTime - 1;
+		
+		LastDirX = DirX;
+		LastDirY = DirY;
+	}
+}
+void CLaserRayS::FX_HitTerrain(int x, int y)
+{
+	PxParticle *p = new PxParticle(laserGlowSprite->Index, x, y);
+	float s;
+	
+	p->SetLifeTime(40);
+	p->GravityFactor(-0.4);
+	p->SetAirResistance(0.2);
+	p->SetAlpha(255);
+	s = RandomFloat(0.6,0.9);
+	p->SetStartSize(s, s);
+	p->SetEndSize(0.01, 0.01);
+	p->SetBlendMode(1);
+	p->SetColor(R,G,B);
+	p->SetMotionRandomness(0.6);
+	
+	p = new PxParticle(laserGlowSprite->Index, x, y);
+	p->SetLifeTime(50);
+	p->GravityFactor(0);
+	p->SetAirResistance(0);
+	p->SetAlpha(255);
+	p->SetStartSize(0.6, 0.6);
+	p->SetEndSize(0.1, 0.1);
+	p->SetBlendMode(1);
+	p->SetStartColor(R,G,B);
+	p->SetEndColor(R*0.3,G*0.3,B*0.3);
+}
+
+void CLaserRayS::FX_HitObject(int x, int y)
+{
+        PxParticle *p;
+	float s;
+	
+	// yellow flash
+	p = new PxParticle(laserGlowSprite->Index, x, y);
+	
+	p->SetLifeTime(10);
+	p->GravityFactor(0);
+	p->SetAlpha(255);
+	s = RandomFloat(0.4,0.8);
+	p->SetStartSize(s, s);
+	p->SetEndSize(0.01, 0.01);
+	p->SetBlendMode(1);
+	
+	s = RandomInt(0, 50);
+	p->SetStartColor(210,210 - s,0);
+	p->SetEndColor(210,50 - s,0);
+	
+	// sparks
+	for(int i=0 ; i<3 ; i += 1)
+	{
+		p = new PxParticle(laserGlowSprite->Index, x, y);
+		
+		p->SetLifeTime(50);
+		p->GravityFactor(1);
+		p->SetRandomVelocity(0.5, 1.8);
+		p->SetAirResistance(0.05);
+		p->SetAlpha(255);
+		s = RandomFloat(0.5,0.7);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.01, 0.01);
+		p->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		p->SetStartColor(255,255 - s,0);
+		p->SetEndColor(255,80 - s,0);
+		
+		p->SetMotionRandomness(0.2);
+	}
+}
+
+void CLaserRayS::FX_MuzzleSparks()
+{
+	PxParticle *p;
+	float s;
+	
+	p = new PxParticle(laserGlowSprite->Index, GlowX, GlowY);
+	
+	p->SetLifeTime(30);
+	p->SetAirResistance(0.3);
+	p->GravityFactor(0.8);
+	p->SetAlpha(255);
+	s = RandomFloat(0.2,0.5);
+	p->SetStartSize(s, s);
+	p->SetEndSize(0.01, 0.01);
+	p->SetBlendMode(1);
+	s = RandomInt(0, 50);
+		p->SetStartColor(255,255 - s,0);
+		p->SetEndColor(255,80 - s,0);
+	
+	float vel = RandomFloat(2.0, 5.0);
+	
+	p->SetVelocity(vel * sin(LaserAngle), -vel * cos(LaserAngle));
+	p->SetMotionRandomness(0.8);           
+}
+
+void CLaserRayS::FX_InitialBurst()
+{
+	PxParticle *p;
+	float s;
+	int i;
+	
+	for(i=0 ; i<5 ; i+=1)
+	{
+		p = new PxParticle(laserGlowSprite->Index, GlowX, GlowY);
+		
+		p->SetLifeTime(40);
+		p->SetAirResistance(0.1);
+		p->GravityFactor(0.4);
+		p->SetAlpha(215);
+		s = RandomFloat(0.4,0.7);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.01, 0.01);
+		p->SetBlendMode(1);
+		p->SetStartColor(R,G,B);
+		p->SetEndColor(R*0.2, G*0.2, B*0.2);
+				
+		float vel = RandomFloat(5.0, 8.0);
+		float desf = RandomFloat(LaserAngle - 0.25 , LaserAngle + 0.25);
+		
+                p->SetVelocity(-vel * sin(desf), -vel * cos(desf));
+		p->SetMotionRandomness(0.5);
+	}
+}
+
+void CLaserRayS::FX_Disintegrate(int x, int y)
+{
+        PxParticle *p;
+	float s;
+	for(int i = 0; i<4 ; i++)
+	{
+	p = new PxParticle(laserGlowSprite->Index, x, y);
+	
+	p->SetLifeTime(60);
+        p->SetAirResistance(0.05);
+	p->SetAlpha(255);
+	p->SetStartSize(0.5, 0.5);
+	p->SetEndSize(0.01, 0.01);
+	p->SetBlendMode(1);
+	p->SetStartColor(R,G,B);
+	p->SetEndColor(R*0.2,G*0.2,B*0.2);
+	p->SetVelocity(1.5*sin(MATH_QUARTER_PI + MATH_HALF_PI * i) , 1.5*cos(MATH_QUARTER_PI + MATH_HALF_PI * i));
+	}
+}
+
+void CLaserRayS::FX_BarrelFlash()
+{
+        PxParticle *p;
+	float s;
+	
+	p = new PxParticle(laserGlowSprite->Index,GlowX, GlowY);
+	
+	p->SetLifeTime(25);
+	p->GravityFactor(0);
+	p->SetAlpha(225);
+	p->SetStartSize(0.6, 0.6);
+	p->SetEndSize(0.01, 0.01);
+	p->SetBlendMode(1);
+	p->SetStartColor(R,G,B);
+	p->SetEndColor(R*0.2,G*0.2,B*0.2);
+} 

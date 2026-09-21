@@ -1,0 +1,65 @@
+require utils, weapon_stun_mine;
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+	CGObject *obj;
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+		{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(obj->IsMaterial == false) continue;
+
+		if(obj->ClType == OC_Worm)
+			{
+				local worm = CWorm(obj);
+                if(PosX > worm->PosX-25 && PosX < worm->PosX+25 && PosY > worm->PosY-25 && PosY < worm->PosY+25)
+                {
+                PlasmaDamage(worm);
+                }
+			}
+
+		if((obj->ClType == OC_Mine || obj is StunMine) && weap->CheckName("Acid Spit") == true)
+			{
+			local mine = CMine(obj);
+			local stunmine = StunMine(obj);
+            if(PosX > mine->PosX-35 && PosX < mine->PosX+35 && PosY > mine->PosY-35 && PosY < mine->PosY+35)
+            	{
+            	mine->Remove();
+				}
+            if(PosX > stunmine->PosX-35 && PosX < stunmine->PosX+35 && PosY > stunmine->PosY-35 && PosY < stunmine->PosY+35)
+            	{
+            	stunmine->Remove();
+				}
+   			}
+        }
+super;
+}
+
+void CMissile::PlasmaDamage(CWorm* target)
+{
+                     local damage = 1;
+                     if(weap->CheckName("Plasma Pistol") == true)
+                     {damage = 10;}
+                     if(weap->CheckName("Plasma Rifle") == true)
+                     {damage = 25;}
+                     if(weap->CheckName("Acid Spit") == true)
+                     {damage = 25;}
+                     CMessageData msgdamage;
+                     msgdamage.params[0] = 3;
+                     msgdamage.params[1] = PosX;
+                     msgdamage.params[2] = PosY;
+                     msgdamage.params[3] = SpX/2;//doesnt work for some reason..
+                     msgdamage.params[4] = SpY/2;
+                     msgdamage.params[5] = damage;
+                     msgdamage.params[6] = 0;
+                     target->Message(NullObj, M_GUNEXP, 1032, &msgdamage);
+                     target->SpX = SpX/4;
+                     target->SpY = SpY/4;
+}
+
+void CMine::Remove()
+{
+Free(true);
+return;
+}

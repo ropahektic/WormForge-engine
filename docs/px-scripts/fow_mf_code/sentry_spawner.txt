@@ -1,0 +1,105 @@
+
+
+void spawnSentryN(int InTeam, int x, int y)
+{
+    local teamno = InTeam;
+    CShootDesc SDesc;
+    zero(&SDesc);
+    local BaseForce = 0.3;
+    local InTeam = teamno;
+
+	//Find first different team color if two first are the same
+    local FirstOtherT = 2;
+    local fi;
+    local c1 = GetTeamColor(1);
+    if(GetTeamColor(1) == GetTeamColor(2))
+		{
+        for(fi = 0; fi < 6; fi++)
+			{
+            if(GetTeamColor(fi + 1) != c1)
+				{
+                FirstOtherT = fi + 1;
+                break;
+                }
+            }
+
+		if(GetTeamColor(1) > GetTeamColor(FirstOtherT))
+			{
+            if(InTeam == 1){InTeam = FirstOtherT;}
+            if(InTeam == 2){InTeam = 1;}
+            }
+		else
+			{
+            if(InTeam == 2){InTeam = FirstOtherT;}
+            }
+        }
+        
+        SDesc.Team = InTeam;
+        SDesc.X = (x*19) + cOffX + 200;
+        SDesc.Y = (y*19) + cOffY;
+        if(teamno == 1){SDesc.SpX = 0.1;}
+		else {SDesc.SpX = -0.1;}
+		
+        SDesc.SpY = -0.05;
+        GG->land->MakeHole (35,(x*19) + cOffX + 200,(y*19) + cOffY);
+        sg = new PxSentryGun(Root->GetObject(25, 0), &SDesc);
+        sg->OwnerTeam = InTeam;
+}
+
+
+
+void placeTreasure(int inLimit, int teamno)
+{
+    //How hidden does a spot need to be for treasure?
+    //I find 5 or 6 is good. 6 for very rare treasure.
+
+    local LocalCircle = CicleMaskMedium;
+    local treasureHiddenLimit = 30;
+    local x = 0; local y = 0;
+    local nbs = 0;
+    placedT = 0;
+    local widthRow = cSizeX;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+    treasureHiddenLimit = inLimit;
+    for (x=0; x < size_x; x++)
+		{
+        for (y=0; y < size_y; y++)
+			{
+            if(CaveMap[x + (y * widthRow)] == 0)
+				{
+                nbs = countAliveNeighbours(x, y);
+                if (placedT < 4) //Up to 4 sentrys, rare occurance
+                    {
+                	if(nbs >= treasureHiddenLimit)
+						{
+                    	spawnSentryN(teamno, x, y);
+                    	placedT = placedT + 1;
+                		}
+                	}
+            	}
+        	}
+    	}
+
+    if(placedT < 2) //if < 2 sentrys could spawn, spawn two in a more common place.
+        {
+        for (x=0; x < size_x; x++)
+			{
+        	for (y=0; y < size_y; y++)
+				{
+            	if(CaveMap[x + (y * widthRow)] == 0)
+					{
+                	nbs = countAliveNeighbours(x, y);
+                	if (placedT < 2)
+						{
+                		if(nbs >= (treasureHiddenLimit - 1))
+							{
+                    		spawnSentryN(teamno, x, y);
+                    		placedT = placedT + 1;
+                			}
+                		}
+            		}
+        		}
+    		}
+    	}
+}

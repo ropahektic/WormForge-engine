@@ -1,0 +1,76 @@
+require utils;
+
+void climb::InitGraphic()
+{
+
+}
+
+void climb::Init()
+{
+keySync->AddKey(17);
+}
+
+void climb::FirstFrame()
+{
+
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+ClimbMode = false;
+ //Climb on-off
+super;
+}
+
+
+override void CWorm::Message( CObject *sender, EMType Type, int mSize, CMessageData *mData )
+{
+        if(Type == M_TURNBEGIN) {ClimbSwitch = true;}
+        if(Type == M_FRAME)
+	{
+	         if(keySync->KeyPressed(17) == true && ClimbSwitch == true)
+                {
+	        int hitx1;
+	        int hity1;
+	        int hitx2;
+	        int hity2;
+	        int hitx3;
+	        int hity3;
+	        int hitx4;
+	        int hity4;
+	        int hitx5;
+	        int hity5;
+	        int hitx6;
+	        int hity6;
+
+                CGObject *hit1 = TraceLine(this, PosX, PosY, PosX + 19*TurnSide, PosY - 5, 2, &hitx1, &hity1);
+                CGObject *hit2 = TraceLine(this, PosX, PosY, PosX + 20, PosY - 7, 2, &hitx2, &hity2);
+                CGObject *hit5 = TraceLine(this, PosX, PosY, PosX - 20, PosY - 7, 2, &hitx5, &hity5);
+                CGObject *hit3 = TraceLine(this, PosX, PosY, PosX + 19*TurnSide, PosY + 5, 2, &hitx3, &hity3);
+                CGObject *hit4 = TraceLine(this, PosX, PosY, PosX + 20, PosY + 7, 2, &hitx4, &hity4);
+                CGObject *hit6 = TraceLine(this, PosX, PosY, PosX - 20, PosY + 7, 2, &hitx6, &hity6);
+             			if(hit1 == NullObj &&  hit3 == NullObj){ClimbMode = false; }
+             			else {ClimbMode = true; }
+             			if(hit2 == NullObj &&  hit4 == NullObj) {LeftMode = false;}
+                                else {LeftMode = true; }
+                                if(hit5 == NullObj &&  hit6 == NullObj) {RightMode = false;}
+                                else {RightMode = true; }
+				//if(hit->ClType == OC_Landscape){}
+		if (ClimbMode != false)
+                {
+                if(SpY > 0)SpY = 0;
+                if(SpX > 0)SpX = 0;
+                }
+	        if (PressedLeft == 1 && PressedRight != 1 && ClimbMode == true)SpX = -0.6;         //left
+                if (LeftMode == true && ClimbMode == false)  {SpX= 0.6;  SpY = 0; }
+                if (PressedRight == 1 && PressedLeft != 1 && ClimbMode == true)SpX = 0.6;          //right
+                if (RightMode == true && ClimbMode == false) {SpX= -0.6; SpY = 0; }
+	        if (ClimbMode == true)SpY = -1.00; //up
+
+	        //if (IsKeyPressed(40) == true && ClimbMode != false)SpY = 0.5; //down
+                }
+	}
+	super;
+
+	if(Type == M_TURNEND){ClimbSwitch = false; }
+}

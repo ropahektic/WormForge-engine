@@ -1,0 +1,16 @@
+require utils, utils_steps;
+
+void extra_grenades::FirstFrame()
+{
+GG->WriteToChat(GG->curFont+3,"['PX'0rang3] I added grenades for golf course at the end of the map.",false);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_FRAME && gframe == 1)
+ 	{
+    local Weap = GetWeaponByName("Grenade");
+    GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), -1);
+ 	}
+}

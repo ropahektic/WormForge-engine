@@ -1,0 +1,17 @@
+CSoundFile* shotgfiring;
+ 
+void shotgun_sound::Init()
+{
+	shotgfiring = new CSoundFile(GetAttachment("Shotgun Firing.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Power Shotgun") || Weap->CheckName("Shotgun Berserker"))
+  {
+  vol = CalculateSoundVolume(PosX,PosY);
+  pan = CalculateSoundPan(PosX,PosY);
+  shotgfiring->Play(vol, pan, false);
+  }
+  super;
+}

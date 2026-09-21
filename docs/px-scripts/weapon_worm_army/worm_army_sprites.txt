@@ -1,0 +1,13 @@
+
+CSprite* wwalksprite;
+
+void worm_army_sprites::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("wormwalk.png"); 
+   wwalksprite = LoadSprite(f, 15, 1);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(732, wwalksprite);
+}

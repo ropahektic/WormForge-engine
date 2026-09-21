@@ -1,0 +1,30 @@
+CSoundFile* healing;
+CSoundFile* fruiteating;
+ 
+void medkit_sounds::Init()
+{
+	healing       = new CSoundFile(GetAttachment("medkit_use.wav"));
+        fruiteating       = new CSoundFile(GetAttachment("forbidden_fruit.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{    
+  if(Weap->CheckName("MedPack") || Weap->CheckName("Medkit 50") ||
+     Weap->CheckName("Medkit 100") || Weap->CheckName("Medkit 150") ||
+     Weap->CheckName("Medkit 200") || Weap->CheckName("Medkit 250"))
+  {  
+    vol = CalculateSoundVolume(PosX,PosY);
+    pan = CalculateSoundPan(PosX,PosY);
+	healing->Play(vol, pan, false);
+  }
+  super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Forbidden Fruit"))
+  {  
+             fruiteating->Play(2.0, 0.0, false);
+  }
+  super;
+}

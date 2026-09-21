@@ -1,0 +1,36 @@
+//  The wind is changed while the worm is moving
+//  If the worm is on the left of the map, the wind goes right
+//  If the worm is on the right, it goes left
+//  If the worm is in the center, there's no wind
+//  By Pac-Man
+
+require utils;
+
+float _windStrength;
+float _multiplicator;
+                
+void VariableWind::Init()
+{
+    _windStrength = 0.0;
+    // Increase the multiplicator to have stronger wind
+    _multiplicator = 0.65;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int size, CMessageData* data)
+{
+    // Calculations each frame
+    if (type == M_FRAME)
+    {
+        CWorm *worm = GetCurrentWorm();
+        if (worm != NullObj)
+        {
+            // Calculate wind strength
+            _windStrength = -((worm->PosX - GS->LevelSX / 2) / GS->LevelSX * _multiplicator);
+            Env->Wind = _windStrength;
+            CMessageData* messageData = new CMessageData;
+            messageData->fparams[0] = _windStrength;
+            Root->Message(Root, M_UPDATEWIND, 4, messageData);    
+        }
+    }
+    super;
+}

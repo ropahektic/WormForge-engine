@@ -1,0 +1,94 @@
+// List of sprites
+// This script changes jumping, flying and landing sprites
+
+CSprite* wbungee;
+CSprite* wbatrope;
+CSprite* wroll;
+CSprite* wjump;
+CSprite* wjumpu;
+CSprite* wjumpd;
+CSprite* wland1;
+CSprite* wland1u;
+CSprite* wland1d;
+CSprite* wland2;
+CSprite* wland2u;
+CSprite* wland2d;
+CSprite* wflylnk;
+CSprite* wbackflp;
+CSprite* wtwang;
+CSprite* wtwangu;
+CSprite* wtwangd;
+CSprite* wflyup;
+CSprite* wflydn;
+CSprite* wfall;
+CSprite* wfalldn;
+
+
+void tmoves::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   
+   f = GetAttachment("wbungee.png"); 
+   wbungee = LoadSprite(f, 19, 1);
+   f = GetAttachment("wbatrope.png"); 
+   wbatrope = LoadSprite(f, 64, 1);
+   f = GetAttachment("wroll.png"); 
+   wroll = LoadSprite(f, 122, 1);
+   f = GetAttachment("wjump.png");
+   wjump = LoadSprite(f, 10, 0);
+   f = GetAttachment("wjumpu.png");
+   wjumpu = LoadSprite(f, 10, 0);
+   f = GetAttachment("wjumpd.png");
+   wjumpd = LoadSprite(f, 10, 0);
+   f = GetAttachment("wland1.png");
+   wland1 = LoadSprite(f, 6, 0);
+   f = GetAttachment("wland1u.png");
+   wland1u = LoadSprite(f, 6, 0);
+   f = GetAttachment("wland1d.png");
+   wland1d = LoadSprite(f, 6, 0);
+   f = GetAttachment("wland2.png");
+   wland2 = LoadSprite(f, 9, 0);
+   f = GetAttachment("wland2u.png");
+   wland2u = LoadSprite(f, 9, 0);
+   f = GetAttachment("wland2d.png");
+   wland2d = LoadSprite(f, 9, 0);
+   f = GetAttachment("wflylnk.png");
+   wflylnk = LoadSprite(f, 7, 0);
+   f = GetAttachment("wbackflp.png");
+   wbackflp = LoadSprite(f, 22, 0);
+   f = GetAttachment("wflyup.png");
+   wflyup = LoadSprite(f, 6, 0);
+   f = GetAttachment("wflydn.png");
+   wflydn = LoadSprite(f, 2, 0);
+   f = GetAttachment("wfall.png");
+   wfall = LoadSprite(f, 16, 2);
+   f = GetAttachment("wfalldn.png");
+   wfalldn = LoadSprite(f, 16, 2);  
+   
+  
+   //Let's override the sprites!
+   
+   SetSpriteOverride(146, wbungee);
+   SetSpriteOverride(147, wbatrope);
+   SetSpriteOverride(148, wroll);
+   SetSpriteOverride(269, wjump);
+   SetSpriteOverride(270, wjumpu);
+   SetSpriteOverride(271, wjumpd);
+   SetSpriteOverride(272, wland1);
+   SetSpriteOverride(273, wland1u);
+   SetSpriteOverride(274, wland1d);
+   SetSpriteOverride(275, wland2);
+   SetSpriteOverride(276, wland2u);
+   SetSpriteOverride(277, wland2d);
+   SetSpriteOverride(278, wflylnk);
+   SetSpriteOverride(279, wbackflp);
+   SetSpriteOverride(292, wtwang);
+   SetSpriteOverride(293, wtwangu);
+   SetSpriteOverride(294, wtwangd);
+   SetSpriteOverride(508, wflyup);
+   SetSpriteOverride(509, wflydn);
+   SetSpriteOverride(510, wfall);
+   SetSpriteOverride(511, wfalldn);
+   
+}

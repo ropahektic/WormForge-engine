@@ -1,0 +1,3 @@
+int ClWT;
+int ClWN;
+bool CatchWeapon;

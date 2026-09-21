@@ -1,0 +1,44 @@
+int DoubleDamageMode;
+
+void DoubleDamageMode_SCRIPT::Init() 
+{
+   DoubleDamageMode = 0;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(CurWeapon->CheckName("Damage*2 Mode") && ObjState == WS_FIRED)
+   {
+      local wep = GS->GetWeaponByName("Damage*2");
+      GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);   
+   }
+   
+   if(DoubleDamageMode == 1)
+   {
+      if(Type == M_TURNEND)
+      {
+         local wep = GS->GetWeaponByName("Damage*2");
+         GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 0);   
+      }
+   }
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{ 
+  if(Weap->CheckName("Damage*2 Mode"))
+  {  
+     if(DoubleDamageMode == 0)
+     {
+        DoubleDamageMode = 1;
+        ShowMessage("Damage*2 Mode: ON");
+     }
+         
+     else if(DoubleDamageMode == 1)
+     {
+        DoubleDamageMode = 0;
+        ShowMessage("Damage*2 Mode: OFF");
+     }      
+  } 
+  super;
+}

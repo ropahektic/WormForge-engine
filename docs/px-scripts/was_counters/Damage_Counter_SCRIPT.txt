@@ -1,0 +1,130 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a damage-counter to the game (can be used for statistical GUI's)
+
+int damage_counts[6];
+bool dc_check_damage;
+bool dc_friendly_damage; 
+int dc_possible_damage;
+int dc_accepted_damage; 
+
+void Damage_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          damage_counts[i] = 0;
+     }
+     
+     dc_check_damage = false;
+     dc_friendly_damage = false;
+     dc_possible_damage = 0;
+     dc_accepted_damage = 0;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{           
+     if(type == M_FRAME)
+     {     
+          if(this != Current_Worm)
+          {
+               if(dc_check_damage == false)
+               {
+                    if(GS->Info.Teams[getWormTeam(this, 0)].Worms[getWormNumber(this, 0)].DamageTaken != 0)
+                    {
+                         dc_check_damage = true;   
+                    } 
+               } 
+          }
+          
+          if(dc_check_damage == true)
+          {
+               dc_possible_damage = 0;
+               
+               for(int i = 1; i < Env->Objs.Count; i++)
+               {
+                    local obj = Env->Objs.Objs[i];
+                         
+                    if(obj == NullObj)
+                    {
+                         continue;
+                    }
+                         
+                    if((obj is CWorm) == false)
+                    { 
+                         continue;
+                    }
+                         
+                    CWorm* worm = CWorm(obj);
+                    
+                    if(worm == NullObj) 
+                    {
+                         continue;
+                    }
+                    
+                    local worm_team = worm->WormTeam - 1;
+                    local worm_number = worm->WormNumber - 1;
+                    
+                    if(GS->Info.Teams[worm_team].Worms[worm_number].DamageTaken != 0)
+                    {
+                         if(worm_team != current_worm_team)
+                         {                                    
+                              dc_friendly_damage = false;
+                              
+                              if(worm->ObjState == WS_SINKING)
+                              {
+                                   damage_counts[current_worm_team] += GS->Info.Teams[worm_team].Worms[worm_number].DamageTaken;
+                                   
+                                   GS->Info.Teams[worm_team].Worms[worm_number].DamageTaken = 0;
+                                   
+                                   dc_accepted_damage = 0;
+                                   
+                                   dc_check_damage = false;
+                                   
+                                   continue;
+                              }
+                              
+                              dc_possible_damage += GS->Info.Teams[worm_team].Worms[worm_number].DamageTaken;
+                         }
+                         else
+                         {
+                              dc_friendly_damage = true;
+                         }
+                    }
+               }
+               
+               if(dc_possible_damage != 0)
+               {
+                    if(dc_possible_damage != dc_accepted_damage)
+                    {
+                         dc_accepted_damage = dc_possible_damage;
+                    }
+               }
+               else
+               {
+                    if(dc_accepted_damage != 0)
+                    {     
+                         damage_counts[current_worm_team] += dc_accepted_damage;
+                              
+                         dc_accepted_damage = 0;  
+                              
+                         dc_check_damage = false;
+                    }
+                    else
+                    {
+                         if(dc_friendly_damage == false)
+                         {
+                              dc_check_damage = false;
+                         }
+                    }
+                    
+                    dc_friendly_damage = false;
+               }
+          }
+     }
+     
+     super;
+}

@@ -1,0 +1,110 @@
+require utils;
+
+CArrowTurret : CTurretBase;
+
+bool AT_DontDrawLand;
+
+CSprite* arrturretBase;
+CSprite* arrturretTower;
+
+void arrowturret::InitGraphic()
+{
+  local f = GetAttachment("balbase.png");
+  arrturretBase = LoadSprite(f, 1, 0);
+  local f = GetAttachment("baltower.png");
+  arrturretTower = LoadSprite(f, 1, 0);
+}
+
+override void CLandscape::ApplyBitmap(int x,int y,int sx,int sy,CBitmap* bm,CBitmap* bm2,int srcX,int srcY)
+{
+  if (AT_DontDrawLand) return;
+  super;
+}
+
+override CArrow::CArrow(CObject* Parent,int* damage,CShootDesc* desc)
+{
+  DontStick = false;
+  super;
+}
+
+override void CArrow::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (DontStick)
+  {
+    AT_DontDrawLand = true;
+    super;
+    AT_DontDrawLand = false;
+  } else {
+    super;
+  }
+}
+
+void CArrowTurret::CArrowTurret(CObject* parent, fixed x, fixed y)
+{
+  super;
+  gFactor = 0.25;
+  ColGroup = ColGroup & (-65537); //remove Arrows flag
+  breakable = true;
+  towerlen = 16;
+  ammoPerTurn = 8;
+  baseSprite = arrturretBase;
+  towerSprite = arrturretTower;
+};
+
+bool CArrowTurret::AimToEnemy()
+{
+    if (TargetObj != NullObj)
+    {
+      local l = DistBetweenObjs(TargetObj, this);
+      timeForShoot = l / 10 + 1; //500 pixels per sec, rait
+    }
+    return super;
+}
+
+bool CArrowTurret::ShootAtEnemy()
+{
+    if (CheckMaskAt(Root, FourCheckMask, ShootX, ShootY, -65537) != NullObj) return false;
+
+
+    CShootDesc SDesc;
+    zero(&SDesc);
+
+    local ForceVar = GS->GetRandom() % 64;
+    local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+
+    SDesc.Team = turretTeam;  //no more //fixin rare CArrow crash bug.
+    SDesc.Worm = 0;
+
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+    if (turretTeam < 0) SDesc.Team = 0; //wtf
+
+    SDesc.SpX = ShootSX * BaseForce;
+    SDesc.SpY = ShootSY * BaseForce;
+
+    local admg = 10;
+
+    local arrow = new CArrow(Root->GetObject(25, 0), &admg, &SDesc);
+    if (CGObject(arrow)->IsValid())
+    {
+      arrow->GravityFactor = 0.25;
+      arrow->DontStick = false;
+    }
+    return true;
+
+};
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Auto-ballista"))
+   {
+     local sg = new CArrowTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->sprNum = 0;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};

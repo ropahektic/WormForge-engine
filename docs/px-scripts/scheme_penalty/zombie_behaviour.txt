@@ -1,0 +1,147 @@
+require utils, utils_steps, wosc_lib;
+
+int cooldown; //random cooldown for turnbegin
+CWorm* Player; //non-zombie worm thats active :P
+int nocrash; // over 100 - it stops nextteam from crashing the game
+
+void zombie_behaviour::InitGraphic(){}
+
+void zombie_behaviour::Init(){}
+
+void zombie_behaviour::FirstFrame()
+{
+ cooldown = 0;
+ nocrash = 0;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)     
+{
+CanBeZombie = true; //always true, unless already Zombie or lower than bottom of the map (sinking).
+Zombie = false;
+Act = false; //true when IT moves 
+EndingT = false;
+DamageCooldown = 0;
+FirePunchTimer = 0;
+StopFirePunchTimer = 0;
+AttackCooldown = 0; //between attacks
+super;    
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if(Type == M_FRAME)
+        {
+        if(FirePunchTimer != 0 && GG->land->Undestructable == false){GG->land->ApplyMask(4, PosX, PosY - 7);}
+        Death();
+        if(cooldown != 0){cooldown = cooldown - 1;}
+        if(Zombie == true && Act == true && Root->TimerDisabled == false){ZombieBehavior();}
+        }
+         
+    if(Type == M_TURNBEGIN)
+        {
+        if(cooldown == 0){cooldown = 10;Player = CWorm(Root->GetObject(2, 16 * WormTeam + WormNumber));MakeActive();nocrash = 0;}
+        }
+         
+    if(Type == M_TURNEND)
+        {
+        if(cooldown == 0){cooldown = 10; MakeInactive(); Player = NullObj;}
+        if(Zombie == true && cooldown == 0){return;}
+        }
+super;
+}
+
+void CWorm::Death()
+{
+	if(PosY > GS->LevelSY)
+  		{
+  		CanBeZombie = false;
+  		Zombie = false;
+  		Act = false;
+  		}
+
+	if(GetTeamColor(WormTeam) == 2){ Zombie = true; }
+                 
+  	if(GS->Info.GetWormHealth(WormTeam,WormNumber) <= 0 && CanBeZombie == true)
+  		{
+  		Zombie = true;
+  		CanBeZombie = false;
+  		GS->Info.SetWormHealth( WormTeam, WormNumber, 100);
+  		}
+}
+
+void CWorm::MakeActive()
+{
+  	for(local t = 1; t<7; t++)
+  	{
+     	for(local i = 1; i<9; i++)
+     	{
+     	local obj1 = CGObject(Root->GetObject(2, 16 * t + i));
+     	local wrm1 = CWorm(Root->GetObject(2, 16 * t + i));
+
+		if (obj1 != NullObj && obj1 != CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber)) && wrm1->Zombie == true && wrm1->Act == false && wrm1 != Player)
+        	{
+            wrm1->Act = true;
+        	}
+     	}
+  	}
+}
+
+void CWorm::MakeInactive()
+{
+  	for(local t = 1; t<7; t++)
+  	{
+     	for(local i = 1; i<9; i++)
+     	{
+     	local obj1 = CGObject(Root->GetObject(2, 16 * t + i));
+     	local wrm1 = CWorm(Root->GetObject(2, 16 * t + i));
+
+		if (obj1 != NullObj && obj1 != CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber)) && wrm1->Zombie == true && wrm1->Act == true && wrm1 != Player)
+        	{
+            wrm1->Act = false;
+        	}
+     	}
+  	}
+}
+
+void CWorm::ZombieBehavior()
+{
+   	if(AttackCooldown > 0){AttackCooldown = AttackCooldown - 1;}
+
+	local obj1 = CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber));
+    local wrm1 = CWorm(Root->GetObject(2, 16 * WormTeam + WormNumber));
+
+	if (obj1 != NullObj && Player != NullObj)
+        {
+        if(Player != this)
+        	{
+            if(PosX < Player->PosX + 150 && PosX > Player->PosX - 150 && PosY > Player->PosY - 90 && PosY < Player->PosY + 90)
+				{
+                FirePunch(obj1,wrm1);
+                if(obj1->PosX < Player->PosX + 20 && obj1->PosX > Player->PosX - 20 && obj1->PosY > Player->PosY - 12 && obj1->PosY < Player->PosY + 90)
+                	{
+                    return;
+                    }
+                }
+            }
+        }
+}
+
+void CWorm::FirePunch(CGObject* obj1, CWorm* worm1)
+{
+	if(obj1->PosX <= Player->PosX + 20 && obj1->PosX >= Player->PosX - 20 && obj1->PosY > Player->PosY - 12 && obj1->PosY < Player->PosY + 100 && AttackCooldown == 0)
+    	{
+        if(ObjState == WS_IDLE || ObjState == WS_JUMP || ObjState == WS_WALKING || ObjState == WS_SLIDING || ObjState == WS_JUMPPREPARE)
+        	{
+          	if(obj1->PosX < Player->PosX){worm1->TurnSide = 1;}else{worm1->TurnSide = -1;}
+        	AttackCooldown = 60;
+        	PunchIt(); //workaround for online games
+        	}
+        }
+}
+
+void CWorm::PunchIt()
+{
+     SpY = -6;
+     SpX = 0;
+     FirePunchTimer = 30;
+}

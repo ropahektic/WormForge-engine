@@ -1,0 +1,68 @@
+CSprite* shield_gun_aiming;
+CSprite* shield_gun_bullet;
+
+void shield_gun_anim::InitGraphic() {
+    CFile* f;
+    f = GetAttachment("shield_gun_aiming.png");
+    shield_gun_aiming = LoadSprite(f, 1, 0);
+    f = GetAttachment("shield_gun_bullet.png");
+    shield_gun_bullet = LoadSprite(f, 1, 0);
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+///////......................................................................\\\\\\
+//
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Shield Gun";
+     sprite = shield_gun_aiming->Index;
+     Params->fix_flip_rotation = true;
+     Params->hand_rotation = 0.5;
+     Params->hand_radius = 4.0;
+     Params->hand_radial_rotation = 0.0;
+//     Params->weap_rotation =  1.0;
+     Params->hand_type = 3;
+     Params->hand_scale = 0.8;               ///// I recommend don`t change it. //////   //
+//
+///////``````````````````````````````````````````````````````````````````````//////
+     local WA = new WormSprite(weapName, sprite, Params);
+    }                                                                            //
+  }                                                                              //
+}                                                                                //
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;                                                                           //
+  if (Type == M_FRAME){                                                          //
+     if (weap->CheckName("Shield Gun")) {
+         if (shield_gun_anim2) {
+            local sprite = shield_gun_bullet->Index;
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);
+            weap->launch.anim.spriteIndex = 0;
+            shield_gun_anim2 = false;
+         }
+     }
+  }                                                                              //
+}                                                                                //
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           //
+  shield_gun_anim2 = true;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("Shield Gun")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER) {
+            
+//DoParticleEffects( sprite, RelX, RelY, lifeTime, animSpeed, veloMin, veloMax, startAlpha, endAlpha, windFactor, startSize, endSize, angleMin, angleMax, randomMotion, grav);
+            DoAnimParticleEffects( shield_gun_bullet->Index, 7, 15, 5, 20, 0.02, -3.0, -7.0, 150, 30, 0, 0.5, 0.2, 0.0, 2.31, 0.0, -1.5);
+            }
+        }
+    }
+super;
+}

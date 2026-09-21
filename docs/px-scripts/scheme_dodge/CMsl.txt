@@ -1,0 +1,94 @@
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+  if(Type == M_FRAME)
+  {
+      if(CurWave == 3)
+      {
+         if(AddTimer < Timer - 8)
+         {
+                  if(SpX == -2){SpX = -3;}
+                  else{SpX = -2;}
+         }
+      }
+  
+      if(PosX < DestroyPosX)
+      {
+      Free(true);
+      return;
+      }
+      
+      if(SuperSheep == true)
+      {
+                    if(GetCurrentWorm() != NullObj)
+                    {
+                                      if(PosX < GetCurrentWorm()->PosX + 2 && PosX > GetCurrentWorm()->PosX - 2)
+                                      {
+                                      ShootZook(PosX, PosY, 0, "SuperSheep");
+                                      Free(true);
+                                      return;
+                                      }
+                    }
+      }
+      
+      if(Special == true)
+      {
+                    if(GetCurrentWorm() != NullObj)
+                    {
+                                      SpY = (GetCurrentWorm()->PosY - PosY)/100;
+                                      if(SpY < 0.5 && SpY >= 0){SpY = 0.5;}
+                                      if(SpY > -0.5 && SpY < 0){SpY = -0.5;}
+                    }
+      }
+      
+      if(Random == true)
+      {
+      SpX = RandomInt(-4, -2);
+      }
+      
+      if(Plane == true)
+      {
+                    if(GetCurrentWorm() != NullObj)
+                    {
+                                      if(PlaneTimer <= 0)
+                                      {
+                                      PlaneTimer = 60;
+                                      ShootZook(PosX, PosY+1, -0.5, "SRocket");
+                                      }
+                                      else{PlaneTimer = PlaneTimer - 1;}
+                    }
+      }   
+      
+      if(BossKilling == true)
+      {
+                    if(GetCurrentWorm() != NullObj)
+                    {
+                        if(PosX >= PosX1-1)
+                        {
+                           BossKilled = true;
+                           CurWave = 100;
+                           Final();
+                        }                
+                    }
+      }   
+      
+      if(BossKilled == true || DodgeStarted == false)
+      {
+      Free(true);
+      return;
+      }         
+  }
+}
+
+
+
+override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+SuperSheep = false;
+Special = false;   //homing
+Random = false;
+Plane = false;
+PlaneTimer = 0;
+BossKilling = false;
+}

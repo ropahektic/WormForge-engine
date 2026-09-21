@@ -1,0 +1,51 @@
+CSoundFile* meater;
+CSoundFile* sdcreepylaugh;
+CSoundFile* sadisticfemalel;
+CSoundFile* bcomeback;
+CSoundFile* everythingaboutyou;
+CSoundFile* blameitall;
+CSoundFile* cantlive;
+
+ 
+void she_devil_sound::Init()
+{
+	meater       = new CSoundFile(GetAttachment("Maneater.wav"));
+	sdcreepylaugh       = new CSoundFile(GetAttachment("She-Devil Creepy Laugh.wav"));
+	sadisticfemalel       = new CSoundFile(GetAttachment("Sadistic Female Laughter.wav"));
+	bcomeback       = new CSoundFile(GetAttachment("Baby Come Back.wav"));
+	everythingaboutyou       = new CSoundFile(GetAttachment("Something in Everything About You.wav"));
+	blameitall       = new CSoundFile(GetAttachment("Blame It All On Me.wav"));
+	cantlive       = new CSoundFile(GetAttachment("Can't Live Without You.wav"));
+	
+	SheDevilSoundDeactivator = 0;
+}
+
+override void CWorm::Message( CObject *sender, EMType Type, int mSize, CMessageData *mData )
+{
+   if(CurWeapon->CheckName("She-Devil"))
+   {
+      if(SheDevilSoundDeactivator < 1)
+      {
+         sdcreepylaugh->Play(2.5, 0.0, false);
+              
+         SheDevilSoundDeactivator = 1;
+      }
+   }
+   
+   if(Type == M_TURNEND && SheDevilSoundDeactivator > 0)
+   {
+      SheDevilSoundDeactivator = 0;
+   }
+   
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("She-Devil"))
+  {  
+             meater->Play(1.25, 0.0, false);
+             sadisticfemalel->Play(34.0, 0.0, false);
+  }
+  super;
+}

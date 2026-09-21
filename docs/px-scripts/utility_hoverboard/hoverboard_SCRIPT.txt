@@ -1,0 +1,135 @@
+/****************************************************************
+ * MOST OF THE CODE WAS COPIED FROM MY OLDER HELICOPTER SCRIPT. *
+ * (c) StepS 21.10.2015 - Back to the Future! Hello Project X!  *
+ ****************************************************************/
+
+require utils;
+
+CSprite* HoveAnim;
+
+void hoverboard_SCRIPT::Init()
+{                                   
+    keySync->AddKey(16); // Shift
+}
+        
+void hoverboard_SCRIPT::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("hove-spr.png");           HoveAnim   = LoadSprite(f, 1, 1);
+}
+
+void CWorm::hv_JetKill()
+{
+    SetState(WS_IDLE);
+    GravityFactor = 1;
+    hoverboard_on = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    CWorm* w = GetCurrentWorm();
+    local Shifth = keySync->KeyPressed(16);
+
+    if (hoverboard_on)
+    {
+        if (Type == M_FRAME)
+        {
+            if (hovelaunch)
+            {
+                SetState(WS_JETPACK);
+                JetFuel = 125*65536;
+                hovelaunch = false;
+            }
+            
+            if (PressedUp) PressedUp = 0;
+            
+            if (SpY < 0.0) SpY = SpY / 1.25; 
+            else if (PressedDown == 1 && SpY > 0.0) SpY = SpY / 1.5;
+            
+            if (PressedLeft == 0 && PressedRight == 0) SpX = SpX / 1.04;
+            if (PressedLeft == 1 && PressedRight == 1) SpX = SpX / 1.04;
+            
+            if (Root->RetreatTimer == 0 && w != NullObj)
+                JetFuel -=0.01*65536; //???
+                
+            if (PressedLeft == 1)
+            {
+                PressedLeft = 0;
+                if (Root->RetreatTimer == 0) JetFuel -= 0.25*65536;
+                if (w != NullObj && !Shifth) TurnSide = -1;
+                
+                if (SpX > -20.0)
+                {
+                    SpX -= 0.45;
+                }
+            }
+            
+            if (PressedRight == 1)
+            {
+                PressedRight = 0;
+                if (Root->RetreatTimer == 0) JetFuel -= 0.25*65536;
+                if (w != NullObj && !Shifth) TurnSide = 1;
+                
+                if (SpX < 20.0)
+                {
+                    SpX += 0.45;                                          
+                }
+            }
+            
+            if (PressedDown)
+            {
+                JetFuel -=0.25*65536;
+                GravityFactor = 0;
+            }
+            else                          
+                GravityFactor = 1;
+           
+            if (ObjState != WS_JETPACK)
+            {
+                //Loss of control
+                if (SpY == 0 && ObjState != WS_FIRED && ObjState != WS_TELEPORTING)
+                    SetState(WS_SLIDING);
+                GravityFactor = 1;
+                hoverboard_on = false;                                  
+            }
+            
+            else if (JetFuel <= 0)
+                hv_JetKill();                                
+        }                      
+           
+/*      else if (Type == M_ENTER)
+        {
+            return;
+        }  
+        
+        else if (Type == M_TURNEND)
+        {
+            hv_JetKill();
+        }
+*/        
+        else if (Type == M_DRAWQUEUE)
+        {
+            if (TurnSide > 0)
+                AddSpriteEx(4,PosX,PosY,HoveAnim->Index,0,0,1);
+            else
+                AddSpriteEx(4,PosX,PosY,HoveAnim->Index+262144,0,0,1);
+        }
+    }
+super;
+}
+
+override void CWorm::RenderWorm()
+{
+    if (!hoverboard_on) super;
+}  
+         
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Hoverboard"))
+    {
+        hoverboard_on = true;
+        hovelaunch = true;
+    }
+    else super;
+}

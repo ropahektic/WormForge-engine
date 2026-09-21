@@ -1,0 +1,36 @@
+require utils;
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if (Weap->CheckName("Mines Gun"))
+	{
+    CShootDesc SDesc;
+    zero(&SDesc);
+    SDesc.X = Desc->X;
+    SDesc.Y = Desc->Y;
+    SDesc.SpX = Desc->SpX * 12;
+    SDesc.SpY = Desc->SpY * 12;
+    SDesc.Team = Desc->Team;
+       
+    CMineParams MParams;
+    zero(&MParams);
+    MParams.Radius = 50;
+    MParams.Prefuse = 3000;
+    MParams.Flags = 256;
+    MParams.Fuse = 3000;
+    MParams.Bias = 1;
+    MParams.BlastPower = 50;
+    MParams.Damage = 30;
+    MParams.Unknown = 0;
+    local m = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+    if (m != NullObj)
+	   	{
+        m->Active = true;
+        m->nPulses = 1;
+        m->DumpingA = 0.6;
+        m->DumpingB = 0.6;
+        m->DumpingC = 0.6;
+    	}
+    }
+super;
+}

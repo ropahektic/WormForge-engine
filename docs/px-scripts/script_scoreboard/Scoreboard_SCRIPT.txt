@@ -1,0 +1,210 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a scoreboard to the game, which shows 12 different statistics for each player.
+// "H" key to activate.
+
+require utils, utils_steps, utils_pyroman, utils_dannyb, was_counters;
+
+CScoreboardHandler : CObject;
+CBitmap32* GUI_Scoreboard;
+string speedx_Scoreboard;
+string speedy_Scoreboard;
+int Scoreboard_PosX;
+int Scoreboard_PosY;
+
+bool sb_teams_playing[6];
+int sb_delay_timer;
+
+void Scoreboard_SCRIPT::InitGraphic()
+{ 
+     SB_Background  = GetAttachment("scoreboard background.png");
+     GUI_Scoreboard = LoadImage(SB_Background);
+}
+
+void Scoreboard_SCRIPT::FirstFrame()
+{
+     new CScoreboardHandler();
+     Scoreboard_PosX = 0;
+     Scoreboard_PosY = 0;
+     
+     for(local i = 0; i <= 5; i++)
+     {
+          if(Root->GetObject(TI_Team, (i + 1)) != NullObj)
+          {
+               sb_teams_playing[i] = true;
+          }
+          else
+          {
+               sb_teams_playing[i] = false;
+          }
+     }
+     
+     keySync->AddKey(72); // H
+     sb_delay_timer = 0;
+}
+
+CScoreboardHandler::CScoreboardHandler()
+{
+     super(Root, GS);  
+     
+     GUI_Scoreboard_n = GUI_Scoreboard;
+}
+
+void CScoreboardHandler::ListAndDraw()
+{
+     int a;
+     int b;
+
+     GUI_Scoreboard_n->Rect(0, 0, 509, 423, 0);
+     
+     // scoreboard title
+     GS->Disp->DrawText(23, GUI_Scoreboard_n, 22, 14, "* * * * * * * * * *  SCOREBOARD  * * * * * * * * * *", &a, &b); 
+     
+     if(sb_teams_playing[0] == true)
+     {     
+          // team 1
+          GS->Disp->DrawText(GetTeamColor(1) + 9, GUI_Scoreboard_n, 20, 52, GetTeamName(1), &a, &b); 
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 72, StrCon("Turns: ", ItoA(turn_counts[0])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 87, StrCon3("Time utilization: ", ItoA(time_utilization_counts[0]), "%"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 102, StrCon6("Kills: ", ItoA(kill_counts[0]), " | Deaths: ", ItoA(death_counts[0]), " | KD: ", ftoaEx(kd_counts[0], 2)), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 117, StrCon("Damage: ", ItoA(damage_counts[0])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 132, StrCon("Friendly fire: ", ItoA(friendly_fire_counts[0])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 147, StrCon("Weapons/utilities used: ", ItoA(equipment_used_counts[0])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 162, StrCon("Specialities used: ", ItoA(specialities_used_counts[0])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 177, StrCon("Crates: ", ItoA(crate_counts[0])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 192, StrCon3("Distance travelled: ", ItoA(distance_travelled_counts[0]), " m"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(1) + 1, GUI_Scoreboard_n, 20, 207, StrCon("Fails: ", ItoA(fail_counts[0])), &a, &b);
+     }
+          
+     if(sb_teams_playing[1] == true)
+     {        
+          // team 2
+          GS->Disp->DrawText(GetTeamColor(2) + 9, GUI_Scoreboard_n, 183, 52, GetTeamName(2), &a, &b); 
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 72, StrCon("Turns: ", ItoA(turn_counts[1])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 87, StrCon3("Time utilization: ", ItoA(time_utilization_counts[1]), "%"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 102, StrCon6("Kills: ", ItoA(kill_counts[1]), " | Deaths: ", ItoA(death_counts[1]), " | KD: ", ftoaEx(kd_counts[1], 2)), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 117, StrCon("Damage: ", ItoA(damage_counts[1])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 132, StrCon("Friendly fire: ", ItoA(friendly_fire_counts[1])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 147, StrCon("Weapons/utilities used: ", ItoA(equipment_used_counts[1])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 162, StrCon("Specialities used: ", ItoA(specialities_used_counts[1])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 177, StrCon("Crates: ", ItoA(crate_counts[1])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 192, StrCon3("Distance travelled: ", ItoA(distance_travelled_counts[1]), " m"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(2) + 1, GUI_Scoreboard_n, 183, 207, StrCon("Fails: ", ItoA(fail_counts[1])), &a, &b);     
+     }
+          
+     if(sb_teams_playing[2] == true)
+     {        
+          // team 3
+          GS->Disp->DrawText(GetTeamColor(3) + 9, GUI_Scoreboard_n, 346, 52, GetTeamName(3), &a, &b); 
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 72, StrCon("Turns: ", ItoA(turn_counts[2])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 87, StrCon3("Time utilization: ", ItoA(time_utilization_counts[2]), "%"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 102, StrCon6("Kills: ", ItoA(kill_counts[2]), " | Deaths: ", ItoA(death_counts[2]), " | KD: ", ftoaEx(kd_counts[2], 2)), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 117, StrCon("Damage: ", ItoA(damage_counts[2])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 132, StrCon("Friendly fire: ", ItoA(friendly_fire_counts[2])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 147, StrCon("Weapons/utilities used: ", ItoA(equipment_used_counts[2])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 162, StrCon("Specialities used: ", ItoA(specialities_used_counts[2])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 177, StrCon("Crates: ", ItoA(crate_counts[2])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 192, StrCon3("Distance travelled: ", ItoA(distance_travelled_counts[2]), " m"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(3) + 1, GUI_Scoreboard_n, 346, 207, StrCon("Fails: ", ItoA(fail_counts[2])), &a, &b); 
+     }  
+          
+     if(sb_teams_playing[3] == true)
+     {        
+          // team 4
+          GS->Disp->DrawText(GetTeamColor(4) + 9, GUI_Scoreboard_n, 20, 236, GetTeamName(4), &a, &b); 
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 256, StrCon("Turns: ", ItoA(turn_counts[3])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 271, StrCon3("Time utilization: ", ItoA(time_utilization_counts[3]), "%"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 286, StrCon6("Kills: ", ItoA(kill_counts[3]), " | Deaths: ", ItoA(death_counts[3]), " | KD: ", ftoaEx(kd_counts[3], 2)), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 301, StrCon("Damage: ", ItoA(damage_counts[3])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 316, StrCon("Friendly fire: ", ItoA(friendly_fire_counts[3])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 331, StrCon("Weapons/utilities used: ", ItoA(equipment_used_counts[3])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 346, StrCon("Specialities used: ", ItoA(specialities_used_counts[3])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 361, StrCon("Crates: ", ItoA(crate_counts[3])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 376, StrCon3("Distance travelled: ", ItoA(distance_travelled_counts[3]), " m"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(4) + 1, GUI_Scoreboard_n, 20, 391, StrCon("Fails: ", ItoA(fail_counts[3])), &a, &b); 
+     } 
+          
+     if(sb_teams_playing[4] == true)
+     {        
+          // team 5
+          GS->Disp->DrawText(GetTeamColor(5) + 9, GUI_Scoreboard_n, 183, 236, GetTeamName(5), &a, &b); 
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 256, StrCon("Turns: ", ItoA(turn_counts[4])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 271, StrCon3("Time utilization: ", ItoA(time_utilization_counts[4]), "%"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 286, StrCon6("Kills: ", ItoA(kill_counts[4]), " | Deaths: ", ItoA(death_counts[4]), " | KD: ", ftoaEx(kd_counts[4], 2)), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 301, StrCon("Damage: ", ItoA(damage_counts[4])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 316, StrCon("Friendly fire: ", ItoA(friendly_fire_counts[4])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 331, StrCon("Weapons/utilities used: ", ItoA(equipment_used_counts[4])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 346, StrCon("Specialities used: ", ItoA(specialities_used_counts[4])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 361, StrCon("Crates: ", ItoA(crate_counts[4])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 376, StrCon3("Distance travelled: ", ItoA(distance_travelled_counts[4]), " m"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(5) + 1, GUI_Scoreboard_n, 183, 391, StrCon("Fails: ", ItoA(fail_counts[4])), &a, &b);  
+     } 
+          
+     if(sb_teams_playing[5] == true)
+     {        
+          // team 6
+          GS->Disp->DrawText(GetTeamColor(6) + 9, GUI_Scoreboard_n, 346, 236, GetTeamName(6), &a, &b); 
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 256, StrCon("Turns: ", ItoA(turn_counts[5])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 271, StrCon3("Time utilization: ", ItoA(time_utilization_counts[5]), "%"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 286, StrCon6("Kills: ", ItoA(kill_counts[5]), " | Deaths: ", ItoA(death_counts[5]), " | KD: ", ftoaEx(kd_counts[5], 2)), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 301, StrCon("Damage: ", ItoA(damage_counts[5])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 316, StrCon("Friendly fire: ", ItoA(friendly_fire_counts[5])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 331, StrCon("Weapons/utilities used: ", ItoA(equipment_used_counts[5])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 346, StrCon("Specialities used: ", ItoA(specialities_used_counts[5])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 361, StrCon("Crates: ", ItoA(crate_counts[5])), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 376, StrCon3("Distance travelled: ", ItoA(distance_travelled_counts[5]), " m"), &a, &b);
+          GS->Disp->DrawText(GetTeamColor(6) + 1, GUI_Scoreboard_n, 346, 391, StrCon("Fails: ", ItoA(fail_counts[5])), &a, &b);
+     }    
+}
+
+void CScoreboardHandler::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+     local cw = GetCurrentWorm();
+   
+     if(cw != NullObj)
+     {
+          if(keySync->KeyPressed(72) && !GameChatOpened)
+          {
+               if(Type == M_FRAME)
+               {
+                    ListAndDraw();
+               }
+               
+               if(Type == M_DRAWQUEUE)
+               {
+                    Scoreboard_PosX = 0;
+                    Scoreboard_PosY = 0;
+         
+                    AddInterfaceBitmap(15, Scoreboard_PosX, Scoreboard_PosY, GUI_Scoreboard_n, 509, 423, 1);
+               }
+          }
+     }
+     
+     if(game_over == true)
+     {
+          if(Type == M_FRAME)
+          {
+               sb_delay_timer += 20;
+               
+               if(sb_delay_timer > 1000)
+               {
+                    ListAndDraw();
+               }
+          }
+          
+          if(Type == M_DRAWQUEUE)
+          {     
+               if(sb_delay_timer > 1000)
+               {
+                    Scoreboard_PosX = 0;
+                    Scoreboard_PosY = 0;
+         
+                    AddInterfaceBitmap(15, Scoreboard_PosX, Scoreboard_PosY, GUI_Scoreboard_n, 509, 423, 1);
+               }
+          }
+     } 
+}

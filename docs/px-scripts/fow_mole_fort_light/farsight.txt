@@ -1,0 +1,132 @@
+
+PxFarSight : CObject;
+
+#WEAPON_FARSIGHT
+
+CSoundFile* RevealMapSound;
+
+int FarSightsLimit;
+
+CTorch* FSArrL[6]; int FSArrLat;
+CTorch* FSArrR[6]; int FSArrRat;
+CTorch* tmpFS;
+
+void farsight::FirstFrame()
+{
+FSArrLat = 0;
+FSArrRat = 0;
+FarSightsLimit = 2; // fixed?
+}
+
+void farsight::InitGraphic()
+{
+CFile *f;
+f = GetAttachment("revealmap.wav");	RevealMapSound = new CSoundFile(f);
+}
+
+PxFarSight::PxFarSight(CObject* Parent, CShootDesc* Desc, int TeamS, int ArrID)
+{
+    super(Parent, GS);
+    ClType = OC_AirStrike;
+
+    // Internal states
+    Dead = false; //True means weapon is done?
+    IsFirstFrame = true;
+    OwnerTeam = Desc->Team;
+    TeamSide = TeamS;
+    PostLightningTime = 60;
+    PlaceX = Desc->AddX;
+    PlaceY = Desc->AddY;
+
+    FSarrID = ArrID;
+}
+
+void PxFarSight::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+        if(Dead)
+		{
+		Free(true);
+		return;
+		}
+
+
+		if(IsFirstFrame)
+		{
+			IsFirstFrame = false;
+
+            local lt = new CTorch(Root->GetObject(25, 0),PlaceX,PlaceY);
+            lt->owningTeam = OwnerTeam;
+            lt->IsMaterial = false;
+            lt->IsFarSight = true;
+
+            if(TeamSide == 1){FSArrL[FSarrID] = lt;}
+            else{FSArrR[FSarrID] = lt;}
+
+            //lt->HasWobbleGraphics = false; raffie
+            //local team = PxFarSight(obj)->owningTeam;
+            //if (darkControl->IsTeamVisible(team))
+			//{
+            //CDarknessControl->SetLight(PlaceX, PlaceY, 50, 110, 0.9);
+            //}
+            //Root->SetCurrentTeam(Root->GetNextTeam());
+            //local team = PxFarSight(obj)->owningTeam;
+
+		}
+
+			PostLightningTime = PostLightningTime - 1;
+			if(PostLightningTime <= 0){Dead = true;}
+	}
+
+    if(Type == M_DRAWQUEUE)
+	{return;}
+
+super;
+}
+
+
+
+//overrides
+CWeapon* TmpHoldinWeap;
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Far Sight"))
+	{
+        local CurrWormz = GetCurrentWorm();
+        if(CurrWormz != NullObj)
+        {
+        //limit amount
+            if(CurrWormz->TeamSide == 1){
+                FSArrLat = (FSArrLat + 1) % FarSightsLimit;
+
+                tmpFS = FSArrL[(FSArrLat - (FarSightsLimit) % FarSightsLimit)];
+                if(tmpFS != NullObj){ tmpFS->Free(true); }
+
+                new PxFarSight(GetObject(25, 0), Desc, CurrWormz->TeamSide, FSArrLat);
+
+            }else{
+                FSArrRat = (FSArrRat + 1) % FarSightsLimit;
+
+                tmpFS = FSArrR[(FSArrRat - (FarSightsLimit) % FarSightsLimit)];
+                if(tmpFS != NullObj){ tmpFS->Free(true); }
+
+                new PxFarSight(GetObject(25, 0), Desc, CurrWormz->TeamSide, FSArrRat);
+
+            }
+
+            if(KaozActive == false || Weap->EndsTurn == true)
+			{
+                Root->RetreatTimer = 1;
+                CurrWormz->CanFire = false;
+                RevealMapSound->Play(1.0,0.0,false);
+            }
+
+        }
+	}
+	else
+	{
+		super;
+	}
+}

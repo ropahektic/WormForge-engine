@@ -1,0 +1,406 @@
+require utils, utils_steps;
+
+CMissile* DKmiss[6];
+CMissile* UAmiss[6];
+CSound* DKsound;
+//bool DarksideKiller;
+//bool DarksideKillerUA;
+//bool UAsituation1;
+int DKtargetX0;
+int DKtargetY0;
+int UAtargetX0;
+int UAtargetY0;
+int DKhutick;
+int UAhutick;
+
+
+/*override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    if (weap->CheckName("Underwater Attack"))
+    {
+         GG->land->MakeHole(50, x, y);
+    }
+    super;
+}*/
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+   DarksideKiller = false;
+   DarksideKillerUA = false;
+   UAsituation1 = false;
+   DKtargetX0M = 0;
+   DKtargetY0M = 0;
+   UAtargetX0M = 0;
+   UAtargetY0M = 0;
+   DKhutickM = 0;
+   UKhutickM = 0;
+   super;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+   {
+       if (DarksideKiller)
+       {
+//               DKmis = this;
+//               if (DKmis == NullObj){DarksideKiller = false;}
+               local hutick2 = gframe-DKhutickM;
+               local koef;
+               if (hutick2 >=325){DarksideKiller = false;}else
+               if (hutick2 >= 230)
+               {
+                   initdesc.AddX = DKtargetX0M;
+                   initdesc.AddY = DKtargetY0M;
+               } else
+               if (hutick2 >= 160)
+               {
+                   if (DKtargetX0M >  GS->LevelSX/1.25 && DKtargetY0M > GS->LevelSY/2){koef =  550;}
+                   else if (DKtargetX0M < GS->LevelSX/5  && DKtargetY0M > GS->LevelSY/2){koef = -550;}
+                   else {koef = 0;}
+                   initdesc.AddX = DKtargetX0M + koef;
+                   initdesc.AddY = -400;
+               } else
+               if (hutick2 >= 120)
+               {
+                   initdesc.AddX = DKtargetX0M;
+                   initdesc.AddY = DKtargetY0M;
+               } else
+               if (hutick2 >= 70)
+               {
+                   initdesc.AddX = DKtargetX0M;
+                   initdesc.AddY = -700;
+               }
+       }
+       if (DarksideKillerUA)
+       {
+//           UAmis = this;
+//           if (UAmis == NullObj){DarksideKillerUA = false;}
+           hutick2 = gframe-UAhutickM;      
+           tempHut01 = GS->LevelSX/50 - (GS->LevelSX - initdesc.X)/50;
+           tempHut02 = GS->LevelSX/100 + (GS->LevelSX - initdesc.X)/100;
+           tempHut = GS->LevelSX/20;                
+           tempHut2;                                 
+           if (UAsituation1){tempHut2 = GS->LevelSY/10 + tempHut + tempHut02;}else{tempHut2 = GS->LevelSY/10 + tempHut + tempHut01;}
+           if (UAsituation1)
+           {
+               if (hutick2 >=333){DarksideKillerUA = false;}else
+               if (hutick2 >= ((tempHut2 + GS->LevelSX/40 + (GS->LevelSX - UAtargetX0M)/40)/3 + 167))    //250 for middle of normal map
+               {
+                   initdesc.AddX = UAtargetX0M;
+                   initdesc.AddY = UAtargetY0M;
+               } else
+               if (hutick2 >= (tempHut2/3 + 148))
+               {
+                   initdesc.AddX = UAtargetX0M;
+                   initdesc.AddY = GS->env->Water + 10;
+               } else
+               if (hutick2 >= (tempHut2/3 + 143))
+               {
+                   initdesc.AddX = UAtargetX0M * 1.5;
+                   initdesc.AddY = GS->env->Water + 50;
+               } else
+               if (hutick2 >= (tempHut2/3 + 138))
+               {
+                   initdesc.AddX = UAtargetX0M * 1.8;
+                   initdesc.AddY = GS->env->Water + 80;
+               } else
+               if (hutick2 >= (tempHut2/3 + 133))   // 200 for normal map
+               {
+                   initdesc.AddX = UAtargetX0M;
+                   initdesc.AddY = GS->env->Water + 10;
+               } else
+               if (hutick2 >= ((tempHut + tempHut02)/3 + 90))      // 135 for normal map
+               {
+                   initdesc.AddX = GS->LevelSX + 100;
+                   initdesc.AddY = GS->env->Water;
+               } else
+               if (hutick2 >= 30)           // 40 standart
+               {
+                   initdesc.AddX = GS->LevelSX + 250;
+                   initdesc.AddY = -250;
+               }
+           } else {
+               if (hutick2 >=333){DarksideKillerUA = false;}else
+               if (hutick2 >= ((tempHut2 + GS->LevelSX/20 - (GS->LevelSX - UAtargetX0M)/20)/3 + 167))
+               {
+                   initdesc.AddX = UAtargetX0M;
+                   initdesc.AddY = UAtargetY0M;
+               } else
+               if (hutick2 >= (tempHut2/3 + 148))
+               {
+                   initdesc.AddX = UAtargetX0M;
+                   initdesc.AddY = GS->env->Water + 10;
+               } else
+               if (hutick2 >= (tempHut2/3 + 143))
+               {
+                   initdesc.AddX = UAtargetX0M / 2;
+                   initdesc.AddY = GS->env->Water + 50;
+               } else
+               if (hutick2 >= (tempHut2/3 + 138))
+               {
+                   initdesc.AddX = UAtargetX0M / 3;
+                   initdesc.AddY = GS->env->Water + 80;
+               } else
+               if (hutick2 >= (tempHut2/3 + 133))
+               {
+                   initdesc.AddX = UAtargetX0M;
+                   initdesc.AddY = GS->env->Water + 10;
+               } else
+               if (hutick2 >= ((tempHut + tempHut01)/3 + 90))
+               {
+                   initdesc.AddX = -100;
+                   initdesc.AddY = GS->env->Water;
+               } else
+               if (hutick2 >= 20)
+               {
+                   initdesc.AddX = -250;
+                   initdesc.AddY = -250;
+               }
+           }
+       }
+//     }
+   }
+   if (Type == M_EXPLOSION)
+   {
+/*       if (weap->CheckName("Underwater Attack"))
+       {
+       if (DarksideKillerUA && UAmis != NullObj)
+       {
+           GG->land->MakeHole(50, UAmis->PosX, UAmis->PosY);
+       }
+       }*/
+       if (DarksideKillerUA) 
+       {
+          GG->land->MakeHole(50, PosX, PosY);
+       }
+   }
+   super;
+}
+
+void CWorm::DoIt()
+{
+     local worm = GetCurrentWorm();
+     if (worm != NullObj)
+     {
+     if (WDarksideKiller || WDarksideKillerUA)
+     {
+     CShootDesc SDesc;
+     zero(&SDesc);
+     SDesc.Team = WormTeam;
+     SDesc.Worm = WormNumber;
+     SDesc.X = PosX;
+     SDesc.Y = PosY-25;
+     SDesc.SpX = 0;
+     SDesc.SpY = -17.0;
+     SDesc.AddX = DKtargetX0 + RandomFloat(-20.0, 20.0);
+     SDesc.AddY = DKtargetY0 + RandomFloat(-20.0, 20.0);
+     SDesc.Delay = 5;
+//     local weapon;
+     if (WDarksideKiller){ldata = GetWeaponByName("Darkside Killer");}
+     else if (WDarksideKillerUA){ldata = GetWeaponByName("Underwater Attack");}
+     
+     if (DoingIt)
+     {
+         local ua1;
+         local memorise = ldata->launch.timeBeforeExplosion;
+         local mathematicsX = (GS->LevelSX/2)/(GS->LevelSX - PosX);
+         local mathematicsY = (GS->LevelSY/2)/(GS->LevelSY - PosY);
+         if (mathematicsX > 5) {mathematicsX = 5;}
+         if (mathematicsY > 5) {mathematicsY = 5;}
+         if ((mathematicsX >= 1 && FireAngle >= 0.96) || (TurnSide > 0 && FireAngle < 0.96))
+            {
+                ua1 = true;
+            } else if ((mathematicsX < 1 && FireAngle > 0.96) || (TurnSide < 0 && FireAngle < 0.96))
+            {
+                ua1 = false;
+            }
+         ldata->Remember = true;
+         
+         ldata->launch.explosion.damage = 50;
+         ldata->launch.explosion.dmgVar = 50;
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-1.5, 1.5) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = -15.0 + 20 - 1/(FireAngle/20) - mathematicsY;
+         if (WDarksideKiller) 
+         {
+            DKmiss[1] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            DKmiss[1]->DarksideKiller = true;
+            DKmiss[1]->DKtargetX0M = DKtargetX0;
+            DKmiss[1]->DKtargetY0M = DKtargetY0;
+            DKmiss[1]->DKhutickM = DKhutick;
+         }
+         else if (WDarksideKillerUA) 
+         {
+            UAmiss[1] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            UAmiss[1]->DarksideKillerUA = true;
+            UAmiss[1]->UAsituation1 = ua1;
+            UAmiss[1]->UAtargetX0M = UAtargetX0;
+            UAmiss[1]->UAtargetY0M = UAtargetY0;
+            UAmiss[1]->UAhutickM = UAhutick;
+         }
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-1.5, 1.5) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = -15.0 + 20 - 1/(FireAngle/20) - mathematicsY;
+         if (WDarksideKiller) 
+         {
+            DKmiss[2] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            DKmiss[2]->DarksideKiller = true;
+            DKmiss[2]->DKtargetX0M = DKtargetX0;
+            DKmiss[2]->DKtargetY0M = DKtargetY0;
+            DKmiss[2]->DKhutickM = DKhutick;
+         }
+         else if (WDarksideKillerUA) 
+         {
+            UAmiss[2] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            UAmiss[2]->DarksideKillerUA = true;
+            UAmiss[2]->UAsituation1 = ua1;
+            UAmiss[2]->UAtargetX0M = UAtargetX0;
+            UAmiss[2]->UAtargetY0M = UAtargetY0;
+            UAmiss[2]->UAhutickM = UAhutick;
+         }
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-1.5, 1.5) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = -15.0 + 20 - 1/(FireAngle/20) - mathematicsY;
+         if (WDarksideKiller) 
+         {
+            DKmiss[3] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            DKmiss[3]->DarksideKiller = true;
+            DKmiss[3]->DKtargetX0M = DKtargetX0;
+            DKmiss[3]->DKtargetY0M = DKtargetY0;
+            DKmiss[3]->DKhutickM = DKhutick;
+         }
+         else if (WDarksideKillerUA) 
+         {
+            UAmiss[3] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            UAmiss[3]->DarksideKillerUA = true;
+            UAmiss[3]->UAsituation1 = ua1;
+            UAmiss[3]->UAtargetX0M = UAtargetX0;
+            UAmiss[3]->UAtargetY0M = UAtargetY0;
+            UAmiss[3]->UAhutickM = UAhutick;
+         }
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-1.5, 1.5) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = -15.0 + 20 - 1/(FireAngle/20) - mathematicsY;
+         if (WDarksideKiller) 
+         {
+            DKmiss[4] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            DKmiss[4]->DarksideKiller = true;
+            DKmiss[4]->DKtargetX0M = DKtargetX0;
+            DKmiss[4]->DKtargetY0M = DKtargetY0;
+            DKmiss[4]->DKhutickM = DKhutick;
+         }
+         else if (WDarksideKillerUA) 
+         {
+            UAmiss[4] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            UAmiss[4]->DarksideKillerUA = true;
+            UAmiss[4]->UAsituation1 = ua1;
+            UAmiss[4]->UAtargetX0M = UAtargetX0;
+            UAmiss[4]->UAtargetY0M = UAtargetY0;
+            UAmiss[4]->UAhutickM = UAhutick;
+         }
+//         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-1.5, 1.5) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = -15.0 + 20 - 1/(FireAngle/20) - mathematicsY;
+         if (WDarksideKiller) 
+         {
+            DKmiss[5] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            DKmiss[5]->DarksideKiller = true;
+            DKmiss[5]->DKtargetX0M = DKtargetX0;
+            DKmiss[5]->DKtargetY0M = DKtargetY0;
+            DKmiss[5]->DKhutickM = DKhutick;
+         }
+         else if (WDarksideKillerUA) 
+         {
+            UAmiss[5] = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+            UAmiss[5]->DarksideKillerUA = true;
+            UAmiss[5]->UAsituation1 = ua1;
+            UAmiss[5]->UAtargetX0M = UAtargetX0;
+            UAmiss[5]->UAtargetY0M = UAtargetY0;
+            UAmiss[5]->UAhutickM = UAhutick;
+         }
+         ldata->launch.timeBeforeExplosion = memorise;
+//         if (WDarksideKiller){DarksideKiller = true; WDarksideKiller = false;}
+//         if (WDarksideKillerUA){DarksideKillerUA = true; WDarksideKillerUA = false;}
+         DoingIt = false;
+     }
+     }
+     }
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if ((CurWeapon->CheckName("Darkside Killer") || CurWeapon->CheckName("Underwater Attack")) && ObjState == WS_AIMING)
+        {
+                 if (FireAngle < 0.875) FireAngle = 0.875;
+                 if (FireAngle > 1.000) FireAngle = 1.000;
+        }
+        local worm = GetCurrentWorm();
+        if (worm != NullObj)
+        {
+            if (WDarksideKiller)
+            {
+                DoIt();
+                WDarksideKiller = false;
+            }
+            if (WDarksideKillerUA)
+            {
+                DoIt();
+                WDarksideKillerUA = false;
+            }
+            if (makeShake)
+            {
+                GS->ShakeX = DKshake;
+                GS->ShakeY = DKshake;
+                DKshake = DKshake * 0.85;
+                if (DKshake < 0.1)
+                {
+                    DKshake = 0;
+                    GS->ShakeX = 0;
+                    GS->ShakeY = 0;
+                    makeShake = false;
+                }
+            }
+        } else if (DKshake > 0){
+            GS->ShakeX = 0;
+            GS->ShakeY = 0;
+        }
+   }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Darkside Killer"))
+    {
+        PlaySound(59, 10, 0.7, 0.7);
+        PlaySound(59, 10, 0.7, 0.7);
+        PlaySound(59, 10, 0.7, 0.7);
+        DKtargetX0 = Desc->AddX;
+        DKtargetY0 = Desc->AddY;
+        WDarksideKiller = true;
+        DoingIt = true;
+        DKhutick = gframe;
+        makeShake = true;
+        DKshake = 20;
+        return;
+    }
+    if (Weap->CheckName("Underwater Attack"))
+    {
+        PlaySound(69, 10, 0.7, 0.7);
+        PlaySound(69, 10, 0.7, 0.7);
+        UAtargetX0 = Desc->AddX;
+        UAtargetY0 = Desc->AddY;
+        WDarksideKillerUA = true;
+        DoingIt = true;
+        UAhutick = gframe;
+        makeShake = true;
+        DKshake = 20;
+        return;
+    } 
+super;
+}    

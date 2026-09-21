@@ -1,0 +1,17 @@
+bool cratefinder;
+
+void crate_finder::Init()
+{
+  cratefinder = true;
+}
+
+override void CCrate::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+
+  if(Type == M_FRAME)
+  {
+    if(cratefinder) desc.highlight = true;
+    else desc.highlight = false;
+  }
+}

@@ -1,0 +1,30 @@
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (HoleMaker)
+        {
+            local hx = RandomInt(0, GS->LevelSX);
+            local hy = RandomInt(0, GS->LevelSY);
+            GG->land->ApplyMask(1,hx,hy);
+            PlaySound(54,0,0,3.0);
+        }
+
+        if (gframe >= hutick + 50*5 && HoleMaker == true)
+        {
+            HoleMaker = false;
+        }
+    }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("True Hole Punch"))
+    {
+        HoleMaker = true;
+        hutick = gframe;
+    }
+
+super;
+}

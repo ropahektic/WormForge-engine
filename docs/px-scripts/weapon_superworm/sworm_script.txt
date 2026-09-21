@@ -1,0 +1,143 @@
+//Modified By Lucho
+require utils;
+
+CWorm* super_worm;
+
+void sworm_script::Init()
+{
+  keySync->AddKey(13); // Enter
+  keySync->AddKey(40); // Down
+} 
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    if (weap->CheckName("Super Worm")) 
+    {
+       if (super_worm != NullObj)
+       {
+          super_worm->sheep_horse = false;
+          super_worm->hideRodeoWorm = false;
+          super_worm = CWorm(NullObj);
+       }
+    }
+    super;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Super Worm"))
+        {
+            if (super_worm != NullObj && super_worm->sheep_horse && super_worm is CWorm)
+            {
+                if (PosY > Env->Water + 170) SetState(WS_IDLE); // actually this means explode sheep
+				if (super_worm->swimsuit && PosY >= Env->Water)
+                {
+                    super_worm->SetState(WS_JUMP);
+                }
+                local speedX;
+                local speedY;
+                if (super_worm->ObjState == WS_PARACHUTE)   // slow down sheep when chute opened
+                {
+                   if (SpX > 0) speedX = -2;
+                   else speedX = 2;
+                   if (SpY > 0) speedY = -2;
+                   else speedY = -1;
+                }
+                else 
+                {
+                   speedX = 0;
+                   speedY = 0;
+                }
+                super_worm->PosX = PosX;
+                super_worm->PosY = PosY;
+                PosX += speedX;
+                PosY += speedY;
+                if (super_worm->SpY < 8.0)   // allows not loose control when riding on sheep, but when sheep falls from big heights
+                {
+                   super_worm->SpX = SpX;                           
+                   super_worm->SpY = SpY;
+                } else if (super_worm->SpY > -8.0) {
+                   super_worm->SpX = SpX;                           
+                   super_worm->SpY = SpY;
+                } else if (super_worm->SpY > 8.0) {
+                   super_worm->SpX = SpX;
+                   super_worm->SpY = 8.0;
+                } else {
+                   super_worm->SpX = SpX;
+                   super_worm->SpY = -8.0;
+                }
+                if (super_worm->ObjState == WS_BUNGEE) super_worm->SetState(WS_IDLE);
+                if (super_worm->ObjState == WS_ROPING) super_worm->SetState(WS_IDLE);
+            }
+        }
+    }
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Super Worm"))
+    {
+        sheep_horse = true;
+        super_worm = this;
+        hideRodeoWorm = true;
+    }
+    if (Weap->CheckName("Swim Suit"))
+    {
+        swimsuit = true;
+    }
+    super;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params) {
+super;
+  hideRodeoWorm = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        local w = GetCurrentWorm();
+        if (super_worm != NullObj && super_worm->sheep_horse)
+        {
+           if (keySync->KeyPressed(40) || keySync->KeyPressed(13)) {
+              super_worm->sheep_horse = false;
+              super_worm->hideRodeoWorm = false;
+           }  
+        }
+        if (w == NullObj && super_worm != NullObj) {
+           super_worm->sheep_horse = false;
+           super_worm->hideRodeoWorm = false;
+        }
+        if (rodeo_bool && super_worm != NullObj)
+        {
+            if (rodeo_count > 10)
+            {
+               if (swimsuit)
+               {
+                   GravityFactor = 1;
+                   swimsuit = false;
+                   super_worm->SetState(WS_SINKING);
+                   super_worm = CWorm(NullObj);
+                   rodeo_bool = false;
+               }
+            }
+            rodeo_count++;
+        }
+    }
+    if (Type == M_TURNBEGIN) rodeo_bool = false;
+    if (Type == M_TURNEND)
+    {
+        rodeo_count = 0;
+        rodeo_bool = true;
+    }
+    super;
+}   
+
+override void CWorm::RenderWorm() {
+  if (hideRodeoWorm) return;
+  else super;
+}

@@ -1,0 +1,672 @@
+//  SCRIPT BY STEPS (christmasweapons.pxl) "Evil Santa"
+
+require utils;
+
+CColMask* col_bmp;
+CColMask* col_snw;
+CColMask* col_slg;
+CColMask* col_stf;
+CColMask* col_ram;
+CColMask* col_drl;
+CColMask* col_swm;
+CColMask* col_tor;
+
+void cwp_col::Init()
+{
+}
+
+void cwp_col::FirstFrame()
+{
+col_bmp = new CColMask(12,12,MakeCircleMask(12));
+col_snw = new CColMask(8,8,MakeCircleMask(8));
+col_slg = new CColMask(8,8,MakeCircleMask(8));
+col_stf = new CColMask(16,16,MakeCircleMask(16));
+col_ram = new CColMask(16,16,MakeCircleMask(16));
+col_drl = new CColMask(10,20,MakeRectMask(20,40));
+col_swm = new CColMask(15,15,MakeCircleMask(15));
+col_tor = new CColMask(10,10,MakeCircleMask(10));
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+Cbumpr = false;
+Csball = false;
+Csling = false;
+Cstaff = false;
+Crambo = false;
+Cdrill = false;
+Csworm = false;
+Ctorch = false;
+}
+
+//------BASEBALL-BOMB--|--BASKETBALL--|--BUMPER-BOMB----------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if(Weap->CheckName("Baseball Bomb")
+|| Weap->CheckName("Basketball")
+|| Weap->CheckName("Basketball ")
+|| Weap->CheckName("Bumper Bomb")
+|| Weap->CheckName("Super Bumper Bomb"))
+{
+CGObject *bsko;
+CMissile *bskm;
+bsko = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+if(bsko != NullObj)
+if(bsko->ClType == OC_Missile)
+{
+bskm = bsko;
+bskm->Cbumpr = true;
+}
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Cbumpr == true)
+{
+if(Type == M_FRAME)
+{
+BumprCol(15.0);
+}
+}
+super;
+}
+
+void CMissile::BumprCol(float Speed)
+{
+CGObject *bskob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+bskob = CGObject(Env->Objs.Objs[i]);
+if(bskob == this) continue;
+if(bskob == NullObj) continue;
+if(GetCurrentWorm() != NullObj)
+{
+if(bskob == GetCurrentWorm()) continue;
+}
+if(bskob->ClType == OC_Worm 
+|| bskob->ClType == OC_Mine 
+|| bskob->ClType == EObjectClass(71)
+|| bskob->ClType == EObjectClass(73)
+|| bskob->ClType == EObjectClass(74))
+{
+if(col_bmp->Check(PosX, PosY, bskob->ColMask, bskob->PosX, bskob->PosY))
+{
+float ForceX = bskob->PosX - PosX;
+float ForceY = bskob->PosY - PosY;
+float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+if(dist > 0)
+{
+ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+
+PlaySound(100,1.0,1.0,0.8);
+
+CMessageData msg;
+msg.params[0]	= 0;
+msg.fparams[1]	= PosX;
+msg.fparams[2]	= PosY;
+msg.fparams[3]	= ForceX;
+msg.fparams[4]	= ForceY;
+msg.params[5]	= 0;
+msg.params[6]	= 0;
+
+bskob->Message(this, M_GUNEXP, 1032, &msg);
+}
+}
+}
+}
+}
+//------SNOW-BALL---------------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if(Weap->CheckName("Snow Ball"))
+{
+CGObject *snwo;
+CMissile *snwm;
+snwo = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+if(snwo != NullObj)
+if(snwo->ClType == OC_Missile)
+{
+snwm = snwo;
+snwm->Csball = true;
+}
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Csball == true)
+{
+if(Type == M_FRAME)
+{
+SballCol(15.0);
+}
+}
+super;
+}
+
+void CMissile::SballCol(float Speed)
+{
+CGObject *snwob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+snwob = CGObject(Env->Objs.Objs[i]);
+if(snwob == this) continue;
+if(snwob == NullObj) continue;
+if(GetCurrentWorm() != NullObj)
+{
+if(snwob == GetCurrentWorm()) continue;
+}
+if(snwob->ClType == OC_Worm 
+|| snwob->ClType == OC_Mine 
+|| snwob->ClType == EObjectClass(70)
+|| snwob->ClType == EObjectClass(71)
+|| snwob->ClType == EObjectClass(73)
+|| snwob->ClType == EObjectClass(74))
+{
+if(col_snw->Check(PosX, PosY, snwob->ColMask, snwob->PosX, snwob->PosY))
+{
+float ForceX = snwob->PosX - PosX;
+float ForceY = snwob->PosY - PosY;
+float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+if(dist > 0)
+{
+ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+
+PlaySound(35,1.0,1.0,0.8);
+
+CMessageData msg;
+msg.params[0]	= 0;
+msg.fparams[1]	= PosX;
+msg.fparams[2]	= PosY;
+msg.fparams[3]	= ForceX;
+msg.fparams[4]	= ForceY;
+msg.params[5]	= 0;
+msg.params[6]	= 0;
+
+snwob->Message(this, M_GUNEXP, 1032, &msg);
+}
+}
+}
+}
+}
+//------SLINGSHOT--|--STONE-BLASTER---------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if(Weap->CheckName("Stone Blaster")
+|| Weap->CheckName("SlingShot"))
+{
+CGObject *slso;
+CMissile *slsm;
+slso = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+if(slso != NullObj)
+if(slso->ClType == OC_Missile)
+{
+slsm = slso;
+slsm->Csling = true;
+}
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Csling == true)
+{
+if(Type == M_FRAME)
+{
+SlingCol(15.0);
+}
+}
+super;
+}
+
+void CMissile::SlingCol(float Speed)
+{
+CGObject *slsob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+slsob = CGObject(Env->Objs.Objs[i]);
+if(slsob == this) continue;
+if(slsob == NullObj) continue;
+if(GetCurrentWorm() != NullObj)
+{
+if(slsob == GetCurrentWorm()) continue;
+}
+if(slsob->ClType == OC_Worm
+|| slsob->ClType == OC_Mine
+|| slsob->ClType == EObjectClass(70)
+|| slsob->ClType == EObjectClass(71)
+|| slsob->ClType == EObjectClass(73)
+|| slsob->ClType == EObjectClass(74))
+{
+if(col_slg->Check(PosX, PosY, slsob->ColMask, slsob->PosX, slsob->PosY))
+{
+float ForceX = slsob->PosX - PosX;
+float ForceY = slsob->PosY - PosY;
+float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+if(dist > 0)
+{
+ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+
+CMessageData msg;
+msg.params[0]	= 0;
+msg.fparams[1]	= PosX;
+msg.fparams[2]	= PosY;
+msg.fparams[3]	= ForceX;
+msg.fparams[4]	= ForceY;
+msg.params[5]	= 3;
+msg.params[6]	= 0;
+
+slsob->Message(this, M_GUNEXP, 1032, &msg);
+}
+}
+}
+}
+}
+//------STAFF-OF-JOLTING--------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if(Weap->CheckName("Staff of Jolting"))
+{
+SJ_now = GetCurrentWorm();
+CGObject *stjo;
+CMissile *stjm;
+stjo = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+if(stjo != NullObj)
+if(stjo->ClType == OC_Missile)
+{
+stjm = stjo;
+stjm->Cstaff = true;
+}
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Cstaff == true)
+{
+if(Type == M_FRAME)
+{
+StaffCol(15.0);
+}
+}
+super;
+}
+
+void CMissile::StaffCol(float Speed)
+{
+CGObject *stjob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+stjob = CGObject(Env->Objs.Objs[i]);
+if(stjob == this) continue;
+if(stjob == NullObj) continue;
+if(GetCurrentWorm() != NullObj)
+{
+if(stjob == GetCurrentWorm()) continue;
+}
+if(stjob->ClType == OC_Worm
+|| stjob->ClType == OC_Mine
+|| stjob->ClType == EObjectClass(70)
+|| stjob->ClType == EObjectClass(71)
+|| stjob->ClType == EObjectClass(73)
+|| stjob->ClType == EObjectClass(74))
+{
+if(col_stf->Check(PosX, PosY, stjob->ColMask, stjob->PosX, stjob->PosY))
+{
+float ForceX = stjob->PosX - PosX;
+float ForceY = stjob->PosY - PosY;
+float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+if(dist > 0)
+{
+ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+
+PlaySound(105,1.0,1.0,0.8);
+
+CMessageData msg;
+msg.params[0]	= 0;
+msg.fparams[1]	= PosX;
+msg.fparams[2]	= PosY;
+msg.fparams[3]	= ForceX;
+msg.fparams[4]	= ForceY;
+msg.params[5]	= 0;
+msg.params[6]	= 0;
+
+stjob->Message(this, M_GUNEXP, 1032, &msg);
+}
+}
+}
+}
+}
+//------BATTERING-RAM-----------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if(Weap->CheckName("Battering Ram"))
+{
+CGObject *ramo;
+CMissile *ramm;
+ramo = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+if(ramo != NullObj)
+if(ramo->ClType == OC_Missile)
+{
+ramm = ramo;
+ramm->Crambo = true;
+}
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Crambo== true)
+{
+if(Type == M_FRAME)
+{
+RamboCol(15.0);
+}
+}
+super;
+}
+
+void CMissile::RamboCol(float Speed)
+{
+CGObject *ramob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+ramob = CGObject(Env->Objs.Objs[i]);
+if(ramob == this) continue;
+if(ramob == NullObj) continue;
+if(GetCurrentWorm() != NullObj)
+{
+if(ramob == GetCurrentWorm()) continue;
+}
+if(ramob->ClType == OC_Worm 
+|| ramob->ClType == OC_Mine 
+|| ramob->ClType == EObjectClass(71) 
+|| ramob->ClType == EObjectClass(73)
+|| ramob->ClType == EObjectClass(74))
+{                
+if(col_ram->Check(PosX, PosY, ramob->ColMask, ramob->PosX, ramob->PosY))
+{
+float ForceX = ramob->PosX - PosX;
+float ForceY = ramob->PosY - PosY;
+float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+if(dist > 0)
+{
+ForceX = 0.3*sqrt(Speed) * ForceX / dist;
+ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+
+PlaySound(101,1.0,1.0,0.8);
+
+CMessageData msg;
+msg.params[0]	= 0;
+msg.fparams[1]	= PosX;
+msg.fparams[2]	= PosY;
+msg.fparams[3]	= ForceX;
+msg.fparams[4]	= ForceY;
+msg.params[5]	= 0;
+msg.params[6]	= 0;
+
+ramob->Message(this, M_GUNEXP, 1032, &msg);
+}
+}
+}
+}
+}
+//------DRILLING-CREW-----------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if(Weap->CheckName("Drilling Crew"))
+{
+CGObject *drco;
+CMissile *drcm;
+drco = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+if(drco != NullObj)
+if(drco->ClType == OC_Missile)
+{
+drcm = drco;
+drcm->Cdrill = true;
+}
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Cdrill == true)
+{
+if(Type == M_FRAME)
+{
+DrillCol(15.0);
+}
+}
+super;
+}
+
+void CMissile::DrillCol(float Speed)
+{
+CGObject *drcob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+drcob = CGObject(Env->Objs.Objs[i]);
+if(drcob == this) continue;
+if(drcob == NullObj) continue;
+if(GetCurrentWorm() != NullObj)
+{
+if(drcob == GetCurrentWorm()) continue;
+}
+if(drcob->ClType == OC_Worm
+|| drcob->ClType == OC_Mine
+|| drcob->ClType == OC_OilDrum
+|| drcob->ClType == EObjectClass(71)
+|| drcob->ClType == EObjectClass(73)
+|| drcob->ClType == EObjectClass(74))
+{
+if(col_drl->Check(PosX, PosY, drcob->ColMask, drcob->PosX, drcob->PosY))
+{
+float ForceX = drcob->PosX - PosX;
+float ForceY = drcob->PosY - PosY;
+float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+if(dist > 0)
+{
+ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+
+PlaySound(85,1.0,1.0,0.9);
+
+CMessageData msg;
+msg.params[0]	= 0;
+msg.fparams[1]	= PosX;
+msg.fparams[2]	= PosY;
+msg.fparams[3]	= ForceX;
+msg.fparams[4]	= ForceY;
+msg.params[5]	= 1;
+msg.params[6]	= 0;
+
+drcob->Message(this, M_GUNEXP, 1032, &msg);
+}
+}
+}
+}
+}
+//------SUPER-WORM--------------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if(Weap->CheckName("Super Worm"))
+{
+CGObject *swmo;
+CMissile *swmm;
+swmo = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+if(swmo != NullObj)
+if(swmo->ClType == OC_Missile)
+{
+swmm = swmo;
+swmm->Csworm = true;
+}
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(IsFlying)
+{
+if(Csworm == true)
+{
+if(Type == M_FRAME)
+{
+SwormCol(15.0);
+}
+}
+}
+super;
+}
+
+void CMissile::SwormCol(float Speed)
+{
+CGObject *swmob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+swmob = CGObject(Env->Objs.Objs[i]);
+if(swmob == this) continue;
+if(swmob == NullObj) continue;
+if(GetCurrentWorm() != NullObj)
+{
+if(swmob == GetCurrentWorm()) continue;
+}
+if(swmob->ClType == OC_Worm
+|| swmob->ClType == OC_Mine
+|| swmob->ClType == EObjectClass(70)
+|| swmob->ClType == EObjectClass(71)
+|| swmob->ClType == EObjectClass(73)
+|| swmob->ClType == EObjectClass(74))
+{
+if(col_swm->Check(PosX, PosY, swmob->ColMask, swmob->PosX, swmob->PosY))
+{
+float ForceX = swmob->PosX - PosX;
+float ForceY = swmob->PosY - PosY;
+float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+if(dist > 0)
+{
+ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+ForceY = 0.8*sqrt(Speed) * ForceY / dist;
+
+PlaySound(101,1.0,1.0,0.8);
+
+CMessageData msg;
+msg.params[0]	= 0;
+msg.fparams[1]	= PosX;
+msg.fparams[2]	= PosY;
+msg.fparams[3]	= ForceX;
+msg.fparams[4]	= ForceY;
+msg.params[5]	= 0;
+msg.params[6]	= 0;
+
+swmob->Message(this, M_GUNEXP, 1032, &msg);
+}
+}
+}
+}
+}
+//------MINI-TORCH--------------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if(Weap->CheckName("Mini-Torch")
+|| Weap->CheckName("Torch Flame"))
+{     
+CGObject *mito;
+CMissile *mitm;
+mito = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+if(mito != NullObj)
+if(mito->ClType == OC_Missile)
+{
+mitm = mito;
+mitm->Ctorch = true;
+}
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Ctorch == true)
+{
+if(Type == M_FRAME)
+{
+TorchCol(15.0);
+}
+}
+super;
+}
+
+void CMissile::TorchCol(float Speed)
+{
+CGObject *mitob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+mitob = CGObject(Env->Objs.Objs[i]);
+if(mitob == this) continue;
+if(mitob == NullObj) continue;
+if(GetCurrentWorm() != NullObj)
+{
+if(mitob == GetCurrentWorm()) continue;
+}
+if(mitob->ClType == OC_Worm 
+|| mitob->ClType == OC_Mine 
+|| mitob->ClType == OC_Crate 
+|| mitob->ClType == OC_OilDrum 
+|| mitob->ClType == EObjectClass(70)
+|| mitob->ClType == EObjectClass(71)
+|| mitob->ClType == EObjectClass(73)
+|| mitob->ClType == EObjectClass(74))
+{
+if(col_tor->Check(PosX, PosY, mitob->ColMask, mitob->PosX, mitob->PosY))
+{
+float ForceX = mitob->PosX - PosX;
+float ForceY = mitob->PosY - PosY;
+float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+if(dist > 0)
+{
+ForceX = 0.35*sqrt(Speed) * ForceX / dist;
+ForceY = 0.35*sqrt(Speed) * ForceY / dist;
+
+CMessageData msg;
+msg.params[0]	= 0;
+msg.fparams[1]	= PosX;
+msg.fparams[2]	= PosY;
+msg.fparams[3]	= ForceX;
+msg.fparams[4]	= ForceY;
+msg.params[5]	= 1;
+msg.params[6]	= 0;
+
+mitob->Message(this, M_GUNEXP, 1032, &msg);
+}
+}
+}
+}
+}

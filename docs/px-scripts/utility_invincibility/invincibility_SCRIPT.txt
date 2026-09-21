@@ -1,0 +1,64 @@
+require utils, utils_steps;
+
+bool turnbegin;
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_TURNBEGIN)
+    {
+        turnbegin = true;
+    }
+    
+    super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (invincible)
+        {
+            if (GotDamage > 0 && !gotdmg && ObjState != WS_SINKING)
+            {
+                GS->Info.SetWormHealth(WormTeam, WormNumber, thehp);
+                gotdmg = true;
+                GotDamage = 1;
+            }
+                 
+            if (GotDamage > 1 && gotdmg)
+            {
+                     gotdmg = false;
+            }
+        }   
+        
+        if (turnbegin)
+        {
+            if (invincible)
+            {
+                invincible = false;
+                turnbegin = false;
+            }
+        }
+    }
+  
+super;
+}
+
+
+override void CWorm::RenderDmgLabel()
+{
+  if (invincible) return;
+  else super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+     if (Weap->CheckName("Invincibility"))
+     {
+         thehp = TargHealth;
+         invincible = true;
+     }
+     
+super; 
+
+}

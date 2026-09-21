@@ -1,0 +1,78 @@
+require p_sprite_builder;
+
+CSprite* Illuminati_Bomb_aiming;
+CSoundFile* xfiles;
+
+void illuminati_script::Init()
+{
+	xfiles       = new CSoundFile(GetAttachment("xfiles.wav"));
+}
+
+void illuminati_script::InitGraphic()
+{
+	CFile* f;
+    f = GetAttachment("Illuminati Triangle.png");
+    Illuminati_Bomb_aiming = LoadSprite(f, 1, 0);
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_FRAME)
+	{
+    if (gframe == 1)
+		{
+     	local weapName; local sprite;
+
+	    CWormAnimParams* Params = new CWormAnimParams;
+     	weapName = "Illuminati Bomb";
+     	sprite = Illuminati_Bomb_aiming->Index;
+     	Params->hand_radius = 23.0;
+     	Params->hand_rotation = 1.0;
+     	Params->hand_radial_rotation = 1.0;
+     	Params->weap_radial_rotation = 0.9;
+     	Params->weap_rotation = -1.0;
+     	Params->weap_radius = 12.0;
+     	Params->hand_type = 1;
+     	Params->hand_scale = 0.8;
+//      Params->zplane = 10.0;
+//      Params->scale = 1.0;
+
+     	local WA = new WormSprite(weapName, sprite, Params);
+    	}
+  	}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_FRAME)
+	{
+    if (weap->CheckName("Illuminati Bomb"))
+		{
+        if (Illuminati_Bomb_anim)
+			{
+            local sprite = Illuminati_Bomb_aiming->Index;
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);
+            weap->launch.anim.spriteIndex = 0;
+            Illuminati_Bomb_anim = false;
+         	}
+     	}
+  	}
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+Illuminati_Bomb_anim = true;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Illuminati Bomb"))
+  {  
+             xfiles->Play(1.4, 0.0, false);
+  }
+  super;
+}

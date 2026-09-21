@@ -1,0 +1,30 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a kill-counter to the game (can be used for statistical GUI's)
+
+int kill_counts[6];
+
+void Kill_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          kill_counts[i] = 0;
+     }
+}
+
+override void CWorm::SetState(EObjState State)
+{
+     if(State == WS_DEAD)
+     { 
+          if(getWormTeam(this, 0) != current_worm_team)
+          {
+               kill_counts[current_worm_team]++;
+          }
+     }
+     
+     super;
+} 

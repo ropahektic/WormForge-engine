@@ -1,0 +1,336 @@
+require p_animation;
+
+CBitmap32* GUI;
+//CBitmap32* GUI2;
+CInterfaceHandler : CObject;
+
+string GolfWormNames[6];
+int GolfWormColors[6];
+int GolfTextColors[6];
+CWorm* GolfPlayer[6];
+int HolePar[19];   
+bool SwitchTable;     
+                   int golflastpoints[6];
+                   int golflastshots[6];
+                   int golflasttshots[6];
+                   int golflasttholes[6];
+
+CAnimationParams* golf_result_message_params;
+CSprite* golfEagle;
+CSprite* golfBirdie;
+CSprite* golfPar;
+CSprite* golfBogey;
+CSprite* golf2Bogey;
+CSprite* golfHoleInOne;
+CSprite* golfAlbatros;
+
+void golf_table_script::InitGraphic()
+{ 
+    GUI = LoadImage( GetAttachment("golf_panel.png") );
+    CFile* f;
+    f = GetAttachment("golf_eagle.png");          golfEagle = LoadSprite(f, 1, 0);
+    f = GetAttachment("golf_birdie.png");         golfBirdie = LoadSprite(f, 1, 0);
+    f = GetAttachment("golf_par.png");            golfPar = LoadSprite(f, 1, 0);
+    f = GetAttachment("golf_bogey.png");          golfBogey = LoadSprite(f, 1, 0);
+    f = GetAttachment("golf_double_bogey.png");   golf2Bogey = LoadSprite(f, 1, 0);
+    f = GetAttachment("golf_hole_in_one.png");    golfHoleInOne = LoadSprite(f, 1, 0);
+    f = GetAttachment("golf_albatros.png");        golfAlbatros = LoadSprite(f, 1, 0);
+}
+
+void golf_table_script::Init()
+{ 
+    for (local i = 0; i < 6; i++)
+    {
+         GolfWormColors[i] = 8;
+          GolfWormNames[i] = "Not playing";
+          GolfPlayer[i] = NullObj;
+    }
+    keySync->AddKey(106);   // *
+    keySync->AddKey(33);
+    keySync->AddKey(34);
+    SwitchTable = true;
+}
+
+CInterfaceHandler::CInterfaceHandler(CObject* parent)
+{
+    super(parent, GS);   
+    GUIn = MakeBitmap(GUI->SX+150, GUI->SY-25);
+    GUIn2 = MakeBitmap(GUI->SX+100, GUI->SY-25);
+    TurnOn = true;
+    check1 = true;
+    check2 = false;
+    col = 8;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    GolfNameReader = true;
+}
+
+void CInterfaceHandler::ListNDraw()
+{
+            Obj_Cur = GetCurrentWorm(); 
+            Worm_Cur = CWorm(Obj_Cur);
+            
+//               if (Worm_Cur != NullObj)                        
+//               {    
+                   local a = 0;
+                   local b = 0;
+                   local color = RGB(251, 245, 114);
+                   
+/*                   int points[6];
+                   int shots[6];
+                   int tshots[6];
+                   int tholes[6];*/
+                   
+                   for (local i = 0; i < 6; i++)
+                   {
+                       if (GolfPlayer[i] != NullObj) 
+                       {
+                          if (GolfPlayer[i]->lockNow == false)
+                          {
+/*                             points[i] = GolfPlayer[i]->golfPoints;
+                             shots[i] = GolfPlayer[i]->holePoints;
+                             tshots[i] = GolfPlayer[i]->totalPoints; 
+                             tholes[i] = GolfPlayer[i]->holesPassed;*/
+                             golflastpoints[i] = GolfPlayer[i]->golfPoints;
+                             golflastshots[i] = GolfPlayer[i]->holePoints;
+                             golflasttshots[i] = GolfPlayer[i]->totalPoints; 
+                             golflasttholes[i] = GolfPlayer[i]->holesPassed;
+                             GolfTextColors[i] = 8;
+                          }
+                          else if (GolfPlayer[i]->lockNow && Worm_Cur != NullObj)
+                          {
+                             GolfTextColors[i] = GolfWormColors[i];
+/*                             points[i] = golflastpoints[i];
+                             shots[i] = golflastshots[i];
+                             tshots[i] = golflasttshots[i];
+                             tholes[i] = golflasttholes[i];*/
+                          }
+                       }
+                       else
+                       {
+//                             points[i] = 0;
+//                             shots[i] = 0;
+                       }
+                   }
+                          
+                   local lsx = GS->landSelectX;
+                   local lsy = GS->landSelectY;
+                   if (lsx & 32768) lsx = lsx | (65535 << 16);
+                   if (lsy & 32768) lsy = lsy | (65535 << 16);       
+/*                          
+                          if (CamLock)
+                          {
+                              GS->CameraX = Worm_Cur->PosX;
+                              GS->CameraY = Worm_Cur->PosY;
+                          }
+*/
+                          // Horizontal
+                          GUIn->HLine(0, GUIn->SX - 1, 0, color);
+                          GUIn->HLine(0, GUIn->SX - 1, GUIn->SY - 1, color);
+                          GUIn2->HLine(0, GUIn2->SX - 1, 0, color);
+                          GUIn2->HLine(0, GUIn2->SX - 1, GUIn2->SY - 1, color);
+                          
+                          // Vertical
+                          GUIn->VLine(0, 0, GUIn->SY - 1, color);
+                          GUIn->VLine(GUIn->SX - 1, 0, GUIn->SY - 1, color);
+                          GUIn2->VLine(GUIn2->SX - 1, 0, GUIn2->SY - 1, color);
+
+                          GUIn->Rect(1, 1, GUIn->SX - 2, GUIn->SY - 2, ARGB(127, 0, 0, 0));
+                          GUIn2->Rect(0, 1, GUIn2->SX - 1, GUIn2->SY - 2, ARGB(127, 0, 0, 0));
+                                                                                       
+                                            // Desctiptions                          
+                          
+                          GS->Disp->DrawText(4, GUIn, 15, 25, "Players", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 95, 25, "Score", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 135, 25, "Shots", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 180, 15, "Total", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 180, 25, "shots", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 234, 15, "Holes", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 228, 25, "passed", &a, &b);
+                          GS->Disp->DrawText(GolfWormColors[0], GUIn, 10, 40, GolfWormNames[0], &a, &b);
+                          if (GolfPlayer[1] != NullObj) GS->Disp->DrawText(GolfWormColors[1], GUIn, 10, 50, GolfWormNames[1], &b, &a);           
+                          if (GolfPlayer[2] != NullObj) GS->Disp->DrawText(GolfWormColors[2], GUIn, 10, 60, GolfWormNames[2], &a, &b);
+                          if (GolfPlayer[3] != NullObj) GS->Disp->DrawText(GolfWormColors[3], GUIn, 10, 70, GolfWormNames[3], &b, &a);                          
+                          if (GolfPlayer[4] != NullObj) GS->Disp->DrawText(GolfWormColors[4], GUIn, 10, 80, GolfWormNames[4], &b, &a);
+                          if (GolfPlayer[5] != NullObj) GS->Disp->DrawText(GolfWormColors[5], GUIn, 10, 90, GolfWormNames[5], &b, &a);
+//                          GS->Disp->DrawText(8, GUIn, 10, 100, "_________", &b, &a);
+//                          GS->Disp->DrawText(8, GUIn, 10, 110, "_________", &b, &a);                             
+                                                                            
+                          GS->Disp->DrawText(4, GUIn2, 15, 25, "Holes", &a, &b);
+                          GS->Disp->DrawText(4, GUIn2, 60, 25, "PAR", &a, &b);
+                                  if (HolePar[7] != 0) GS->Disp->DrawText(4, GUIn2, 95, 25, "Holes", &a, &b);
+                          if (HolePar[7] != 0) GS->Disp->DrawText(4, GUIn2, 140, 25, "PAR", &a, &b);
+                                  if (HolePar[13] != 0) GS->Disp->DrawText(4, GUIn2, 175, 25, "Holes", &a, &b);
+                          if (HolePar[13] != 0) GS->Disp->DrawText(4, GUIn2, 220, 25, "PAR", &a, &b);
+                          
+                          if (HolePar[1] != 0) GS->Disp->DrawText(8, GUIn2, 10, 40, "HOLE 1", &a, &b);
+                          if (HolePar[2] != 0) GS->Disp->DrawText(8, GUIn2, 10, 50, "HOLE 2", &b, &a);
+                          if (HolePar[3] != 0) GS->Disp->DrawText(8, GUIn2, 10, 60, "HOLE 3", &b, &a);
+                          if (HolePar[4] != 0) GS->Disp->DrawText(8, GUIn2, 10, 70, "HOLE 4", &a, &b);
+                          if (HolePar[5] != 0) GS->Disp->DrawText(8, GUIn2, 10, 80, "HOLE 5", &b, &a);
+                          if (HolePar[6] != 0) GS->Disp->DrawText(8, GUIn2, 10, 90, "HOLE 6", &b, &a);
+                          if (HolePar[7] != 0) GS->Disp->DrawText(8, GUIn2, 90, 40, "HOLE 7", &a, &b);
+                          if (HolePar[8] != 0) GS->Disp->DrawText(8, GUIn2, 90, 50, "HOLE 8", &b, &a);
+                          if (HolePar[9] != 0) GS->Disp->DrawText(8, GUIn2, 90, 60, "HOLE 9", &b, &a);
+                          if (HolePar[10] != 0) GS->Disp->DrawText(8, GUIn2, 90, 70, "HOLE 10", &a, &b);
+                          if (HolePar[11] != 0) GS->Disp->DrawText(8, GUIn2, 90, 80, "HOLE 11", &b, &a);
+                          if (HolePar[12] != 0) GS->Disp->DrawText(8, GUIn2, 90, 90, "HOLE 12", &b, &a);
+                          if (HolePar[13] != 0) GS->Disp->DrawText(8, GUIn2, 170, 40, "HOLE 13", &a, &b);
+                          if (HolePar[14] != 0) GS->Disp->DrawText(8, GUIn2, 170, 50, "HOLE 14", &b, &a);
+                          if (HolePar[15] != 0) GS->Disp->DrawText(8, GUIn2, 170, 60, "HOLE 15", &b, &a);
+                          if (HolePar[16] != 0) GS->Disp->DrawText(8, GUIn2, 170, 70, "HOLE 16", &a, &b);
+                          if (HolePar[17] != 0) GS->Disp->DrawText(8, GUIn2, 170, 80, "HOLE 17", &b, &a);
+                          if (HolePar[18] != 0) GS->Disp->DrawText(8, GUIn2, 170, 90, "HOLE 18", &b, &a);
+                          GS->Disp->DrawText(4, GUIn, 10, 105, "Current hole", &a, &b);
+//                          GS->Disp->DrawText(8, GUIn2, 10, 100, "HOLE 7", &b, &a);
+//                          GS->Disp->DrawText(8, GUIn2, 10, 110, "HOLE 8", &a, &b);       
+                          
+                                                // Parametres                                                   
+                                                    
+                          GS->Disp->DrawText(GolfTextColors[0], GUIn, 100, 40, ItoA(golflastpoints[0]), &a, &b);
+                          if (GolfPlayer[1] != NullObj) GS->Disp->DrawText(GolfTextColors[1], GUIn, 100, 50, ItoA(golflastpoints[1]), &b, &a);           
+                          if (GolfPlayer[2] != NullObj) GS->Disp->DrawText(GolfTextColors[2], GUIn, 100, 60, ItoA(golflastpoints[2]), &a, &b);
+                          if (GolfPlayer[3] != NullObj) GS->Disp->DrawText(GolfTextColors[3], GUIn, 100, 70, ItoA(golflastpoints[3]), &b, &a);
+                          if (GolfPlayer[4] != NullObj) GS->Disp->DrawText(GolfTextColors[4], GUIn, 100, 80, ItoA(golflastpoints[4]), &a, &b);
+                          if (GolfPlayer[5] != NullObj) GS->Disp->DrawText(GolfTextColors[5], GUIn, 100, 90, ItoA(golflastpoints[5]), &b, &a);
+//                          GS->Disp->DrawText(8, GUIn, 100, 100, ItoA(Worm_Cur->RopeLength/65536), &b, &a);
+//                          GS->Disp->DrawText(8, GUIn, 100, 110, ItoA(Worm_Cur->RopeFragments), &b, &a);
+                          
+                          GS->Disp->DrawText(GolfTextColors[0], GUIn, 140, 40, ItoA(golflastshots[0]), &a, &b);
+                          if (GolfPlayer[1] != NullObj) GS->Disp->DrawText(GolfTextColors[1], GUIn, 140, 50, ItoA(golflastshots[1]), &a, &b);
+                          if (GolfPlayer[2] != NullObj) GS->Disp->DrawText(GolfTextColors[2], GUIn, 140, 60, ItoA(golflastshots[2]), &a, &b);
+                          if (GolfPlayer[3] != NullObj) GS->Disp->DrawText(GolfTextColors[3], GUIn, 140, 70, ItoA(golflastshots[3]), &a, &b);
+                          if (GolfPlayer[4] != NullObj) GS->Disp->DrawText(GolfTextColors[4], GUIn, 140, 80, ItoA(golflastshots[4]), &a, &b);
+                          if (GolfPlayer[5] != NullObj) GS->Disp->DrawText(GolfTextColors[5], GUIn, 140, 90, ItoA(golflastshots[5]), &a, &b);
+                          GS->Disp->DrawText(GolfTextColors[0], GUIn, 190, 40, ItoA(golflasttshots[0]), &a, &b);
+                          if (GolfPlayer[1] != NullObj) GS->Disp->DrawText(GolfTextColors[1], GUIn, 190, 50, ItoA(golflasttshots[1]), &a, &b);
+                          if (GolfPlayer[2] != NullObj) GS->Disp->DrawText(GolfTextColors[2], GUIn, 190, 60, ItoA(golflasttshots[2]), &a, &b);
+                          if (GolfPlayer[3] != NullObj) GS->Disp->DrawText(GolfTextColors[3], GUIn, 190, 70, ItoA(golflasttshots[3]), &a, &b);
+                          if (GolfPlayer[4] != NullObj) GS->Disp->DrawText(GolfTextColors[4], GUIn, 190, 80, ItoA(golflasttshots[4]), &a, &b);
+                          if (GolfPlayer[5] != NullObj) GS->Disp->DrawText(GolfTextColors[5], GUIn, 190, 90, ItoA(golflasttshots[5]), &a, &b);
+                          GS->Disp->DrawText(GolfTextColors[0], GUIn, 240, 40, ItoA(golflasttholes[0]), &a, &b);
+                          if (GolfPlayer[1] != NullObj) GS->Disp->DrawText(GolfTextColors[1], GUIn, 240, 50, ItoA(golflasttholes[1]), &a, &b);
+                          if (GolfPlayer[2] != NullObj) GS->Disp->DrawText(GolfTextColors[2], GUIn, 240, 60, ItoA(golflasttholes[2]), &a, &b);
+                          if (GolfPlayer[3] != NullObj) GS->Disp->DrawText(GolfTextColors[3], GUIn, 240, 70, ItoA(golflasttholes[3]), &a, &b);
+                          if (GolfPlayer[4] != NullObj) GS->Disp->DrawText(GolfTextColors[4], GUIn, 240, 80, ItoA(golflasttholes[4]), &a, &b);
+                          if (GolfPlayer[5] != NullObj) GS->Disp->DrawText(GolfTextColors[5], GUIn, 240, 90, ItoA(golflasttholes[5]), &a, &b);
+                          
+                          if (HolePar[1] != 0) GS->Disp->DrawText(8, GUIn2, 65, 40, ItoA(HolePar[1]), &a, &b);
+                          if (HolePar[2] != 0) GS->Disp->DrawText(8, GUIn2, 65, 50, ItoA(HolePar[2]), &b, &a);
+                          if (HolePar[3] != 0) GS->Disp->DrawText(8, GUIn2, 65, 60, ItoA(HolePar[3]), &b, &a);
+                          if (HolePar[4] != 0) GS->Disp->DrawText(8, GUIn2, 65, 70, ItoA(HolePar[4]), &a, &b);
+                          if (HolePar[5] != 0) GS->Disp->DrawText(8, GUIn2, 65, 80, ItoA(HolePar[5]), &b, &a);
+                          if (HolePar[6] != 0) GS->Disp->DrawText(8, GUIn2, 65, 90, ItoA(HolePar[6]), &b, &a); 
+                          if (HolePar[7] != 0) GS->Disp->DrawText(8, GUIn2, 145, 40, ItoA(HolePar[7]), &a, &b);
+                          if (HolePar[8] != 0) GS->Disp->DrawText(8, GUIn2, 145, 50, ItoA(HolePar[8]), &b, &a);
+                          if (HolePar[9] != 0) GS->Disp->DrawText(8, GUIn2, 145, 60, ItoA(HolePar[9]), &b, &a);
+                          if (HolePar[10] != 0) GS->Disp->DrawText(8, GUIn2, 145, 70, ItoA(HolePar[10]), &a, &b);
+                          if (HolePar[11] != 0) GS->Disp->DrawText(8, GUIn2, 145, 80, ItoA(HolePar[11]), &b, &a);
+                          if (HolePar[12] != 0) GS->Disp->DrawText(8, GUIn2, 145, 90, ItoA(HolePar[12]), &b, &a);
+                          if (HolePar[13] != 0) GS->Disp->DrawText(8, GUIn2, 225, 40, ItoA(HolePar[13]), &a, &b);
+                          if (HolePar[14] != 0) GS->Disp->DrawText(8, GUIn2, 225, 50, ItoA(HolePar[14]), &b, &a);
+                          if (HolePar[15] != 0) GS->Disp->DrawText(8, GUIn2, 225, 60, ItoA(HolePar[15]), &b, &a);
+                          if (HolePar[16] != 0) GS->Disp->DrawText(8, GUIn2, 225, 70, ItoA(HolePar[16]), &a, &b);
+                          if (HolePar[17] != 0) GS->Disp->DrawText(8, GUIn2, 225, 80, ItoA(HolePar[17]), &b, &a);
+                          if (HolePar[18] != 0) GS->Disp->DrawText(8, GUIn2, 225, 90, ItoA(HolePar[18]), &b, &a);
+//                          GS->Disp->DrawText(8, GUIn2, 85, 100, ItoA(Env->Gravity), &b, &a);
+//                          GS->Disp->DrawText(8, GUIn2, 85, 110, ItoA(Env->Wind), &a, &b);   
+                          
+                          if (Worm_Cur != NullObj) GS->Disp->DrawText(4, GUIn, 100, 105, ItoA(Worm_Cur->currentHole), &a, &b);     
+//              }
+}
+
+
+void golf_table_script::FirstFrame()
+{
+ new CInterfaceHandler(Root);
+}
+
+
+
+void CInterfaceHandler::Toggler()
+{
+// CWorm *w = GetCurrentWorm();
+ 
+//if(w != NullObj)
+// {
+    if (IsKeyPressed(106))
+    {
+        if (check1)
+        {
+            TurnOn = false;
+        }
+        else TurnOn = true;
+    }
+    else
+    {
+        if (TurnOn) check1 = true;
+        else check1 = false;
+    }
+    
+ if (IsKeyPressed(33))     // PgUp
+// if (keySync->KeyPressedNow(33))
+    {     
+         TurnOn = true;    
+    }                                               
+ if (IsKeyPressed(34))     // PgDwn
+// if (keySync->KeyPressedNow(34))
+    {     
+         TurnOn = false; 
+    }   
+//} 
+}
+  
+void CInterfaceHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if (Type == M_FRAME)
+    {
+      Toggler();     
+      ListNDraw();
+    }
+ if (Type == M_DRAWQUEUE)
+    {
+     if (TurnOn)
+     {
+      AddInterfaceBitmap(0, (-GS->Disp->xRes / 2) + GUIn->SX / 2, (-GS->Disp->yRes/2)+(GUIn->SY+25)*1.33, GUIn,280,400,0);      // (-GS->Disp->xRes / 2) + GUIn->SX / 2
+      AddInterfaceBitmap(0, (-GS->Disp->xRes / 2) + GUIn->SX + 150, (-GS->Disp->yRes/2)+(GUIn->SY+25)*1.33, GUIn2,300,400,0);     // (-GS->Disp->xRes / 2) + GUIn->SX + 100
+     }
+    }
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (GolfNameReader)
+        {
+            for (local i = 0; i < 6; i++)
+            {
+                if (GolfWormColors[i] == 8)
+                {
+                    GolfWormNames[i] = GetName();
+                    GolfWormColors[i] = GetWormColor(this);
+                    GolfPlayer[i] = CWorm(this);
+                    break;
+                }
+            }
+            for (local i = 1; i < Root->Childs.Count; i++)
+            {
+                local obj = CObject(Root->Childs.Objs[i]);
+                if (#GOLF_ZONES)
+                {
+                  if (obj is CGolfSpriterHole)
+                  {
+                     local zone = CGolfSpriterHole(obj);
+                     HolePar[zone->hole] = zone->par;
+                  }
+                }
+            }
+            GolfNameReader = false;
+        }
+    }
+    super;
+}

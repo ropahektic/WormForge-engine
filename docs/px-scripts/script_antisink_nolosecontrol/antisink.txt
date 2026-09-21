@@ -1,0 +1,54 @@
+require utils;
+
+override void CWorm::SetState(EObjState State)
+{                                    
+   if (State == WS_SINKING) return;
+   super;
+//   if (int(State) <= 103) return;
+//   if (GS != NullObj)
+//      ShowMessage(MakeNumberString("SetState : ", int(State), ""));
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params) {
+         LastPosX = 0.0;
+         LastPosY = 0.0;
+         ILayer = Layer;
+         IColGroup = ColGroup;
+         super;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+         super;
+         if(Type != M_FRAME) return;
+         if(PosY > (Env->Water + 10)) {
+                 if (antisink_fail) return;
+                 if (!TeleportObject(this, LastPosX, LastPosY, 3200, true, 3))
+                 {
+                    antisink_fail = true;
+                    return;
+                 }
+              //   ShowMessage("Respawning...");
+                 SpX = 0.0;
+                 SpY = 0.0;
+                 SetState(WS_IDLE);
+                 GS->Info.SetWormHealth(WormTeam, WormNumber, 100);
+                 GS->Info.Teams[WormTeam-1].Worms[WormNumber-1].State = 101;
+                 Layer = ILayer;
+                 ColGroup = IColGroup;
+           //      Root->Message(sender,M_SKIPTURN,MSize,MData);
+         }
+         if(ObjState == WS_IDLE) {
+                 LastPosX = PosX;
+                 LastPosY = PosY;
+                 ILayer = Layer;
+                 IColGroup = ColGroup;
+         }
+}
+
+override void CWorm::OnSink()
+{
+// do nothing, not even sounds
+//   ShowMessage("SANK");
+   return;
+}

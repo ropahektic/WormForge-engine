@@ -1,0 +1,482 @@
+
+require utils;
+
+                    
+$editor
+ $object LightSource
+  $origin -15 -15
+  $image "edcross.png"
+  $radius 17
+  $func SpawnLightSource     
+  $autoname LSource
+  $param Radius radius 50
+  $param FalloffRadius radius 75
+  $param Intensity int 100
+ $object_end
+ 
+ $object FoWControl
+  $origin -15 -15
+  $image "edfowcontrol.png"
+  $radius 17
+  $func SpawnFoWControl
+  $param Enable bool true
+  $param WormLightRadius int 50
+  $param WormLightFRadius int 110
+ $object_end
+$end
+
+CDarknessControl* darkControl;
+
+#DARKNESS
+
+enum DCLightType = (DCL_OMNI, DCL_DIRECT);
+
+void darkness_script::Init()
+{
+  darkControl = new CDarknessControl;
+}
+
+void SpawnLightSource(CEditorObject* obj)
+{
+  darkControl->SetLight(obj->PosX, obj->PosY, obj->GetInt("Radius"),
+    obj->GetInt("FalloffRadius"), obj->GetInt("Intensity")/100.0);
+  darkControl->sSources = darkControl->nSources;
+}
+
+CDarknessControl::CDarknessControl()
+{ 
+  enabled = false;
+  initialized = false;
+  seeAll = false;
+  lSource = new CLightSource[512];   
+  sSources = 0;          
+  wLightRadius = 50;
+  wLightFRadius = 110;
+}
+
+void DarknessControl_Render()
+{
+   darkControl->Draw();
+}
+
+bool CDarknessControl::IsColorVisible(int clr)
+{                 
+   if (IsReplay() || seeAll) return true;    
+   if (IsMultiplayer())
+   {                
+        if (GG->machColors[GetLocalMachine()] & (1 << clr))
+        {
+           return true;
+        }
+   
+   } else {  
+        if (clr == GetTeamColor(Root->CurTeam))
+        {
+           return true;
+        }
+   }
+   return false;
+}
+
+bool CDarknessControl::IsTeamVisible(int team)
+{
+  return IsColorVisible(GetTeamColor(team));
+}
+
+bool CDarknessControl::DoIKnowHim(CWorm* worm)
+{
+   if (!enabled) return true;
+   return IsTeamVisible(worm->WormTeam);
+}
+
+
+override void CWorm::RenderLabels()
+{
+  if (darkControl->DoIKnowHim(this) || (DC_LightTimer > 0) ) super;
+  DC_LightTimer -= 1;
+}                         /*
+override void CWorm::RenderDmgLabel()
+{
+  if (darkControl->DoIKnowHim(this)) super;
+}                                */
+override void CWorm::RenderCrosshair()
+{
+  if (darkControl->DoIKnowHim(this)) super;
+}
+     
+override void CDDQueue::AddSprite(fixed z,fixed x,fixed y,int unk,int sprite,fixed frame)
+{
+  if (!darkControl->enabled || darkControl->seeAll || !IsMultiplayer()) 
+  { 
+    super;
+    return;
+  }
+  local sIndex = sprite & 65535;
+  local sWorm = GetCurrentWorm();
+  if (sIndex >= 20 && sIndex <= 25)
+  {
+    if (GG->machColors[GetLocalMachine()] & (1 << (sIndex - 20)) )
+    {
+       super;
+    }
+    return;
+    
+  }else if( sIndex >= 26 && sIndex <= 31 ){  //26 = red team select worm-- 8 = click effect
+      
+    if (GG->machColors[GetLocalMachine()] & (1 << (sIndex - 26)) )
+    {
+       super;
+    }
+    return;
+      
+   }else if(sIndex >= 8 && sIndex <= 13){
+      if (GG->machColors[GetLocalMachine()] & (1 << (sIndex - 8)) )
+    {
+       super;
+    }
+    return;
+  }
+  
+  super; 
+}
+     
+override void CObject::ForceFocus(fixed x,fixed y)
+{
+   if (!IsMultiplayer() || darkControl == NullObj || !darkControl->enabled)
+   {
+     super;
+   } else {
+     if (ClType == OC_Team)
+     {          
+        local tm = CTeam(this);
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(tm->Index)))
+        {
+           super;
+        }    
+     }
+     if (ClType == OC_Worm)
+     {
+        local wm = CWorm(this);  
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(wm->WormTeam)))
+        {
+           super;
+        }
+     } 
+    
+     if (ClType == OC_Missile)
+     {
+        local ml = CMissile(this);  
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(ml->initdesc.Team)))
+        {
+           super;
+        }
+     } 
+     
+     
+   }
+}
+override void CGObject::LookAtMe(fixed x,fixed y,int priority)
+{
+   if (!IsMultiplayer() || darkControl == NullObj || !darkControl->enabled)
+   {
+     super;
+   } else {
+     if (ClType == OC_Worm)
+     {
+        local wm = CWorm(this);
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(wm->WormTeam)))
+        {
+           super;
+        }
+     } 
+     if (ClType == OC_Missile)
+     {
+        local ml = CMissile(this);  
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(ml->initdesc.Team)))
+        {
+           super;
+        }
+     } 
+   }
+}
+
+void CDarknessControl::Init()
+{
+  bSize = 12;
+  nBlX = GS->Disp->xRes / bSize + 4; 
+  nBlY = GS->Disp->yRes / bSize + 4;
+  lOutRGB = new int[nBlX*nBlY];
+  initialized = true;   
+  if (IsMultiplayer())
+  {
+    if ((GG->machColors[GetLocalMachine()] & (1+2+4+8+16+32)) == 0) enabled = false;
+  }
+}      
+
+void CDarknessControl::SetLight(float x, float y, float rad, float rad2, float intens)
+{
+  if (nSources == 512) return;
+  lSource[nSources].x = x;
+  lSource[nSources].y = y;   
+  lSource[nSources].rad = rad;
+  lSource[nSources].rad2 = rad2; 
+  lSource[nSources].rads = rad * rad;
+  lSource[nSources].rad2s = rad2 * rad2;  
+  lSource[nSources].intens = intens;
+  lSource[nSources].radds = rad2 * rad2 - rad * rad;
+  lSource[nSources].type = DCL_OMNI;
+  nSources++;
+}    
+
+void CDarknessControl::SetDirectionalLight(float x1, float y1, float x2, float y2, float spread, float dSpread, float intens, float intensFall)
+{   
+  if (nSources == 512) return;
+                                                              
+  local ds = sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));   //normalization factor
+  if (ds == 0) return;
+                    
+  lSource[nSources].a = (y1 - y2) / ds;   
+  lSource[nSources].b = (x2 - x1) / ds;
+  lSource[nSources].c = -(x1 * (y1 - y2) + y1 * (x2 - x1)) / ds;   
+  lSource[nSources].c2 = -(x1 * (x2 - x1) - y1 * (y1 - y2)) / ds;
+  
+  lSource[nSources].x = x1;  
+  lSource[nSources].y = y1;
+  
+  lSource[nSources].rad = ds;
+  lSource[nSources].rad2 = spread;   
+  lSource[nSources].rad2s = dSpread;  
+  lSource[nSources].rads = (ds * dSpread + spread) / 3.0;   
+  lSource[nSources].radsr = ds * dSpread + spread;
+  
+  
+  lSource[nSources].intens = intens;   
+  lSource[nSources].intens2 = intensFall;
+  
+         
+  lSource[nSources].type = DCL_DIRECT;
+  nSources++;
+}
+
+void CDarknessControl::DoFlashlight(CGObject* fromObj, float x1, float y1, float dx, float dy, float maxDist)
+{
+  local xr = 0; local yr = 0;
+  local cObj = TraceLine(fromObj, x1, y1, x1 + dx * maxDist, y1 + dy * maxDist, -1, &xr, &yr);
+  local ds = (xr - x1) * (xr - x1) + (yr - y1) * (yr - y1);
+  if (cObj != NullObj && ds < 40000)
+  {
+    if (cObj->ClType == OC_Worm)
+    {
+      local wm = CWorm(cObj);
+      wm->DC_LightTimer = 3;
+    }
+  }
+  SetDirectionalLight(x1, y1, xr, yr, 25, 0.35, 0.8, 0.7 / maxDist);
+}
+
+void CDarknessControl::GenerateLSources()
+{
+  nSources = sSources;
+  for (local i = 1; i < Env->Objs.Count; i++)
+  {
+    local obj = CGObject(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    if (obj->ClType == OC_Worm)
+    {
+      local wm = CWorm(obj);
+      local lit = DoIKnowHim(wm);
+      if (!lit) continue;
+      SetLight(obj->PosX, obj->PosY, wLightRadius, wLightFRadius, 0.9);
+      if (wm->ObjState == WS_AIMING || wm->ObjState == WS_SETPOWER || wm->ObjState == WS_FIRED || wm->ObjState == WS_FIRECONT)
+      {
+        local ang = (1 - wm->FireAngle) * 3.14159;
+        if (wm->TurnSide < 0) 
+        {
+           ang = 6.28318 - ang;
+        }
+        DoFlashlight(wm, wm->PosX, wm->PosY, sin(ang), -cos(ang), 1000); 
+      }
+    }
+  }
+}
+
+void CDarknessControl::GetLightIntensity(float x, float y, float* R, float* G, float* B)
+{
+  local oR = 0.0; local oG = 0.0; local oB = 0.0;
+  
+  for (local i = 0; i < nSources; i++)
+  {
+      local dx = x - lSource[i].x;  
+      local dy = y - lSource[i].y;
+      local ds = dx * dx + dy * dy;
+      if (lSource[i].type == DCL_OMNI)
+      {
+        if (ds < lSource[i].rad2s)
+        {
+           if (ds < lSource[i].rads)
+           {
+               oR = oR + lSource[i].intens; oG = oG + lSource[i].intens; oB = oB + lSource[i].intens;
+           } else {
+               local coef = (1.0 - (ds - lSource[i].rads) / lSource[i].radds) * lSource[i].intens;   
+               oR += coef; oG += coef; oB += coef;       
+           }
+        }
+      } else {
+        local v1 = x * lSource[i].b - y * lSource[i].a + lSource[i].c2;
+        if (v1 >= 0)
+        {
+          local sp = 0.0; local coef2 = 1.0;
+          if (v1 <= lSource[i].rad)
+          {
+                sp = lSource[i].rad2 + v1 * lSource[i].rad2s;
+          } else {
+              if (v1 <= (lSource[i].rad + lSource[i].rads))
+              {
+                 local coef2 = 1.0 - (v1 - lSource[i].rad) / lSource[i].rads;
+                 sp = lSource[i].radsr * sqrt(coef2);
+              } else continue;
+          }
+          
+          if (sp > 0.0)
+          {     
+            sp = sp + 0.5;
+            local v2 = abs(x * lSource[i].a + y * lSource[i].b + lSource[i].c);
+            local coef = 1 - v2 / sp;
+            if (coef > 0.0)
+            {               
+              local intens = lSource[i].intens - lSource[i].intens2 * v1;
+              if (intens > 0.0)
+              { 
+                coef = coef * intens * coef2;
+                oR += coef; oG += coef; oB += coef;
+              }
+            }
+          }             
+        }
+      }
+  }
+  *R = oR; *G = oG; *B = oB;
+}
+
+void CDarknessControl::Draw()
+{
+  if (!initialized) Init();
+  GenerateLSources();
+  local i = 0;                   // i don't trust EAX to do typecasting :D
+  local offX = -float( int(int(GS->ActCameraX) % bSize) ) + GS->ActCameraX - GS->Disp->halfX - bSize;   
+  local offY = -float( int(int(GS->ActCameraY) % bSize) ) + GS->ActCameraY - GS->Disp->halfY - bSize;     
+  local IntensityR = 0.0;
+  local IntensityG = 0.0;  
+  local IntensityB = 0.0;
+  for (local cy = 0; cy < nBlY; cy++)
+  {
+    local cOffX = offX;
+    local cOffY = cy * bSize + offY;
+    for (local cx = 0; cx < nBlX; cx++)
+    {
+      GetLightIntensity(cOffX, cOffY, &IntensityR, &IntensityG, &IntensityB);
+      local R = int(IntensityR * 255.0);
+      if (R > 255) R = 255;          
+      local G = int(IntensityG * 255.0);
+      if (G > 255) G = 255;
+      local B = int(IntensityB * 255.0);
+      if (B > 255) B = 255;
+      lOutRGB[i] = RGB(R,G,B);
+      i++;
+      cOffX += bSize;
+    }
+  }    
+  
+  CQuad q;
+  i = 0;
+  q.tex = 0;
+  q.blend = 64; //color blending
+  
+  for (local j = 0; j < 4; j++)
+  {
+    q.v[j].tx = 0; q.v[j].ty = 0;
+  }
+  for (local cy = 0; cy < (nBlY-1); cy++)
+  {              
+    local cOffX = offX;
+    local cOffY = cy * bSize + offY;
+    for (local cx = 0; cx < (nBlX-1); cx++)
+    {
+      q.v[0].x = cOffX;
+      q.v[0].y = cOffY;
+      q.v[1].x = cOffX + bSize;    
+      q.v[1].y = cOffY;
+      q.v[2].x = cOffX + bSize;
+      q.v[2].y = cOffY + bSize;
+      q.v[3].x = cOffX;
+      q.v[3].y = cOffY + bSize;
+      
+      q.v[0].color = lOutRGB[i];  
+      q.v[1].color = lOutRGB[i+1];
+      q.v[2].color = lOutRGB[i+nBlX+1];
+      q.v[3].color = lOutRGB[i+nBlX];
+      RenderQuad(&q, 0);
+      
+      
+      i++;
+      cOffX += bSize;
+    }
+    i++;
+  }
+}
+
+void CDarknessControl::UpdateStatus()
+{
+  if (seeAll || !enabled || !initialized) return;
+  if (!IsMultiplayer()) return;
+  
+  local hOther = false;
+  local hMy = false;
+  for (local i = 1; i < Env->Objs.Count; i++)
+  {
+     local wm = CWorm(Env->Objs.Objs[i]);
+     if (wm == NullObj) continue;
+     if (wm->ClType != OC_Worm) continue;
+     if (wm->ObjState == WS_DEATH) continue;
+     if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(wm->WormTeam)))
+     {
+       hMy = true;
+     } else {
+       hOther = true;
+     }
+  }
+  
+  if (!hMy) seeAll = true;
+  if (!hOther) seeAll = true;
+}
+
+void CDarknessControl::Queue()
+{
+  if (!enabled) return;
+  Root->AddCustomRender(0.5, "DarknessControl_Render");
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;   
+  
+  if (Type == M_FRAME)
+  {
+     darkControl->UpdateStatus();
+  }
+  if (Type == M_DRAWQUEUE)
+  {
+     darkControl->Queue();
+  }
+}
+
+void SpawnFoWControl(CEditorObject* obj)
+{
+  if (obj->GetBool("Enable"))
+  {
+    darkControl->enabled = true;
+  }       
+  darkControl->wLightRadius = obj->GetInt("WormLightRadius");      
+  darkControl->wLightFRadius = obj->GetInt("WormLightFRadius");
+
+}

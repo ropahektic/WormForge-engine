@@ -1,0 +1,189 @@
+
+$editor
+  $object  CustomTurret
+   $origin -20 -25
+   $radius 28
+   $image "edturret.png"
+   $func SpawnCustomTurret
+   $param WeapType enum 1 vase
+   $param Invincible bool false
+   $param Mounted bool false      
+   $param ClearMines bool true
+   $param AmmoPerTurn int 1
+   $param Delay int 500
+   $param Damage int 25
+   $param FireNum int 5
+   $param Health int 20
+   $param MinRadius int 1
+   $param SensorRadius int 50
+   $param ExplDamage int 25
+   $param ArrowsGravity int 50
+$end
+
+CSprite* customturretBase3;
+CSprite* customturretTower3;
+int sprNumW3;
+bool sprNumSet3;
+bool weaptypeSet3;
+float aGrav3;
+
+void deathtrapturret::InitGraphic()
+{
+  local f = GetAttachment("pyro_baseminez3.png");
+  customturretBase3 = LoadSprite(f, 1, 0);
+  local f = GetAttachment("pyro_towerminez3.png");
+  customturretTower3 = LoadSprite(f, 1, 0);
+}
+
+CCustomTurret3 : CDeathTrapBase;
+
+void CCustomTurret3::CCustomTurret3(CObject* parent, fixed x, fixed y)
+{
+  super;                 
+  breakable = true;
+  baseSprite = customturretBase3;
+  towerSprite = customturretTower3;
+  towerOffset = 12;
+};
+
+
+void CCustomTurret3::ChooseWeapon3(int i)
+{
+    i = weapI;
+    if (CheckMaskAt(this, FourCheckMask, ShootX, ShootY, -1) != NullObj) return false;
+    CMineParams MParams;
+    CShootDesc SDesc;
+    zero(&MParams);
+    zero(&SDesc);
+    
+    local ForceVar = GS->GetRandom() % 64;
+    local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+    
+    SDesc.Team = turretTeam;
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+    local worm = GetCurrentWorm();
+    SDesc.Worm = worm->WormNumber;
+    SDesc.AddX = worm->PosX;
+    SDesc.AddY = worm->PosY;
+    
+    
+    if (turretTeam < 0) SDesc.Team = 0;
+
+    SDesc.SpX = ShootSX * BaseForce;
+    SDesc.SpY = ShootSY * BaseForce;
+    SDesc.Delay = ExplTimer;
+    
+    MParams.Prefuse = 0;
+    MParams.Flags = 60;
+    MParams.Bias = 0;
+    MParams.Damage = 50;
+    MParams.BlastPower = 100;
+    MParams.Fuse = ExplTimer; //20 frames
+    MParams.Radius = 48;
+    
+    if (i == 17) {random = new CGas(Root->GetObject(25, 0), ShootX, ShootY, admg, turretTeam); return;}
+    if (i == 20) {CFireDesc FDesc; FDesc.X = ShootX; FDesc.Y = ShootY;  FDesc.SpX = ShootSX * BaseForce * 4; FDesc.SpY = ShootSY * BaseForce * 4; FDesc.Count = 0; FDesc.Duration = 1500; FDesc.UpPower = 1; FDesc.Damage = FNum-1; FDesc.Unk = 0; FDesc.UnkB = admg/5; FDesc.UnkD = 0; FDesc.OwnerTeam = turretTeam;
+           random = new CFire(Root->GetObject(25, 0), &FDesc, 0); PlaySound(22, 10, RandomFloat(1.0, 1.0+BaseForce/30.0), 0.9); return;}
+}
+
+void CCustomTurret3::ShootAtEnemy3()
+{
+    if (CheckMaskAt(this, FourCheckMask, ShootX, ShootY, -1) != NullObj) return false;
+    CMineParams MParams;
+    CShootDesc SDesc;
+    zero(&MParams);
+    zero(&SDesc);
+    
+    local ForceVar = GS->GetRandom() % 64;
+    local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+    
+    SDesc.Team = turretTeam;
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+    local worm = GetCurrentWorm();
+    SDesc.Worm = worm->WormNumber;
+    SDesc.AddX = worm->PosX;
+    SDesc.AddY = worm->PosY;
+    
+    
+    if (turretTeam < 0) SDesc.Team = 0;
+
+    SDesc.SpX = ShootSX * BaseForce;
+    SDesc.SpY = ShootSY * BaseForce;
+    SDesc.Delay = ExplTimer;
+    
+    MParams.Prefuse = 0;
+    MParams.Flags = 60;
+    MParams.Bias = 0;
+    MParams.Damage = 50;
+    MParams.BlastPower = 100;
+    MParams.Fuse = ExplTimer; //20 frames
+    MParams.Radius = 48;
+    
+    local weapon;
+    local vase;
+    
+    if (weaptype == 17) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); vase = GetWeaponByName("Death Trap Fragments"); vase->launch.explosion.damage = admg; vase->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &vase->launch, &SDesc); if(vase->launch.timeBeforeExplosion != 5000)vase->launch.timeBeforeExplosion = 5000; hsouls->Play(3.0, 0.0, false);}
+    if (weaptype == 21) {weapI = RandomInt(1,20); ChooseWeapon3(weapI);}
+
+    return true;
+};
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Death Trap"))
+   {
+     local sg = new CCustomTurret3(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 1;
+     sg->weaptype = 17;       
+     sg->sprNum = 0;
+   } else {
+     super;
+   };
+};
+
+void SpawnCustomTurret3(CEditorObject* eobj)
+{
+  sprNumSet3 = true;
+  weaptypeSet3 = true;
+  if (sprNumSet3)        //less lags at start plz
+  {
+      if (StrCmp(eobj->GetString("WeapType"), "vase")) {sprNumW3 = 74; sprNumSet3 = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "random")) {sprNumW3 = 102; sprNumSet3 = false;} //599
+  } 
+  local sg = new CCustomTurret3(Root->GetObject(25, 0), eobj->PosX, eobj->PosY);
+  sg->turretTeam = -1;
+  sg->clearMines = eobj->GetBool("ClearMines");   
+  sg->ammoPerTurn = eobj->GetInt("AmmoPerTurn");
+  if (weaptypeSet3)        //less lags at start plz
+  {
+     if (StrCmp(eobj->GetString("WeapType"), "vase")) {sg->weaptype = 17; weaptypeSet3 = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "random")) {sg->weaptype = 21; weaptypeSet3 = false;}
+  } 
+  sg->FNum = eobj->GetInt("FireNum");          
+  sg->admg = eobj->GetInt("Damage");
+  sg->ExplTimer = eobj->GetInt("Delay");
+  sg->health = eobj->GetInt("Health");
+  sg->minimalRadius = eobj->GetInt("MinRadius");
+  sg->sensorRadius = eobj->GetInt("SensorRadius");
+  sg->lostRadius = sg->sensorRadius + 10;
+  sg->ExpDamage = eobj->GetInt("ExplDamage");
+  sg->maxHealth = sg->health;
+  sg->sprNum3 = sprNumW3; 
+  aGrav = eobj->GetInt("ArrowsGravity") / 100.0;
+  if (eobj->GetBool("Invincible"))
+  {
+     sg->breakable = false;
+  }
+  if (eobj->GetBool("Mounted"))
+  {
+    sg->SpeedDivider = 32767;
+    for (local i = 0; i < 100; i++)
+    {
+      if (Env->CheckCollision(sg, sg->PosX, sg->PosY + 1) != NullObj) break;
+      sg->PosY += 1;
+    }
+  }
+};

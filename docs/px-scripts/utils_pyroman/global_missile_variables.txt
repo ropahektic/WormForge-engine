@@ -1,0 +1,35 @@
+CSprite* fireball4;
+
+void global_missile_variables::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("fireball4.png");
+    fireball4 = LoadSprite(f, 1, 0);
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    not_too_much_particles = true;
+    imCheckMis = CMissile(NullObj);
+}
+
+bool CWorm::CheckParticlesNumber() {
+    for (local i = 1; i < Env->Objs.Count; i++)
+    {                                                                   // Let`s limit particles making
+        local part_counter;
+        if (i == 1) part_counter = 0;
+        local part = CMissile(Env->Objs.Objs[i]);
+        if (part == NullObj) continue;
+        if (part->ClType != OC_Missile) continue;
+//        {
+            part_counter++;
+//        }
+        if (i == (Env->Objs.Count - 1))
+        {
+            if (part_counter > 20) part->not_too_much_particles = false;
+            else part->not_too_much_particles = true;
+        }
+    }
+    return part->not_too_much_particles;
+}

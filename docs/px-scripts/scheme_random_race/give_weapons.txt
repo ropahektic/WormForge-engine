@@ -1,0 +1,554 @@
+require utils, utils_steps, p_animation, pxparticles;
+
+int race_turn_counter;
+int race_numOfTeams;
+int roll;
+
+bool race_turn_started;
+bool make_roll;
+bool agility_on;
+
+CSprite* RopeRaceSprite;
+CSprite* ParkourRaceSprite;
+CSprite* WingRaceSprite;
+CSprite* PortalRaceSprite;
+CSprite* HelicopterRaceSprite;
+
+CAnimation* RandomRaceMessage;
+CAnimationParams* race_result_message_params;
+
+void give_weapons::FirstFrame()
+{
+    race_turn_counter = 0;
+
+    race_numOfTeams = 0;
+    local n = 1;
+    for(n=1; n<7; n++){if(Root->NextColor[n] > 0){race_numOfTeams++;}}
+    //GG->WriteToChat(1, "number of teams:", false);
+    //GG->WriteToChat(1, ItoA(race_numOfTeams), false);
+
+	race_result_message_params = new CAnimationParams;
+	race_result_message_params->duration = 5;   // seconds, fade duration
+    race_result_message_params->rot = 180;
+    race_result_message_params->alpha = 100;
+    race_result_message_params->ZPlane = 3;
+    race_result_message_params->fade = false;
+}
+
+void give_weapons::InitGraphic()
+{
+    CFile *f;
+ 	f = GetAttachment("rope_race.png");		RopeRaceSprite = LoadSprite(f, 1, 0);
+ 	f = GetAttachment("park_race.png");		ParkourRaceSprite = LoadSprite(f, 1, 0);
+ 	f = GetAttachment("wing_race.png");		WingRaceSprite = LoadSprite(f, 1, 0);
+ 	f = GetAttachment("port_race.png");		PortalRaceSprite = LoadSprite(f, 1, 0);
+ 	f = GetAttachment("heli_race.png");		HelicopterRaceSprite = LoadSprite(f, 1, 0);
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_TURNBEGIN && race_turn_counter == 0)
+	{
+    race_turn_started = true;
+    make_roll = true;
+    agility_on = false;
+    //GG->WriteToChat(1, "race_turn_started", false);
+	}
+ 
+if (Type == M_TURNEND)
+	{
+	race_turn_counter = race_turn_counter - 1;
+	//GG->WriteToChat(1, "turn_counter countdown:", false);
+	//GG->WriteToChat(1, ItoA(race_turn_counter), false);
+	}
+	
+if (race_turn_counter > 0)
+	{
+	race_turn_started = false;
+	}
+super;
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+super;
+
+	local w = GetCurrentWorm();
+   	if(w == NullObj) return;
+   	if(GS->Info.Teams[w->WormTeam-1].Worms[w->WormNumber-1].State == 100) return;
+
+	local lastWeap = w->CurWeapon;  local lastWeapN = w->WeaponN;
+   	local weap = GetWeaponByName("Swim Suit");
+   	local weap2 = GetWeaponByName("Parkour");
+   	local weap3 = GetWeaponByName("Anti Fall Damage");
+
+   	if(weap == NullObj || weap2 == NullObj) return;
+   	
+if (agility_on == true)
+	{
+   	CShootDesc sdesc;
+   	zero(&sdesc);
+
+   	w->CurWeapon = weap;  w->WeaponN = weap->GetWeaponIndex();
+   	w->FireFinal(weap, &sdesc);
+
+   	w->CurWeapon = weap2;  w->WeaponN = weap2->GetWeaponIndex();
+   	w->FireFinal(weap2, &sdesc);
+
+   	w->CurWeapon = weap3;  w->WeaponN = weap3->GetWeaponIndex();
+   	w->FireFinal(weap3, &sdesc);
+
+   	if(lastWeap == NullObj) return;
+   	w->CurWeapon = lastWeap;  w->WeaponN = lastWeapN;
+	}
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+local w = GetCurrentWorm();
+
+if (race_turn_started && race_turn_counter == 0)
+ 	{
+ 	if(w != NullObj)
+        {
+        race_team_number = w->WormTeam;
+
+		rope = GetWeaponByName("Ninja Rope");
+		jump = GetWeaponByName("Jump");
+		lowg = GetWeaponByName("Low Gravity");
+		wing = GetWeaponByName("Wings");
+		port = GetWeaponByName("Portal Gun");
+		heli = GetWeaponByName("Helicopter");
+		
+		skip = GetWeaponByName("Skip Go");
+		if(w->ObjState == WS_IDLE) w->CurWeapon = skip;
+    
+        if(make_roll)
+            {
+            show_sprite = true;
+            
+			roll = RandomInt(0, 4);
+			if (roll == 0) RopeRace();
+			else if (roll == 1) ParkourRace();
+			else if (roll == 2) WingRace();
+			else if (roll == 3) PortalRace();
+			else if (roll == 4) HelicopterRace();
+		
+		    make_roll = false;
+		    
+			//GG->WriteToChat(1, "Roll:", false);
+			//GG->WriteToChat(1, ItoA(roll), false);
+			}
+			
+        if(show_sprite)
+			                        {
+									race_result_message_params->scale = 0.0;
+                                    race_result_message_params->blend_type = 2;
+                                    race_result_message_params->duration = 5;   // seconds, fade duration
+                                    race_result_message_params->rot = 180;
+                                    race_result_message_params->alpha = 100;
+                                    race_result_message_params->ZPlane = 3;
+                                    race_result_message_params->fade = false;
+                                    if 		(roll == 0) race_result_message_params->sprite = RopeRaceSprite->Index;
+                                    else if (roll == 1) race_result_message_params->sprite = ParkourRaceSprite->Index;
+                                    else if (roll == 2) race_result_message_params->sprite = WingRaceSprite->Index;
+                                    else if (roll == 3) race_result_message_params->sprite = PortalRaceSprite->Index;
+                                    else if (roll == 4) race_result_message_params->sprite = HelicopterRaceSprite->Index;
+                                    else race_result_message_params->sprite = 0;
+
+                                    RandomRaceMessage = new CAnimation(Root, GS->ActCameraX, (GS->ActCameraY - GS->Disp->yRes/5), NullObj, race_result_message_params);
+                                    animate = true;
+                                    stopFrame = gframe;
+                                    show_sprite = false;
+                                    return;
+                                    }
+		
+		race_turn_counter = race_numOfTeams;
+		//GG->WriteToChat(1, "turn_counter = race_numOfTeams:", false);
+		//GG->WriteToChat(1, ItoA(race_turn_counter), false);
+		}
+	}
+	
+if(Type == M_FRAME)
+	{
+	if (RandomRaceMessage != NullObj)
+                        {
+                          if (animate)
+                          {
+                            RandomRaceMessage->x = GS->ActCameraX;
+                            RandomRaceMessage->y = GS->ActCameraY - GS->Disp->yRes/4;
+                            if (RandomRaceMessage->scale < 1.0) RandomRaceMessage->scale += 0.04;
+                            if (gframe - stopFrame > 190)   // when 4 sec passed
+                            {
+                                RandomRaceMessage->alpha -= 5;    // 1 more sec to fade down
+                            }
+                          }
+                        }
+                        else animate = false;
+	}
+	
+}
+
+// Weapons distribution
+
+void CWorm::RopeRace()
+{
+// Team 1
+
+GS->Info.SetWeaponDelay(1, rope->GetWeaponIndex(), rope->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(1, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 2
+
+GS->Info.SetWeaponDelay(2, rope->GetWeaponIndex(), rope->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(2, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 3
+
+GS->Info.SetWeaponDelay(3, rope->GetWeaponIndex(), rope->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(3, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 4
+
+GS->Info.SetWeaponDelay(4, rope->GetWeaponIndex(), rope->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(4, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 5
+
+GS->Info.SetWeaponDelay(5, rope->GetWeaponIndex(), rope->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(5, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 6
+
+GS->Info.SetWeaponDelay(6, rope->GetWeaponIndex(), rope->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(6, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+}
+
+void CWorm::ParkourRace()
+{
+agility_on = true;
+
+   local w = GetCurrentWorm();
+   if(w == NullObj) return;
+   if(GS->Info.Teams[w->WormTeam-1].Worms[w->WormNumber-1].State == 100) return;
+
+   local lastWeap = w->CurWeapon;  local lastWeapN = w->WeaponN;
+   local weap = GetWeaponByName("Swim Suit");
+   local weap2 = GetWeaponByName("Parkour");
+   local weap3 = GetWeaponByName("Anti Fall Damage");
+
+   if(weap == NullObj || weap2 == NullObj) return;
+
+   CShootDesc sdesc;
+   zero(&sdesc);
+
+   w->CurWeapon = weap;  w->WeaponN = weap->GetWeaponIndex();
+   w->FireFinal(weap, &sdesc);
+   
+   w->CurWeapon = weap2;  w->WeaponN = weap2->GetWeaponIndex();
+   w->FireFinal(weap2, &sdesc);
+   
+   w->CurWeapon = weap3;  w->WeaponN = weap3->GetWeaponIndex();
+   w->FireFinal(weap3, &sdesc);
+
+   if(lastWeap == NullObj) return;
+   w->CurWeapon = lastWeap;  w->WeaponN = lastWeapN;
+
+// Team 1
+
+GS->Info.SetWeaponDelay(1, jump->GetWeaponIndex(), jump->GetPageIndex(), 0 );
+GS->Info.SetWeaponDelay(1, lowg->GetWeaponIndex(), lowg->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(1, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 2
+
+GS->Info.SetWeaponDelay(2, jump->GetWeaponIndex(), jump->GetPageIndex(), 0 );
+GS->Info.SetWeaponDelay(2, lowg->GetWeaponIndex(), lowg->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(2, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 3
+
+GS->Info.SetWeaponDelay(3, jump->GetWeaponIndex(), jump->GetPageIndex(), 0 );
+GS->Info.SetWeaponDelay(3, lowg->GetWeaponIndex(), lowg->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(3, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 4
+
+GS->Info.SetWeaponDelay(4, jump->GetWeaponIndex(), jump->GetPageIndex(), 0 );
+GS->Info.SetWeaponDelay(4, lowg->GetWeaponIndex(), lowg->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(4, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 5
+
+GS->Info.SetWeaponDelay(5, jump->GetWeaponIndex(), jump->GetPageIndex(), 0 );
+GS->Info.SetWeaponDelay(5, lowg->GetWeaponIndex(), lowg->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(5, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 6
+
+GS->Info.SetWeaponDelay(6, jump->GetWeaponIndex(), jump->GetPageIndex(), 0 );
+GS->Info.SetWeaponDelay(6, lowg->GetWeaponIndex(), lowg->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(6, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+}
+
+void CWorm::WingRace()
+{
+// Team 1
+
+GS->Info.SetWeaponDelay(1, wing->GetWeaponIndex(), wing->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(1, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 2
+
+GS->Info.SetWeaponDelay(2, wing->GetWeaponIndex(), wing->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(2, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 3
+
+GS->Info.SetWeaponDelay(3, wing->GetWeaponIndex(), wing->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(3, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 4
+
+GS->Info.SetWeaponDelay(4, wing->GetWeaponIndex(), wing->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(4, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 5
+
+GS->Info.SetWeaponDelay(5, wing->GetWeaponIndex(), wing->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(5, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 6
+
+GS->Info.SetWeaponDelay(6, wing->GetWeaponIndex(), wing->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(6, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+}
+
+void CWorm::PortalRace()
+{
+
+local w = GetCurrentWorm();
+   if(w == NullObj) return;
+   if(GS->Info.Teams[w->WormTeam-1].Worms[w->WormNumber-1].State == 100) return;
+
+   local lastWeap = w->CurWeapon;  local lastWeapN = w->WeaponN;
+   local weap = GetWeaponByName("Anti Fall Damage");
+
+   if(weap == NullObj) return;
+
+   CShootDesc sdesc;
+   zero(&sdesc);
+
+   w->CurWeapon = weap;  w->WeaponN = weap->GetWeaponIndex();
+   w->FireFinal(weap, &sdesc);
+
+   if(lastWeap == NullObj) return;
+   w->CurWeapon = lastWeap;  w->WeaponN = lastWeapN;
+// Team 1
+
+GS->Info.SetWeaponDelay(1, port->GetWeaponIndex(), port->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(1, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 2
+
+GS->Info.SetWeaponDelay(2, port->GetWeaponIndex(), port->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(2, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 3
+
+GS->Info.SetWeaponDelay(3, port->GetWeaponIndex(), port->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(3, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 4
+
+GS->Info.SetWeaponDelay(4, port->GetWeaponIndex(), port->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(4, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 5
+
+GS->Info.SetWeaponDelay(5, port->GetWeaponIndex(), port->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(5, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+
+// Team 6
+
+GS->Info.SetWeaponDelay(6, port->GetWeaponIndex(), port->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(6, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, heli->GetWeaponIndex(), heli->GetPageIndex(), -1 );
+}
+
+void CWorm::HelicopterRace()
+{
+// Team 1
+
+GS->Info.SetWeaponDelay(1, heli->GetWeaponIndex(), heli->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(1, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(1, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+
+// Team 2
+
+GS->Info.SetWeaponDelay(2, heli->GetWeaponIndex(), heli->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(2, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(2, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+
+// Team 3
+
+GS->Info.SetWeaponDelay(3, heli->GetWeaponIndex(), heli->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(3, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(3, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+
+// Team 4
+
+GS->Info.SetWeaponDelay(4, heli->GetWeaponIndex(), heli->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(4, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(4, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+
+// Team 5
+
+GS->Info.SetWeaponDelay(5, heli->GetWeaponIndex(), heli->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(5, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(5, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+
+// Team 6
+
+GS->Info.SetWeaponDelay(6, heli->GetWeaponIndex(), heli->GetPageIndex(), 0 );
+
+GS->Info.SetWeaponDelay(6, rope->GetWeaponIndex(), rope->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, jump->GetWeaponIndex(), jump->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, lowg->GetWeaponIndex(), lowg->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, wing->GetWeaponIndex(), wing->GetPageIndex(), -1 );
+GS->Info.SetWeaponDelay(6, port->GetWeaponIndex(), port->GetPageIndex(), -1 );
+}

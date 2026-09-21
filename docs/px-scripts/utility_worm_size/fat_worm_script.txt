@@ -1,0 +1,142 @@
+override void CWorm::RenderWorm() {
+  if (imFatWorm) RenderNewWorm();
+  super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+super;
+   if (Type == M_DRAWQUEUE) {
+//      if (imFatWorm) RenderNewWorm();
+   }
+   if (Type == M_TURNEND) {
+      if (imFatWorm) WAP->ReadyDeactive = true; 
+   }
+   if (Type == M_TURNBEGIN) {
+//      local w = GetCurrentWorm();
+//      if (w != NullObj) imFatWorm = true;
+   }
+   if (Type == M_FRAME) {
+      if (imFatWorm) {
+/*         if (alphaRise) smallWormAlpha--;
+         else smallWormAlpha++;
+         if (smallWormAlpha > 254) alphaRise = true;
+         else if (smallWormAlpha < 75) alphaRise = false;
+         animColor = ARGB(smallWormAlpha/2 + 128, smallWormAlpha, 180, 255);
+         if(sizeRise) params2->Size += 0.01;
+         else params2->Size -= 0.01;
+         if (params2->Size > 1.7) sizeRise = false;
+         else if (params2->Size < 0.60) sizeRise = true;         
+*/      }
+//      if (CurWeapon->CheckName("Fat Worm")) {
+//         if (IsMoving()) CanFire = false;                                              
+//         else CanFire = true;
+//      }
+       if (WAP->ReadyDeactive) {
+       if (imFatWorm && ObjState == WS_IDLE) {
+           FatDeactivate();
+       }
+      }
+   }
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) {
+   if (Weap->CheckName("Fat Worm")) {
+      if (imFatWorm) {
+         FatDeactivate();
+/*      
+         ColMask = wormsOriginalMask;
+         MaskIndex = wormsOriginalMaskIndex;
+         PosY -= 9;
+         local hit1 = CheckMaskAt(this,smallWormMask,PosX-3,PosY-6, -1);
+         local hit2 = CheckMaskAt(this,smallWormMask,PosX+3,PosY-6, -1);
+         local hit3 = CheckMaskAt(this,smallWormMask,PosX-3,PosY-3, -1);
+         local hit4 = CheckMaskAt(this,smallWormMask,PosX+3,PosY-3, -1);
+         if (hit1 != NullObj || hit2 != NullObj || hit3 != NullObj || hit4 != NullObj) {
+            GG->land->MakeHole( 5, PosX, PosY-4);
+            GG->land->MakeHole( 4, PosX-6, PosY+4);
+            GG->land->MakeHole( 4, PosX+6, PosY+4);
+            GG->land->MakeHole( 4, PosX-6, PosY);
+            GG->land->MakeHole( 4, PosX+6, PosY);
+            GG->land->MakeHole( 4, PosX, PosY-1);
+         }
+         ShowMessage("Fat worm mode: OFF");
+         imFatWorm = false;
+         hideWorm = false;
+         SpX = 0.0;
+         SpY = 0.0;
+         animatedWorm = false;
+         SpeedDivider = SpeedDivider * 1.666666;
+         GravityFactor = GravityFactor * 0.7692;
+*/         
+      }
+      else if (imSmallWorm)
+      {
+          SmallDeactivate();
+          FatActivate();
+      }
+       else {
+          FatActivate();
+      }
+      return;
+   }
+super;
+}
+
+void CWorm::FatDeactivate()
+{
+//         if (imFatWorm && ObjState == WS_IDLE) {
+          MaskIndex = wormsOriginalMaskIndex;
+          PosY -= 9;
+          SpX = 0.0;   // we need this to avoid glitches
+          SpY = 0.2; 
+          local hit1 = CheckMaskAt(this,smallWormMask,PosX-5,PosY-7, -1);
+          local hit2 = CheckMaskAt(this,smallWormMask,PosX+5,PosY-7, -1);
+          local hit3 = CheckMaskAt(this,smallWormMask,PosX-3,PosY-3, -1);
+          local hit4 = CheckMaskAt(this,smallWormMask,PosX+3,PosY-3, -1);
+            if (hit1 != NullObj || hit2 != NullObj || hit3 != NullObj || hit4 != NullObj) {
+            GG->land->MakeHole( 5, PosX, PosY-4);
+            GG->land->MakeHole( 4, PosX-6, PosY+4);
+            GG->land->MakeHole( 4, PosX+6, PosY+4);
+            GG->land->MakeHole( 4, PosX-6, PosY);
+            GG->land->MakeHole( 4, PosX+6, PosY);
+            GG->land->MakeHole( 4, PosX, PosY-1);
+            }
+          ColMask = wormsOriginalMask;
+          ShowMessage("Fat worm mode: OFF");
+          imFatWorm = false;
+          hideWorm = false;
+          WAP->ReadyDeactive = false;
+          animatedWorm = false;
+          GravityFactor = GravityFactor * 0.8;       // 0.6
+          SpeedDivider = SpeedDivider * 1.666666;    // 1.666666
+//         }
+}
+
+void CWorm::FatActivate()
+{
+         PosY -= 30;
+         wormsOriginalMask = ColMask;
+          local hit1 = CheckMaskAt(this,smallWormMask,PosX-5,PosY-7, -1);
+          local hit2 = CheckMaskAt(this,smallWormMask,PosX+5,PosY-7, -1);
+          local hit3 = CheckMaskAt(this,smallWormMask,PosX-3,PosY-3, -1);
+          local hit4 = CheckMaskAt(this,smallWormMask,PosX+3,PosY-3, -1);
+            if (hit1 != NullObj || hit2 != NullObj || hit3 != NullObj || hit4 != NullObj) {
+            GG->land->MakeHole( 5, PosX, PosY-4);
+            GG->land->MakeHole( 4, PosX-6, PosY+4);
+            GG->land->MakeHole( 4, PosX+6, PosY+4);
+            GG->land->MakeHole( 4, PosX-6, PosY);
+            GG->land->MakeHole( 4, PosX+6, PosY);
+            GG->land->MakeHole( 4, PosX, PosY-1);
+            }  
+         WAP->Size = 1.6;
+//         animColor = ARGB(255, 90, 180, 255);    // lol
+         wormsOriginalMaskIndex = MaskIndex;
+         MaskIndex = 9; // mine = 2
+         ColMask = smallWormMask60;
+         ShowMessage("Fat worm mode: ON");            
+         imFatWorm = true;
+         hideWorm = true;
+         animatedWorm = true;
+         GravityFactor = GravityFactor * 1.25;
+         SpeedDivider = SpeedDivider * 0.6; 
+}

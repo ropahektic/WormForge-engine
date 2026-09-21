@@ -1,0 +1,187 @@
+// by PyroMan
+require utils, p_portal2;
+
+#PORTAL_WALLS
+
+$editor
+
+ $object Portal_Wall
+  $origin -15 -15
+  $image "portal_gun_ico2.png"
+  $radius 17
+  $autoname ignore_wall
+  $func SpawnWall
+  $param Size area 50 50
+ $object_end
+ 
+ $object Portal_WallControl
+  $origin -15 -15
+  $image "portal_gun_ico_.png"
+  $radius 17
+  $autoname ignore_wall_contol
+  $func SpawnWallControl
+  $param Ign_all_but_this bool false
+ $object_end
+ 
+ $object Portal
+  $origin -15 -15
+  $image "portal_gun_ico2.png"
+  $radius 17
+  $autoname portal
+  $func SpawnPortal
+  $param Type enum 2 Orange Blue
+  $param ExitOnly bool false
+  $param AngleType enum 8 Top TopRight Right BottomRight Bottom BottomLeft Left TopLeft
+  $param LinkedTo objectt Portal
+ $object_end 
+
+$end 
+
+bool ignore_active;
+bool ignore_mode;
+
+CAnimationParams* portal_loop2_Params;
+CSprite* portal_blue2;
+CSprite* portal_orange2;
+
+
+CPortal_Ignore_Wall : CObject;
+CPortal_Ignore_WallControl : CObject;
+CPortalOnMap : CObject;
+
+void p_portal_walls::InitGraphic()
+{
+        CFile *f;
+	f = GetAttachment("portal_blue.png");           portal_blue2 = LoadSprite(f, 1, 0);
+	f = GetAttachment("portal_orange.png");         portal_orange2 = LoadSprite(f, 1, 0);
+}
+
+void p_portal_walls::FirstFrame()
+{
+    portal_loop2_Params = new CAnimationParams;
+        
+        portal_loop2_Params->speed = 35;
+        portal_loop2_Params->ZPlane = 9;
+        portal_loop2_Params->scale = 0.8;
+        portal_loop2_Params->turns = 500;
+        portal_loop2_Params->loop = true;
+        portal_loop2_Params->alpha = 45;
+        portal_loop2_Params->blend_type = 3;  
+}
+
+CPortalOnMap::CPortalOnMap(CEditorObject* aobj)
+{
+   super(Root, GS);
+   x_koef = 0;
+   y_koef = 0;
+   x = int(aobj->PosX);
+   y = int(aobj->PosY);
+   if (StrCmp(aobj->GetString("Type"), "Orange")) PType = 1;
+   if (StrCmp(aobj->GetString("Type"), "Blue")) PType = 2;
+   LinkedTo = StrSave(aobj->GetString("LinkedTo"));
+   if (StrCmp(aobj->GetString("AngleType"), "Top")) {AngType = 1; x_koef = 0; y_koef = 10;}
+   if (StrCmp(aobj->GetString("AngleType"), "TopRight")) {AngType = 2; x_koef = -10; y_koef = 10;}
+   if (StrCmp(aobj->GetString("AngleType"), "Right")) {AngType = 3; x_koef = -10; y_koef = 0;}
+   if (StrCmp(aobj->GetString("AngleType"), "BottomRight")) {AngType = 4; x_koef = -10; y_koef = -10;}
+   if (StrCmp(aobj->GetString("AngleType"), "Bottom")) {AngType = 5; x_koef = 0; y_koef = -10;}
+   if (StrCmp(aobj->GetString("AngleType"), "BottomLeft")) {AngType = 6; x_koef = 10; y_koef = -10;}
+   if (StrCmp(aobj->GetString("AngleType"), "Left")) {AngType = 7; x_koef = 10; y_koef = 0;}      
+   if (StrCmp(aobj->GetString("AngleType"), "TopLeft")) {AngType = 8; x_koef = 10; y_koef = 10;}
+   ExitOnly = aobj->GetBool("ExitOnly");
+   
+   t_name = aobj->GetName();
+   port = CPortal(NullObj);
+}
+
+void CPortalOnMap::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+   {
+      if (port == NullObj) 
+      {
+          port = new CPortal(PType, x + x_koef, y + y_koef, 40, 50, 0, 0, ExitOnly, false, LinkedTo, t_name, true, AngType);
+          if (PType == 1) {
+              portal_loop2_Params->sprite = portal_orange2->Index;
+          } else {
+              portal_loop2_Params->sprite = portal_blue2->Index;
+          }
+          portal_loop2_Params->rot = 2*(-45+45*(AngType));
+          local anim = new CAnimation(Root->GetObject(25, 0), x, y, NullObj, portal_loop2_Params);
+      }
+   }
+}
+
+
+CPortal_Ignore_Wall::CPortal_Ignore_Wall(CEditorObject* aobj)
+{
+  super(Root, GS);
+  pr_x1 = aobj->PosX;
+  pr_x2 = aobj->PosX + aobj->GetInt("Size");
+  pr_y1 = aobj->PosY;
+  pr_y2 = aobj->PosY + aobj->GetInt2("Size");
+  timer = 0;
+  fps = 1;
+//  ignore_active = false;
+}
+
+CPortal_Ignore_WallControl::CPortal_Ignore_WallControl(CEditorObject* aobj)
+{
+  super(Root, GS);
+  ignore_control = aobj->GetBool( "Ign_all_but_this");  
+  fps = 15;
+  timer = fps-1; // to start first proceed as soon as possible
+}
+
+
+void CPortal_Ignore_WallControl::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{  
+//  if (Type != M_FRAME) return;
+//  timer += 1; 
+//  if (timer % fps) return;        //performance
+  
+   if (Type == M_FRAME)
+   {
+           if(ignore_control)
+           {
+             ignore_mode = true;
+             ignore_active = true;
+           } else { 
+             ignore_mode = true;
+             ignore_active = false;
+           }
+   }
+}
+
+
+/*void CPortal_Ignore_Wall::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+//  timer += 1; 
+//  if (timer % fps) return; 
+  
+              if (ignore_mode) ignore_active = true;
+              else ignore_active = false;
+} */
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)       
+{
+    super;                              // declare variables inside CMissile to read them in portal gun
+    ignore_wall_mode = ignore_mode;
+    open_portal_there = ignore_active;
+}
+
+
+void SpawnWall(CEditorObject* obj)
+{
+  wall1 = new CPortal_Ignore_Wall(obj);
+}
+
+void SpawnWallControl(CEditorObject* obj)
+{
+  wall2 = new CPortal_Ignore_WallControl(obj);
+}            
+
+void SpawnPortal(CEditorObject* obj)
+{
+  portal1 = new CPortalOnMap(obj);
+}                                                             

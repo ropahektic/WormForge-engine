@@ -1,0 +1,71 @@
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)               //workaround for fp
+{
+super;
+   if(Type == M_GUNEXP)
+   {
+     if(MData->params[5] == 30){DamageCooldown = 60;}
+   }
+
+
+   if(Type == M_FRAME)
+   {
+   if(DamageCooldown > 0){DamageCooldown = DamageCooldown - 1;}
+   if(FirePunchTimer > 0){FirePunchTimer = FirePunchTimer - 1;}
+           if(FirePunchTimer != 0)
+           {
+                    for(local t = 1; t<7; t++)
+                    {
+                       for(local i = 1; i<9; i ++)
+                       {
+                       local obj1 = CGObject(Root->GetObject(2, 16 * t + i));
+                       local wrm1 = CWorm(Root->GetObject(2, 16 * t + i));
+                          if (obj1 != NullObj)
+                          {
+                                   if(wrm1 != CWorm(Root->GetObject(2, 16 * WormTeam + WormNumber)))
+                                   {
+                                        if(TurnSide == 1) //FirePunching worm looks right
+                                        {
+                                             if(obj1->PosX >= PosX - 4 && obj1->PosX <= PosX + 20)    //x check
+                                             {
+                                                           if(obj1->PosY <= PosY + 12 && obj1->PosY >= PosY - 25)  //y check
+                                                           {
+                                                                     Punch(obj1, wrm1, 8, 4, -9, 30);
+                                                           }                      
+                                             }
+                                        }
+                                        
+                                        if(TurnSide == -1) //FirePunching worm looks left
+                                        {
+                                             if(obj1->PosX <= PosX + 4 && obj1->PosX >= PosX - 20)    //x check
+                                             {
+                                                           if(obj1->PosY <= PosY + 12 && obj1->PosY >= PosY - 25)  //y check
+                                                           {
+                                                                     Punch(obj1, wrm1, 8, 4, -9, 30);
+                                                           }                      
+                                             }
+                                        }
+                                   }
+                          }
+                       }   
+                    }                                 
+           }
+   }
+}
+
+void CWorm::Punch(CGObject* obj1, CWorm* wrm1, int type, int spx, int spy, int damage)
+{
+  if(wrm1->DamageCooldown == 0)
+  {
+     wrm1->DamageCooldown = 60;
+     CMessageData msgpunch;
+     msgpunch.params[0] = type;
+     msgpunch.fparams[1] = obj1->PosX;
+     msgpunch.fparams[2] = obj1->PosY;
+     msgpunch.fparams[3] = spx*TurnSide;
+     msgpunch.fparams[4] = spy;
+     msgpunch.params[5] = damage;
+     msgpunch.params[6] = WormTeam;
+     obj1->Message(NullObj, M_GUNEXP, 1032, &msgpunch);
+  }
+}

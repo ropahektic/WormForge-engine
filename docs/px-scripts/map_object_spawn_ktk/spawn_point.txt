@@ -1,0 +1,106 @@
+//-----------------------------------------------------------------------------
+require utils_danylo;
+//-----------------------------------------------------------------------------
+$editor
+  $object SpawnPoint
+    $origin -12 -23
+    $image "spawn_point.png"
+    $autoname SpawnPoint
+    $func InvokeSpawn
+    $radius 16
+    $param Team enum 7 Any Red Blue Green Yellow Purple Cyan;
+    $param FromWorm enum 8 1 2 3 4 5 6 7 8
+    $param ToWorm enum 8 1 2 3 4 5 6 7 8 
+    $param WormOffsets string "1"
+    $param PlacementMethod enum 2 Vertical Horizontal
+    $param TurnSide enum 3 Random Left Right
+    $param Looping enum 2 WormsFirst TeamsFirst 
+  $object_end    
+$end 
+//-----------------------------------------------------------------------------
+void InvokeSpawn(CEditorObject* EditorObject)
+{  
+  spawnX = EditorObject->PosX;
+  spawnY = EditorObject->PosY;
+  
+  // Team colour
+  teamColour = -1;
+  teamColourStr = EditorObject->GetString("Team");
+  if (StrCmp(teamColourStr, "Red")) teamColour = 0; else
+  if (StrCmp(teamColourStr, "Blue")) teamColour = 1; else
+  if (StrCmp(teamColourStr, "Green")) teamColour = 2; else
+  if (StrCmp(teamColourStr, "Yellow")) teamColour = 3; else
+  if (StrCmp(teamColourStr, "Purple")) teamColour = 4; else
+  if (StrCmp(teamColourStr, "Cyan")) teamColour = 5;
+  
+  // From/To worm 
+  fromWorm = atoi(EditorObject->GetString("FromWorm"), 0);
+  toWorm = atoi(EditorObject->GetString("ToWorm"), 0);
+  
+  // Worm offsets
+  wormOffsetsStr = EditorObject->GetString("WormOffsets");
+  wormOffsetsQueue = strToIntQueue(wormOffsetsStr);
+  currWormOffset;
+
+  // Turn side
+  turnSide = 0;
+  turnSideStr = EditorObject->GetString("TurnSide"); 
+  if (StrCmp(turnSideStr, "Left")) turnSide = -1; else
+  if (StrCmp(turnSideStr, "Right")) turnSide = 1;
+
+  // Placement method
+  placementMethod = EditorObject->GetString("PlacementMethod");
+  isPlacementHorizontal = StrCmp(placementMethod, "Horizontal");
+  isPlacementVertical = StrCmp(placementMethod, "Vertical");
+   
+  // Looping
+  looping = EditorObject->GetString("Looping");
+  
+  if (!StrCmp(looping, "TeamsFirst")) { 
+  for (local wormIndex = fromWorm; wormIndex <= toWorm; wormIndex++) {
+    for (local teamIndex = 6; teamIndex > 0; teamIndex--) {
+      if (teamColour == -1 || GetTeamColor(teamIndex) == teamColour) {
+        local Worm = CWorm(Root->GetObject(2, 16 * teamIndex + wormIndex));
+        if (Worm != NullObj) {
+
+          // Set offset and spawn position
+          if (wormOffsetsQueue->Head != NullObj) {
+            currWormOffset = wormOffsetsQueue->Pop();
+          }                  
+          if (isPlacementHorizontal) spawnX += currWormOffset; 
+          else if (isPlacementVertical) spawnY += currWormOffset;              
+          Worm->PosX = spawnX;
+          Worm->PosY = spawnY;          
+          
+          if (turnSide != 0) Worm->TurnSide = turnSide; 
+                   
+        } 
+      }
+    }
+  }
+  } else
+  if (!StrCmp(looping, "WormsFirst")) { 
+  for (local teamIndex = 6; teamIndex > 0; teamIndex--) {
+    for (local wormIndex = fromWorm; wormIndex <= toWorm; wormIndex++) {
+      if (teamColour == -1 || GetTeamColor(teamIndex) == teamColour) {
+        local Worm = CWorm(Root->GetObject(2, 16 * teamIndex + wormIndex));
+        if (Worm != NullObj) {
+
+          // Set offset and spawn position
+          if (wormOffsetsQueue->Head != NullObj) {
+            currWormOffset = wormOffsetsQueue->Pop();
+          }                  
+          if (isPlacementHorizontal) spawnX += currWormOffset; 
+          else if (isPlacementVertical) spawnY += currWormOffset;              
+          Worm->PosX = spawnX;
+          Worm->PosY = spawnY;          
+          
+          if (turnSide != 0) Worm->TurnSide = turnSide; 
+                   
+        } 
+      }
+    }
+  }
+  } 
+  
+} 

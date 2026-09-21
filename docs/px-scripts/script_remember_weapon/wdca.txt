@@ -1,0 +1,5 @@
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    Weap->Remember = true;
+    super;
+}

@@ -1,0 +1,786 @@
+///////////////////////////////////////////////////////////// Require libraries:
+
+require utils, fow_spawn, weapon_sentry_gun, fow_magicmole, fow_mole_fort_light;
+
+///////////////////////////////////////////////////////////// List of used items:
+
+CInterfaceHandler : CObject;
+CInterfaceHandler * centerLineGUI;
+
+CSprite* SprKCrate;
+CSprite* SprKCrateOL;
+CSprite* SprMayhem;
+CBitmap32* GUIkcrate;
+
+CSprite* lwlk;
+CSprite* lwlkb;
+CSprite* lslp;
+
+CObjList * KCrateList;
+
+CWorm* NearestEnemyWorm;
+
+bool SpawnKCrateOverride;
+
+int allTeamColors[6];
+int cOffX;
+int cOffY;
+int Island2OffX;
+
+int cSizeX;
+int cSizeY;
+int fillprob;
+int r1_cutoff;
+int r2_cutoff;
+
+int CaveMap[2000]; // Enough for 100x100 int
+int CaveMap2[2000]; // needs another..?
+int BigAssRandomArray[2000];
+
+int StartTurnCounter;
+int fireWormSelect;
+
+int RefreshWeapon;
+
+int caveSupported;
+
+int mapsizeX;
+int mapsizeY;
+
+int hremover;
+bool dohole;
+
+CCrateHandler : CObject;
+
+bool CrCustomSpawnActive;
+int MapEmptySpaceL[500];  //20*25
+int MapEmptySpaceR[500];
+bool CrMapGenerated;
+//Todo editor item: crate spawn point
+//Todo editor item: ignore this floor/area (for crate line trace)
+
+CCrate* NewlyCrate;
+
+int SMlastdistL;
+int SMlastdistR;
+int ax;
+int ay;
+
+int CrSearchGridSize;
+int CurrWaterLvl;
+
+int NewCrX;
+int NewCrY;
+bool CrateSpawnSuccess;
+
+int SpawnJetCrate;
+
+int placedT;
+
+CBitmap32* CicleMaskMedium;
+CBitmap32* CicleMaskMediumOL;
+
+CObjList * WormsOnClouds;
+
+CLemming : CGObject;
+
+int DropNever[30];
+int DropVeryRarely[30];
+int DropLess[30];
+int DropAverage[30];
+int DropMore[10];
+int EndGameBonus[10];
+
+bool SuppressAllMsg; //so we can hide crate pick up text, and use our own.
+int WepAmountL[80]; //keep track of all weapons
+int WepAmountR[80]; //Reset all weapons each game start to prevent bugs.. =( How to read weapon amount??
+
+CLemming* BigMoleArr[30]; //List of all pet moles
+int MoleArrAt;
+bool JetCrateAlive;
+
+string lastSupressedMsg;
+int lastSupressedMsgColor;
+int lastSupressedMsgTeam;
+CCrate* tmpCratep;
+CWeapon* tmpWeapy;
+
+///////////////////////////////////////////////////////////// Special bools and ints:
+
+int NextKcrateX;
+int WantToSpawnKCrate(int RNGA,int RNGB, int SX, int SY, int startturns)
+{
+    KCrateList->Compact();
+    if(KCrateList->Count >= 2){return 3;} //No more 2 at the time
+
+    local bonus = int(startturns);
+
+    if(bonus > 30 || bonus < 0){bonus = 30;}
+    if((RNGA % 100) < (5 + bonus))
+		{
+        local sp = 20;
+        local xstep = SX / sp;
+        NextKcrateX = xstep * ((RNGB % sp) + 1);
+
+        if(SX == 2200 && SY == 1504)
+			{
+            if(NextKcrateX < 105){NextKcrateX = 105; return 1;}
+            if(NextKcrateX > 2098){NextKcrateX = 2098; return 1;}
+            if(NextKcrateX > 1010 && NextKcrateX < 1195)
+				{
+                if(RNGB % 2 == 0){NextKcrateX = 555;}
+                else {NextKcrateX = 1690;}
+                }
+            }
+
+		return 1;
+        }
+
+	return 0;
+}
+
+//Returns the number of cells in a ring around (x,y) that are alive.
+
+int countAliveNeighbours(int inX, int inY)
+{
+    local count = 0;
+    local i = 0;
+    local j = 0;
+    local neighbour_x = 0;
+    local neighbour_y = 0;
+
+    local widthRow = cSizeX;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+
+    for(i = -1; i < 2; i++)
+		{
+        for(j = -1; j < 2; j++)
+			{
+            neighbour_x = inX + i;
+            neighbour_y = inY + j;
+            //If we're looking at the middle point
+            if(i == 0 && j == 0){} //Do nothing, we don't want to add ourselves in!
+
+            //In case the index we're looking at it off the edge of the map
+            //Otherwise, a normal check of the neighbour
+
+            else if( CaveMap[ neighbour_x + ( neighbour_y * widthRow)] == 1){count = count + 1;}
+        	}
+    	}
+    return count;
+}
+
+int CaveRandpick(int RNGa)
+{
+	if((RNGa % 100) < fillprob) return 1; //TILE_WALL;
+
+ 	else return 0;//TILE_FLOOR;
+}
+
+bool GenerateCrSpawnMap(int side, int mSX, int mSY){
+
+    if(NewlyCrate == NullObj){return false;}
+
+    local CrSpawnUnderY = 305;
+    local CrSpawnOverY = 1088; //not used?
+
+    CrSearchGridSize = 50;
+    local extraX = 0;
+    local side2X = 0;
+    if(mSX == 2200 && mSY == 1504)
+		{
+        CrSpawnUnderY = 305;
+        CrSpawnOverY = 1088;
+        ax = int(880 / CrSearchGridSize);
+        ay = int(790 / CrSearchGridSize);
+        side2X = 1325;
+    	}
+    if(mSX == 2200 && mSY == 2000)
+		{
+        CrSpawnUnderY = 713;
+        CrSpawnOverY = 1500;
+        ax = int(730 / CrSearchGridSize);
+        ay = int(790 / CrSearchGridSize);
+        extraX = 80;
+        side2X = 1377;
+    	}
+
+    local startx = 0;
+    local starty = CrSpawnUnderY;
+
+    local dOut = 0;
+    local DFbmp = DigFoam;
+
+    SMlastdistL = 0;
+    SMlastdistR = 0;
+    for(iy = 0; iy < ay; iy++ )            	//int
+		{
+        for(ix = 0; ix < ax; ix++ )         //int
+			{
+            local cy = (iy * CrSearchGridSize) + starty;
+            local cx = 0;
+            if(side == 0){cx = (ix * CrSearchGridSize) + extraX;}
+			else {cx = (ix * CrSearchGridSize) + side2X ;}
+
+            local Obje = Env->CheckCollision( NewlyCrate, cx, cy );
+            if(Obje != NullObj)
+				{
+                if(Obje->ClType == OC_Landscape)
+					{
+                    if(side == 0){MapEmptySpaceL[(iy * ax) + ix] = 0;} //not enough room
+					else {MapEmptySpaceR[(iy * ax) + ix] = 0;}
+                    continue;
+                    }
+				else if(Obje->ClType == OC_Crate)
+					{
+                    if(side == 0){MapEmptySpaceL[(iy * ax) + ix] = 0;} //spawning on another crate
+                    else {MapEmptySpaceR[(iy * ax) + ix] = 0;}
+                    continue;
+                    }
+                }
+
+            local hitx1 = 0;
+            local hity1 = 0;
+            local hit1 = TraceLine(NewlyCrate, cx, cy, cx, CurrWaterLvl + 10, -1, &hitx1, &hity1);
+
+            if (hit1 != NullObj)
+                {
+                local disty = 0;
+                disty = abs(cy - hity1);
+                if(disty > 100){disty = 100;}
+                if(disty == 0){disty = 1;}
+
+            	if(side == 0)
+					{
+                    dOut = SMlastdistL + disty;
+                    SMlastdistL = dOut;
+                    MapEmptySpaceL[(iy * ax) + ix] = dOut;
+                    }
+				else
+					{
+                    dOut = SMlastdistR + disty;
+                    SMlastdistR = dOut;
+                    MapEmptySpaceR[(iy * ax) + ix] = dOut;
+                    }
+                continue;
+                }
+
+			else
+				{
+                if(side == 0){MapEmptySpaceL[(iy * ax) + ix] = 0;} //water
+                else {MapEmptySpaceR[(iy * ax) + ix] = 0;}
+                continue;
+                }
+        }
+    }
+
+    CrMapGenerated = true;
+    return true;
+}
+
+bool WormNotThere(int pX, int pY, bool moreminus)
+	{
+    CWorm * TWrm;
+    if(WormsOnClouds == NullObj){return true;}
+    for(int n = 0; n<WormsOnClouds->Count; n++)
+        {
+        TWrm = WormsOnClouds->Objs[n];
+        local morem = 10;
+        if(moreminus){morem = 16;}
+        if( (abs(TWrm->PosX - pX - morem) < 50) && (abs(TWrm->PosY - pY - morem) < 50) )
+			{
+            return false;
+            }
+        }
+
+	return true;
+}
+
+bool isAnyWormOnClouds(int INmapSY,int INmapSX)
+	{
+    if(INmapSY == 1504 && INmapSX == 2200){return isAnyWormOnCloudsPt2(26,27,888,448);}
+
+    if(INmapSY == 2000 && INmapSX == 2200){return isAnyWormOnCloudsPt2(119,17,80,5);}
+}
+
+bool isAnyWormOnCloudsPt2(int INsizex, int INsizey, int xoff, int yoff)
+	{
+    local size_x = INsizex;
+    local size_y = INsizey;
+
+    for (int j = 6; j >= 1; j-=1)
+		{
+        for (int i = 8; i >= 1; i-=1)
+        	{
+            local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+            if (Worm)
+        		{ //Standing on clouds?
+                if(Worm->PosX > (xoff - 20) && Worm->PosX < (xoff + (size_x * 17)) &&
+				   Worm->PosY > (yoff - 120) && Worm->PosY < (yoff + (size_y * 17)) )
+				   	{
+                    return true;
+                    }
+                }
+            }
+        }
+
+    return false;
+}
+
+int TeamLowestHealth;
+
+int TeamHealthDiff()
+{
+    teamLhp = 0;
+    teamRhp = 0;
+    local whp = 0;
+	for (int j = 6; j >= 1; j-=1)
+    	{
+        for (int i = 8; i >= 1; i-=1)
+            {
+            local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+            if (Worm)
+                {
+                if(Worm->TeamSide == 1)
+					{
+                    whp = GS->Info.GetWormHealth(Worm->WormTeam, Worm->WormNumber);
+                    if(whp < 0){whp = 0;}
+                    teamLhp += whp;
+                    }
+				else
+					{
+                    whp = GS->Info.GetWormHealth(Worm->WormTeam, Worm->WormNumber);
+                    if(whp < 0){whp = 0;}
+                    teamRhp += whp;
+                    }
+                }
+            }
+        }
+
+    if(teamLhp < teamRhp){TeamLowestHealth = 1;}
+    else{TeamLowestHealth = 2;}
+
+    return abs(teamLhp - teamRhp);
+}
+
+int GenerateWeaponID(int RNGn, int RNGnA, int RNGnB)
+{
+	local NTurn = StartTurnCounter;
+	if(NTurn > 100){NTurn = 100;}
+	if(RNGnB <= ( NTurn * 0.5 ) ) {return EndGameBonus[RNGnA % 3];}
+
+	if(RNGn <= 7) {return DropVeryRarely[(RNGnA % 11)];}
+	else if(RNGn <= 18) {return DropLess[RNGnA % 5];}
+	else if(RNGn <= 43) {return DropMore[RNGnA % 4];}
+	else {return DropAverage[RNGnA % 25];}
+}
+
+bool CLemming::WaitSome(int amount, int stateat)
+{
+    if(stateat != StateM){WaitTimer = 0; WaitInEffect = false; return true;}
+    WaitTimer++;
+
+    if(WaitTimer > amount)
+		{
+        WaitTimer = 0; WaitInEffect = false;
+        return true;
+    	}
+	else
+		{
+        WaitInEffect = true;
+        return false;
+    	}
+}
+
+bool CLemming::CheckCollision()
+{
+    local Cdir = 0;
+    if(WalkingDir == 0){ Cdir = -1; }else{ Cdir = 1; }
+    local Obje = Env->CheckCollision( this, PosX+Cdir, PosY-1 );
+    if(Obje != NullObj)
+		{
+        if(Obje->ClType == OC_Landscape)
+			{
+            StateM = 2; //Collision
+            return false;
+        	}
+    	}
+  	return true;
+}
+
+int CLemming::CheckCollisionGrow(){
+
+    local Obje = Env->CheckCollision( this, PosX, PosY-2 );
+    if(Obje != NullObj){
+            if(Obje->ClType == OC_Landscape){
+            return 0;
+        }
+    }
+    local Obje = Env->CheckCollision( this, PosX, PosY+2 );
+    if(Obje != NullObj){
+            if(Obje->ClType == OC_Landscape){
+            return 1;
+        }
+    }
+    local Obje = Env->CheckCollision( this, PosX-2, PosY );
+    if(Obje != NullObj){
+            if(Obje->ClType == OC_Landscape){
+            return 2;
+        }
+    }
+    local Obje = Env->CheckCollision( this, PosX+2, PosY );
+    if(Obje != NullObj){
+            if(Obje->ClType == OC_Landscape){
+            return 3;
+        }
+    }
+
+  return 4;
+}
+
+///////////////////////////////////////////////////////////// First frame runs:
+
+void mf_general::FirstFrame()
+{
+// Remove bottom pixels on map (prevents holes generation)
+
+local nmasks = int(GS->LevelSX / 19) + 1;
+for(int m = 0; m < nmasks; m++) {GG->land->ApplyMask (4,m * 19,GS->LevelSY + 2);}
+	
+// Line interface
+
+	// Apparently teamnumber is always colornumber+1?
+    local numOfTeams = 0;
+    local numOfTeamColors = 0;
+    local n = 1;
+    for(n=1; n<7; n++) //I would like to check each team color. It says RRBBGG teams to be "1, 3, 6" and RGBYPC to be "1,2,3,4,5,6".
+		{
+        if(Root->NextColor[n] > 0){numOfTeamColors++;}
+        }
+
+	if(numOfTeamColors != 2)
+		{
+        for(n=0; n<12;n++){GG->WriteToChat(8, "ERROR: THIS IS A 2 TEAM MAP ONLY.", false);}
+        }
+	else
+		{
+        local welcomegui = new CInterfaceHandler(Root);
+        welcomegui->IsWelcome = true;
+        welcomegui->KCx = int(GS->LevelSX / 2);
+        welcomegui->KCy = int(GS->LevelSY / 2);
+
+        local centergui = new CInterfaceHandler(Root);
+        centergui->IsCenter = true;
+        centergui->KCx = int(GS->LevelSX / 2);
+        centergui->KCy = int(GS->LevelSY / 2);
+        centergui->MapHeight = GS->LevelSY;
+        centergui->SetDrawColor = 1; //blue
+        centerLineGUI = centergui;
+        }
+    
+// Cave generation
+
+	local mapSX = GS->LevelSX;
+    local mapSY = GS->LevelSY;
+
+    CurrWaterLvl = Env->Water;
+    local CrHand = new CCrateHandler(Root);
+
+    fireWormSelect = 0;
+
+    for(int r = 0; r < 2000; r++){BigAssRandomArray[r] = GS->GetRandom();}
+
+    caveSupported = 0;
+
+    local AreaStartX = 0;
+    local AreaStartY = 0;
+    local AreaEndX = 0;
+    local AreaEndY = 0;
+
+    CrCustomSpawnActive = false;
+
+    if(mapSY == 1504 && mapSX == 2200)
+		{
+        CrCustomSpawnActive = true;
+
+        caveSupported = 2;
+        AreaStartX = 141; AreaEndX = 868;
+        AreaStartY = 600; AreaEndY = 856;
+        Island2OffX = 1224;
+        }
+
+    if(mapSY == 2000 && mapSX == 2200)
+		{
+        CrCustomSpawnActive = true;
+
+        caveSupported = 2;
+        AreaStartX = 200; AreaEndX = 715;
+        AreaStartY = 1010; AreaEndY = 1200;
+        Island2OffX = 1296;
+        }
+
+    if(caveSupported > 0)
+		{
+        cSizeX = int((AreaEndX - AreaStartX) / 19); //19x19 == size of hole
+        cSizeY = int((AreaEndY - AreaStartY) / 19);
+
+        cOffX = AreaStartX;
+        cOffY = AreaStartY;
+
+		//Magic values to get nice looking caverns
+		fillprob = 66; //40
+        r1_cutoff = 7; //5
+        r2_cutoff = 1; //2
+        local generations = 3; //3
+
+        //Island 1
+        CaveInitmap(GS->GetRandom());
+        local ii = 0;
+        for(ii=0; ii<generations; ii++){CaveGeneration();}
+
+        CavernPrintmap(0, 19, 14);
+        placeTreasure(6,1);
+
+        //Island 2
+        cOffX = cOffX + Island2OffX;
+        CaveInitmap(GS->GetRandom());
+        local ii = 0;
+        for(ii=0; ii<generations; ii++){CaveGeneration();}
+
+        CavernPrintmap(0, 19, 14);
+        placeTreasure(6,2);
+
+		if(caveSupported == 2)    //cloud "Bridge"
+			{
+            fillprob = 35; //40
+            r1_cutoff = 6; //5
+            r2_cutoff = 3; //2
+            generations = 1; //3
+
+            cSizeX = 24; //442 / 19; //19x19 == size of hole
+            cSizeY = 20; //380 / 19;
+
+            cOffX = 868;
+            cOffY = 200;
+            }
+        }
+        
+// Lemmings related
+
+	JetCrateAlive = false;
+
+    local foundworm = false;
+    local firstwormTeam = 0;
+    local secondwormTeam = 0;
+
+	//Find first worms in team
+    for (j = 6; j >= 1; j-=1)
+        {
+        if(foundworm == true){break;}
+        for (i = 8; i >= 1; i-=1)
+            {
+			local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+            if (Worm)
+                {
+                if(Worm->TeamSide == 1)
+					{
+                    foundworm = true;
+                    firstwormTeam = Worm->WormTeam;
+                    break;
+                    }
+                }
+            }
+        }
+
+    foundworm = false;
+
+    for (j = 6; j >= 1; j-=1)
+        {
+        if(foundworm == true){break;}
+        for (i = 8; i >= 1; i-=1)
+            {
+			local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+            if (Worm)
+                {
+                if(Worm->TeamSide == 2)
+					{
+                    foundworm = true;
+                    secondwormTeam = Worm->WormTeam;
+                    break;
+                    }
+                }
+            }
+        }
+
+    // Map without air strike weapons and extra girder pack
+    // Replace air strike weapons if its the new map with clouds
+    
+    local mapSX = GS->LevelSX;
+    local mapSY = GS->LevelSY;
+
+    if(mapSX == 2200 && mapSY == 2000)
+		{
+        WepAmountL[30] = 0;
+        WepAmountR[30] = 0;
+        WepAmountL[36] = 1;
+        WepAmountR[36] = 1;
+        
+        DropAverage[12] = 1; //Napalm strike now Bazooka
+        DropAverage[13] = 17; //mine strike now magnet
+        DropLess[2] = 37; //MB Bomb now rope
+        DropMore[4] = 37; //jet>rope
+        }
+
+    //Set all teams weapons
+    for(n = 0; n < 80; n++)
+		{
+        local wep = GS->GetWeaponByIndex(1, n);
+        if(wep != NullObj && n != 3 && n != 18 && n != 26 && n != 29 && n != 32 && n != 33 && n != 34 && n != 38 && n != 39 && n != 57 && n != 58)
+			{
+            GS->Info.SetWeaponEx(1,n,wep->GetPageIndex(), WepAmountL[n]);
+            GS->Info.SetWeaponEx(2,n,wep->GetPageIndex(), WepAmountR[n]);
+            //bug still applies but since both teams have same weapons at start it does not matter.
+            }
+        }
+}
+
+///////////////////////////////////////////////////////////// Initial runs:
+
+void mf_general::InitGraphic()
+{
+    CFile *f;
+    f  = GetAttachment("kcrate.png"); SprKCrate = LoadSprite(f, 7, 0);
+    f  = GetAttachment("kcrateol.png"); SprKCrateOL = LoadSprite(f, 7, 0);
+
+    f  = GetAttachment("lwalk1.png"); lwlk = LoadSprite(f, 8, 0);
+    f  = GetAttachment("lwalk1b.png"); lwlkb = LoadSprite(f, 8, 0);
+    f  = GetAttachment("zzz.png"); lslp = LoadSprite(f, 5, 0);
+
+    f  = GetAttachment("mayhem.png"); SprMayhem = LoadSprite(f, 1, 0);
+    
+    f  = GetAttachment("mlandair.png"); CicleMaskMedium  = LoadImage(f);
+    f  = GetAttachment("MLandAirOutLine.png"); CicleMaskMediumOL  = LoadImage(f);
+    
+    GUIkcrate = LoadImage( GetAttachment("cntk.png") );
+}
+
+void mf_general::Init()
+{
+    KCrateList = new CObjList();
+    KCrateList->Compact();
+    
+    RefreshWeapon = -1;
+    CrCustomSpawnActive = false;
+    CrMapGenerated = false;
+    SpawnJetCrate = 1;
+    mapsizeX = 0;
+    mapsizeY = 0;
+    
+    MoleArrAt = 0;
+    //BigFireList = new CObjList();
+    SuppressAllMsg = true;
+
+    for(int i = 0; i<80; i++)
+		{
+        WepAmountL[i] = 0;
+        WepAmountR[i] = 0;
+    	}
+
+    WepAmountL[13] = 1;
+    WepAmountL[24] = 2;
+    WepAmountL[30] = 2;
+    WepAmountL[31] = 2;
+    WepAmountL[63] = 3;
+    WepAmountL[17] = 1;
+    WepAmountL[6] = 4;
+
+    WepAmountR[13] = 1;
+    WepAmountR[24] = 2;
+    WepAmountR[30] = 2;
+    WepAmountR[31] = 2;
+    WepAmountR[63] = 3;
+    WepAmountR[17] = 1;
+    WepAmountR[6] = 4;
+
+    //WepAmountR = WepAmountL; ok.. not working?
+
+    DropNever[0] = 3;
+    DropNever[1] = 12;
+    DropNever[2] = 17;
+    DropNever[3] = 18;
+    DropNever[4] = 19;
+    DropNever[5] = 20;
+    DropNever[6] = 29;
+    DropNever[7] = 32;
+    DropNever[8] = 33;
+    DropNever[9] = 34;
+    DropNever[10] = 38;
+    DropNever[11] = 39;
+    DropNever[12] = 40;
+    DropNever[13] = 42;
+    DropNever[14] = 50;
+    DropNever[15] = 51;
+    DropNever[16] = 54;
+    DropNever[17] = 56;
+    DropNever[18] = 57;
+    DropNever[19] = 58;
+    DropNever[20] = 59;
+    DropNever[21] = 59;
+    DropNever[22] = 66;
+    DropNever[23] = 64;
+    DropNever[24] = 26;
+
+    DropVeryRarely[0] = 8; //0.7%
+    DropVeryRarely[1] = 9;
+    DropVeryRarely[2] = 16;
+    DropVeryRarely[3] = 41;
+    DropVeryRarely[4] = 36;
+    DropVeryRarely[5] = 45;
+    DropVeryRarely[6] = 49;
+    DropVeryRarely[7] = 61;
+    DropVeryRarely[8] = 62;
+    DropVeryRarely[9] = 52;
+    DropVeryRarely[10] = 65;
+
+    DropLess[0] = 7; //1.5%
+    DropLess[1] = 43;
+    DropLess[2] = 46;
+    DropLess[3] = 37;
+    DropLess[4] = 37;
+
+    DropAverage[0] = 4; //2.3%
+    DropAverage[1] = 5;
+    DropAverage[2] = 6;
+    DropAverage[3] = 11;
+    DropAverage[4] = 13;
+    DropAverage[5] = 14;
+    DropAverage[6] = 15;
+    DropAverage[7] = 21;
+    DropAverage[8] = 23;
+    DropAverage[9] = 24;
+    DropAverage[10] = 25;
+    DropAverage[11] = 27;
+    DropAverage[12] = 28;
+    DropAverage[13] = 30;
+    DropAverage[14] = 31;
+    DropAverage[15] = 35;
+    DropAverage[16] = 44;
+    DropAverage[17] = 47;
+    DropAverage[18] = 48;
+    DropAverage[19] = 53;
+    DropAverage[20] = 55;
+    DropAverage[21] = 60;
+    DropAverage[22] = 6;
+    DropAverage[23] = 6;
+    DropAverage[24] = 17;
+
+    DropMore[0] = 2; //5%
+    DropMore[1] = 22;
+    DropMore[2] = 42;
+    DropMore[3] = 63;
+
+    EndGameBonus[0] = 7; //cluster
+    EndGameBonus[1] = 37; //ninja rope
+	EndGameBonus[2] = 43; //holy
+}

@@ -1,0 +1,44 @@
+bool CWorm::checkZombies(CWorm* curworm)
+{  
+  for (int i = 0; i < Env->Objs.Count; i++) 
+        {
+          CGObject* obj = CGObject(Env->Objs.Objs[i]);
+          
+          if (obj==NullObj) continue;
+          if ((obj is CWorm) == false) continue;
+          
+          CWorm * zworm = CWorm(obj);   
+          
+          if (zworm==NullObj) continue;
+          if (zworm->WormTeam != curworm->WormTeam ||
+              zworm == curworm ||
+              zworm->Zombie == false ||
+              zworm->CanBeZombie == true)
+              continue;
+           
+          return true;
+        }
+   return false;     
+}  
+
+int CWorm::zombieQuantityInTeam(CWorm* curworm)
+{ 
+  int quantity = 0; 
+  for (int i = 0; i < Env->Objs.Count; i++) 
+        {
+          CGObject* obj = CGObject(Env->Objs.Objs[i]);
+          
+          if (obj==NullObj) continue;
+          if ((obj is CWorm) == false) continue;
+          
+          CWorm * zworm = CWorm(obj);   
+          
+          if (zworm==NullObj) continue;
+          if (zworm->WormTeam != curworm->WormTeam ||
+              zworm == curworm ||
+              zworm->Zombie == false)
+              continue;
+              quantity++;
+        } 
+   return quantity;     
+}

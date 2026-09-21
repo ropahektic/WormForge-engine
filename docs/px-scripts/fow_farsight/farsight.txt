@@ -1,0 +1,80 @@
+require utils, fow_darkness, fow_torch;
+
+PxFarSight : CObject;
+
+#WEAPON_FARSIGHT
+
+CSoundFile* RevealMapSound;
+
+void farsight::FirstFrame(){}
+
+void farsight::InitGraphic()
+{
+CFile *f;
+f = GetAttachment("revealmap.wav");	RevealMapSound = new CSoundFile(f);
+}
+
+PxFarSight::PxFarSight(CObject* Parent, CShootDesc* Desc)
+{
+    super(Parent, GS);
+    ClType = OC_AirStrike;
+
+    // Internal states
+    Dead = false; //True means weapon is done?
+    IsFirstFrame = true;
+    OwnerTeam = Desc->Team;
+    PostLightningTime = 60;
+    PlaceX = Desc->AddX;
+    PlaceY = Desc->AddY;
+}
+
+void PxFarSight::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+		{
+        if(Dead)
+			{
+			Free(true);
+			return;
+			}
+
+		if(IsFirstFrame)
+			{
+			IsFirstFrame = false;
+
+            local lt = new CTorch(Root->GetObject(25, 0),PlaceX,PlaceY);
+            lt->owningTeam = OwnerTeam;
+            lt->IsMaterial = false;
+            lt->IsFarSight = true;
+			}
+
+		PostLightningTime = PostLightningTime - 1;
+		if(PostLightningTime <= 0){Dead = true;}
+		}
+
+    if(Type == M_DRAWQUEUE)
+	{return;}
+
+super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Far Sight"))
+		{
+        local w = GetCurrentWorm();
+        if(w != NullObj)
+        	{
+        	fs = new PxFarSight(GetObject(25, 0), Desc);
+            
+        	vol = CalculateSoundVolume(fs->PlaceX,fs->PlaceY);
+     		pan = CalculateSoundPan(fs->PlaceX,fs->PlaceY);
+        	RevealMapSound->Play(vol,pan,false);
+        	}
+		}
+	else
+		{
+		super;
+		}
+}

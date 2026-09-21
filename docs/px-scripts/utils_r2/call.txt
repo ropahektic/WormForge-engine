@@ -1,0 +1,19 @@
+require utils, utils_steps;
+
+/*override void CObject::vo0f(int unk)
+{
+    super;
+    GG->WriteToChat( GG->curFont, StrCon3( "CObject::vo0f(int unk) > (", itoa(unk), ")" ), false);
+}
+
+override void CObject::Free(bool FreeMem)
+{
+    super;
+    GG->WriteToChat( GG->curFont, StrCon3( "CObject::Free(bool FreeMem) > (", btoa(FreeMem), ")" ), false);
+}
+
+override void CObject::DoExplosion(fixed x,fixed y,int PushPower,int Damage,int unkB,int Team)
+{
+    super;
+    GG->WriteToChat( GG->curFont, StrCon( StrCon6("void CObject::DoExplosion(fixed x,fixed y,int PushPower,int Damage,int unkB,int Team) > (", itoa(x), " ", itoa(y), " ", itoa(PushPower)),StrCon7( " ", itoa(Damage), " ",itoa(unkB), " ", itoa(Team),  ")") ), false);
+}          */

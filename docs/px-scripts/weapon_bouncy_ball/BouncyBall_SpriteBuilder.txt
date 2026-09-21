@@ -1,0 +1,69 @@
+                  // paste all this code into your script. Replace names with your weap names, adjust parameters (u can use my templates from forum) and you ready to go.
+require p_sprite_builder;
+
+///////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////  ANIMATE WORM  ///////////////////////////////////
+//```````````````````````````````````````````````````````````````````````````````//
+CSprite* BOUNCYBALL_aiming;                                                 //   1.   rename as "YOUR_WEAP_aiming" 
+
+//WormSprite* toxicPaintBallWS;
+//WeapSprite* toxicPaintBallws;
+                                                                                 //
+
+void BouncyBall_SpriteBuilder::InitGraphic()                                  //   name of your sript in LibEditor
+{   CFile* f;                                                                    //
+    f = GetAttachment("The Bouncy Ball.png");                             //    3.  (replace with your attached png of aiming sprite)
+    BOUNCYBALL_aiming = LoadSprite(f, 1, 0);                                //    4.  (replace with variable from 1.)
+}                                                                                //
+                                                                                 //
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          //
+  if (Type == M_FRAME) {                                                         //
+    if (gframe == 1) {                                                           //
+     local weapName; local sprite;
+///////......................................................................\\\\\\
+//
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Bouncy Ball";                                               //    7.  weap name: EXACT weap name.
+     sprite = BOUNCYBALL_aiming->Index;                                     //    8.  (replace with variable from 1.)
+     Params->hand_radius = 27.0;                                                 
+     Params->hand_rotation = 1.0;                                                //    10. rotate worm`s hand, if u need: -1.0...1.0;
+     Params->hand_radial_rotation = 1.0;
+     Params->weap_radial_rotation = 0.9;     
+     Params->weap_rotation = -1.0;
+     Params->weap_radius = 12.0;
+     Params->hand_type = 1;     // 1 = lower hand. 2 = normal hand. 3 - upper hand.
+     Params->hand_scale = 0.8;               ///// I recommend don`t change it. //////   //                                
+//     Params->zplane = 10.0;          // this is def value;                             
+//     Params->scale = 1.0;           // this better dont change. 1.0 is default value.                            
+//
+///////``````````````````````````````````````````````````````````````````````//////                                                    
+     local WA = new WormSprite(weapName, sprite, Params);
+    }                                                                            //
+  }                                                                              //
+}                                                                                //
+//_____________________________ END OF WORM ANIMATION ___________________________//
+///////////////////////////////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////  ANIMATE BULLET  //////////////////////////////////
+//```````````````````````````````````````````````````````````````````````````````//
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){    
+super;
+  if (Type == M_FRAME){                                                          //
+     if (weap->CheckName("Bouncy Ball")) {                                   //   11. replace with your weap name
+         if (BOUNCYBALL_anim) {                                              //   12. replace "toxic_paintBall_anim" with variable from 15.
+              local sprite = BOUNCYBALL_aiming->Index;                      //   13. replace "toxic_paintBall_bullet" with variable from 2.
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);              
+              weap->launch.anim.spriteIndex = 0;
+              BOUNCYBALL_anim = false;                                       //   14. replace "toxic_paintBall_anim" with variable from 15.
+         }                                                                     
+     }                                                                                                                                                     
+  }                                                                              //
+}                                                                                //
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           //
+  BOUNCYBALL_anim = true;                                                    //   15. rename variable to YOUR_WEAP_anim
+}                                                                                //

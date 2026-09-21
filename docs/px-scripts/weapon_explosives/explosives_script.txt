@@ -1,0 +1,66 @@
+
+require utils, utils_steps, utils_pyroman, p_animation, pxparticles, p_sprite_builder;
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    super;
+    if (weap->CheckName("GunPowder Bomb"))
+    {
+       DoExplosion( x, y, 20, 20, 0, ClWT);
+       DoExplosion( x, y, 20, 20, 0, ClWT);
+       DoExplosion( x, y, 20, 20, 0, ClWT);
+       DoExplosion( x, y, 20, 20, 0, ClWT);
+    }
+	if (weap->CheckName("Firecracker"))
+    {
+        local radius = 13;
+        local dmg = 8;
+        local push = 50;
+        Root->DoExplosion( x, y - radius, push, dmg, 0, ClWT);
+        Root->DoExplosion( x + radius * 2/3, y - radius * 2/3, push, dmg, 0, ClWT);
+        Root->DoExplosion( x + radius, y, push, dmg, 0, ClWT);
+        Root->DoExplosion( x + radius * 2/3, y + radius * 2/3, push, dmg, 0, ClWT);
+        Root->DoExplosion( x, y + radius, push, dmg, 0, ClWT);
+        Root->DoExplosion( x - radius * 2/3, y + radius * 2/3, push, dmg, 0, ClWT);
+        Root->DoExplosion( x - radius, y, push, dmg, 0, ClWT);
+        Root->DoExplosion( x - radius * 2/3, y - radius * 2/3, push, dmg, 0, ClWT);
+    }
+}
+
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("TNT"))
+        {
+            if (not_too_much_particles) do_sprite_trail_effects(75, PosX, PosY-20);
+        } 
+        if (weap->CheckName("GunPowder Bomb"))
+        {
+            if (not_too_much_particles) do_sprite_trail_effects(75, PosX, PosY-20);
+        }
+        if (weap->CheckName("Firecracker"))
+        {
+            if (not_too_much_particles) do_sprite_trail_effects(54, PosX, PosY);
+        }
+                         
+    }                                    
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Firecracker"))
+    {
+        ClWT = WormTeam;
+        ClWN = WormNumber;
+    }
+    if (Weap->CheckName("GunPowder Bomb"))
+    {
+        ClWT = WormTeam;
+        ClWN = WormNumber;
+    }
+    super;
+}

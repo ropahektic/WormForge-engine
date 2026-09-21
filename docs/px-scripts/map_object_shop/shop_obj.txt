@@ -1,0 +1,356 @@
+require utils, script_trueshopping, map_object_custom_hp, map_object_traps;
+
+//////////////////////////////////
+//EXTRA EDITOR OBJECTS
+//////////////////////////////////
+
+$editor
+ 
+ $object PurchaseItem
+  $origin -32 -40
+  $image "edshop.png"
+  $radius 41
+  $func SpawnItemShop
+  $param ShopID int 1
+  $param PurchaseZone objectt Zone
+  $param Limit int 1
+  $param Stock1 objectt ItemStock
+  $param Stock2 objectt ItemStock
+  $param Stock3 objectt ItemStock
+  $param Stock4 objectt ItemStock
+  $param Stock5 objectt ItemStock
+  $param Stock6 objectt ItemStock
+  $param Stock7 objectt ItemStock
+  $param Stock8 objectt ItemStock
+  $param Stock9 objectt ItemStock
+  $param Stock10 objectt ItemStock
+  $param Stock11 objectt ItemStock
+  $param Stock12 objectt ItemStock
+  $param Stock13 objectt ItemStock
+  $param Stock14 objectt ItemStock
+  $param Stock15 objectt ItemStock
+  $param Stock16 objectt ItemStock
+  $param Stock17 objectt ItemStock
+  $param Stock18 objectt ItemStock
+  $param Stock19 objectt ItemStock
+  $param Stock20 objectt ItemStock
+ $object_end
+ 
+ $object ItemStock
+  $origin -8 -8
+  $image "edshopitem.png"
+  $radius 17
+  $autoname IStock
+  $func SpawnItemStock
+  $param Weapon string "Bazooka"
+  $param Amount int 1
+  $param Page int 1 //unnecessary?
+  $param CoinPrice int 1
+  $param DiamondPrice int 1
+ $object_end
+ 
+ 
+ $object CoinBonus
+  $origin -15 -15
+  $image "edshopcoin.png"
+  $radius 17
+  $func SpawnCoinBonus
+  $param SmallBonus int 1
+  $param PerXDamage int 10
+  $param BetterBonus int 5
+  $param PerYDamage int 75
+  $param HugeBonus int 10
+  $param PerZDamage int 150
+ $object_end
+$end
+
+//////////////////////////////////
+//Classes..
+CShopInterface : CObject;
+CItemStock : CObject;
+CCoinBonus : CObject;
+CSoundFile* PurchaseSound;
+
+string shop_weapname[201];
+string shop_obj2name[201];
+int shop_Page[201];
+int shop_Amount[201];
+int shop_Price[201];
+int shop_Price2[201];
+CWeapon* shop_ActualWeap[201];
+
+//////////////////////////////////
+
+void shop_obj::Init()
+{
+    keySync->AddKey(66); //Sync B
+    keySync->AddKey(78); //Sync N
+}
+
+//////////////////////////////////
+
+CItemStock* SearchForStock(string Name)
+{
+  for (local i = 0; i < gTrapParent2->Childs.Count; i += 1)
+  {
+    obj = CItemStock(gTrapParent2->Childs.Objs[i]);
+    if (obj is CItemStock)
+    {
+      if (StrCmp(obj->my_name, Name))
+      {
+        return obj;
+      };
+    };
+  };  
+  return NullObj;
+};
+
+CItemStock::CItemStock(CEditorObject* obj) //Item Stock
+{
+ super(gTrapParent2, GS);
+ my_name = StrSave(obj->GetName());
+ st_weapname = obj->GetString("Weapon");
+ st_Page = obj->GetInt("Page");
+ st_Amount = obj->GetInt("Amount");
+ st_Price = obj->GetInt("CoinPrice");
+ st_Price2 = obj->GetInt("DiamondPrice");
+}
+
+CShopInterface::CShopInterface(CEditorObject* obj) //Shop Interface
+{
+   super(Root, GS);    
+   
+   myX = obj->PosX;
+   myY = obj->PosY;
+   StockNum = obj->GetInt("Limit"); //How many items are sold here?
+   ZoneName = StrSave(obj->GetString("PurchaseZone")); //Link
+   MyShopID = (obj->GetInt("ShopID"))-1; //My Unique ID
+   
+   GotSound = false; //Will get your CSound soon
+   GotStock = false; //Which weapons are we selling?
+   SelWeap = 1;      //Currently selected weapon
+   
+   for(local i = (MyShopID*20)+1; i <= (MyShopID*20)+20; i ++)
+   {
+      //Get our ItemStocks' names so we can find them later.
+      shop_obj2name[i] = StrSave(obj->GetString(StrCon("Stock",ItoA(i-(MyShopID*20)))));
+   }
+   
+   sm = new CBuyInterface(GetObject(25, 0)); //Create BuyInterface
+   sm->PosX = myX;                           //to draw stuff for us..
+   sm->PosY = myY;
+   sm->ReadyToGo = false;
+
+   sm->StockNum = StockNum;
+   sm->SelWeap = SelWeap;  
+}
+
+CCoinBonus::CCoinBonus(CEditorObject* obj) //Coin Bonus
+{
+   super(Root, GS);    
+
+   sbcoins = obj->GetInt("SmallBonus");    //Player will receive SmallBonus
+   bbcoins = obj->GetInt("BetterBonus");   //amount of coins N times;
+   hbcoins = obj->GetInt("HugeBonus");
+   
+   sbdamage = obj->GetInt("PerXDamage");   // N = TotalDamage/X
+   bbdamage = obj->GetInt("PerYDamage");
+   hbdamage = obj->GetInt("PerZDamage");   //Same is valid for Better and Huge
+                                           //bonuses.
+                                           
+   lastteam = -1;
+   
+   for (local j = 1; j <= 6; j += 1) //Every Team
+   {                                        
+   for (local i = 1; i <= 8; i += 1) //Every Worm
+   {
+   initialhp[i + j*10] = 0;                       //derp
+   }
+   }
+   
+}
+
+void CCoinBonus::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (Type == M_TURNBEGIN) //Get all health values at turn start
+     {                        //to compare with previous turn's.
+        local coinbonus = 0;
+        local totaldamage = 0;
+        for (local j = 1; j <= 6; j += 1) //Every Team
+        {
+        for (local i = 1; i <= 8; i += 1) //Every Worm
+        {
+            local objWorm = CWorm(Root->GetObject(2, i + j * 16));
+            if (objWorm) 
+            {
+               local curhealth = GS->Info.GetWormHealth(j, i);
+               if ((j != lastteam) && (lastteam != -1)) //No bonus for friendly fire!
+               {
+                 if (curhealth<initialhp[i + j * 10]) { //Ouch, that hurt.
+                  totaldamage += initialhp[i + j * 10]-curhealth; //Bonus!
+                 }
+               }
+               initialhp[i + j * 10] = curhealth; //Got it!
+            }
+            else //It might have died.
+            {
+              if (initialhp[i + j * 10] > 0) //Did it really die?
+             {
+                if ((j != lastteam) && (lastteam != -1)) //No bonus for suiciding! 
+                {
+                totaldamage += initialhp[i + j * 10]; //Bonus for you!
+                }
+                initialhp[i + j * 10] = 0; //Reset the HP anyways
+             }
+            }
+        }
+        }
+        if ((totaldamage>=sbdamage) && (lastteam > 0)) { //Eligible for Small Bonus?
+           local minibonus = (totaldamage/sbdamage)*sbcoins;
+           local megabonus = 0;
+           local gigabonus = 0;
+           if (totaldamage >= bbdamage) { //Eligible for Better Bonus?!
+              megabonus = (totaldamage/bbdamage)*bbcoins;
+              if (totaldamage >= hbdamage) { //Eligible for HUGE Bonus?!!
+                 gigabonus = (totaldamage/hbdamage)*hbcoins;
+              }
+           }
+           local wep = GS->GetWeaponByName("Gold Coin");
+           GS->Info.AddWeaponEx(lastteam,wep->GetWeaponIndex(),wep->GetPageIndex(),minibonus);
+           //Compliment player and display bonus values
+           if (gigabonus>0)
+           {ShowMessage(StrCon(StrCon(StrCon(StrCon("Awesome! ",GetTeamName(lastteam))," got "),ItoA(minibonus+megabonus+gigabonus))," coins!"));}
+           else if (megabonus>0)
+           {ShowMessage(StrCon(StrCon(StrCon(StrCon("Nice! ",GetTeamName(lastteam))," got "),ItoA(minibonus+megabonus))," coins!"));}
+           else
+           {ShowMessage(StrCon(StrCon(StrCon(GetTeamName(lastteam)," got "),ItoA(minibonus+megabonus+gigabonus))," coins."));}
+        }
+     }
+     if (Type == M_TURNEND) //Which team has just played?
+     {
+        lastteam = Root->CurTeam;
+     }
+}
+
+void CShopInterface::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    
+     if (Type == M_FRAME)
+     {
+      if (GotSound) //Got our CSound already? Ready to work!
+      {
+      if (zone == NullObj) //We actually have a link
+        {
+        zone = SearchForZone(ZoneName); //Where is it?
+        return;
+        }
+      else {
+           if (GotStock) 
+           { //We have our weapons!  
+           if (zone->active) //Worm detected!                          
+           {
+            CWorm *ActWorm = GetCurrentWorm();
+            if(ActWorm != NullObj) {
+                if (keySync->KeyPressedNow(66)) { //B Pressed, attempting to buy!
+                   local wep = GS->GetWeaponByName("Gold Coin");
+                   local wep2 = GS->GetWeaponByName("Diamond");
+                   //Got enough money?
+                   if (GS->Info.AddWeaponEx(Root->CurTeam,wep->GetWeaponIndex(),wep->GetPageIndex(),0) >= shop_Price[(MyShopID*20)+SelWeap] && GS->Info.AddWeaponEx(Root->CurTeam,wep2->GetWeaponIndex(),wep2->GetPageIndex(),0) >= shop_Price2[(MyShopID*20)+SelWeap] )
+                   {
+                   ShowMessage("Succesfully bought!");
+                   SoundObj = CSound(NullObj); 
+	           PurchaseSound->Play(1.0, 0.0, false);
+                   GS->Info.AddWeaponEx(Root->CurTeam,wep->GetWeaponIndex(),wep->GetPageIndex(),-shop_Price[(MyShopID*20)+SelWeap]);
+                   GS->Info.AddWeaponEx(Root->CurTeam,wep2->GetWeaponIndex(),wep2->GetPageIndex(),-shop_Price2[(MyShopID*20)+SelWeap]);
+                   GS->Info.AddWeaponEx(Root->CurTeam,shop_ActualWeap[(MyShopID*20)+SelWeap]->GetWeaponIndex(),shop_Page[(MyShopID*20)+SelWeap],shop_Amount[(MyShopID*20)+SelWeap]);
+                   }
+                   else {
+                   ShowMessage("Not enough coins/diamonds!"); 
+                   }
+                }
+                else if (keySync->KeyPressedNow(78)) { //N Pressed, next Weapon please
+                 if (SelWeap<StockNum) SelWeap+=1;
+                 else SelWeap = 1;
+                        //Update our loyal interface
+                        sm->SelWeap = SelWeap;
+                        sm->Weap = shop_weapname[(MyShopID*20)+SelWeap];
+                        sm->OrigName = shop_weapname[(MyShopID*20)+SelWeap];
+                        sm->MyWeap = shop_ActualWeap[(MyShopID*20)+SelWeap];
+                        sm->Amount = shop_Amount[(MyShopID*20)+SelWeap];
+                        sm->CPrice = shop_Price[(MyShopID*20)+SelWeap];
+                        sm->DPrice = shop_Price2[(MyShopID*20)+SelWeap];
+                        sm->Page = shop_Page[(MyShopID*20)+SelWeap];
+                        sm->Updated = true;
+                }
+            }
+           }
+           }
+           else
+           { //No Stock
+             obj2 = SearchForStock(shop_obj2name[(MyShopID*20)+1]); //At least one has to exist.
+             if (obj2 != NullObj) {             
+             for(local i = (MyShopID*20)+1; i <= (MyShopID*20)+20; i ++)
+             {
+              obj2 = SearchForStock(shop_obj2name[i]);
+              if (obj2 != NullObj) {
+                shop_weapname[i] = obj2->st_weapname; //Filling our arrays...
+                shop_Page[i] = obj2->st_Page;
+                shop_Amount[i] = obj2->st_Amount;
+                shop_Price[i] = obj2->st_Price;
+                shop_Price2[i] = obj2->st_Price2; 
+                shop_ActualWeap[i] = GS->GetWeaponByName(shop_weapname[i]);
+                }
+                else {
+                shop_weapname[i] = "Bazooka"; //Default values
+                shop_Page[i] = 1;
+                shop_Amount[i] = 1;
+                shop_Price[i] = 1;
+                shop_Price2[i] = 0;
+                }
+             }
+              GotStock=true;
+              sm->SelWeap = SelWeap; //Keep our BuyInterface updated!
+              sm->Weap = shop_weapname[(MyShopID*20)+SelWeap];
+              sm->OrigName = shop_weapname[(MyShopID*20)+SelWeap];
+              sm->Amount = shop_Amount[(MyShopID*20)+SelWeap];
+              sm->CPrice = shop_Price[(MyShopID*20)+SelWeap];
+              sm->DPrice = shop_Price2[(MyShopID*20)+SelWeap];
+              sm->Page = shop_Page[(MyShopID*20)+SelWeap];
+              sm->ReadyToGo = true;
+             }
+             else {
+              ShowMessage("No ITEMSTOCK found!");
+             }
+           }
+      }
+      }
+      else {
+      //There we go, our cash register sound effect
+      CFile *f;
+      f = GetAttachment("kaching.wav");   
+      PurchaseSound = new CSoundFile(f);
+      GotSound=true;
+      }
+     }
+}
+
+//Spawn stuff.
+///////////////////////////
+
+void SpawnItemShop(CEditorObject* obj)
+{
+  si = new CShopInterface(obj);
+};
+
+void SpawnCoinBonus(CEditorObject* obj)
+{
+  cb = new CCoinBonus(obj);
+};
+
+void SpawnItemStock(CEditorObject* obj)
+{
+  is = new CItemStock(obj);
+};
+
+/////////////////////////////////
+//END OF EXTRA EDITOR OBJECTS LIB

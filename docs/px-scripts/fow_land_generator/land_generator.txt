@@ -1,0 +1,361 @@
+require utils;
+
+CBitmap32* h01a;
+CBitmap32* h01b;
+CBitmap32* h02a;
+CBitmap32* h02b;
+CBitmap32* h02c;
+CBitmap32* h10a;
+CBitmap32* h10b;
+CBitmap32* h11a;
+CBitmap32* h11b;
+CBitmap32* h11c;
+CBitmap32* h11d;
+CBitmap32* h11e;
+CBitmap32* h11f;
+CBitmap32* h11g;
+CBitmap32* h11h;
+CBitmap32* h11i;
+CBitmap32* h11j;
+CBitmap32* h12a;
+CBitmap32* h12b;
+CBitmap32* h20a;
+CBitmap32* h20b;
+CBitmap32* h20c;
+CBitmap32* h21a;
+CBitmap32* h21b;
+CBitmap32* h22a;
+CBitmap32* h22b;
+CBitmap32* h22c;
+CBitmap32* h22d;
+CBitmap32* h22e;
+CBitmap32* h22f;
+CBitmap32* h22g;
+
+CBitmap32* cloud_1;
+CBitmap32* cloud_2;
+CBitmap32* cloud_3;
+CBitmap32* cloud_4;
+
+int atLvl;
+int pieceY;
+
+void land_generator::InitGraphic()
+{
+    f  = GetAttachment("01a.png"); h01a  = LoadImage(f);
+    f  = GetAttachment("01b.png"); h01b  = LoadImage(f);
+    f  = GetAttachment("02a.png"); h02a  = LoadImage(f);
+    f  = GetAttachment("02b.png"); h02b  = LoadImage(f);
+    f  = GetAttachment("02c.png"); h02c  = LoadImage(f);
+    f  = GetAttachment("10a.png"); h10a  = LoadImage(f);
+    f  = GetAttachment("10b.png"); h10b  = LoadImage(f);
+    f  = GetAttachment("11a.png"); h11a  = LoadImage(f);
+    f  = GetAttachment("11b.png"); h11b  = LoadImage(f);
+    f  = GetAttachment("11c.png"); h11c  = LoadImage(f);
+    f  = GetAttachment("11d.png"); h11d  = LoadImage(f);
+    f  = GetAttachment("11e.png"); h11e  = LoadImage(f);
+    f  = GetAttachment("11f.png"); h11f  = LoadImage(f);
+    f  = GetAttachment("11g.png"); h11g  = LoadImage(f);
+    f  = GetAttachment("11h.png"); h11h  = LoadImage(f);
+    f  = GetAttachment("11i.png"); h11i  = LoadImage(f);
+    f  = GetAttachment("11j.png"); h11j  = LoadImage(f);
+    f  = GetAttachment("12a.png"); h12a  = LoadImage(f);
+    f  = GetAttachment("12b.png"); h12b  = LoadImage(f);
+    f  = GetAttachment("20a.png"); h20a  = LoadImage(f);
+    f  = GetAttachment("20b.png"); h20b  = LoadImage(f);
+    f  = GetAttachment("20c.png"); h20c  = LoadImage(f);
+    f  = GetAttachment("21a.png"); h21a  = LoadImage(f);
+    f  = GetAttachment("21b.png"); h21b  = LoadImage(f);
+    f  = GetAttachment("22a.png"); h22a  = LoadImage(f);
+    f  = GetAttachment("22b.png"); h22b  = LoadImage(f);
+    f  = GetAttachment("22c.png"); h22c  = LoadImage(f);
+    f  = GetAttachment("22d.png"); h22d  = LoadImage(f);
+    f  = GetAttachment("22e.png"); h22e  = LoadImage(f);
+    f  = GetAttachment("22f.png"); h22f  = LoadImage(f);
+    f  = GetAttachment("22g.png"); h22g  = LoadImage(f);
+    
+    f  = GetAttachment("cloud_1.png"); cloud_1  = LoadImage(f);
+    f  = GetAttachment("cloud_2.png"); cloud_2  = LoadImage(f);
+    f  = GetAttachment("cloud_3.png"); cloud_3  = LoadImage(f);
+    f  = GetAttachment("cloud_4.png"); cloud_4  = LoadImage(f);
+}
+
+void land_generator::FirstFrame()
+{
+GenerateHills(GS->GetRandom(), GS->GetRandom(), GS->LevelSX, GS->LevelSY);
+}
+
+CBitmap32* OutPiece;
+CBitmap32* GetPiece(int RNGA, int ForceLvl, int side)
+{
+if(ForceLvl == 10)
+	{
+    if(atLvl == 0)
+		{
+        local pck = RNGA % 5;
+        if(pck == 0){OutPiece = h01a; atLvl = 1;}
+        if(pck == 1){OutPiece = h01b; atLvl = 1;}
+        if(pck == 2){OutPiece = h02a; atLvl = 2;}
+        if(pck == 3){OutPiece = h02b; atLvl = 2;}
+        if(pck == 4){OutPiece = h02c; atLvl = 2;}
+        }
+	else if(atLvl == 1)
+		{
+        local pck = RNGA % 14;
+        if(pck == 0){OutPiece = h10a; atLvl = 0;}
+        if(pck == 1){OutPiece = h10b; atLvl = 0;}
+        if(pck == 2){OutPiece = h11a; atLvl = 1;}
+        if(pck == 3){OutPiece = h11b; atLvl = 1;}
+        if(pck == 4){OutPiece = h11c; atLvl = 1;}
+        if(pck == 5){OutPiece = h11d; atLvl = 1;}
+        if(pck == 6){OutPiece = h11e; atLvl = 1;}
+        if(pck == 7){OutPiece = h11f; atLvl = 1;}
+        if(pck == 8){OutPiece = h11g; atLvl = 1;}
+        if(pck == 9){OutPiece = h11h; atLvl = 1;}
+        if(pck == 10){OutPiece = h11i; atLvl = 1;}
+        if(pck == 11){OutPiece = h11j; atLvl = 1;}
+        if(pck == 12){OutPiece = h12a; atLvl = 2;}
+        if(pck == 13){OutPiece = h12b; atLvl = 2;}
+        }
+	else if(atLvl == 2)
+		{
+        local pck = RNGA % 13;
+        if(pck == 0){OutPiece = h20a; atLvl = 0;}
+        if(pck == 1){OutPiece = h20b; atLvl = 0;}
+        if(pck == 2){OutPiece = h20c; atLvl = 0;}
+        if(pck == 3){OutPiece = h21a; atLvl = 1;}
+        if(pck == 4){OutPiece = h22a; atLvl = 2;}
+        if(pck == 5){OutPiece = h22b; atLvl = 2;}
+        if(pck == 6){OutPiece = h22c; atLvl = 2;}
+        if(pck == 7){OutPiece = h22d; atLvl = 2;}
+        if(pck == 8){OutPiece = h22e; atLvl = 2;}
+        if(pck == 9){OutPiece = h22f; atLvl = 2;}
+        if(pck == 10){OutPiece = h22g; atLvl = 2;}
+        if(pck == 11){OutPiece = h22g; atLvl = 2;}
+        if(pck == 12){OutPiece = h21b; atLvl = 1;}
+        }
+	else
+		{
+        OutPiece = h10a; atLvl = 0;
+        }
+    }
+    
+if(ForceLvl == 0)
+	{
+    if(atLvl == 0){OutPiece = h10a;} //should not happen
+    if(atLvl == 1)
+		{
+        local pck = RNGA % 2;
+        if(pck == 0){OutPiece = h10a;}
+        if(pck == 1){OutPiece = h10b;}
+        }
+    if(atLvl == 2)
+		{
+        local pck = RNGA % 3;
+        if(pck == 0){OutPiece = h20a;}
+        if(pck == 1){OutPiece = h20b;}
+        if(pck == 2){OutPiece = h20c;}
+        }
+    atLvl = 0;
+    }
+    
+if(ForceLvl == 1)
+	{
+    if(atLvl == 0)
+		{
+        local pck = RNGA % 2;
+        if(pck == 0){OutPiece = h01a;}
+        if(pck == 1){OutPiece = h01b;}
+        }
+    if(atLvl == 1)
+		{
+        local pck = RNGA % 3;
+        if(pck == 0){OutPiece = h11a;}
+        if(pck == 1){OutPiece = h11b;}
+        if(pck == 2){OutPiece = h11c;}
+        }
+    if(atLvl == 2)
+		{
+        local pck = RNGA % 2;
+        if(pck == 0){OutPiece = h21a;}
+        if(pck == 1){OutPiece = h21b;}
+        }
+    atLvl = 1;
+    }
+    
+if(ForceLvl == 2)
+	{
+    if(atLvl == 0)
+		{
+        local pck = RNGA % 3;
+        if(pck == 0){OutPiece = h02a;}
+        if(pck == 1){OutPiece = h02b;}
+        if(pck == 2){OutPiece = h02c;}
+        }
+    if(atLvl == 1)
+		{
+        local pck = RNGA % 2;
+        if(pck == 0){OutPiece = h12a;}
+        if(pck == 1){OutPiece = h12b;}
+        }
+    if(atLvl == 2){OutPiece = h22a;}
+    atLvl = 2;
+    }
+
+    pieceY = OutPiece->SY;
+    return OutPiece;
+}
+
+
+void GenerateHills(int RNGA, int RNGB, int MSX, int MSY)
+{
+    //18 fits
+    if(MSY == 1504 && MSX == 2200)
+		{
+        for(int side = 0; side < 2; side++)
+			{
+            atLvl = 0;
+            pieceY = 0;
+            for(int i = 0; i < 9; i++)
+				{
+                local GoD = 10;
+                if(i == 7)
+					{
+                    GoD = 1;
+                	}
+                if(i == 8)
+					{
+                    GoD = 0;
+                	}
+                if(side == 0)
+					{
+                    local theP = GetPiece(RNGA - i - pieceY, GoD, 0);
+                    GG->land->Draw(theP, (i * 100) + 101, 1500 - pieceY);
+                	}
+				else
+					{
+                    local theP = GetPiece(RNGB - i - pieceY, GoD, 1);
+                    GG->land->Draw(theP, (i * 100) + 1200, 1500 - pieceY);
+                	}
+            	}
+        	}
+    	}
+    	
+    if(MSY == 2000 && MSX == 2200)
+		{
+        for(int sideB = 0; sideB < 2; sideB++)
+			{
+            atLvl = 0;
+            pieceY = 0;
+            for(int iA = 0; iA < 7; iA++)
+				{
+                local GoD = 10;
+                if(iA == 5)
+					{
+                    GoD = 1;
+                	}
+                if(iA == 6)
+					{
+                    GoD = 0;
+                	}
+                if(sideB == 0)
+					{
+                    local theP = GetPiece(RNGA - iA - pieceY, GoD, 0);
+                    GG->land->Draw(theP, (iA * 100) + 123, 1848 - pieceY);
+                	}
+				else
+					{
+                    local theP = GetPiece(RNGB - iA - pieceY, GoD, 1);
+                    GG->land->Draw(theP, (iA * 100) + 1364, 1848 - pieceY);
+                	}
+            	}
+        	}
+
+		for(int sideA = 0; sideA < 2; sideA++)
+			{
+            atLvl = 0;
+            pieceY = 0;
+            for(int iB = 0; iB < 7; iB++)
+				{
+                local GoD = 10;
+                if(iB == 5)
+					{
+                    GoD = 1;
+                	}
+                if(iB == 6)
+					{
+                    GoD = 0;
+					}
+                if(sideA == 0)
+					{
+                    local theP = GetPiece((RNGB-33) - iB - pieceY, GoD, 0);
+                    GG->land->Draw(theP, (iB * 100) + 93, 624 - pieceY);
+                	}
+				else
+					{
+                    local theP = GetPiece((RNGA-33) - iB - pieceY, GoD, 1);
+                    GG->land->Draw(theP, (iB * 100) + 1382, 624 - pieceY);
+                	}
+            	}
+ 	       }
+    	}
+    	
+    if(MSY == 2320 && MSX == 3840)
+		{
+        for(int sideB = 0; sideB < 2; sideB++)
+			{
+            atLvl = 0;
+            pieceY = 0;
+            for(int iA = 0; iA < 7; iA++)
+				{
+                local GoD = 10;
+                if(iA == 5)
+					{
+                    GoD = 1;
+                	}
+                if(iA == 6)
+					{
+                    GoD = 0;
+                	}
+                if(sideB == 0)
+					{
+                    local theP = GetPiece(RNGA - iA - pieceY, GoD, 0);
+                    GG->land->Draw(theP, (iA * 100) + 948, 2170 - pieceY);
+                	}
+				else
+					{
+                    local theP = GetPiece(RNGB - iA - pieceY, GoD, 1);
+                    GG->land->Draw(theP, (iA * 100) + 2188, 2170 - pieceY);
+                	}
+            	}
+        	}
+
+		for(int sideA = 0; sideA < 2; sideA++)
+			{
+            atLvl = 0;
+            pieceY = 0;
+            for(int iB = 0; iB < 7; iB++)
+				{
+                local GoD = 10;
+                if(iB == 5)
+					{
+                    GoD = 1;
+                	}
+                if(iB == 6)
+					{
+                    GoD = 0;
+					}
+                if(sideA == 0)
+					{
+                    local theP = GetPiece((RNGB-33) - iB - pieceY, GoD, 0);
+                    GG->land->Draw(theP, (iB * 100) + 948, 1540 - pieceY);
+                	}
+				else
+					{
+                    local theP = GetPiece((RNGA-33) - iB - pieceY, GoD, 1);
+                    GG->land->Draw(theP, (iB * 100) + 2188, 1540 - pieceY);
+                	}
+            	}
+ 	       }
+    	}
+}

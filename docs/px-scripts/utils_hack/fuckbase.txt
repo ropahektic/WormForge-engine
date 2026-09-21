@@ -1,0 +1,90 @@
+
+string fuck_string;
+int string_fucker[1];
+                        
+CColMask fuck_CColMask;
+int CColMask_fucker[1];
+
+CColMask* fuck_PCColMask;
+int PCColMask_fucker[1];
+                   
+null_type* fuck_Pnull_type;
+int Pnull_type_fucker[1];
+
+CWorm* fuck_PCWorm;
+int PCWorm_fucker[1];
+
+CObject* fuck_PCObject;
+int PCObject_fucker[1];
+
+CGObject* fuck_PCGObject;
+int PCGObject_fucker[1];
+
+CFile* fuck_PCFile;
+int PCFile_fucker[1];   
+
+CSprite* fuck_PCSprite;
+int PCSprite_fucker[1];   
+
+CMessageData* fuck_PCMessageData;
+int PCMessageData_fucker[1];
+
+string string_intP(int targ)         
+{
+   string_fucker[-1*1] = targ;         //CORE OF THE HACK!
+   return fuck_string; 
+}      
+              
+CColMask CColMask_intP(int targ)
+{
+   CColMask_fucker[-1*1] = targ;    
+   return fuck_CColMask; 
+}   
+
+CColMask* PCColMask_intP(int targ)
+{
+   PCColMask_fucker[-1*1] = targ;      
+   return fuck_PCColMask; 
+}   
+    
+null_type* Pnull_type_intP(int targ)
+{
+   Pnull_type_fucker[-1*1] = targ;      
+   return fuck_Pnull_type; 
+}   
+
+CWorm* PCWorm_intP(int targ)
+{
+   PCWorm_fucker[-1*1] = targ;        
+   return fuck_PCWorm; 
+}   
+  
+CObject* PCObject_intP(int targ)
+{
+   PCObject_fucker[-1*1] = targ;     
+   return fuck_PCObject; 
+}   
+  
+CGObject* PCGObject_intP(int targ)
+{
+   PCGObject_fucker[-1*1] = targ;
+   return fuck_PCGObject; 
+}   
+  
+CFile* PCFile_intP(int targ)
+{
+   PCFile_fucker[-1*1] = targ;
+   return fuck_PCFile; 
+}   
+        
+CSprite* PCSprite_intP(int targ)
+{
+   PCSprite_fucker[-1*1] = targ;
+   return fuck_PCSprite; 
+}   
+     
+CMessageData* PCMessageData_intP(int targ)
+{
+   PCMessageData_fucker[-1*1] = targ;
+   return fuck_PCMessageData; 
+}   

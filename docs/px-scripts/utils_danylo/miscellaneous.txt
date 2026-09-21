@@ -1,0 +1,24 @@
+//-----------------------------------------------------------------------------
+int colourToInt(string colour)
+{
+  if (StrCmp(colour, "Red"))    return 0;
+  if (StrCmp(colour, "Blue"))   return 1;
+  if (StrCmp(colour, "Green"))  return 2;
+  if (StrCmp(colour, "Yellow")) return 3;
+  if (StrCmp(colour, "Purple")) return 4;
+  if (StrCmp(colour, "Cyan"))   return 5;
+}  
+//-----------------------------------------------------------------------------
+string intToColour(int n) {
+  if (n == 0) return "Red";
+  if (n == 1) return "Blue";
+  if (n == 2) return "Green";
+  if (n == 3) return "Yellow"; 
+  if (n == 4) return "Purple";
+  if (n == 5) return "Cyan";
+}
+//-----------------------------------------------------------------------------
+void CGame::WriteToChat(string m) {
+  WriteToChat(curFont, m, false);
+}
+//-----------------------------------------------------------------------------

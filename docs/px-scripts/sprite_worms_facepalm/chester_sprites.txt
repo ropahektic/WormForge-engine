@@ -1,0 +1,12 @@
+
+CSprite* wfp;
+
+void chester_sprites::InitGraphic()
+{
+   CFile *f;
+
+   f = GetAttachment("wfacep.png");
+   wfp = LoadSprite(f, 30, 0);
+
+   SetSpriteOverride(194, wfp);       
+}

@@ -1,0 +1,99 @@
+//FireExtension script made by rafa``2
+
+require utils, utils_steps;
+
+CObjList * FireExList;
+bool FireEx_Active;
+
+struct CFireEx::CFireEx(CFire* Parent, CFireDesc* Desc)
+{
+    FireParent  = Parent;
+    FireMelting = Desc->UnkD;
+    FirePosX    = 0;           
+    FirePosY    = 99999;
+}
+
+void fire_extension::Init()
+{
+    FireExList = new CObjList();
+    FireEx_Active = false;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    
+    if(!FireEx_Active)
+        return;
+    
+    if(Type == M_FRAME)
+    {
+        CheckFireParents();
+    }
+}
+
+
+override void CFire::CFire(CObject* Parent,CFireDesc* Desc,int unk)
+{
+    super;
+    
+    if(!FireEx_Active)
+        return;
+        
+    FireExList->Add(new CFireEx(this, Desc));
+}
+
+void CheckFireParents()
+{
+    for(int i=0; i<FireExList->Count; i++)
+    {
+         CFireEx * FireEx = FireExList->Objs[i];
+         
+         if(FireEx == NullObj) 
+         {
+             ;
+         }
+         else if(FireEx->FireParent == NullObj)
+         {
+             FireExList->Remove(FireEx);
+             delete(FireEx);
+         }
+        
+        FireExList->Compact();
+    }
+}
+
+CFireEx * GetFireExList(CFire *FireParent)
+{
+    for(int i=0; i<FireExList->Count; i++)
+    {
+         CFireEx * FireEx = FireExList->Objs[i];
+         
+         if(FireEx == NullObj || FireEx->FireParent == NullObj) 
+             continue;  
+             
+         if(FireEx->FireParent == FireParent)
+         {
+             return FireEx;
+         }
+    }
+    
+    return NullObj;
+}
+
+override void CFire::LookAtMe(fixed x,fixed y,int priority)
+{
+    super; 
+    
+    if(!FireEx_Active)
+        return;
+        
+    CFireEx * FireEx = GetFireExList(this);
+    
+    if(FireEx == NullObj || FireEx->FireParent == NullObj)    
+        return;
+    
+    FireEx->FirePosX = x;     
+    FireEx->FirePosY = y;
+   
+}

@@ -1,0 +1,104 @@
+
+$editor
+ $object ExtendedSmokeTrap
+  $origin -15 -15
+  $image "edcross.png"
+  $func SpawnExtendedSmokeTrap
+  $radius 17
+  $param Type enum 3 Smoke Toxic LongSmoke
+  $param Always bool true
+  $param ProximityZone object
+  $param NPerShoot int 11
+  $param Frequency int 8
+  $param SpeedVar int 20
+  $param HealingFactor int 0
+  $param ToxicDamage int 2
+  $param MaximumHealthBoost int 1000
+ $object_end
+$end
+
+CPTrap : CObject;
+
+CPTrap::CPTrap(CEditorObject* eobj)
+{
+  super(Root, GS);
+  local typestr = eobj->GetString("Type");
+  if (StrCmp(typestr, "Smoke"))
+  {
+    TrapType = 1;
+  };
+  if (StrCmp(typestr, "Toxic"))
+  {
+    TrapType = 2;
+  };
+  if (StrCmp(typestr, "LongSmoke"))
+  {
+    TrapType = 3;
+  };
+
+  Always = eobj->GetBool("Always");
+  ZoneName = StrSave(eobj->GetString("ProximityZone"));
+  NPerShoot = eobj->GetInt("NPerShoot");
+  Freq = eobj->GetInt("Frequency");
+  SpeedVar = eobj->GetInt("SpeedVar");
+  HealingFactor = eobj->GetInt("HealingFactor");
+  ToxicDamage = eobj->GetInt("ToxicDamage");
+  MaximumHealthBoost = eobj->GetInt("MaximumHealthBoost");
+  zone = CZone(NullObj);
+  timer = 0;
+  PosX = eobj->PosX;
+  PosY = eobj->PosY;
+  active = false;
+};
+
+void CPTrap::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+
+  if (Always)
+  {
+    active = true;
+  } else {
+    if (zone == NullObj)
+    {
+      for (local i = 0; i < gTrapParent->Childs.Count; i += 1)
+      {
+        local obj = CZone(gTrapParent->Childs.Objs[i]);
+        if (obj is CZone)
+        {
+          if (StrCmp(obj->zone_name, ZoneName))
+          {
+            zone = obj;
+            break;
+          };
+        };
+      };
+      return;
+    };
+    active = zone->active;
+  };
+
+  if (active)
+  {
+    if (timer % Freq == 0)
+    {
+      if (TrapType == 1)
+      {
+        parmanExtended->ParticleBoom( NPerShoot, PosX, PosY, SpeedVar, HealingFactor, ToxicDamage, MaximumHealthBoost, parmanExtended->smokedesc);
+      } else if (TrapType == 2) {
+        parmanExtended->ParticleBoom( NPerShoot, PosX, PosY, SpeedVar, HealingFactor, ToxicDamage, MaximumHealthBoost, parmanExtended->toxicdesc);
+      } else if (TrapType == 3) {
+        parmanExtended->ParticleBoom( NPerShoot, PosX, PosY, SpeedVar, HealingFactor, ToxicDamage, MaximumHealthBoost, parmanExtended->lsmokedesc);
+      };
+    };
+    timer += 1;
+  } else {
+    timer = 0;
+  };
+
+};
+
+void SpawnExtendedSmokeTrap(CEditorObject* trapobj)
+{
+ trap = new CPTrap(trapobj);
+};

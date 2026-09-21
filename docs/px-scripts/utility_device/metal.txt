@@ -1,0 +1,28 @@
+int MetalTm[7];
+
+void metal::Init()
+{
+  for(local t = 0;t<7;t++)
+  {
+  MetalTm[t] = 10;
+  }
+}
+
+void CWorm::WasteMetal(int amount)
+{
+     MetalTm[GetTeamNumber(WormTeam)] = MetalTm[GetTeamNumber(WormTeam)] - amount;
+     local met1 = GS->GetWeaponByName("Metal");
+     if(met1 != NullObj){GS->Info.SetWeaponEx(GetTeamNumber(WormTeam), met1->GetWeaponIndex(), met1->GetPageIndex(), MetalTm[GetTeamNumber(WormTeam)]);}
+}
+
+void CWorm::ReturnMetal(int amount)
+{
+     MetalTm[GetTeamNumber(WormTeam)] = MetalTm[GetTeamNumber(WormTeam)] + amount;
+     local met1 = GS->GetWeaponByName("Metal");
+     if(met1 != NullObj){GS->Info.SetWeaponEx(GetTeamNumber(WormTeam), met1->GetWeaponIndex(), met1->GetPageIndex(), MetalTm[GetTeamNumber(WormTeam)]);}
+}
+
+int CWorm::GetTeamMetal()
+{
+     return MetalTm[GetTeamNumber(WormTeam)];
+}

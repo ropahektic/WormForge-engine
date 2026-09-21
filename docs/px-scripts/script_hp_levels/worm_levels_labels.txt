@@ -1,0 +1,151 @@
+//Script by PyroMan
+
+CInterfaceHandler0 : CObject;
+ 
+bool SwitchTable;    
+bool selectingWorm; 
+
+void worm_levels_labels::Init()
+{ 
+    keySync->AddKey(106);   // Num *
+    keySync->AddKey(33);    // PageUp
+    keySync->AddKey(34);    // PageDown
+    keySync->AddKey(9);     // Tab
+    keySync->AddKey(16);    // Shift
+    keySync->AddKey(46);    // Delete, uses in prev script
+    SwitchTable = true;
+}
+
+void worm_levels_labels::InitGraphic(){}
+
+CInterfaceHandler0::CInterfaceHandler0(CObject* parent)
+{
+    super(parent, GS);   
+    GUIn = MakeBitmap(150, 65);
+    TurnOn = true;
+    check1 = true;
+    check2 = false;
+}
+
+void CInterfaceHandler0::ListNDraw()
+{
+    Obj_Cur = GetCurrentWorm();
+    Worm_Cur = CWorm(Obj_Cur);
+
+    local a = 0;
+    local b = 0;
+    local color = RGB(251, 245, 114); 
+    local level0;
+    local koef0;
+    local hp0;
+    local hp;
+	local dmg;             
+                            
+    if (ShootingOne != NullObj) 
+    	{
+        koef0 = ((ShootingOne->level_reachment + ShootingOne->level_rise_coefficient) * (ShootingOne->level*1.0 + 1.0)) - (ShootingOne->total_hp_collected);
+        level0 = MakeNumberString(" [", koef0, "]");
+
+        level = MakeNumberString("", ShootingOne->level+1, level0);
+                      
+        hp0 = MakeNumberString(" [", ShootingOne->hp_at_start+ShootingOne->hp_limit, "]");
+        hp = MakeNumberString("", ShootingOne->TargHealth, hp0);
+                      
+        dmg = MakeNumberString("+", (ShootingOne->ExplosionFactor-1.0)*100, " %");
+        }
+                          
+        local lsx = GS->landSelectX;
+        local lsy = GS->landSelectY;
+        if (lsx & 32768) lsx = lsx | (65535 << 16);
+        if (lsy & 32768) lsy = lsy | (65535 << 16);       
+
+// Horizontal
+        GUIn->HLine(0, GUIn->SX - 1, 0, color);
+        GUIn->HLine(0, GUIn->SX - 1, GUIn->SY - 1, color);
+                          
+// Vertical
+		GUIn->VLine(0, 0, GUIn->SY - 1, color);
+        GUIn->VLine(GUIn->SX - 1, 0, GUIn->SY - 1, color);
+
+		GUIn->Rect(1, 1, GUIn->SX - 2, GUIn->SY - 2, ARGB(127, 0, 0, 0));
+                                                                                       
+// Desctiptions
+                          
+		GS->Disp->DrawText(4, GUIn, 15, 8, "Level: ", &a, &b);
+        GS->Disp->DrawText(4, GUIn, 15, 18, "Total damage: ", &a, &b);
+        GS->Disp->DrawText(4, GUIn, 15, 28, "Health: ", &a, &b);
+        GS->Disp->DrawText(4, GUIn, 15, 38, "Damage: ", &a, &b);
+        GS->Disp->DrawText(4, GUIn, 15, 48, "Kills: ", &a, &b);                    
+
+// Parametres                                                   
+	if (ShootingOne != NullObj)
+		{
+        GS->Disp->DrawText(1, GUIn, 100, 8, level, &a, &b); 
+        GS->Disp->DrawText(1, GUIn, 100, 18, ItoA(ShootingOne->total_hp_collected), &a, &b);
+        GS->Disp->DrawText(1, GUIn, 100, 28, hp, &a, &b);
+        GS->Disp->DrawText(1, GUIn, 100, 38, dmg, &a, &b);
+        GS->Disp->DrawText(1, GUIn, 100, 48, ItoA(ShootingOne->kills), &a, &b);
+        }
+}
+
+
+void worm_levels_labels::FirstFrame()
+{
+ new CInterfaceHandler0(Root);
+}
+
+
+void CInterfaceHandler0::Toggler()
+{
+     if (IsKeyPressed(18) && IsKeyPressed(76)) // alt+l show/hide
+     {
+        if (check1)
+        {
+            TurnOn = false;
+        }
+        else TurnOn = true;
+     }
+     else
+     {
+        if (TurnOn) check1 = true;
+        else check1 = false;
+     }
+}
+  
+void CInterfaceHandler0::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if (Type == M_FRAME)
+    {
+      Toggler();     
+      ListNDraw();
+    }
+ if (Type == M_DRAWQUEUE)
+    {
+     if (TurnOn)
+     {
+      if (ShootingOne != NullObj) AddBitmap(0, ShootingOne->PosX, ShootingOne->PosY+50, GUIn,150,65,0);      // (-GS->Disp->xRes / 2) + GUIn->SX / 2
+     }
+    }
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    super;
+    if (Weap->CheckName("Select Worm"))
+    {
+        selectingWorm = true;
+    }
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+       if (selectingWorm && ShootingOne == this)
+       {
+          if (ObjState == WS_IDLE || ObjState == WS_AIMING) {}
+          else {selectingWorm = false;}                                   
+       }
+    }
+}

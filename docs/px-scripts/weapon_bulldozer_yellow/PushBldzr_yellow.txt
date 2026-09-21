@@ -1,0 +1,109 @@
+require utils;
+
+CMissile* dmis_bldzr;
+bool bulldozer_yellow;
+CColMask* PUSH_COLMASK_YELLOW;
+
+void PushBldzr_yellow::Init(){}
+
+void PushBldzr_yellow::FirstFrame()
+{
+     PUSH_COLMASK_YELLOW = new CColMask(10,10,MakeRectMask(20,20));
+}
+
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+Sdigging = false;
+BType = false;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) 
+{
+super;
+if(Weap->CheckName("Bulldozer"))
+	{
+    CGObject *Bobj;
+    CMissile *Bmis;	
+	Bobj = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+	if(Bobj->ClType == OC_Missile)
+    	{
+        Bmis = Bobj;
+        Bmis->BType = true;
+        }
+    bulldozer_yellow = true;
+	}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+	{
+    if (weap->CheckName("Bulldozer"))
+    	{
+        if (bulldozer_yellow)
+        	{
+            dmis_bldzr = this; dmis_bldzr->Sdigging = true; bulldozer_yellow = false;
+          	}
+        }
+
+        if (dmis_bldzr == this && Sdigging)
+        	{
+            GG->land->MakeHole(10,dmis_bldzr->PosX,dmis_bldzr->PosY-8.7);
+        	}
+
+    }
+    
+if(BType == true)
+	{
+    if(Type == M_FRAME){bullProcessCollision(15.0);}
+	}
+	
+super;
+}
+
+void CMissile::bullProcessCollision(float Speed)
+{
+	CGObject *obj;
+	
+	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(GetCurrentWorm() != NullObj)
+		                    {
+		                    if(obj == GetCurrentWorm()) continue;
+		                    }
+		
+		
+		if(obj->ClType == OC_Worm || obj->ClType == OC_OilDrum || obj->ClType == OC_Mine || obj->ClType == OC_Crate || obj->ClType == OC_Fire || obj->ClType == OC_Flame)
+		{
+			if(PUSH_COLMASK_YELLOW->Check(PosX, PosY, obj->ColMask, obj->PosX, obj->PosY))
+			{
+				float ForceX = obj->PosX - PosX;
+				float ForceY = obj->PosY - PosY;
+				float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+				
+				if(dist > 0)
+				{
+					ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+					ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+					
+					CMessageData msg;
+					msg.params[0]	= 0;
+					msg.fparams[1]	= PosX;
+					msg.fparams[2]	= PosY;
+					msg.fparams[3]	= ForceX;
+					msg.fparams[4]	= ForceY;
+					msg.params[5]	= 1;
+					msg.params[6]	= 0;
+					
+					obj->Message(this, M_GUNEXP, 1032, &msg);
+				}
+			}
+		}
+	}
+}

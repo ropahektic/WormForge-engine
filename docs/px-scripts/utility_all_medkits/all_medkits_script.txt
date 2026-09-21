@@ -1,0 +1,68 @@
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+       if (Weap->CheckName("Medkit 25")) 
+       {
+               local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+               GS->Info.SetWormHealth(WormTeam, WormNumber, HP + 25);
+               SickFlags = 0;
+               SickDamage = 0;
+               
+               return;         
+       }
+       if (Weap->CheckName("Medkit 50")) 
+       {
+               local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+               GS->Info.SetWormHealth(WormTeam, WormNumber, HP + 50);
+               SickFlags = 0;
+               SickDamage = 0;
+               
+               return;         
+       }
+       if (Weap->CheckName("Medkit 100")) 
+       {
+               local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+               GS->Info.SetWormHealth(WormTeam, WormNumber, HP + 100);
+               SickFlags = 0;
+               SickDamage = 0;
+               
+               return;         
+       }
+       if (Weap->CheckName("Medkit 150")) 
+       {
+               local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+               GS->Info.SetWormHealth(WormTeam, WormNumber, HP + 150);
+               SickFlags = 0;
+               SickDamage = 0;
+               
+               return;         
+       }
+       if (Weap->CheckName("Medkit 200")) 
+       {
+               local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+               GS->Info.SetWormHealth(WormTeam, WormNumber, HP + 200);
+               SickFlags = 0;
+               SickDamage = 0;
+               
+               return;         
+       }
+       if (Weap->CheckName("Medkit 250")) 
+       {
+               local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+               GS->Info.SetWormHealth(WormTeam, WormNumber, HP + 250);
+               SickFlags = 0;
+               SickDamage = 0;
+               
+               return;         
+       }
+       if (Weap->CheckName("Forbidden Fruit")) 
+       {
+               local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);  
+               GS->Info.SetWormHealth(WormTeam, WormNumber, HP + 25000);
+               SickFlags = 0;
+               SickDamage = 0;
+               
+               return;         
+       }
+       
+       super;   
+}

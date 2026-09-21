@@ -1,0 +1,79 @@
+require utils_steps;
+
+void IceDrum::Freeze()
+{
+      CWorm * cur_worm = GetCurrentWorm();
+        
+      for(int k = 1; k < Env->Objs.Count; k++)
+      {
+          local obj = CGObject(Env->Objs.Objs[k]);
+          if(obj == NullObj) continue;
+          if(obj->ClType == OC_Worm)
+	  {
+	      CWorm *sel_worm = CWorm(obj);
+	      
+	      if(DistBetweenObjs(this, sel_worm) <= 150)  
+	      {
+                  local state = sel_worm->ObjState;
+                  
+                  if (state != WS_SINKING && state != WS_DEAD && state != WS_DEATH && state != WS_FROZEN && sel_worm->DispHealth > 0)    //   
+                  {
+                      if(sel_worm->swimsuit)
+                      {
+                              local ss_wep = GetWeaponByName("Swim Suit");
+                          
+                              if(ss_wep != NullObj)
+                              {
+                                  CShootDesc sdesc;
+                                  zero(&sdesc);
+
+                                  sel_worm->CurWeapon = ss_wep; 
+                                  sel_worm->WeaponN = ss_wep->GetWeaponIndex();
+                                  sel_worm->FireFinal(ss_wep, &sdesc);
+                              }
+                      }
+                      
+                      if(cur_worm != NullObj && cur_worm == sel_worm)
+                      {
+                          if(int(cur_worm->ObjState) == 109)   //kami
+                          {
+                              cur_worm->SetState(WS_JUMP);
+                              GG->land->MakeHole(25, cur_worm->PosX, cur_worm->PosY);
+                           
+                              if(cur_worm->DispHealth > 1)
+                              {
+                                  CMessageData msgdamage;
+                                  zero(&msgdamage);
+                                  msgdamage.params[0] = 10;
+                                  msgdamage.params[1] = cur_worm->PosX;
+                                  msgdamage.params[2] = cur_worm->PosY;
+                                  msgdamage.params[5] = 30;
+                                  cur_worm->Message(NullObj, M_GUNEXP, 1032, &msgdamage);
+                                  
+                              }
+                              
+                              //cur_worm->dead = true;
+                          }  
+                      }   
+                      
+                      if(#KAMIKAZE_ROCKET)
+                      {
+                           if(sel_worm->kRocketCtrl)
+                           {
+                               sel_worm->kRocketCtrl = !sel_worm->kRocketCtrl;
+                           }
+                      }                   
+                      
+                      sel_worm->SetState(WS_FROZEN);
+                      
+                  }   
+              }
+           }
+       }
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+         swimsuit = false;
+         super;
+}

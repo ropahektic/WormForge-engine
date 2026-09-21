@@ -1,0 +1,55 @@
+require utils;
+
+override void CCrate::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+	{
+	local PlayingWorm = GetCurrentWorm();
+	if (PlayingWorm != NullObj)
+		{
+    	for (local i = 1; i < Env->Objs.Count; i++)
+        	{
+        	local obj = CCrate(Env->Objs.Objs[i]);
+        	if (obj == NullObj) continue;
+        	if (obj is CCrate) // obj->ClType == OC_Crate
+            	{
+            	if (obj->PosY > GS->LevelSY)
+					{
+    				remX = obj->PosX;
+					remY = obj->PosY;
+
+					obj->PosX = PlayingWorm->PosX;
+					obj->PosY = PlayingWorm->PosY;
+
+					DoExplosion(remX,remY, 100, 25, 0, 0);
+    	        	}
+				}
+			}
+		}
+	}
+super;
+}
+
+override void CCrate::Free(bool FreeMem)
+{
+if(desc.type == CT_WEAPON && desc.weapon > 100)
+        {
+        local wep = GS->GetWeaponByIndex(1, desc.weapon-100);
+        if(wep != NullObj)
+             {
+             local PlayingWorm = GetCurrentWorm();
+             if(PlayingWorm == NullObj){super; return;}
+             if(Root->CurTeam == 0 || Root->CurWorm == 0){super; return;}
+
+			 local windex = wep->GetWeaponIndex();
+             if(windex < 0 || windex > 80){super; return;}
+
+			 local teamnumber = GetTeamNumber(PlayingWorm->WormTeam);
+			 GS->Info.AddWeapon( teamnumber, windex, 1);
+			 PlayLocalSound(124, 3, 1, 1); // collect
+
+             PlayingWorm->ShowTeamMessage(15, "Got new weapon!", PlayingWorm->WormTeam);
+             }
+		}
+super;
+}

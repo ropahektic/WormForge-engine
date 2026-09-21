@@ -1,0 +1,38 @@
+require utils;
+
+void acceleworm::Init()
+{
+     keySync->AddKey(188); // <  
+     keySync->AddKey(190); // >
+     keySync->AddKey(186); // ;  
+     keySync->AddKey(191); // /
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Type == M_FRAME)
+    {
+        CWorm *w = GetCurrentWorm();
+        if (w != NullObj)
+        {
+            if (keySync->KeyPressed(188))
+            {
+                w->SpX = -5;
+            }
+            else if (keySync->KeyPressed(190)) 
+            {
+                w->SpX = 5;
+            }
+            if (keySync->KeyPressed(186)) 
+            {
+                w->SpY = -5;
+            }
+            else if (keySync->KeyPressed(191)) 
+            {
+                w->SpY = 5;
+            }
+        }
+    }
+    
+    super;      
+}

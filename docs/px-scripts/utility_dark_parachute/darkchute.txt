@@ -1,0 +1,29 @@
+//List of sprites
+CSprite* wparalnk;
+CSprite* wparacht;
+CSprite* wparbak;
+CSprite* wparbaku;
+CSprite* wparbakd;
+
+void darkchute::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("wparalnk.png");
+   wparalnk = LoadSprite(f, 17, 0);
+   f = GetAttachment("wparacht.png");
+   wparacht = LoadSprite(f, 17, 3);
+   f = GetAttachment("wparbak.png");
+   wparbak = LoadSprite(f, 6, 0);   
+   f = GetAttachment("wparbaku.png");
+   wparbaku = LoadSprite(f, 6, 0);
+   f = GetAttachment("wparbakd.png");
+   wparbakd = LoadSprite(f, 6, 0);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(287, wparalnk);
+   SetSpriteOverride(288, wparacht);
+   SetSpriteOverride(289, wparbak);
+   SetSpriteOverride(290, wparbaku);
+   SetSpriteOverride(291, wparbakd);
+}

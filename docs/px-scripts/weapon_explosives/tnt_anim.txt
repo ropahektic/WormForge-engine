@@ -1,0 +1,51 @@
+CSprite* tnt_aiming;
+                                                                                                                               
+void tnt_anim::InitGraphic() {
+    CFile* f;                                                                    
+    f = GetAttachment("tnt.png");                             
+    tnt_aiming = LoadSprite(f, 1, 0);                                                            
+}                                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "TNT";                                               
+     sprite = tnt_aiming->Index;                                     
+     Params->hand_radius = 12.0;    
+     Params->hand_radial_rotation = -0.95;                                                     
+     Params->weap_rotation =  0.45;
+     Params->weap_radius = 12.0;
+     Params->hand_type = 1;
+     Params->dont_rotate_with_angle = true;
+     Params->ang_if_static = -0.1; 
+     Params->hand_ang_if_static = 0.4; 
+     Params->scale = 0.8;                                     
+                                                  
+     local WA = new WormSprite(weapName, sprite, Params);
+    }                                                                           
+  }                                                                              
+}                                                                                
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;                                                                          
+  if (Type == M_FRAME){                                                          
+     if (weap->CheckName("TNT")) {                                
+         if (tnt_anim2) {                                              
+            local sprite = tnt_aiming->Index;                      
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            local wa = new WeapSprite(this, sprite, Params);  
+            wa->type = 5;             
+            weap->launch.anim.spriteIndex = 0;
+            tnt_anim2 = false;                                         
+         } 
+     }                                                                                                                                                                                                                          
+  }                                                                              
+}                                                                                
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           
+  tnt_anim2 = true;                                                    
+}                                                                                

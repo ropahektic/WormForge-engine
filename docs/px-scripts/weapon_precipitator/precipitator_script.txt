@@ -1,0 +1,15 @@
+require sprite_curtis_455, sprite_curtis_456;
+
+//---------------------------------PRECIPITATOR-------------------------------//
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+ {
+   if(Weap->CheckName("Precipitator"))
+   {
+   Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 20;
+   Desc->SpY = 20*(0.5 - FireAngle);
+   super(GetWeaponByName("Exp. Rain"), Desc);
+   return;
+   }
+ super;
+ }

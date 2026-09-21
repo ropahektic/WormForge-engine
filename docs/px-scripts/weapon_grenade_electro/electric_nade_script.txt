@@ -1,0 +1,73 @@
+// By PyroMan.
+
+require utils, utils_steps, utils_pyroman, p_animation, pxparticles, weapon_lightning, weapon_tazer, p_sprite_builder;
+
+CAnimationParams* ElectricGrenadeParams;
+
+float EG_scale;
+float EG_scale_next;
+
+CSprite* eg_explosion;
+
+CWorm *EG_now;
+
+void electric_nade_script::FirstFrame()
+{
+	EG_scale_next = 0.5;
+	ElectricGrenadeParams = new CAnimationParams;
+}
+
+
+void electric_nade_script::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("eg_explosion.png");
+    eg_explosion = LoadSprite(f, 10, 0);
+}
+
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    super;
+    if (weap->CheckName("Electric Grenade"))
+    {
+        im_electric = false;
+        ElectricGrenadeParams->turns = 1;
+        ElectricGrenadeParams->sprite = eg_explosion->Index;
+        ElectricGrenadeParams->speed = 75;
+        ElectricGrenadeParams->scale = 1.0;
+        ElectricGrenadeParams->duration = 1;
+        ElectricGrenadeParams->ZPlane = 6;
+        ElectricGrenadeParams->once = true;
+        ElectricGrenadeParams->color = ARGB(85, 30, 20, 235);
+        ElectricGrenadeParams->blend_type = 4;
+        new CAnimation(Root, x, y, NullObj, ElectricGrenadeParams);
+        local taz = new CTazerShot(GetObject(25, 0), this);
+        taz->AddToIgnoreList(EG_now);
+    }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Electric Grenade"))
+        {
+            imCheckMis = this;
+            if (not_too_much_particles) do_zip_trail_effects();
+        }
+    }                                    
+    super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Electric Grenade"))
+    {
+        EG_now = GetCurrentWorm();
+        EG_scale = EG_scale_next;
+        CheckParticlesNumber();
+    }                                                         
+    super;
+}

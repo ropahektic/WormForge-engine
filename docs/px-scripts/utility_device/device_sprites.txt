@@ -1,0 +1,259 @@
+require utils;
+
+CDeviceSpriteManager : CObject;
+CDeviceSpriter : CObject;
+
+CDeviceSpriteManager *SM;
+
+CSprite* JPSprite;
+CSprite* HPSprite;
+CSprite* SentryRSSprite;
+CSprite* SentryBASprite;
+CSprite* SentryBSSprite;
+CSprite* SentryRASprite;
+
+CSprite* SentryRSRSprite;
+CSprite* SentryBARSprite;
+CSprite* SentryBSRSprite;
+CSprite* SentryRARSprite;
+
+CSprite* DisrRedSprite;
+CSprite* DisrBlueSprite;
+CSprite* RedFieldSprite;
+CSprite* BlueFieldSprite;
+
+CSprite* MetalBoxSprite;
+
+
+void device_sprites::InitGraphic()
+{
+    local spr       = GetAttachment("jumppad3.png");
+    JPSprite     = LoadSprite(spr, 1, 0);
+
+    local spr2       = GetAttachment("hoverpad.png");
+    HPSprite     = LoadSprite(spr2, 1, 0);
+
+    local spr3       = GetAttachment("sentryblueaim.png");
+    SentryBASprite     = LoadSprite(spr3, 1, 0);
+    local spr4       = GetAttachment("sentryredaim.png");
+    SentryRASprite     = LoadSprite(spr4, 1, 0);
+    local spr5       = GetAttachment("sentrybluestand.png");
+    SentryBSSprite     = LoadSprite(spr5, 1, 0);
+    local spr6       = GetAttachment("sentryredstand.png");
+    SentryRSSprite     = LoadSprite(spr6, 1, 0);
+
+    local spr7       = GetAttachment("disrred.png");
+    DisrRedSprite     = LoadSprite(spr7, 1, 0);
+    local spr8       = GetAttachment("disrblue.png");
+    DisrBlueSprite     = LoadSprite(spr8, 1, 0);
+
+    local spr9       = GetAttachment("bluefield2.png");
+    BlueFieldSprite     = LoadSprite(spr9, 1, 0);
+    local spr10       = GetAttachment("redfield2.png");
+    RedFieldSprite     = LoadSprite(spr10, 1, 0);
+
+    local spr11       = GetAttachment("metalbox.png");
+    MetalBoxSprite     = LoadSprite(spr11, 20, 0);
+
+    local spr12       = GetAttachment("sentryblueaimrev.png");
+    SentryBARSprite     = LoadSprite(spr12, 1, 0);
+    local spr13       = GetAttachment("sentryredaimrev.png");
+    SentryRARSprite     = LoadSprite(spr13, 1, 0);
+    local spr14       = GetAttachment("sentrybluestandrev.png");
+    SentryBSRSprite     = LoadSprite(spr14, 1, 0);
+    local spr15       = GetAttachment("sentryredstandrev.png");
+    SentryRSRSprite     = LoadSprite(spr15, 1, 0);
+
+}
+
+void device_sprites::Init(){}
+
+void device_sprites::FirstFrame()
+{
+	SM = new CDeviceSpriteManager();
+}
+
+CDeviceSpriteManager::CDeviceSpriteManager()
+{
+	super(Root, GS);
+}
+
+void __DrawDevice()
+{
+        //GG->WriteToChat(1, "SM::__DrawBuilding", false);
+	SM->Draw();
+}
+
+void CDeviceSpriteManager::Draw()
+{
+	for(int i=0 ; i<Childs.Count ; i+=1)
+	{
+		local p = CDeviceSpriter(Childs.Objs[i]);
+		if(p == CDeviceSpriter(NullObj)) { continue;}
+		p->Draw();
+	}
+}
+
+void CDeviceSpriteManager::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		super;
+                //local stri = MakeNumberString("SM::Frame::Childs.Count - ",Childs.Count,"");
+                //GG->WriteToChat(1, stri, false);
+	}
+	if(Type == M_DRAWQUEUE)
+	{
+		AddCustomRender(6, "__DrawDevice");
+	}
+
+	if(Type == M_FRAME)
+	{
+		for(int i=0 ; i<Childs.Count ; i+=1)
+		{
+			local p = CDeviceSpriter(Childs.Objs[i]);
+			if(p == CDeviceSpriter(NullObj)) continue;
+
+			if(p->Dead)
+			{
+			        //GG->WriteToChat(1, "SM::KillingIt", false);
+				p->Free(true);
+				break;
+			}
+		}
+	}
+}
+
+void CDeviceSpriteManager::MakeSpriter(float x, float y, CDevice* link)
+{
+     //GG->WriteToChat(1, "SM::MakeSpriter", false);
+     local Buildin = new CDeviceSpriter(this, x, y);
+     Buildin->PosX = x;
+     Buildin->PosY = y;
+     Buildin->LinkedBuilding = link;
+}
+
+CDeviceSpriter::CDeviceSpriter(CDeviceSpriteManager* SM, float x, float y)
+{
+    super(SM, GS);
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+    Dead = false;
+
+    CDevice* LinkedBuilding = NullObj;
+}
+
+void CDeviceSpriter::Draw()
+{
+    if(Dead) return;
+
+    if(LinkedBuilding != NullObj)
+    {
+
+        if(StrCmp(LinkedBuilding->ClassType,"JumpPad"))
+        {
+             CQuad qs;
+             FillSpriteQuad(&qs, JPSprite->Index, 0.0, 0);
+             TransformQuad(&qs,0,1,1,LinkedBuilding->PosX,LinkedBuilding->PosY);
+             qs.blend = 0;
+             for (local i = 0; i < 4; i += 1) qs.v[i].color = -1;
+	     RenderQuad(&qs, 0);
+        }
+
+
+        if(StrCmp(LinkedBuilding->ClassType,"HoverPad"))
+        {
+             CQuad q;
+             FillSpriteQuad(&q, HPSprite->Index, 0.0, 0);
+             TransformQuad(&q,0,1,1,LinkedBuilding->PosX,LinkedBuilding->PosY);
+             q.blend = 0;
+             for (local i = 0; i < 4; i += 1) q.v[i].color = -1;
+	     RenderQuad(&q, 0);
+        }
+
+
+        if(StrCmp(LinkedBuilding->ClassType,"Sentry"))
+        {
+             local sentryindex = SentryRSSprite->Index;
+             if(LinkedBuilding->AnimBool == false)
+             {
+             if(GetTeamColor(LinkedBuilding->Team) == 0){if(LinkedBuilding->Direction == 1){sentryindex = SentryRSSprite->Index;}else{sentryindex = SentryRSRSprite->Index;}}
+             if(GetTeamColor(LinkedBuilding->Team) == 1){if(LinkedBuilding->Direction == 1){sentryindex = SentryBSSprite->Index;}else{sentryindex = SentryBSRSprite->Index;}}
+             }
+             else
+             {
+             if(GetTeamColor(LinkedBuilding->Team) == 0){if(LinkedBuilding->Direction == 1){sentryindex = SentryRASprite->Index;}else{sentryindex = SentryRARSprite->Index;}}
+             if(GetTeamColor(LinkedBuilding->Team) == 1){if(LinkedBuilding->Direction == 1){sentryindex = SentryBASprite->Index;}else{sentryindex = SentryBARSprite->Index;}}
+             }
+
+             CQuad q;
+             FillSpriteQuad(&q, sentryindex, LinkedBuilding->AnimPhase, 0);
+             TransformQuad(&q,0,1,1,LinkedBuilding->PosX,LinkedBuilding->PosY);
+             q.blend = 0;
+             for (local i = 0; i < 4; i += 1) q.v[i].color = -1;
+	     RenderQuad(&q, 0);
+        }
+
+
+        if(StrCmp(LinkedBuilding->ClassType,"Disruptor"))
+        {
+             local disindex = 0;
+             local fieldindex = 0;
+
+             if(GetTeamColor(LinkedBuilding->Team) == 0) disindex = DisrRedSprite->Index;
+             if(GetTeamColor(LinkedBuilding->Team) == 1) disindex = DisrBlueSprite->Index;
+
+             if(GetTeamColor(LinkedBuilding->Team) == 0) fieldindex = RedFieldSprite->Index;
+             if(GetTeamColor(LinkedBuilding->Team) == 1) fieldindex = BlueFieldSprite->Index;
+
+             CQuad q;
+             FillSpriteQuad(&q, disindex, LinkedBuilding->AnimPhase, 0);
+             TransformQuad(&q,0,1,1,LinkedBuilding->PosX,LinkedBuilding->PosY);
+             q.blend = 0;
+             for (local i = 0; i < 4; i += 1) q.v[i].color = -1;
+	     RenderQuad(&q, 0);
+
+             CQuad qw;
+             FillSpriteQuad(&qw, fieldindex, LinkedBuilding->AnimPhase, 0);
+             TransformQuad(&qw,0,1,1,LinkedBuilding->PosX,LinkedBuilding->PosY);
+             qw.blend = 0;
+             for (local i = 0; i < 4; i += 1) qw.v[i].color = -1;
+	     RenderQuad(&qw, 0);
+        }
+
+
+        if(StrCmp(LinkedBuilding->ClassType,"MetalBox"))
+        {
+             CQuad q;
+             FillSpriteQuad(&q, MetalBoxSprite->Index, LinkedBuilding->AnimPhase, 0);
+             TransformQuad(&q,0,1,1,LinkedBuilding->PosX,LinkedBuilding->PosY);
+             q.blend = 0;
+             for (local i = 0; i < 4; i += 1) q.v[i].color = -1;
+	     RenderQuad(&q, 0);
+        }
+    }
+}
+
+void CDeviceSpriter::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if(Type == M_FRAME)
+     {
+               if(LinkedBuilding != NullObj)
+               {
+               Destroy();
+               PosX = 0;
+               PosY = 0;
+               }
+               else{ Dead = true; return;}
+     }
+}
+
+void CDeviceSpriter::Destroy()
+{
+      if (LinkedBuilding->Health < 1) //Destroying
+      {
+      Dead = true; return;
+      }
+}

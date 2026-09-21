@@ -1,0 +1,83 @@
+require utils;
+
+RopeCounter : CObject;
+RopeCounter* gRopeCounter;
+CGUIText* multiRopeGUI[7];
+int RopeShots[7];
+
+void rope_counter::InitGraphic()
+{
+  curRopeShotsGUI = new CGUIText(GS->Disp, 16, 1);
+  for (local i = 1; i <= 6; i++) multiRopeGUI[i] = new CGUIText(GS->Disp, 16, 1);
+}
+
+void rope_counter::FirstFrame()
+{
+new RopeCounter(Root);
+}
+
+RopeCounter::RopeCounter(CObject* parent)
+{
+   super(Root, GS);
+
+   cRopeShots = 0;
+   gRopeCounter = this;
+}
+
+void RopeCounter::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if (Type == M_DRAWQUEUE)
+   		{
+      	Draw();
+   		}
+}
+
+void RopeCounter::Draw()
+{
+   local cTeam = Root->CurTeam;
+   if (cTeam >= 1)
+   {
+     cRopeShots = RopeShots[cTeam];
+   }
+   
+   local x = -(GS->ResX / 2) + 250; // to not obscure race timer
+   local y = GS->ResY / 2 - 90;
+   
+   for (local i = 6; i >= 1; i--)
+   {
+     if (!IsTeamAlive(i)) continue;
+
+     local str = StrCon(GetTeamName(i), " rope shots : ");
+     str = StrCon(str , FormatRopeNum(RopeShots[i]));
+     
+     local outX = 1;
+     local outY = 1;
+   
+     local outClr = RGB(127,127,127);
+   
+     local bitm = multiRopeGUI[i]->SetText(str, GetTeamColor(i), 0, outClr, &outX, &outY, 1);
+     AddInterfaceBitmap(0, x + outX / 2, y, bitm, outX, outY, 0);
+     y -= outY + 4;
+   }
+   
+   return;
+   
+   
+}
+
+string RopeCounter::FormatRopeNum(int time)
+{
+  local r_shts = MakeZeroedNumber(time, 3);
+
+  local r_n = StrCon(r_shts, "");
+  return r_n;
+}
+
+override void CWorm::SetState(EObjState State)
+{
+super;
+     if(State == WS_ROPING)
+     {
+          RopeShots[Root->CurTeam] += 1;
+     }
+}

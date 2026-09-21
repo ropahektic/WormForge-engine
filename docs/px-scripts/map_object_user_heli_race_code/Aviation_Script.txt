@@ -1,0 +1,28 @@
+require weapon_sentry_gun;
+
+void Aviation_Script::FirstFrame()
+{
+      GG->WriteToChat(10, "Welcome to UserC479's Aviation Race!", false);
+      GG->WriteToChat(10, "----------------------------------------------------------------------------------------------", false);
+      GG->WriteToChat(10, "Current Glitches: You get hit as your launching the Helicopter. To fix this - simply Relaunch.", false);
+      GG->WriteToChat(10, "----------------------------------------------------------------------------------------------", false);
+}
+
+override PxSentryGun::PxSentryGun(CObject* Parent,CShootDesc* Desc)
+{
+  super;
+    MaxHealth = 99999999; // lol
+	Health = MaxHealth;
+    TurretActive = true;
+
+    	// Gun parameters
+	GunAmmunition = 40;
+	GunDamage = 2;
+	GunPush = 3;
+	GunSpread = 0.5;
+	GunFramesPerShot = 6;
+
+	// Turret parameters
+	TurretRotationSpeedIdle = 1;
+	TurretRotationSpeedActive = 3;
+}

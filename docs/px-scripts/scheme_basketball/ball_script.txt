@@ -1,0 +1,863 @@
+require utils, utils_steps, utils_danylo, pxparticles, p_animation, p_sprite_builder, scheme_basketball_sounds;
+
+#WEAPON_BASKETBALL
+
+CColMask* BALL_MASK;
+CSprite* basketball_sprite;
+CSprite* basketball_tr;
+CSprite* hands;
+
+CSoundFile* hit1;
+CSoundFile* hit2;
+CSoundFile* hit3;
+CSoundFile* hit4;
+CSoundFile* hit5;
+CSoundFile* hit6;
+CSoundFile* hit7;
+CSoundFile* hit8;
+CSoundFile* hit9;
+CSoundFile* hit10;
+CSoundFile* hit11;
+
+CSoundFile* catch1;
+CSoundFile* catch2;
+CSoundFile* catch3;
+CSoundFile* catch4;
+CSoundFile* catch5;
+CSoundFile* catch6;
+CSoundFile* catch7;
+
+CSoundFile* hoop1;
+CSoundFile* hoop2;
+CSoundFile* hoop3;
+CSoundFile* hoop4;
+
+CSoundFile* roll1;
+CSoundFile* roll2;
+CSoundFile* splash1;
+CSoundFile* splash2;
+CSoundFile* splash3;
+CSoundFile* splash4;
+
+CSoundFile* redwins;
+CSoundFile* bluewins;
+
+CSoundFile* crowd1;
+CSoundFile* crowd2;
+CSoundFile* crowd3;
+
+bool BallFired;
+bool CanPickBall;
+bool DrawLine;
+int Cooldown;
+
+void ball_script::FirstFrame()
+{
+	BALL_MASK = new CColMask(16, 16, MakeCircleMask(16));
+}
+
+void ball_script::Init()
+{
+    hit1 = new CSoundFile(GetAttachment("hit1.wav"));
+    hit2 = new CSoundFile(GetAttachment("hit2.wav"));
+    hit3 = new CSoundFile(GetAttachment("hit3.wav"));
+    hit4 = new CSoundFile(GetAttachment("hit4.wav"));
+    hit5 = new CSoundFile(GetAttachment("hit5.wav"));
+    hit6 = new CSoundFile(GetAttachment("hit6.wav"));
+    hit7 = new CSoundFile(GetAttachment("hit7.wav"));
+    hit8 = new CSoundFile(GetAttachment("hit8.wav"));
+    hit9 = new CSoundFile(GetAttachment("hit9.wav"));
+    hit10 = new CSoundFile(GetAttachment("hit10.wav"));
+    hit11 = new CSoundFile(GetAttachment("hit11.wav"));
+    
+    catch1 = new CSoundFile(GetAttachment("catch1.wav"));
+    catch2 = new CSoundFile(GetAttachment("catch2.wav"));
+    catch3 = new CSoundFile(GetAttachment("catch3.wav"));
+    catch4 = new CSoundFile(GetAttachment("catch4.wav"));
+    catch5 = new CSoundFile(GetAttachment("catch5.wav"));
+    catch6 = new CSoundFile(GetAttachment("catch6.wav"));
+    catch7 = new CSoundFile(GetAttachment("catch7.wav"));
+
+    hoop1 = new CSoundFile(GetAttachment("hoop1.wav"));
+    hoop2 = new CSoundFile(GetAttachment("hoop2.wav"));
+    hoop3 = new CSoundFile(GetAttachment("hoop3.wav"));
+    hoop4 = new CSoundFile(GetAttachment("hoop4.wav"));
+
+    roll1 = new CSoundFile(GetAttachment("roll1.wav"));
+    roll2 = new CSoundFile(GetAttachment("roll2.wav"));
+    splash1 = new CSoundFile(GetAttachment("splash1.wav"));
+    splash2 = new CSoundFile(GetAttachment("splash2.wav"));
+    splash3 = new CSoundFile(GetAttachment("splash3.wav"));
+    splash4 = new CSoundFile(GetAttachment("splash4.wav"));
+    
+    redwins = new CSoundFile(GetAttachment("red_team_wins_the_round.wav"));
+    bluewins = new CSoundFile(GetAttachment("blue_team_wins_the_round.wav"));
+    
+    crowd1 = new CSoundFile(GetAttachment("crowd1.wav"));
+    crowd2 = new CSoundFile(GetAttachment("crowd2.wav"));
+    crowd3 = new CSoundFile(GetAttachment("crowd3.wav"));
+}
+
+void ball_script::InitGraphic()
+{
+	CFile *f;
+   	f = GetAttachment("basketball.png");	basketball_sprite = LoadSprite(f, 1, 0);
+    f = GetAttachment("basketballt.png");	basketball_tr = LoadSprite(f, 7, 0);
+    f = GetAttachment("hands.png");			hands = LoadSprite(f, 11, 1);
+}
+
+CBasketBall : CMine;
+
+CBasketBall::CBasketBall(CObject* Parent, CShootDesc* Desc)
+{
+	CMineParams MParams;
+	zero(&MParams);
+	MParams.Prefuse = 0;
+	MParams.Radius = 0;
+	MParams.Fuse = 0;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Damage = 0;
+	MParams.BlastPower = 0;
+
+	SetLayerOverride(LAYER_OILDRUM);
+	super(Parent, &MParams, Desc, false, 0);
+	ColGroup = CMASK_SKIMMING;
+
+	BounceColMask = ColMask;
+	BounceColMask2 = MASK_PIXEL;
+	ColMask = BALL_MASK;
+
+	PhysBounciness = 0.07; // How much the physics object should bounce when colliding
+	PhysFriction = 0.02; // How much speed should be decreased when colliding
+	PhysInertiaX = 0.4; // How much acceleration should be added on the X and Y axis
+	PhysInertiaY = 0.6;
+
+	LowSpeedThreshold = 4.0; // The object will be put into "low speed" state when its speed goes below this value for a long time
+	TimeForLowSpeed = 100; // How many frames the physics object should hold a low speed to be put into "low speed" state
+
+	// Regular physics parameters will be replaced by those ones when in "low speed" state
+	LowSpeedBounciness = 0.05;
+	LowSpeedFriction = 0.03;
+	LowSpeedInertiaX = 0.1;
+	LowSpeedInertiaY = 0.1;
+
+	SleepDistanceThreshold = 2;
+	SleepSamplePeriod = 80;
+
+	DefaultColGroup =	CMASK_TERRAIN | CMASK_WORM_ON_TERRAIN | CMASK_WORM_FROZEN |
+						CMASK_CRATE | CMASK_DONORCARD | CMASK_OILDRUM; // CMASK_WORM_IN_MIDAIR
+
+	NextDie = GS->Tick + 300;
+	Wtfboom = false;
+
+	LastSpX = SpX;
+	LastSpY = SpY;
+	LastPosX = PosX;
+	LastPosY = PosY;
+	RealSpX = 0.0;
+	RealSpY = 0.0;
+
+	Rotation = 0.0;
+	SpinMultiplierX = 0.06;
+	SpinMultiplierY = 0.02;
+	MaxSpinSpeed = 0.6;
+
+	Res = new CTraceRes;
+	First = true;
+	EnteredSolid = false;
+
+	LastRecordPosX = PosX;
+	LastRecordPosY = PosY;
+	SleepSampleTimer = 50;
+	LowSpeedTimer = 100;
+	IsAsleep = false;
+	IsLowSpeed = false;
+
+	ZPlane = 5;
+	ClType = EObjectClass(71);
+	ReadyToRoll = false;
+	WindFactor = 0.0;
+	animate = false;
+	stopFrame = 0;
+	sprite_roll = 0;
+}
+
+void CBasketBall::Free(bool b)
+{
+	delete Res;
+	super;
+}
+
+void CBasketBall::Collide(CGObject* Obj, int type)
+{
+}
+
+void CBasketBall::UpdateRotation()
+{
+	float abs_speedX = RealSpX;
+	float abs_speedY = RealSpY;
+
+	if(abs_speedX < 0) abs_speedX = 0-abs_speedX;
+	if(abs_speedY < 0) abs_speedY = 0-abs_speedY;
+
+	float rot = SpinMultiplierX * abs_speedX + SpinMultiplierY * abs_speedY;
+
+	if(rot > MaxSpinSpeed) rot = MaxSpinSpeed;
+	if(RealSpX<0) rot = 0-rot;
+
+	ApplyRotation(rot);
+}
+
+void CBasketBall::ApplyRotation(float r)
+{
+	Rotation += r;
+	while(Rotation > 3.141593)		Rotation -= 6.283186;
+	while(Rotation <= 0 - 3.141593)	Rotation += 6.283186;
+}
+
+void CBasketBall::Sleep()
+{
+	if(IsAsleep) return;
+	IsAsleep = true;
+	IsLowSpeed = false;
+	//IsMaterial = true;
+	SleepX = PosX;
+	SleepY = PosY;
+	SpeedDivider = 1000;
+	SpeedDividerB = 1000;
+	SpX = 0.0;
+	SpY = 0.0;
+	GravityFactor = 0.0;
+	Stopped = 1;
+	InMidAir = 0;
+}
+
+void CBasketBall::Wake()
+{
+	if(IsAsleep == false && IsLowSpeed == false) return;
+	IsAsleep = false;
+	IsLowSpeed = false;
+	//IsMaterial = false;
+	SleepX = 0;
+	SleepY = 0;
+	SpeedDivider = 1;
+	SpeedDividerB = 1;
+	GravityFactor = 1.0;
+	Stopped = 0;
+	InMidAir = 1;
+	SleepSampleTimer = 100; // 200
+	LowSpeedTimer = 100; // 200
+}
+
+void CBasketBall::Render()
+{
+	AddSpriteEx(ZPlane+0.01, PosX, PosY, basketball_sprite->Index, 0, Rotation, 1);
+}
+
+void CBasketBall::PhysicsThink()
+{
+	if (BBMessage != NullObj && BBMessage->alpha <= 0) animate = false;
+	if(IsAsleep)
+	{
+		PosX = SleepX;
+		PosY = SleepY;
+		RealSpX = 0.0;
+		RealSpY = 0.0;
+		SpX = 0.0;
+		SpY = 0.0;
+		Stopped = 1;
+		InMidAir = 0;
+	}
+	else
+	{
+		float Speed = sqrt(RealSpX*RealSpX + RealSpY*RealSpY);
+
+		fixed SpX2 = SpX;
+		fixed SpY2 = SpY + Env->Gravity;
+
+		float bounciness;
+		float friction;
+		float inertiaX;
+		float inertiaY;
+
+		if(IsLowSpeed)
+		{
+			bounciness = LowSpeedBounciness;
+			friction = LowSpeedFriction;
+			inertiaX = LowSpeedInertiaX;
+			inertiaY = LowSpeedInertiaY;
+		}
+		else
+		{
+			bounciness = PhysBounciness;
+			friction = PhysFriction;
+			inertiaX = PhysInertiaX;
+			inertiaY = PhysInertiaY;
+		}
+		
+		if ((abs(SpY) + abs(SpX)) > 5 && PosX != GS->LevelSX / 2) WindFactor = 0.1;
+        else WindFactor = 0.0;
+
+		if(SpX2 == 0)
+		{
+			if(SpY2 == 0)
+			{
+				SpY2 = SpY + 0.1;
+			}
+		}
+
+		// Collision detection
+		// Regular traces, takes anything solid into consideration
+		TraceMaskEx(this, BounceColMask, PosX, PosY, PosX + SpX2, PosY + SpY2, DefaultColGroup, Res);
+		
+		if(Res->StartsSolid)
+		{
+			TraceMaskEx(this, BounceColMask, PosX, PosY, PosX + SpX2, PosY + SpY2, DefaultColGroup, Res);
+			if(Res->StartsSolid)
+			{
+				// The object is stuck inside something solid, try to unblock it
+				TraceMaskEx(this, BounceColMask, PosX, PosY, PosX - 8 * SpX2, PosY - 8 * SpY2, DefaultColGroup, Res);
+				TraceMaskEx(this, BounceColMask, Res->LeftSolidX, Res->LeftSolidY, Res->LeftSolidX + 8 * SpX2, Res->LeftSolidY + 8 * SpY2, DefaultColGroup, Res);
+			}
+		}
+
+		// Couldn't unblock it :(
+		if(Res->StartsSolid)
+		{
+			TraceMaskEx(this, BounceColMask2, PosX, PosY, PosX - 8 * SpX2, PosY - 8 * SpY2, DefaultColGroup, Res);
+			TraceMaskEx(this, BounceColMask2, Res->LeftSolidX, Res->LeftSolidY, Res->LeftSolidX + 8 * SpX2, Res->LeftSolidY + 8 * SpY2, DefaultColGroup, Res);
+			if(Res->StartsSolid)
+			{
+				//EnteredSolid = true;
+				//SpY = SpY - 4.0;
+				Sleep();
+			}
+		}
+
+		// Collision processing
+		if(Res->Hit)
+		{
+			First = false;
+			// Calculating tangent and normal initial forces
+			float SpT = (SpX2 * Res->TangentX) + (SpY2 * Res->TangentY);
+			float SpN = (SpX2 * Res->NormalX ) + (SpY2 * Res->NormalY );
+
+			// Move the object 1 pixel away from the collision point
+			PosX = Res->PreHitX;
+			PosY = Res->PreHitY;
+
+			// Calculating bounciness and friction forces
+			float ForceX = 0 - SpN * Res->NormalX * (bounciness + 1.0) - SpT * Res->TangentX * friction;
+			float ForceY = 0 - SpN * Res->NormalY * (bounciness + 1.0) - SpT * Res->TangentY * friction;
+
+			SpX = SpX + ForceX;
+			SpY = SpY + ForceY;
+			
+			if(!IsLowSpeed) // make sound only if not in low speed state
+			    {
+			    ReadyToRoll = true;
+    			pan = CalculateSoundPan(PosX,PosY);
+    			bVolume = abs(SpY/2) + abs(SpX/2);
+                if (bVolume < 0.4) bVolume = 0.4;
+                else if (bVolume > 3.0) bVolume = 3.0;
+
+				local i = RandomInt(1, 11);
+    			if      (i == 1) hit1->Play(bVolume, pan, false);
+    			else if (i == 2) hit2->Play(bVolume, pan, false);
+    			else if (i == 3) hit3->Play(bVolume, pan, false);
+    			else if (i == 4) hit4->Play(bVolume, pan, false);
+    			else if (i == 5) hit5->Play(bVolume, pan, false);
+    			else if (i == 6) hit6->Play(bVolume, pan, false);
+    			else if (i == 7) hit7->Play(bVolume, pan, false);
+    			else if (i == 8) hit8->Play(bVolume, pan, false);
+    			else if (i == 9) hit9->Play(bVolume, pan, false);
+    			else if (i == 10) hit10->Play(bVolume, pan, false);
+    			else if (i == 11) hit11->Play(bVolume, pan, false);
+    			}
+		}
+
+		SpX = SpX + inertiaX * (SpX - LastSpX);
+		SpY = SpY + inertiaY * (SpY - LastSpY);
+		RealSpX = PosX - LastPosX;
+		RealSpY = PosY - LastPosY;
+
+		// Should solve an issue where the object keeps rolling on a perfectly horizontal surface,
+		// even though friction should prevent it from doing so
+		if(IsLowSpeed)
+		{
+            if(ReadyToRoll) // make last sound as if ball is no longer bounces
+				{
+    			pan = CalculateSoundPan(PosX,PosY);
+				local i = RandomInt(1, 2);
+    			if      (i == 1) roll1->Play(0.4, pan, false);
+    			else if (i == 2) roll2->Play(0.4, pan, false);
+    			ReadyToRoll = false;
+    			}
+    			
+			if(RealSpY > -1.0)
+			{
+				if(RealSpY < 1.0)
+				{
+					if(SpX > -0.3) // -1.0
+					{
+						if(SpX < 0.0) SpX += 0.025; // = 0
+						else if (SpX < 0.0001) SpX = 0;
+					}
+				}
+			}
+		}
+
+		LastPosX = PosX;
+		LastPosY = PosY;
+		LastSpX = SpX;
+		LastSpY = SpY;
+
+		if(Speed < LowSpeedThreshold)
+		{
+			LowSpeedTimer = LowSpeedTimer - 1;
+			if(LowSpeedTimer <= 0)
+			{
+				IsLowSpeed = true;
+				LowSpeedTimer = TimeForLowSpeed;
+			}
+		}
+		else
+		{
+			LowSpeedTimer = TimeForLowSpeed;
+			IsLowSpeed = false;
+		}
+
+		SleepSampleTimer = SleepSampleTimer - 1;
+		if(SleepSampleTimer <= 0)
+		{
+			float dx = PosX - LastRecordPosX;
+			float dy = PosY - LastRecordPosY;
+			float dist = sqrt(dx*dx+dy*dy);
+
+			if(dist < SleepDistanceThreshold) Sleep();
+
+			SleepSampleTimer = SleepSamplePeriod;
+			LastRecordPosX = PosX;
+			LastRecordPosY = PosY;
+		}
+		
+		if(PosY > GS->LevelSY - 10) // if ball goes to water
+      	{
+			vol = CalculateSoundVolume(PosX,PosY);
+    		pan = CalculateSoundPan(PosX,PosY);
+
+    		local i = RandomInt(1, 4);
+    		if      (i == 1) splash1->Play(vol, pan, false);
+    		else if (i == 2) splash2->Play(vol, pan, false);
+    		else if (i == 3) splash3->Play(vol, pan, false);
+    		else if (i == 4) splash4->Play(vol, pan, false);
+
+    		local p = new PxParticle(basketball_tr->Index, PosX, PosY);
+			p->SetLifeTime(30);
+			p->SetRandomVelocity(10, 10);
+			p->SetAirResistance(0.5);
+			p->SetStartAlpha(255);
+			p->SetEndAlpha(255);
+
+			sprite_roll = 0;
+            ShowSprite();
+            ReturnToCenter();
+  		}
+
+  		else if(PosY > 300 && PosY < 320)
+  		{
+  		    if(PosX > 376 && PosX < 413) // left hoop
+  		    {
+				if(SpY > 0)
+      		    {
+            	vol = CalculateSoundVolume(PosX,PosY);
+    			pan = CalculateSoundPan(PosX,PosY);
+
+    			local i = RandomInt(1, 4);
+    			if      (i == 1) hoop1->Play(vol, pan, false);
+    			else if (i == 2) hoop2->Play(vol, pan, false);
+    			else if (i == 3) hoop3->Play(vol, pan, false);
+    			else if (i == 4) hoop4->Play(vol, pan, false);
+
+				BlueScoreNumber = BlueScoreNumber + ScoreCoefficient;
+				local p = new PxParticle(basketball_tr->Index, PosX, PosY);
+				p->SetLifeTime(30);
+				p->SetRandomVelocity(10, 10);
+				p->SetAirResistance(0.5);
+				p->SetStartAlpha(255);
+				p->SetEndAlpha(255);
+
+            	sprite_roll = 1;
+            	ShowSprite();
+            	CalculatePoints();
+            	ReturnToCenter();
+            	}
+            	else
+            	{
+            	PlayLocalSound(49, 1.0, 1.0, 1.0); // moo
+				BlueScoreNumber = BlueScoreNumber + 0;
+				ReturnToCenter();
+            	}
+  			}
+  			else if(PosX > 1508 && PosX < 1545) // right hoop
+  			{
+				if(SpY > 0)
+      		    {
+            	vol = CalculateSoundVolume(PosX,PosY);
+    			pan = CalculateSoundPan(PosX,PosY);
+
+    			local i = RandomInt(1, 4);
+    			if      (i == 1) hoop1->Play(vol, pan, false);
+    			else if (i == 2) hoop2->Play(vol, pan, false);
+    			else if (i == 3) hoop3->Play(vol, pan, false);
+    			else if (i == 4) hoop4->Play(vol, pan, false);
+
+				RedScoreNumber = RedScoreNumber + ScoreCoefficient;
+				local p = new PxParticle(basketball_tr->Index, PosX, PosY);
+				p->SetLifeTime(30);
+				p->SetRandomVelocity(10, 10);
+				p->SetAirResistance(0.5);
+				p->SetStartAlpha(255);
+				p->SetEndAlpha(255);
+
+            	sprite_roll = 2;
+            	ShowSprite();
+            	CalculatePoints();
+            	ReturnToCenter();
+            	}
+            	else
+            	{
+            	PlayLocalSound(49, 1.0, 1.0, 1.0); // moo
+				RedScoreNumber = RedScoreNumber + 0;
+				ReturnToCenter();
+            	}
+  			}
+  		}
+	}
+}
+
+void CBasketBall::DoTrailEffects()
+{
+	if(IsAsleep == false && IsLowSpeed == false)
+	{
+		local p0 = new PxParticle(basketball_tr->Index, PosX, PosY);
+		p0->SetBlendMode(1);
+		p0->SetStartColor(90,90,90);
+		p0->SetEndColor(0,0,0);
+		p0->SetLifeTime(20);
+		p0->SetRandomVelocity(0, 0.3);
+		p0->SetAirResistance(0);
+		p0->SetAlpha(255);
+		p0->SetStartSize(1,1);
+		p0->SetEndSize(0.5,0.5);
+	}
+}
+
+
+void CBasketBall::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Wtfboom) return;
+
+	if(Type==M_FRAME)
+	{
+  		if(Wtfboom) Free(true);
+
+		if(Sinking==false)
+		{
+			UpdateRotation();
+			PhysicsThink();
+			DoTrailEffects();
+			
+			if (BBMessage != NullObj)
+            {
+            if (animate)
+                {
+                BBMessage->x = GS->LevelSX / 2;
+                BBMessage->y = 200;
+                if (BBMessage->scale < 0.5) BBMessage->scale += 0.04;
+                if (gframe - stopFrame > 95)   // when 2 sec passed
+                    {
+                    BBMessage->alpha -= 5;    // 1 more sec to fade down
+                    }
+                }
+            }
+    		else animate = false;
+		}
+	}
+
+	if(Type==M_DRAWQUEUE)
+	{
+		Render();
+		return;
+	}
+
+	super;
+}
+
+void CBasketBall::ReturnToCenter()
+{
+	Root->Message( Root, M_SKIPTURN, 0, NullObj);
+	PosX = GS->LevelSX / 2;
+	PosY = 400;
+	//GravityFactor = 0.0;
+	WindFactor = 0.0;
+	RealSpX = 0;
+	RealSpY = 0;
+	LastSpX = 0;
+	LastSpY = 0;
+	SpX = 0;
+	SpY = 0;
+	SpX2 = 0;
+	SpY2 = 0;
+}
+
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	super;
+	Cooldown = 0;
+	BallFired = false;
+	CanPickBall = true;
+	PlaySound = true;
+
+	hands_frame      = 0.0;
+	hands_max_frame  = 40;
+	hands_initial_tick = 0;
+	hands_spd_factor = float(1 / hands_max_frame);
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+        local w = GetCurrentWorm();
+		local BB = GetWeaponByName("Basketball");
+        local BBT = GetWeaponByName("Basketball ");
+
+        hands_frame = (GS->Tick - hands_initial_tick) % hands_max_frame;
+
+        if (gframe == 1)
+        	{
+        	for(int i = 1; i < Env->Objs.Count; i++)
+    				{
+        			local obj = Env->Objs.Objs[i];
+		        	if(obj == NullObj) continue;
+    		    	if((obj is CWorm) == false) continue;
+	        		CWorm* worm = CWorm(obj);
+		        	if(worm == NullObj) continue;
+		        	
+		        	for (local wormIndex = 2; wormIndex <= 8; wormIndex++)
+							{
+   			 				GS->Info.SetWormHealth( WormTeam, wormIndex, 0);
+      						GS->Info.Teams[WormTeam-1].Worms[wormIndex-1].State = 135;
+	      					CWorm* wormy = Root->GetObject( 2, 16 * WormTeam + wormIndex);
+    	  					if (wormy == NullObj) continue;
+      						wormy->Free(true);
+  							}
+					}
+
+            for (local ti = 1; ti <= 6; ti++)  // rename all worms
+	    		{
+				for (local wi = 1; wi <= 8; wi++)
+		    		{
+	      			local wormy = CWorm(Root->GetObject(2, 16 * ti + wi));
+	      			if(wormy != NullObj)
+	      	    		{
+	      	    		local n = RandomInt(1,9);
+	      	    		local pn = 0;
+	      	    		if(n != pn)
+	      	    			{
+    						if      (n == 1) {name = "Jordan"; pn = 1;}
+    						else if (n == 2) {name = "LeBron"; pn = 2;}
+    						else if (n == 3) {name = "Kobe"; pn = 3;}
+    						else if (n == 4) {name = "Shaq"; pn = 4;}
+    						else if (n == 5) {name = "Durant"; pn = 5;}
+    						else if (n == 6) {name = "Malone"; pn = 6;}
+    						else if (n == 7) {name = "Russell"; pn = 7;}
+    						else if (n == 8) {name = "Jones"; pn = 8;}
+    						else if (n == 9) {name = "Romka"; pn = 9;}
+    						}
+	      	    		wormy->SetName(name);
+	      	    		}
+  					}
+				}
+			}
+
+        if(Root->Timer == 0) // drop ball from worm if he had it
+			{
+		    	if(BallFired == false)
+					{
+					BallPosX = LastWormPosX;
+					BallPosY = LastWormPosY;
+					if(LastWormPosX == 0 && LastWormPosY == 0) // this part is to spawn first ball in the game
+					    {
+					    BallPosX = GS->LevelSX / 2;
+						BallPosY = 400;
+					    }
+					CreateBall();
+					BallFired = true;
+					}
+			}
+
+        if(Root->SuddenDeath == true) // kill the team with less points
+            {
+            for (local teamIndex = 1; teamIndex <= 6; teamIndex++)
+                {
+                if(RedScoreNumber > BlueScoreNumber)
+                	{
+                	if (GetTeamColor(teamIndex) == 1)
+						{
+						destroyTeam(teamIndex);
+						if(PlaySound)
+							{
+							redwins->Play(1.0, 0.0, false);
+							PlaySound = false;
+							}
+						}
+					}
+            	if(RedScoreNumber < BlueScoreNumber)
+                	{
+                	if (GetTeamColor(teamIndex) == 0)
+						{
+						destroyTeam(teamIndex);
+						if(PlaySound)
+							{
+							bluewins->Play(1.0, 0.0, false);
+							PlaySound = false;
+							}
+						}
+                	}
+				}
+			}
+
+		if(Cooldown > 0){Cooldown = Cooldown - 1; CanPickBall = false;}
+		else {CanPickBall = true;}
+
+    	if(BallFired == true) // remove ball from all players when it is shot or dropped
+	    	{
+	        	GS->Info.SetWeaponDelay(1, BB->GetWeaponIndex(), BB->GetPageIndex(), -1 );
+	        	GS->Info.SetWeaponDelay(2, BB->GetWeaponIndex(), BB->GetPageIndex(), -1 );
+
+	        	GS->Info.SetWeaponDelay(1, BBT->GetWeaponIndex(), BBT->GetPageIndex(), -1 );
+	        	GS->Info.SetWeaponDelay(2, BBT->GetWeaponIndex(), BBT->GetPageIndex(), -1 );
+			}
+
+		if(w != NullObj)
+		{
+            LastWormPosX = w->PosX;
+			LastWormPosY = w->PosY;
+			
+			if(w->PosY > 549) RememberPosX = w->PosX;
+
+			if((w->CurWeapon->CheckName("Basketball") || w->CurWeapon->CheckName("Basketball ")) && w->ObjState == WS_SETPOWER) BallFired = true;
+
+			if(CanPickBall == true)
+            {
+                local x = w->PosX;
+        		local y = w->PosY;
+				local obj_ball = SCFindBall(x-22, x+22, y-24, y+24);
+
+                if(obj_ball != NullObj)
+                {
+            		vol = CalculateSoundVolume(PosX,PosY);
+    				pan = CalculateSoundPan(PosX,PosY);
+					local i = RandomInt(1, 7);
+    				if      (i == 1) catch1->Play(vol, pan, false);
+    				else if (i == 2) catch2->Play(vol, pan, false);
+    				else if (i == 3) catch3->Play(vol, pan, false);
+    				else if (i == 4) catch4->Play(vol, pan, false);
+    				else if (i == 5) catch5->Play(vol, pan, false);
+    				else if (i == 6) catch6->Play(vol, pan, false);
+    				else if (i == 7) catch7->Play(vol, pan, false);
+
+            		obj_ball->Free(true);
+            		BallFired = false;
+            		DrawLine = true;
+            		GS->Info.SetWeaponDelay(1, BB->GetWeaponIndex(), BB->GetPageIndex(), 0 );
+            		GS->Info.SetWeaponDelay(2, BB->GetWeaponIndex(), BB->GetPageIndex(), 0 );
+
+            		GS->Info.SetWeaponDelay(1, BBT->GetWeaponIndex(), BBT->GetPageIndex(), 0 );
+            		GS->Info.SetWeaponDelay(2, BBT->GetWeaponIndex(), BBT->GetPageIndex(), 0 );
+				}
+            }
+		}
+	}
+	
+	if(Type == M_TURNEND)
+	{
+		DrawLine = false;
+	}
+	super;
+}
+
+void CWorm::CreateBall()
+{
+CShootDesc SDesc;
+zero(&SDesc);
+
+SDesc.Team = WormTeam;
+SDesc.X = BallPosX;
+SDesc.Y = BallPosY;
+bball = new CBasketBall(GetObject(25, 0), &SDesc);
+bball->WindFactor = 0.0;
+BallFired = true;
+}
+
+CGObject * CWorm::SCFindBall(int l, int r, int t, int b)     // left, right, top, bottom
+{
+      for(int i = 0; i < Env->Objs.Count; i++)
+      {
+          local obj = CGObject(Env->Objs.Objs[i]);
+          if(obj == NullObj) continue;
+          if(obj is CBasketBall)
+             {
+             if(obj->IsInBox( l, t, r, b))                    // left, top, right, bottom
+             return obj;
+             }
+      }
+      return CGObject(NullObj);
+}
+
+void CWorm::DrawWormHands()
+{
+local w = GetCurrentWorm();
+if (w == NullObj) return;
+
+AddSpriteEx(8, PosX + (2 * TurnSide), PosY, hands->Index + 262144 * -Sign(-TurnSide - 1), hands_frame * hands_spd_factor, 0, 0.8);
+}
+
+override void CWorm::RenderWorm()
+{
+if ((ObjState == WS_WALKING || (CurWeapon->CheckName("Jump") && ObjState == WS_AIMING)) && BallFired == false) DrawWormHands();
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Basketball") || Weap->CheckName("Basketball "))
+	{
+		Cooldown = 100;
+		BallFired = true;
+
+		CShootDesc SDesc;
+		zero(&SDesc);
+
+		local BaseForceX = 0.4;
+		local BaseForceY = 0.8;
+
+		local ang = (1 - FireAngle) * 3.14159;
+        if (TurnSide < 0) ang = 6.28318 - ang;
+
+		SDesc.Team = WormTeam;
+		SDesc.X = PosX;
+		SDesc.Y = PosY;
+
+		float ForceInit = FirePower * 20.0;
+
+		SDesc.SpX = SpX + sin(ang) * ForceInit;
+		SDesc.SpY = SpY - cos(ang) * ForceInit;
+
+		new CBasketBall(GetObject(25, 0), &SDesc);
+	}
+	else super;
+}

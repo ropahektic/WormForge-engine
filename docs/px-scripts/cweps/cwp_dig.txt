@@ -1,0 +1,125 @@
+
+require utils, utils_steps;
+
+CMissile* mis_dig;
+
+bool lsdig;
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+Dgrvlr = false;
+Dsling = false;
+Dforbs = false;
+Ddrill = false;
+Dtorch = false;
+Dsworm = false;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+{
+if(weap->CheckName("Gravler FD")
+|| weap->CheckName("Gravler FD ")
+|| weap->CheckName("Gravedigger")
+|| weap->CheckName("Super Gravedigger"))
+{
+if (lsdig)
+{
+mis_dig = this; mis_dig->Dgrvlr = true; lsdig = true;
+}
+}
+if (mis_dig == this && Dgrvlr)
+{
+GG->land->MakeHole(8,mis_dig->PosX,mis_dig->PosY-0.0);
+}
+//-------------------------------------------------------
+if(weap->CheckName("Stone Blaster")
+|| weap->CheckName("SlingShot"))
+{
+if (lsdig)
+{
+mis_dig = this; mis_dig->Dsling = true; lsdig = true;
+}
+}
+if (mis_dig == this && Dsling)
+{
+GG->land->MakeHole(6,mis_dig->PosX,mis_dig->PosY-1.25);
+}
+//-------------------------------------------------------
+if(weap->CheckName("Fire Orbs"))
+{
+if (lsdig)
+{
+mis_dig = this; mis_dig->Dforbs = true; lsdig = true;
+}
+}
+if (mis_dig == this && Dforbs)
+{
+GG->land->MakeHole(6,mis_dig->PosX,mis_dig->PosY-0.50);
+}
+//-------------------------------------------------------
+if(weap->CheckName("Drilling Crew"))
+{
+if (lsdig)
+{
+mis_dig = this; mis_dig->Ddrill = true; lsdig = true;
+}
+}
+if (mis_dig == this && Ddrill)
+{
+GG->land->MakeHole(8,mis_dig->PosX,mis_dig->PosY-7.0);
+}
+//-------------------------------------------------------
+if(weap->CheckName("Super Worm"))
+{
+if (lsdig) 
+{
+mis_dig = this; mis_dig->Dsworm = true; lsdig = false;
+}
+if (Dsworm)
+{
+if (IsFlying)
+{
+Dodig = true;
+GG->land->MakeHole(8,PosX,PosY);
+if (modulef(SpX) > 8 || modulef(SpY) > 8) Dsworm = false;
+}
+}
+}
+//-------------------------------------------------------
+if(weap->CheckName("Mini-Torch")
+|| weap->CheckName("Torch Flame"))
+{
+if (lsdig)
+{
+mis_dig = this; mis_dig->Dtorch = true; lsdig = true;
+}
+}
+if (mis_dig == this && Dtorch)
+{
+GG->land->MakeHole(6,mis_dig->PosX,mis_dig->PosY-0.0);
+}
+}
+super;
+}
+//------------------------------------------------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if(Weap->CheckName("Gravler FD")
+|| Weap->CheckName("Gravler FD ")
+|| Weap->CheckName("Gravedigger")
+|| Weap->CheckName("Super Gravedigger")
+|| Weap->CheckName("Stone Blaster")
+|| Weap->CheckName("SlingShot")
+|| Weap->CheckName("Fire Orbs")
+|| Weap->CheckName("Drilling Crew")
+|| Weap->CheckName("Super Worm")
+|| Weap->CheckName("Mini-Torch")
+|| Weap->CheckName("Torch Flame"))
+{
+lsdig = true;
+}
+super;
+}

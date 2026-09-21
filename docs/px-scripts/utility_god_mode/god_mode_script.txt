@@ -1,0 +1,225 @@
+require utils, utils_steps, p_sprite_builder, utility_no_fall_damage;
+
+CColMask* god_mode_mask250;
+
+void god_mode_script::InitGraphic()
+{
+    god_mode_mask250 = new CColMask(250,250,MakeCircleMask(250));
+}
+
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    god_mode = false;
+    swimsuit = false;
+    im_kamikaze = false;
+    suicide_bool = false;
+    kamiX = 0;
+    kamiY = 0;
+    suicide_tick = 0;
+    god_timer = 0;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_GUNEXP) 
+    {
+       if (god_mode) 
+       {
+          local sx = MData->GetParameter(3) / 65536;    // PushX
+          local sy = MData->GetParameter(4) / 65536;    // PushY 
+          SpX = sx;
+          SpY = sy;
+          return;
+       }
+//       else super; 
+    }
+    else if (Type == M_EXPLOSION) 
+    {
+       if (god_mode) 
+       {
+           local aa = MData->GetParameter(0);          // null
+           local x = MData->GetParameter(1) / 65536;   // x
+           local y = MData->GetParameter(2) / 65536;   // y
+           local PushPower = MData->GetParameter(3);   // PushPower
+           local Damage = MData->GetParameter(4);      // Damage
+           local ee = MData->GetParameter(5);          // UnkB
+           local ff = MData->GetParameter(6);          // Team
+           local gg = MData->GetParameter(7) / 65536;  // unknown
+           local hh = MData->GetParameter(8) / 65536;  // unknown
+           
+           local dam = CheckMaskAt(this, god_mode_mask250, x, y, -1);
+           if (dam != NullObj)
+           {
+           // my own pushing script
+               local dist = int(DistBetweenObjs(sender, this));
+               if (dist < PushPower)
+               {
+                   local sideX;
+                   local sideY;
+                   local chX = PosX - x;
+                   if (chX < 0) 
+                   {
+                       sideX = -1;
+                       chX = -chX;
+                   } else sideX = 1;
+                   local powX = Damage/(Damage + chX);
+            
+                   local chY = PosY - y;
+                   if (chY-5 < 0) sideY = -1;
+                   else sideY = 1;
+                   if (chY < 0) 
+                   {
+                       chY = -chY;
+                   }
+                   local powY = Damage/(Damage + chY) + 0.3;
+            
+                   SpX += sideX * PushPower * (1 - powX) / 10;
+                   SpY += sideY * PushPower * (powY - 0.5) / 5;
+               }
+           }
+           return;
+       }
+//       else super;
+    }
+//    else super;
+    if (Type == M_TURNBEGIN) {
+       IGodLayer = Layer;
+       IGodColGroup = ColGroup;
+    }
+    if (Type == M_FRAME)
+    {
+      if (god_mode)
+      {
+        if (god_timer_bool)
+        {
+            if (god_timer > 5)
+            {
+                god_timer = 0;
+                god_timer_bool = false;
+                if (swimsuit)
+                {
+                   antisinkGod_fail = false;
+                   GravityFactor = 1;
+                   swimsuit = false;
+                }
+            }
+            god_timer++;
+        }
+        // antisink, stealed from antisink.pxl  /->
+        /*local LastGodPosX;
+        local LastGodPosY;
+        local IGodLayer;
+        local IGodColGroup;
+        local GodHealth;
+        local antisinkGod_fail;*/
+        if (swimsuit) antisinkGod_fail = true;
+        if(PosY > (Env->Water + 10)) SetState(WS_JUMP); // swimming capability
+        if(PosY > (Env->Water + 2)) {
+                 if (antisinkGod_fail) return;
+                 if (!TeleportObject(this, LastGodPosX, LastGodPosY, 3200, true, 3))
+                 {
+                    antisinkGod_fail = true;
+                    return;
+                 }
+                 SpX = 0.0;
+                 SpY = 0.0;
+                 SetState(WS_IDLE);
+                 GS->Info.SetWormHealth(WormTeam, WormNumber, GodHealth);
+                 GS->Info.Teams[WormTeam-1].Worms[WormNumber-1].State = 101;
+                    Layer = IGodLayer;
+                    ColGroup = IGodColGroup;
+        }
+        if(ObjState == WS_IDLE || ObjState == WS_WALKING || ObjState == WS_AIMING) {
+                 LastGodPosX = PosX;
+                 LastGodPosY = PosY;
+                 GodHealth = GS->Info.GetWormHealth(WormTeam, WormNumber);
+        }
+        // end of antisink <-/
+        if ((SpY > 8.0 || SpY < -8.0 || SpX > 8.0 || SpX < -8.0) && ObjState != WS_ROPING && ObjState != WS_BUNGEE && ObjState != WS_JETPACK && ObjState != WS_AFTERROPE) SetState(WS_SLIDING);
+        if (ObjState == WS_POING) SetState (WS_SLIDING);
+        if (im_kamikaze)
+        {
+            if ((PosX+PosY) > (kamiX+kamiY+350) || (PosX+PosY) < (kamiX+kamiY-350))
+            {
+                DoExplosion(PosX, PosY, 60, 30, 0, WormTeam);
+                SetState(WS_IDLE);
+                im_kamikaze = false;
+            }
+        }
+        if (suicide_bool)
+        {
+            if (suicide_tick > 65)
+            {
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                DoExplosion(PosX, PosY, 60, 30, 0, WormTeam);
+                SetState(WS_IDLE);
+                suicide_tick = 0;
+                suicide_bool = false;
+            }
+            else suicide_tick++;
+        } else suicide_tick = 0;
+      }
+    }
+    if (Type == M_TURNEND) 
+    {
+        god_timer_bool = true;
+        god_mode = false;
+    }
+    super;
+}
+
+override void CWorm::SetState(EObjState State)
+{                                    
+   if (State == WS_SINKING && god_mode) return;
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("God Mode") && god_mode == false)
+    {
+        god_mode = true;
+        
+        local w = GetCurrentWorm();
+        w->anti_FD = true;
+        
+        ShowMessage("God Mode: ON");
+        return;
+    }
+    if (Weap->CheckName("God Mode") && god_mode == true)
+    {
+        god_mode = false;
+
+        local w = GetCurrentWorm();
+        w->anti_FD = false;
+
+        ShowMessage("God Mode: OFF");
+        return;
+    }
+    if (Weap->CheckName("Swim Suit"))
+    {
+        swimsuit = true;
+    }
+    if (Weap->CheckName("Kamikaze"))
+    {
+        im_kamikaze = true;
+        kamiX = PosX;
+        kamiY = PosY;
+    }
+    if (Weap->CheckName("Suicide Bomber"))
+    {
+        suicide_bool = true;
+    }
+    super;
+}

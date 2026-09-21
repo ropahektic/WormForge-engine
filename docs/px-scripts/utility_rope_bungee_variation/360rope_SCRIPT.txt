@@ -1,0 +1,126 @@
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+//CWorm* w = GetCurrentWorm();
+
+//    if (w != NullObj)
+//    {
+     //    if (StrCmp(ftoa(FireAngle),ftoa(0.200)))
+     //    {
+     //        FireAngle = 0.0;
+     //    }
+/*
+         if (Type == M_SPACE)
+         {
+             if (w->CurWeapon->CheckName("360 rope") && (w->ObjState == WS_JUMP || w->ObjState == WS_JUMPPREPARE || w->ObjState == WS_SLIDING))
+             {
+                 spacepress = true;
+                 return; // <-- Thanks zed for the tip. Removes the "beep" sound.
+             }
+         }
+*/
+         if (Type == M_FRAME)
+         {
+
+/*                   if (gframe >= itick + 22)
+                   {
+                       rallow = true;
+                   }
+
+                   else rallow = false;      */
+
+                   if (CurWeapon->CheckName("360 rope (TS)") && !fastaim && ObjState == WS_AIMING /* && firedfromground && gframe >= fitick + 28 && w->RopeAttached == 0*/)
+                   {
+                       if (PressedUp == 1)
+                       {
+                           PressedUp = 0;
+                           if (FireAngle < 1.0) FireAngle = FireAngle + 0.008;
+                           if (FireAngle > 1.0) FireAngle = 1.0;
+                       }
+
+                       if (PressedDown == 1)
+                       {
+                           PressedDown = 0;
+                           if (FireAngle > 0.0) FireAngle = FireAngle - 0.008;
+                           if (FireAngle < 0.0) FireAngle = 0.0;
+                       }
+                   }
+/*
+                   if (w->InMidAir == 1 && w->CurWeapon->CheckName("360 rope") && w->ObjState != WS_FLYING2 && w->ObjState != WS_FLYING && w->ObjState != WS_POWERFLY && w->ObjState != WS_POING && spacepress && rallow)
+                   {
+                       w->SetState(WS_SHOOTINGROPE);
+                       360rope = true;
+                       spacepress = false;
+                       itick = gframe;
+                   }
+
+                   if (w->CurWeapon->CheckName("360 rope") && w->ObjState == WS_JUMP)
+                   {
+                       jumped = true;
+                   }
+
+
+                   if (w->ObjState == WS_SLIDING && 360rope)
+                   {
+                       if (!jumped) w->SetState(WS_AFTERROPE);
+                   }
+
+                   if (w->ObjState == WS_AFTERROPE)
+                   {
+                       jumped = false;
+                   }
+
+                   if (w->ObjState != WS_ROPING && w->ObjState != WS_SHOOTINGROPE && w->ObjState != WS_AFTERROPE && w->ObjState != WS_BUNGEE)
+                   {
+                       360rope = false;
+                   }
+         }
+
+         if (Type == M_AFTERSHOOT)
+         {
+             spacepress = false;
+         }
+*/
+        }
+
+super;
+}
+/*
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+CWorm* w = GetCurrentWorm();
+
+if (w != NullObj)
+{
+    if (Weap->CheckName("360 rope"))
+    {
+        w->SetState(WS_SHOOTINGROPE);
+        360rope = true;
+        firedfromground = true;
+        fitick = gframe;
+    }
+
+    else super;
+}
+
+else super;
+
+}
+
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+     CWorm* w = GetCurrentWorm();
+
+     if (w != NullObj)
+     {
+         if (w->CurWeapon->CheckName("360 rope") && (sound == 140 || sound == 177 || sound == 194 || sound == 231 || sound == 248 || sound == 285 || sound == 302 || sound == 339 || sound == 356 || sound == 393 || sound == 410 || sound == 447))
+         {
+             sound = 666;
+         }
+
+         else super;
+     }
+
+     else super;
+
+}
+*/

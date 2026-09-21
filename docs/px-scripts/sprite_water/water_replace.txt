@@ -1,0 +1,9 @@
+CSprite* no_water;
+
+void water_replace::InitGraphic()
+{
+   CFile* file;
+   file = GetAttachment("empty64.png");
+   no_water = LoadSprite(file, 1, 0);
+   SetSpriteOverride(620, no_water);
+}

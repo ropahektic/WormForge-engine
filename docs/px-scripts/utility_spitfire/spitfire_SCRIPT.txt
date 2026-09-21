@@ -1,0 +1,527 @@
+require utils;
+
+CSprite* SpitfireAnim_l;
+CSprite* SpitfireAnim_r;
+CSprite* SpitfireJumpIn;
+CSoundFile* engineSound;
+
+void spitfire_SCRIPT::FirstFrame()
+{
+        keySync->AddKey(96); // 0
+        keySync->AddKey(97); // 1
+	
+        CFile *f;
+	f = GetAttachment("spitfire.wav");	engineSound = new CSoundFile(f);
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    fixed hframenum;
+    fixed sf_jumpinframenum;
+    fixed explosionSize;
+    fixed SpeedAverage;
+    fixed SoundTimer = 0.00;
+    turnActive = false;
+    planeTilt = 192;
+    engineVolume = 0.5;
+	engineSoundObj = CSound(NullObj);
+    super;
+}
+
+void spitfire_SCRIPT::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("spitfire-anim-l.png");           SpitfireAnim_l = LoadSprite(f, 3, 1);
+    f = GetAttachment("spitfire-anim-r.png");           SpitfireAnim_r = LoadSprite(f, 3, 1);
+    f = GetAttachment("spitfire-jumpin.png");           SpitfireJumpIn = LoadSprite(f, 24, 1); 
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    CWorm* w = GetCurrentWorm();
+    local Shifth = keySync->KeyPressed(16);
+    local Superdrive = keySync->KeyPressed(96); // 0
+    kamiMsg = 0;
+    
+        if (Type == M_FRAME)
+        {
+            if (ObjState == WS_FIRED && CurWeapon->CheckName("Spitfire"))
+            {
+                sf_jumpin = true;
+                sf_jumpinframenum = sf_jumpinframenum + 0.0417;
+				turnActive = true;
+            }
+        
+            if (spitfire)
+            {
+                if (spitfirelaunch)
+                {
+                    JetFuel = 200*65536;
+                    sf_jumpinframenum = 0;                      
+                    sf_jumpin = false;
+                    spitfirelaunch = false;
+					turnActive = true;
+                }
+                
+                if (PressedUp == 0 && PressedDown == 0) SpY = SpY / 1.05;
+                if (PressedLeft == 0 && PressedRight == 0) SpX = SpX / 1.05;
+                if (PressedUp == 1 && PressedDown == 1) SpY = SpY / 1.05;
+                if (PressedLeft == 1 && PressedRight == 1) SpX = SpX / 1.05;
+                
+                //if (Root->RetreatTimer == 0 && w != NullObj) JetFuel -=0.020*65536;
+                
+                     if (hframenum == 0.99) hframenum = 0.00;
+                else if (hframenum == 0.50) hframenum = 0.99;
+                else if (hframenum == 0.00) hframenum = 0.50;
+                
+                if (Superdrive == 1){
+                
+                //UP
+                if (PressedUp == 1)
+                {
+                    //Superdrive
+                    Superdrive = 0;
+                    turnActive = true;
+                    planeTilt = -60;
+                    JetFuel -= 0.8*65536;
+                    
+                    if (SpY > -100)
+                    {
+                        SpY -= 1.2;
+                    }
+
+                }
+                
+                //DOWN
+                if (PressedDown == 1)
+                {
+                    //Superdrive
+                    Superdrive = 0;
+                    turnActive = true;
+                    planeTilt = 30;
+                    JetFuel -= 0.4*65536;
+                    
+                    if (SpY < 100)
+                    {
+                        SpY += 1.2;
+                    }
+                }
+                
+                //LEFT
+                if (PressedLeft == 1)
+                {
+                    Superdrive = 0;
+                    turnActive = true;
+                    planeTilt = 192;
+                    JetFuel -= 0.8*65536;
+                    
+                    if (SpX > -100)
+                    {
+                        SpX -= 1.2;
+                    }           
+                }
+                
+                
+                //RIGHT
+                if (PressedRight == 1)
+                {
+                    Superdrive = 0;
+                    turnActive = true;
+                    planeTilt = 192;
+                    JetFuel -= 0.8*65536;
+                    
+                    if (SpX < 100)
+                    {
+                        SpX += 1.2;
+                    }
+                }
+                
+                
+                }else{
+
+                //Normal Speed
+                //UP
+                
+                if ((PressedLeft == 1 || PressedRight == 1) && PressedUp == 1)
+                {
+
+                    turnActive = true;
+                    if (JetFuel > 100*65536){
+                       if (Root->RetreatTimer == 0) JetFuel -= 0.2*65536;
+                    } else
+                    {
+                       if (Root->RetreatTimer == 0) JetFuel -= 0.020*65536;
+                    }
+                    if (PressedUp == 1){
+                    
+                    
+                    //planeTilt = -48;
+                    
+                    if (SpY < 20)
+                    {
+                        planeTilt = -18;
+                        engineVolume = 0.8;
+                        JetFuel = 200*65536;
+                        SpY -= 0.4;
+                        
+                    }else  if (SpY < 8)
+                    {
+                        planeTilt = -24;
+                        engineVolume = 0.6;
+                        SpY -= 0.3;
+                        
+                        
+                    }else  if (SpY < 7)
+                    {
+                            planeTilt = -30;
+                        SpY -= 0.2;
+                        
+                    }else   if (SpY < 5)
+                    {
+                        planeTilt = -36;
+                        SpY -= 0.2;
+                        
+                    }else   if (SpY < 3)
+                    {
+                        planeTilt = -48;
+                        SpY -= 0.1;
+                    }else   if (SpY < 2)
+                    {
+                      planeTilt = -64;
+                        SpY -= 0.1;
+                    
+                    }else   if (SpY > 1.5)
+                    {
+                        planeTilt = -72;
+                        SpY -= 0.1;   
+                        
+                    }else   if (SpY < 1)
+                    {
+                     planeTilt = -96;
+                        engineVolume = 0.5;
+                        SpY -= 0.05;   
+                    }else{
+
+                       planeTilt = -192;
+                       engineVolume = 0.5;
+                    }
+                    
+                    
+                    }  
+                    if (PressedLeft == 1){
+                    if (w != NullObj) {if (!Shifth) TurnSide = -1;}
+                      if (SpX > -10)
+                      {
+                        SpX -= 0.8;
+                      }
+                      }
+                    if (PressedRight == 1){
+                    if (w != NullObj) {if (!Shifth) TurnSide = 1;}
+                      if (SpX < 10)
+                      {
+                        SpX += 0.8;                                          
+                      }
+                      }
+                    PressedUp = 0;
+                    PressedLeft = 0;
+                    PressedRight = 0;
+
+                }
+                
+                //DOWN
+                if ((PressedLeft == 1 || PressedRight == 1) && PressedDown == 1)
+                {
+
+                    //Normal Speed
+                    PressedUp = 0;
+                    turnActive = true;
+                    //if (Root->RetreatTimer == 0) JetFuel -= 0.020*65536;
+                    
+                    if (PressedLeft == 1){
+                    if (w != NullObj) {if (!Shifth) TurnSide = -1;}
+                      if (SpX > -10)
+                      {
+                        SpX -= 0.5;
+                      }
+                      } else if (PressedRight == 1){
+                      if (w != NullObj) {if (!Shifth) TurnSide = 1;}
+                      if (SpX < 10)
+                      {
+                        SpX += 0.5;                                          
+                      }
+                      }
+                    if (PressedDown == 1){
+                    
+                    //if(planeTilt > 12){
+                    //  planeTilt -= 48;
+                    //}
+
+                    if (SpY < 1)
+                    {
+                        planeTilt = 96;
+                        engineVolume = 0.5;
+                        SpY += 0.02;
+                    }else  if (SpY < 1.5)
+                    {
+                        planeTilt = 72;
+                        SpY += 0.1;
+                        
+                    }else  if (SpY < 2)
+                    {
+                        planeTilt = 48;
+                        SpY += 0.1;
+                    }else   if (SpY < 3)
+                    {
+                        planeTilt = 36;
+                        SpY += 0.2;
+                    }else   if (SpY < 5)
+                    {
+                        planeTilt = 24;
+                        SpY += 0.4;
+                    }else   if (SpY < 7)
+                    {
+                        planeTilt = 18;
+                        SpY += 0.6;
+                    }else   if (SpY < 8)
+                    {
+                        planeTilt = 12;
+                        engineVolume = 0.6;
+                        SpY += 0.8;
+                    }else   if (SpY < 20)
+                    {
+                        kamiMsg = 1;
+                        planeTilt = 9;
+                        engineVolume = 0.8;
+                        JetFuel = 200*65536;
+                        SpY += 1;
+                    }else{
+
+                       planeTilt = 192;
+                       engineVolume = 0.5;
+                    }
+                    
+                    }
+
+                    PressedDown = 0;
+                    PressedLeft = 0;
+                    PressedRight = 0;
+                }else{
+                engineVolume = 0.5;
+                }
+                
+                if (PressedUp == 1)
+                {
+                  PressedUp = 0;
+                }
+                if (PressedDown == 1)
+                {
+                  //PressedDown = 0;
+                }
+                     
+                
+                //LEFT
+                if (PressedLeft == 1)
+                {
+ 
+                      PressedLeft = 0;
+                      turnActive = true;
+                      planeTilt = 192;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.010*65536;
+                    if (w != NullObj) {if (!Shifth) TurnSide = -1;}
+                    
+                    if (SpX > -10)
+                    {
+                        SpX -= 0.2;
+                    }
+                }
+                
+                
+                //RIGHT
+                if (PressedRight == 1)
+                {
+
+                    PressedRight = 0;
+                    turnActive = true;
+                    planeTilt = 192;
+                    if (Root->RetreatTimer == 0) JetFuel -= 0.010*65536;
+                    if (w != NullObj) {if (!Shifth) TurnSide = 1;}
+                    
+                    if (SpX < 10)
+                    {
+                        SpX += 0.2;                                          
+                    }
+                }
+               
+               }
+              
+              
+              
+               
+                if (ObjState != WS_JETPACK)
+                {
+                    if (SpY == 0 && ObjState != WS_FIRED && ObjState != WS_TELEPORTING) SetState(WS_FLYING);
+                    GravityFactor = 1;
+                    spitfire = false;                                  
+                }
+                
+                else if (JetFuel <= 1*65536)
+                {
+                    DoExplosion(PosX,PosY,100,10,0,0);
+                    GravityFactor = 1;
+                    spitfire = false;
+                }
+                
+                else if (disablespitfire)
+                {
+                    if(SpX == 0)
+                     { SpeedAverage = abs(SpY)*20; }
+                     else{
+                    SpeedAverage = (abs(SpY) + abs(SpX))/1;
+                    }
+                    if(Superdrive == 1){
+                    explosionSize = ((JetFuel/65536-75)/20)*SpeedAverage;
+                    }else{
+                    explosionSize = ((JetFuel/65536-75)/10)*SpeedAverage;
+                    }
+                    
+                    if (explosionSize < 10){
+                       explosionSize = 10;
+                    }
+                    if (explosionSize > 150){
+                       explosionSize = 150;
+                    }
+					
+					if(engineSoundObj != CSound(NullObj))
+				  {
+					  engineSoundObj->Stop();
+					  engineSoundObj = CSound(NullObj);
+				  }
+
+                    DoExplosion(PosX,PosY,100,explosionSize,0,0);
+                    GravityFactor = 1;                                        
+                    spitfire = false;
+                    disablespitfire = false;
+                }                                                               
+            }
+        }
+        
+        if (Type == M_TURNEND)
+        {
+            if (ObjState != WS_JETPACK && spitfire)
+            {
+                DoExplosion(PosX,PosY,100,10,0,0);
+                GravityFactor = 1;
+                spitfire = false;                                  
+            }
+            
+            else if (spitfire)
+            {
+                SpX = 0;
+                SpY = 0;
+                if(SpX > 0){
+                SpX -= 0.1;
+                //SpX = 0;
+                } else if(SpX < 0){
+                SpX += 0.1;
+                //SpX = 0;
+                }  else SpX = 0;
+                
+                if(SpY > 0){
+                SpY -= 0.1;
+
+                //SpY = 0;
+                } else if(SpY < 0){
+                SpY += 0.1;
+                //SpY = 0;
+                } else SpY = 0;
+            }
+			
+			if(engineSoundObj != CSound(NullObj))
+				  {
+					  engineSoundObj->Stop();
+					  engineSoundObj = CSound(NullObj);
+				  }
+            turnActive = false;
+            
+        }
+        
+        if (Type == M_DRAWQUEUE)
+        {
+            if (spitfire)
+            {	
+			   if(turnActive){
+			   	   
+               if (SoundTimer >= 1.25) {
+                  engineSoundObj = engineSound->Play(engineVolume, 0.0, false);
+               }
+               if (SoundTimer <= 1.25) {
+                  SoundTimer += 0.01;
+               }
+               else { 
+               SoundTimer = 0.00; 
+               }
+               }
+                if (TurnSide > 0)
+                {
+                    AddSpriteEx(4,PosX,PosY,SpitfireAnim_r->Index,hframenum,sin(SpX/planeTilt),1);
+                }
+                
+                else
+                {
+                    AddSpriteEx(4,PosX,PosY,SpitfireAnim_l->Index,hframenum,sin(SpX/planeTilt),1);
+                }
+
+            
+            }
+            else if (sf_jumpin)
+            {
+                if (TurnSide > 0)
+                {
+                    AddSpriteEx(4,PosX,PosY,SpitfireJumpIn->Index,sf_jumpinframenum,0,1);
+                }
+                else
+                {
+                    AddSpriteEx(4,PosX,PosY,SpitfireJumpIn->Index+262144,sf_jumpinframenum,0,1);
+                }
+            }else{
+			
+			if(engineSoundObj != CSound(NullObj))
+				  {
+					  engineSoundObj->Stop();
+					  engineSoundObj = CSound(NullObj);
+				  }
+			
+			}
+        }
+super;
+}
+
+override void CWorm::RenderWorm()
+{
+    if (!spitfire && !sf_jumpin) super;
+}  
+
+override void CWorm::Collide(CGObject* Obj,int type) 
+{
+    if (spitfire)
+    {
+        if (Obj != NullObj)
+        {
+            if (Obj->ClType != OC_Mine) disablespitfire = true;
+        }
+    }
+    
+    super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Spitfire"))
+    {
+        GravityFactor = 0;
+        spitfire = true;
+        spitfirelaunch = true;
+    }
+    super;
+}

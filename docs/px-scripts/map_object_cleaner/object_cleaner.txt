@@ -1,0 +1,35 @@
+require utils;
+//-----------------------------------------------------------------------------
+$editor
+ $object ObjectCleaner
+  $origin -15 -15
+  $image "bin.png"
+  $func InvokeObjectCleaner
+  $radius 17
+  $param Radius radius 100
+ $object_end
+$end
+//-----------------------------------------------------------------------------
+void InvokeObjectCleaner(CEditorObject* obj)
+{
+   rad = obj->GetInt("Radius");
+   rad = rad * rad;
+   
+   for (i = 0; i < Env->Objs.Count; i+=1)
+   {
+     ob = CGObject(Env->Objs.Objs[i]);
+     if (ob)
+     {
+      if (ob is CMine || ob is COilDrum || ob is CTurretBase)
+      {
+       dx = ob->PosX - obj->PosX;
+       dy = ob->PosY - obj->PosY;
+       if (dx * dx + dy * dy < rad)
+       {
+         ob->Free(true);
+       };
+      };
+     };
+   };
+};
+//-----------------------------------------------------------------------------

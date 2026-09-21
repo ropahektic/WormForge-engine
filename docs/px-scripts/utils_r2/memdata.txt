@@ -1,0 +1,5 @@
+Point::Point(fixed X, fixed Y)
+{
+    PX = X;
+    PY = Y;
+}

@@ -1,0 +1,17 @@
+//List of sprites
+CSprite* canonsprite;
+CSprite* canoffsprite;
+
+void canisterreplace::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("canon.png");
+   canonsprite = LoadSprite(f, 125, 0);
+   f = GetAttachment("canoff.png");
+   canoffsprite = LoadSprite(f, 18, 1);
+
+   //Let's override the sprites!
+   SetSpriteOverride(555, canoffsprite);
+   SetSpriteOverride(556, canonsprite);
+}

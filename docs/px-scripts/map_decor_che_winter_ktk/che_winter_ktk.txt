@@ -1,0 +1,447 @@
+//map_objects by 0rang3, based on golf zones by PyroMan
+
+require utils;
+
+#che_winter_ktk
+
+$editor
+ 
+ $object che_castle                  // Name your object 1
+  $image "che_castle.png"            // Name of your png file with object
+  $autoname che_castle               // Name for editor
+  $func Spawnche_castle              // Name of function
+  $origin -310 -455             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object che_cave_big                 // Name your object 2
+  $image "che_cave_big.png"           // Name of your png file with object
+  $autoname che_cave_big              // Name for editor
+  $func Spawnche_cave_big             // Name of function
+  $origin -236 -135             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object che_cave_small                   // Name your object 3
+  $image "che_cave_small.png"             // Name of your png file with object
+  $autoname che_cave_small                // Name for editor
+  $func Spawnche_cave_small               // Name of function
+  $origin -95 -102             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object che_tower                  // Name your object 4
+  $image "che_tower.png"            // Name of your png file with object
+  $autoname che_tower               // Name for editor
+  $func Spawnche_tower              // Name of function
+  $origin -50 -254             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object che_house                  // Name your object 5
+  $image "che_house.png"            // Name of your png file with object
+  $autoname che_house               // Name for editor
+  $func Spawnche_house              // Name of function
+  $origin -37 -172             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object che_background                  // Name your object 6
+  $image "che_background.png"            // Name of your png file with object
+  $autoname che_background               // Name for editor
+  $func Spawnche_background              // Name of function
+  $origin -207 -120                       // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+
+$end 
+
+////////////////////////////////////////////////////////////////////////////////
+
+CSpriterche_castle : CObject;           // Object function for 1
+CSpriterche_cave_big : CObject;         // Object function for 2
+CSpriterche_cave_small : CObject;       // Object function for 3
+CSpriterche_tower : CObject;            // Object function for 4
+CSpriterche_house : CObject;            // Object function for 5
+CSpriterche_background : CObject;            // Object function for 6
+
+CSprite*che_castle;                     // Sprite function for 1
+CSprite*che_cave_big;                   // Sprite function for 2
+CSprite*che_cave_small;                 // Sprite function for 3
+CSprite*che_tower;                      // Sprite function for 4
+CSprite*che_house;                      // Sprite function for 5
+CSprite*che_background;                      // Sprite function for 6
+
+////////////////////////////////////////////////////////////////////////////////
+
+void che_winter_ktk::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("che_castle.png");			che_castle = LoadSprite(f, 1, 0);
+        f = GetAttachment("che_cave_big.png");			che_cave_big = LoadSprite(f, 1, 0);	
+        f = GetAttachment("che_cave_small.png");		che_cave_small = LoadSprite(f, 1, 0);
+        f = GetAttachment("che_tower.png");			che_tower = LoadSprite(f, 1, 0);
+        f = GetAttachment("che_house.png");			che_house = LoadSprite(f, 1, 0);
+        f = GetAttachment("che_background.png");		che_background = LoadSprite(f, 1, 0);	
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// First Object Settings
+
+CSpriterche_castle::CSpriterche_castle(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(227*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(227*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Second Object Settings
+
+CSpriterche_cave_big::CSpriterche_cave_big(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(67*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(67*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Third Object Settings
+
+CSpriterche_cave_small::CSpriterche_cave_small(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(51*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(51*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Fourth Object Settings
+
+CSpriterche_tower::CSpriterche_tower(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(127*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(127*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Fifth Object Settings
+
+CSpriterche_house::CSpriterche_house(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(86*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(86*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Sixth Object Settings
+
+CSpriterche_background::CSpriterche_background(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(60*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(60*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Draw First Object 
+
+void CSpriterche_castle::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = che_castle->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Second Object 
+        
+void CSpriterche_cave_big::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = che_cave_big->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Third Object 
+
+void CSpriterche_cave_small::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = che_cave_small->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Fourth Object 
+        
+void CSpriterche_tower::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = che_tower->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Fifth Object 
+        
+void CSpriterche_house::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = che_house->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Sixth Object 
+        
+void CSpriterche_background::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = che_background->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Spawn First Object
+
+void Spawnche_castle(CEditorObject* obj)
+{
+  zone = new CSpriterche_castle(obj);
+}       
+
+// Spawn Second Object
+
+void Spawnche_cave_big(CEditorObject* obj)
+{
+  zone = new CSpriterche_cave_big(obj);
+}
+
+// Spawn Third Object
+
+void Spawnche_cave_small(CEditorObject* obj)
+{
+  zone = new CSpriterche_cave_small(obj);
+}       
+
+// Spawn Forth Object
+
+void Spawnche_tower(CEditorObject* obj)
+{
+  zone = new CSpriterche_tower(obj);
+}
+
+// Spawn Fifth Object
+
+void Spawnche_house(CEditorObject* obj)
+{
+  zone = new CSpriterche_house(obj);
+}
+
+// Spawn Sixth Object
+
+void Spawnche_background(CEditorObject* obj)
+{
+  zone = new CSpriterche_background(obj);
+}                                                      

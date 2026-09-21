@@ -1,0 +1,57 @@
+void armored::InitGraphic()
+{
+}
+
+void armored::Init()
+{
+}
+
+void armored::FirstFrame()
+{
+}
+
+//This reduces damage done by 5 from attacks
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+IsArmored = false;
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(IsArmored == true)
+   {
+         if(Type == M_GUNEXP)
+         {
+                 if(MData->params[0] != 10)
+                 {
+                 CMessageData msg;
+                 msg.params[0]	= MData->params[0];
+                 msg.fparams[1]	= MData->fparams[1];
+                 msg.fparams[2]	= MData->fparams[2];
+                 msg.fparams[3]	= MData->fparams[3];
+                 msg.fparams[4]	= MData->fparams[4];
+                 msg.params[5]	= MData->params[5]-5;
+                 msg.params[6]	= MData->params[6];
+                 super(sender, M_GUNEXP, 1032, &msg);
+                 return;
+                 }
+         }
+
+         if(Type == M_EXPLOSION)
+         {
+                 CMessageData msg;
+                 msg.params[0]	= MData->params[0];
+                 msg.fparams[1]	= MData->fparams[1];
+                 msg.fparams[2]	= MData->fparams[2];
+                 msg.params[3]	= MData->params[3];
+                 msg.params[4]	= MData->params[4]-5;
+                 msg.params[5]	= MData->params[5];
+                 msg.params[6]	= MData->params[6];
+                 super(sender, M_EXPLOSION, 1032, &msg);
+                 return;
+         }
+   }
+super;
+}

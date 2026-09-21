@@ -1,0 +1,251 @@
+
+//- Submarine Strike (Sub Strike) v1.0 10/05/2017
+//- -------------------------------------------------------------------------------------
+//- Specifically designed for the purpose of attacking worms from the bottom of the map.
+//- -------------------------------------------------------------------------------------
+//- made by rafa``2
+
+require utils, pxairstrike;
+
+#SUB_STRIKE
+
+CSprite * sub_spr;
+CSoundFile * sub_snd;
+CSoundFile * sub_mis_snd;
+
+void substrike_s::InitGraphic()
+{   
+    sub_spr = LoadSprite(GetAttachment("submarine.png"), 6, 1);
+}
+
+void substrike_s::FirstFrame()
+{     
+      sub_snd = new CSoundFile(GetAttachment("substrike.wav"));
+      sub_mis_snd = new CSoundFile(GetAttachment("substrikem.wav"));
+}
+
+SubStrike : PxAirstrike
+
+SubStrike::SubStrike(CObject* Parent, CShootDesc* Desc, PxAirstrikeParams* Params, CWorm* owner)
+{
+      super(Parent, Desc, Params);
+      sub_owner = owner;
+      sub_params = Params;
+      sub_desc = Desc;
+      sub_target_x = sub_desc->AddX;
+      sub_target_y = sub_desc->AddY;
+      sub_dir = Sign(sub_desc->SpX);
+      sub_team = sub_owner->WormTeam;
+      sub_spr_initial_y = Env->Water + 220;
+      sub_spr_initial_x = sub_target_x + 125 * -sub_dir; 
+      sub_spr_initial_tick = GS->Tick;
+      sub_spr_actual_tick = 0;
+      sub_spr_actual_x = sub_spr_initial_x;
+      sub_spr_actual_y = sub_spr_initial_y;
+      sub_spr_delay_b_attack = 120;
+      sub_spr_delay_a_attack = 70;
+      sub_spr_alpha = 0;
+      sub_sndobj = CSound(NullObj);
+      StartSound();
+      BombDrop = 0;
+      version = 1.0;      
+}
+
+void SubStrike::DropBomb()
+{
+      CShootDesc SDesc;
+      zero(&SDesc);        
+
+      SDesc.Team = sub_team;
+      SDesc.X = sub_target_x + 15 * -sub_dir + Sign(RandomInt(-10, 10)) * RandomInt(0, 15);
+      SDesc.Y = Env->Water - 2;
+      SDesc.AddX = sub_target_x;
+      SDesc.AddY = sub_target_y;
+      SDesc.SpX = sub_params->BombSpX;
+      SDesc.SpY = sub_params->BombSpY;
+      
+      new CSubMissile(&SDesc);
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Submarine Attack"))
+	{
+	
+             PxAirstrikeParams * subparams = new PxAirstrikeParams();
+             subparams->Sprite = 0;
+             subparams->Sound = 0;
+             subparams->NumBombs = 20;
+             subparams->BombDistance = 30;
+             subparams->BombSpX = 10 * Desc->SpX;
+             subparams->BombSpY = -15;
+             subparams->FramesBetweenBombs = 3;
+             subparams->PlaneAppearYOffset = Env->Water;
+             
+             new SubStrike(GetObject(25, 0), Desc, subparams, this);
+	}
+	else
+	{
+	     super;
+	}
+}
+
+CSubMissile:CMissile
+
+CSubMissile::CSubMissile(CShootDesc * sdata)
+{    
+
+      CWeaponLaunch ldata;
+      zero(&ldata);
+    
+      ldata.spriteSize = 2;
+      ldata.launchSpeed = 0;
+      ldata.runAway = false;
+      ldata.speedMultipler = 100;
+      ldata.windFactor = 0;
+      ldata.gravityFactor = 100;
+      ldata.movementRandomness = 25;
+      ldata.explodeOnSpace = false;
+      ldata.countdownFrom = 0;
+      ldata.timeBeforeExplosion = 10000;
+      ldata.action = WAction_Bounce;
+      ldata.explodeInto = WExplode_Nothing;
+      
+      ldata.explosion.flags = 2+4+8+16+32+64+2048+4096+131072+4194304;
+      ldata.explosion.pushPower = 100;
+      ldata.explosion.damage = 20;
+      ldata.explosion.dmgVar = 0;
+      ldata.explosion.bias = 15;
+      
+      ldata.anim.spriteIndex = 60;
+      ldata.anim.trailIndex = 131;
+      ldata.anim.trailPower = 10;
+      ldata.anim.trailSpeed = 125;
+      ldata.anim.unk = 50;
+      ldata.anim.type = WAT_TrackMovement;
+      sub_m_sndobj = CSound(NullObj);
+      
+      super(Root->GetObject(25,0), &ldata, sdata);
+      
+      StartSound();
+      
+}
+
+void SubStrike::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{     
+     if(Type == M_FRAME)
+     {
+           sub_spr_actual_tick = GS->Tick - sub_spr_initial_tick;
+            
+            if(sub_spr_delay_b_attack <= 0)
+            {
+                 super;
+                 
+                 sub_spr_delay_a_attack = sub_spr_delay_a_attack - 1;
+                 
+                 if(sub_spr_delay_a_attack <= 0)
+                 { 
+                      sub_spr_alpha = sub_spr_alpha + 2;
+                 
+                      if(sub_spr_alpha >= 255)
+                      {
+                          sub_spr_alpha = 255;
+                          StopSound();
+                      }
+                 }
+            }
+           
+            sub_spr_delay_b_attack = sub_spr_delay_b_attack - 1;
+     }
+     
+     else if(Type == M_DRAWQUEUE)
+     {
+             
+             SetColorMod(ARGB(abs(255 - sub_spr_alpha), 60, 60, 220), 6);
+             
+             if(sub_spr_actual_y >= Env->Water + 40)
+             {
+                  sub_spr_actual_x = sub_spr_initial_x +  sub_spr_actual_tick * 0.6 * sub_dir; 
+                  sub_spr_actual_y = sub_spr_initial_y - 15.0 * sqrt(sub_spr_actual_tick * 1.25);
+             }
+             
+             AddSpriteEx( 2.0, 
+                          sub_spr_actual_x, 
+                          sub_spr_actual_y,        
+                          sub_spr->Index + 262144 * -Sign(sub_dir - 1), 
+                          sub_spr_actual_tick * 0.025, 
+                          -(MATH_QUARTER_PI * -0.75) * sub_dir, //-atan2(sub_spr_actual_x, sub_spr_actual_y) * sub_dir, 
+                          1.0);
+             ClearColorMod();
+     }
+     else super;   
+}
+
+void SubStrike::RenderPlane()
+{
+}
+
+override void CDDQueue::AddSprite(fixed z,fixed x,fixed y,int unk,int sprite,fixed frame)
+{
+      local worm = GetCurrentWorm();
+      
+      if(worm != NullObj && worm->CurWeapon != NullObj)
+      {
+           if(worm->CurWeapon->CheckName("Submarine Attack"))
+           {
+                if(sprite >= 32 && sprite <= 37)
+                {
+                     super(z, x, y + 20, unk, sprite + 524288 , frame);
+                     
+                }
+                else super;
+           }
+           else super;
+      }
+      else super;  
+}
+
+/*void CSubMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if(Type == M_DRAWQUEUE)
+     {
+             SetColorMod(RGB(80, 210, 80), 8);
+             super;
+             ClearColorMod(); 
+     }
+     else super;
+}*/
+
+void SubStrike::StartSound()
+{
+    if(sub_sndobj == CSound(NullObj))
+    {
+        sub_sndobj = sub_snd->Play(1.4, 0.0, false);
+    }
+}
+
+void SubStrike::StopSound() 
+{   
+    if(sub_sndobj != CSound(NullObj) && sub_sndobj->isAlive() == true)
+    {
+        sub_sndobj->Stop();
+        sub_sndobj = CSound(NullObj);
+    }
+}
+
+void CSubMissile::StartSound()
+{
+    if(sub_m_sndobj == CSound(NullObj))
+    {
+        sub_m_sndobj = sub_mis_snd->Play(1.0, 0.0, false);
+    }
+}
+
+void CSubMissile::StopSound() 
+{   
+    if(sub_m_sndobj != CSound(NullObj) && sub_m_sndobj->isAlive() == true)
+    {
+        sub_m_sndobj->Stop();
+        sub_m_sndobj = CSound(NullObj);
+    }
+}

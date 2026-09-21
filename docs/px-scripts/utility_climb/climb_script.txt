@@ -1,0 +1,222 @@
+require utils, utility_ladder;
+
+CSoundFile* climb_on;
+CSoundFile* climb_off;
+CSoundFile* pick1;
+CSoundFile* pick2;
+CSoundFile* pick3;
+CSoundFile* pick4;
+CSoundFile* pick5;
+CSprite* maska;
+CSprite* claw;
+int climb_cooldown; //cooldown between sounds
+
+void climb_script::InitGraphic()
+{
+CFile* f;
+f = GetAttachment("maska.png"); maska = LoadSprite(f, 1, 1);
+f = GetAttachment("claw.png"); claw = LoadSprite(f, 6, 1);
+}
+
+void climb_script::Init()
+{
+climb_cooldown = 0;
+
+keySync->AddKey(17); //ctrl
+keySync->AddKey(37); //left
+keySync->AddKey(38); //up
+keySync->AddKey(39); //right
+keySync->AddKey(40); //down
+
+climb_on = new CSoundFile(GetAttachment("climb_on.wav"));
+climb_off = new CSoundFile(GetAttachment("climb_off.wav"));
+
+pick1 = new CSoundFile(GetAttachment("pick1.wav"));
+pick2 = new CSoundFile(GetAttachment("pick2.wav"));
+pick3 = new CSoundFile(GetAttachment("pick3.wav"));
+pick4 = new CSoundFile(GetAttachment("pick4.wav"));
+pick5 = new CSoundFile(GetAttachment("pick5.wav"));
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+claw_frame      = 0.0;
+claw_max_frame  = 36; 
+claw_initial_tick = 0;
+claw_spd_factor = float(1 / claw_max_frame);
+    
+super;
+}
+
+override void CWorm::Message( CObject *sender, EMType Type, int mSize, CMessageData *mData )
+{     
+   if(ClimbSwitch)                       
+   {     
+       CWorm *w = GetCurrentWorm();
+       
+       if(keySync->KeyPressed(17) == true && UsingLadder == false)
+             {                                                                                      
+             StartClimb = true;
+             StopClimb = false;
+             }
+       else
+             {
+             StartClimb = false;
+             StopClimb = true;
+             }
+       
+       if(Type == M_GUNEXP)
+          {
+          StartClimb = false;
+          StopClimb = true;
+          }
+          
+       if(Type == M_FRAME)
+          {
+          if(StopClimb == true)
+             {
+             claw_frame      = 0.0; 
+             claw_initial_tick = 0;
+             }
+          }
+                    
+       if(Type == M_FRAME)
+          {
+          if(climb_cooldown > 0){climb_cooldown = climb_cooldown - 1;}
+                        
+          if(StartClimb == true)
+	     {	     
+	     claw_frame = (GS->Tick - claw_initial_tick) % claw_max_frame;
+	     
+	     local wm = CWorm(this);
+                                  
+	        int hitx1;	        int hity1;
+	        int hitx2;	        int hity2;
+	        int hitx3;	        int hity3;
+	        int hitx4;	        int hity4;
+	        int hitx5;	        int hity5;
+	        int hitx6;	        int hity6;
+	        
+                CGObject *hit1 = TraceLine(this, PosX, PosY, PosX + 20*TurnSide, PosY - 6, 2, &hitx1, &hity1);
+                CGObject *hit2 = TraceLine(this, PosX, PosY, PosX + 20*TurnSide, PosY + 6, 2, &hitx2, &hity2);
+                
+                CGObject *hit3 = TraceLine(this, PosX, PosY, PosX + 20, PosY - 6, 2, &hitx3, &hity3);
+                CGObject *hit4 = TraceLine(this, PosX, PosY, PosX + 20, PosY + 6, 2, &hitx4, &hity4);
+                
+                CGObject *hit5 = TraceLine(this, PosX, PosY, PosX - 20, PosY - 6, 2, &hitx5, &hity5);
+                CGObject *hit6 = TraceLine(this, PosX, PosY, PosX - 20, PosY + 6, 2, &hitx6, &hity6);      
+             			
+                if(hit1 == NullObj &&  hit2 == NullObj){ClimbMode = false; producesound = false;}
+                else {ClimbMode = true; producesound = true;}
+             	
+                if(hit3 == NullObj &&  hit4 == NullObj) {LeftMode = false;}
+                else {LeftMode = true; wm->TurnSide = 1;}    
+                
+                if(hit5 == NullObj &&  hit6 == NullObj) {RightMode = false;}  
+                else {RightMode = true; wm->TurnSide = -1;}
+                
+                if (keySync->KeyPressed(37) == true && keySync->KeyPressed(39) == false && ClimbMode == true){SpX = -0.5;}         //left                
+                if (LeftMode == true && ClimbMode == false)  {SpX= 0.5;  SpY = 0;}      
+                if (keySync->KeyPressed(39) == true && keySync->KeyPressed(37) == false && ClimbMode == true){SpX = 0.5;}          //right
+                if (RightMode == true && ClimbMode == false) {SpX= -0.5; SpY = 0;} 
+  
+                if (keySync->KeyPressed(38) == true && ClimbMode == true){SpY = -1.33;}       //up
+	        if (keySync->KeyPressed(40) == true  && ClimbMode == true){SpY = 1.33;}       //down
+	        
+	        if((ObjState == WS_PARACHUTE || ObjState == WS_JUMP || ObjState == WS_JUMPPREPARE ||
+                    ObjState == WS_AFTERROPE || ObjState == WS_FLYING || ObjState == WS_FLYING2 ||
+                    ObjState == WS_WALKING || ObjState == WS_AIMING)
+                    && StartClimb == true)
+                    {SetState(WS_SLIDING);}
+                    
+                if (ClimbMode == true)
+                   {
+                   if(SpY > 0){SpY = 0;}
+                   if(SpX > 0){SpX = 0;}
+                   }
+                
+                if(climb_cooldown == 0 && producesound == true)
+                       {
+                       climb_cooldown = 50;
+                       vol = CalculateSoundVolume(PosX,PosY);
+     	 			   pan = CalculateSoundPan(PosX,PosY);
+                       local i = RandomInt(1, 5);
+                       if      (i == 1) {pick1->Play(vol, pan, false); return;}
+                       else if (i == 2) {pick2->Play(vol, pan, false); return;}
+                       else if (i == 3) {pick3->Play(vol, pan, false); return;}
+                       else if (i == 4) {pick4->Play(vol, pan, false); return;}
+                       else if (i == 5) {pick5->Play(vol, pan, false); return;}
+                       }
+	       }
+	  
+             
+          if(GravityFactor == 0 && UsingLadder == false)
+             {
+             GravityFactor = 1;
+             }          
+	  }      
+        
+        if(Type == M_TURNBEGIN || Type == M_TURNEND)
+           {
+           StartClimb = false;
+           StopClimb = true;
+           ClimbSwitch = false;
+           ShowMessage("Climb deactivated");
+           climb_off->Play(2.0, 0.0, false);
+           }
+     }
+super;                                
+}
+
+override void CWorm::RenderWorm()
+{
+if(StartClimb == true)
+    {
+    DrawClimbWorm();
+    }
+else if(StartClimb == false)
+    {
+    super;
+    }            
+}
+
+void CWorm::DrawClimbWorm()
+{
+local w = GetCurrentWorm();
+if (w == NullObj) return;
+
+// Note: Look at Ladder script for drawing invisible sprites
+
+if(!isInvisible)
+	{
+    AddSpriteEx(8, PosX + (2 * TurnSide), PosY+4, maska->Index + 262144 * -Sign(-TurnSide - 1), 0, 0, 1.0);
+	AddSpriteEx(6, PosX + (15 * TurnSide), PosY+4, claw->Index + 262144 * -Sign(-TurnSide - 1), (claw_frame+8) * claw_spd_factor, 0, 1.2);
+	AddSpriteEx(7, PosX + (11 * TurnSide), PosY+2, claw->Index + 262144 * -Sign(-TurnSide - 1), claw_frame * claw_spd_factor, 0, 1.4);
+	}
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Climb"))
+     {
+	 vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     if(ClimbSwitch == false)
+        {
+        claw_initial_tick = GS->Tick;                
+        ClimbSwitch = true;
+        ShowMessage("Climb activated");
+        climb_on->Play(vol, pan, false);
+        } 
+     else
+        {
+        ClimbSwitch = false;
+        ShowMessage("Climb deactivated");
+        climb_off->Play(vol, pan, false);
+        }          
+     }
+  else 
+     {
+     super;
+     }
+}      

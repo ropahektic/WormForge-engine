@@ -1,0 +1,932 @@
+// by PyroMan
+
+require utils, utils_steps, pxparticles, p_portal2, p_portal_walls, p_weapgraphics, p_weapsounds;
+
+#PORTAL_GUN
+
+CMissile* portal_bullet;    // that`s the way we declare to read portal bullet!
+int portal_name;
+int PortalWT;
+int portal_alpha;
+int portal_type_sending;
+//int PortalWN;
+bool portal_pressing;
+bool read_portal_name;
+bool ctrl_alt_pressed;
+bool portals_CurrentTeamMode;
+float ang_portal[9];   // 0-8
+
+string portal_num2;
+//CPortal* portal[683];   // 2 portals for each worm: 6 teams, 8 worms, 2 portals + 1 coz count starts from 0;
+CPortal* portal[63];      // 2 portals for each team;    I think that`s the best way
+
+CAnimation* portal_a[63];
+CAnimation* portal_a1[63];
+CAnimation* portal_glow;
+bool portals_made[63];
+
+CAnimationParams* portal_loop_Params;
+CAnimationParams* portal_team_Params;
+CAnimationParams* portal_type_Params;
+CSprite* plazmaballglowSprite;
+CSprite* explosion_burst;
+CSprite* portal_orange;
+CSprite* portal_blue;
+CSprite* portal_glow_sprite;
+CSprite* portal_team_spot;
+CSprite* portal_black_mask;
+CSprite* portal_gun_glow;
+CSoundFile* portal_gun_shoot;
+CSoundFile* portal_gun_hit;
+CSoundFile* portal_gun_failhit;
+CSoundFile* portal_active_sound;
+CSoundFile* portal_inactive_sound;
+
+void portal_gun_script::InitGraphic()     
+{
+        CFile *f;
+	f = GetAttachment("lightning_glow.png");	plazmaballglowSprite = LoadSprite(f, 1, 0);
+	f = GetAttachment("portal_blue.png");           portal_blue = LoadSprite(f, 1, 0);
+	f = GetAttachment("portal_orange.png");         portal_orange = LoadSprite(f, 1, 0);
+	f = GetAttachment("portal_glow.png");           portal_glow_sprite = LoadSprite(f, 1, 0);
+	f = GetAttachment("portal_black_mask.png");     portal_black_mask = LoadSprite(f, 2, 0);
+	f = GetAttachment("portal_gun_glow.png");       portal_gun_glow = LoadSprite(f, 1, 0);
+	
+        f = GetAttachment("portal_gun_shoot.wav");      portal_gun_shoot = new CSoundFile(f);
+        f = GetAttachment("portal_gun_hit.wav");        portal_gun_hit = new CSoundFile(f);
+        f = GetAttachment("portal_gun_failhit.wav");    portal_gun_failhit = new CSoundFile(f);
+        f = GetAttachment("portal_active.wav");         portal_active_sound = new CSoundFile(f);
+        f = GetAttachment("portal_inactive.wav");       portal_inactive_sound = new CSoundFile(f);
+}                                                                                                     
+                                                                                                  // portal_active.wav
+void portal_gun_script::Init()
+{
+  keySync->AddKey(109); // NumPad "-" button
+  keySync->AddKey(107); // NumPad "+" button
+  keySync->AddKey(187); // "=" button
+  keySync->AddKey(189); // "-" button
+  keySync->AddKey(18);  // "ALT" button
+  keySync->AddKey(17);  // "CTRL" button
+  keySync->AddKey(32);  // "SPACEBAR" button
+  keySync->AddKey(16);  // "SHIFT" button
+  keySync->AddKey(38);  // "UP" button  
+  keySync->AddKey(40);  // "DOWN" button
+  keySync->AddKey(37);  // "LEFT" button  
+  keySync->AddKey(39);  // "RIGHT" button
+  
+  keySync->AddKey(19);  // "Break" button, to disable all active portals of current player.  
+} 
+
+void portal_gun_script::FirstFrame()
+{
+    portal_alpha = 50;
+    // initialize animation parameters 
+    portal_loop_Params = new CAnimationParams;
+    portal_team_Params = new CAnimationParams;
+    portal_type_Params = new CAnimationParams;
+    portal_type_Params->sprite = portal_gun_glow->Index;
+    portal_type_Params->speed = 0;
+    portal_type_Params->ZPlane = 5;
+    portal_type_Params->turns = 10000;  // hope its enough for ya :D
+    portal_type_Params->blend_type = 1;
+    portal_type_Params->color = ARGB(85, 230, 100, 0);
+    portal_type_Params->alpha = 100;
+  
+        portal_loop_Params->speed = 35;
+        portal_loop_Params->ZPlane = 9;
+        portal_loop_Params->scale = 0.8;
+        portal_loop_Params->turns = 100;
+        portal_loop_Params->loop = true;
+        portal_loop_Params->alpha = portal_alpha;
+        portal_loop_Params->blend_type = 3; 
+        
+        portal_team_Params->sprite = portal_black_mask->Index;
+        portal_team_Params->speed = 10;
+        portal_team_Params->ZPlane = 10;
+        portal_team_Params->scale = 0.5;
+        portal_team_Params->alpha = portal_alpha;
+        portal_team_Params->turns = 100;
+        portal_team_Params->loop = true;  
+        
+    portal_name = 1;
+    portal_koef = 1;
+    portal1_rdy = false;
+    portal2_rdy = false;
+    makeGlowAnim = true;
+    for (local i = 0; i <= 62; i++)
+    {
+        portals_made[i] = false;
+    }
+}
+
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+         super;
+         portal_nameP = 1;
+         ctrl_alt_check = false;
+         open_portal = true;
+//         ignore_wall_mode = false;     // declared in p_portal_walls.pxl
+         portal_type = 1;
+//         portal_angle_type = 0;
+//         portal_angle_type2 = 0;
+         portal_angle = 0.0;
+//         portal_angle_deg = 0;
+         portals_CurrentTeamMode = true;
+         i_am_portal = false;    // hell yeah! xD  
+         x_koef = 0;
+         y_koey = 0;
+         Res = new CTraceRes;
+         NoWormsColGroup =	CMASK_TERRAIN; // | CMASK_CRATE | CMASK_DONORCARD | CMASK_OILDRUM;
+}
+
+void CMissile::GetHitAngle(int posx, int posy)
+{
+   local worked = false;
+   x = posx;
+   y = posy;
+   local m_koef = 10;           // move koefficient: we actually placing portal a bit away from the wall, to avoid conflict collision
+   
+////////////   let`s calculate which shape and angle has landscape where missile exploded  ////////////
+//  note: rough calculation. reading only 45 degree range:  0, 45, 90, 135, 180, 225, 270, 315, 360  //
+        
+			fixed SpX2 = SpX;
+		        fixed SpY2 = SpY;
+                                        
+                TraceMaskEx(this, ColMask, PosX, PosY, PosX + SpX2, PosY + SpY2, NoWormsColGroup, Res);
+                if(Res->Hit) 
+		{        
+                        portal_angle = atan2(Res->NormalX, Res->NormalY);
+//                        portal_angle_deg = portal_angle/MATH_PI*360-180;                
+//                        if (Res->NormalX <= 0.25 && Res->NormalX >= -0.25 && Res->NormalY >= 0.95) // Top
+                        if (Res->NormalY >= 0.95) // Top
+                        {
+                            portal_angle_type = 1;
+                            x_koef = 0;
+                            y_koef = m_koef;
+                            worked = true;
+                        }
+//                        else if (Res->NormalX < -0.25 && Res->NormalX > -0.850 && Res->NormalY > 0.20 && Res->NormalY < 0.97) // Top Right
+                        else if (Res->NormalX < 0 && Res->NormalY > 0.25 && Res->NormalY < 0.97) // Top Right
+                        {
+                            portal_angle_type = 2;
+                            x_koef = -m_koef;
+                            y_koef = m_koef;
+                            worked = true;
+                        }
+//                        else if (Res->NormalX <= -0.85 && Res->NormalY >= -0.50 && Res->NormalY <= 0.60) // Right
+                        else if (Res->NormalX <= -0.90) // Right
+                        {
+                            portal_angle_type = 3;
+                            x_koef = -m_koef;
+                            y_koef = 0;
+                            worked = true;
+                        } 
+//                        else if (Res->NormalX > -0.85 && Res->NormalX < -0.25 && Res->NormalY > -0.97 && Res->NormalY < -0.35) // Bottom Right
+                        else if (Res->NormalX < 0 && Res->NormalY < -0.20 && Res->NormalY > -0.97) // Bottom Right
+                        {
+                            portal_angle_type = 4;
+                            x_koef = -m_koef;
+                            y_koef = -m_koef;
+                            worked = true;
+                        }
+//                        else if (Res->NormalX <= 0.25 && Res->NormalX >= -0.25 && Res->NormalY <= -0.95) // Bottom
+                        else if (Res->NormalY <= -0.97) // Bottom
+                        {
+                            portal_angle_type = 5;
+                            x_koef = 0;
+                            y_koef = -m_koef;
+                            worked = true;
+                        }
+//                        else if (Res->NormalX < 0.85 && Res->NormalX > 0.25 && Res->NormalY < -0.35 && Res->NormalY > -0.97) // Bottom Left
+                        else if (Res->NormalX > 0 && Res->NormalY < -0.20 && Res->NormalY > -0.97) // Bottom Left
+                        {
+                            portal_angle_type = 6;
+                            x_koef = m_koef;
+                            y_koef = -m_koef;
+                            worked = true;
+                        }  
+//                        else if (Res->NormalX >= 0.85 && Res->NormalY >= -0.60 && Res->NormalY <= 0.60) // Left
+                        else if (Res->NormalX >= 0.97) // Left
+                        {
+                            portal_angle_type = 7;
+                            x_koef = m_koef;
+                            y_koef = 0;
+                            worked = true;
+                        }
+//                        else if (Res->NormalX > 0.25 && Res->NormalX < 0.85 && Res->NormalY > 0.20 && Res->NormalY < 0.97) // Top Left
+                        else if (Res->NormalX > 0 && Res->NormalY > 0.25 && Res->NormalY < 0.97) // Top Left                        
+                        {
+                            portal_angle_type = 8;
+                            x_koef = m_koef;
+                            y_koef = m_koef;
+                            worked = true;
+                        }              
+		} 
+}
+
+
+void CMissile::CheckWall(int x, int y)
+{
+  if (open_portal)
+  {
+     //  Check collision wilth landscape in 7 pixels (becouse missile`s collision mask center has also some radius) around explosion point.
+     // i believe missile`s collision mask has 10pxls radius, so 5 - is a half. And we must check collision minimun un 6 pixels from col mask center.
+     // 6-7 will work best for basic usage
+     // But setting it with larger number, such as 15-30 - it will avoid portals to open on very tight parts of landscape.
+     // Remeber the Portal game. if part is too small - its mot gonna open there.
+     // So don`t be surprised if portal will not open on some spikey or tight parts of the map.
+     local rad = 15;
+     int hitp1_x;           int hitp1_y;            
+     int hitp2_x;           int hitp2_y;
+     int hitp3_x;           int hitp3_y;
+     int hitp4_x;           int hitp4_y;
+		
+     
+     CGObject *hitp1 = TraceLine(this, x, y, x+rad, y+rad, 2, &hitp1_x, &hitp1_y);
+     CGObject *hitp2 = TraceLine(this, x, y, x-rad, y-rad, 2, &hitp2_x, &hitp2_y);
+     CGObject *hitp3 = TraceLine(this, x, y, x+rad, y-rad, 2, &hitp3_x, &hitp3_y);
+     CGObject *hitp4 = TraceLine(this, x, y, x-rad, y+rad, 2, &hitp4_x, &hitp4_y);
+     
+     if (hitp1 != NullObj || hitp2 != NullObj || hitp3 != NullObj || hitp4 != NullObj) MakePortal(portal_bullet, x, y);
+     else portal_gun_failhit->Play( 1.0, 1.0, false);
+  }
+  if (open_portal_there)
+  {
+    for (i = 1; i < Root->Childs.Count; i++)
+    {
+        local wall = CPortal_Ignore_Wall(Root->Childs.Objs[i]);
+        if (wall == NullObj) continue;
+        if (#PORTAL_WALLS)
+        {
+          if (wall is CPortal_Ignore_Wall)
+          {
+            if (x > wall->pr_x1 && x < wall->pr_x2 && y > wall->pr_y1 && y < wall->pr_y2)
+            {
+              if (portal_angle_type > 0)                  // to don`t open portal in bad places with "Ignore Wall" mode
+              {
+                MakePortal(portal_bullet, x, y);
+                return;
+              } else {
+                open_portal = false;
+                return;
+              }
+            }
+          }
+        }
+    }
+  } else
+  {
+    for (i = 1; i < Root->Childs.Count; i++)
+    {
+        local wall = CPortal_Ignore_Wall(Root->Childs.Objs[i]);
+        if (wall == NullObj) continue;
+        if (#PORTAL_WALLS)
+        {
+          if (wall is CPortal_Ignore_Wall)
+          {
+            if (x > wall->pr_x1 && x < wall->pr_x2 && y > wall->pr_y1 && y < wall->pr_y2)
+            {
+                open_portal = false;
+                return;
+            }
+          }
+        }
+    }
+  }
+}
+
+void CMissile::TakeOffPortalWeap()
+{
+     local w = GetCurrentWorm();
+     local weaps = GetWeaponByName("Portal Gun");
+//     if (w != NullObj) GS->Info.AddWeaponEx(w->WormTeam, weaps->GetWeaponIndex(), weaps->GetPageIndex(), -1);
+     if (w != NullObj) {  
+                 if (w->portal_firstShot)
+                 {
+                    w->portal_firstShot = false;
+                 }
+                 else 
+                 {
+                    GS->Info.AddWeaponEx(w->WormTeam, weaps->GetWeaponIndex(), weaps->GetPageIndex(), -1);
+                    if (w->CurWeapon->CheckName("Portal Gun")) w->SetState(WS_IDLE);
+                    w->portal_firstShot = true;
+                 }
+     }
+}
+
+void CMissile::MakePortal(CMissile* parent, int x, int y)
+{
+     local w = GetCurrentWorm();
+     portal_bullet = parent;
+     local land_tele = false;
+     local ang_rad;
+//     if (portal_angle_type2 == 0) ang_rad = (-135 + 45 * portal_angle_type)*MATH_PI/180;
+//     else ang_rad = (-135 + 45 * portal_angle_type2)*MATH_PI/180;
+     ang_rad = MATH_HALF_PI - portal_angle;
+     
+     if (portal_nameP == 1)
+        {
+//            local number = 100 * PortalWT + 10 * PortalWN + 1;
+            local number = 10 * PortalWT + 1;
+            portal1 = MakeNumberString(portal_num2, portal_nameP, "");
+            portal2 = MakeNumberString(portal_num2, portal_nameP + 1, "");
+            if (portals_made[number] == false)
+            {
+                if (portal[number+1] == NullObj)                     
+                {
+                  portal_gun_hit->Play( 1.0, 1.0, false);
+                  portal_loop_Params->sprite = portal_orange->Index;
+                  portal[number] = new CPortal(1, x + x_koef, y + y_koef, 40, 50, portal_bullet->SpX, portal_bullet->SpY, false, land_tele, portal2, portal1, true, portal_angle_type);
+//                  if (portal_angle_type2 == 0) portal_loop_Params->rot = -135 + 45 * portal_angle_type;
+//                  else portal_loop_Params->rot = -135 + 45 * portal_angle_type2;
+//                  portal_loop_Params->rot = portal_angle_deg;
+                  portal_a[number] = new CAnimation(Root, x, y, NullObj, portal_loop_Params);
+                  ang_portal[portal_angle_type] = portal_a[number]->rot;
+                  portal_a[number]->rot = ang_rad;
+                  portal_a1[number] = new CAnimation(Root, x - x_koef * 2, y - y_koef * 2, NullObj, portal_team_Params);
+                  portal_name = 2;
+                  portals_made[number] = true;
+                  TakeOffPortalWeap();
+                } else if (x > (portal[number+1]->pr_x1 - 10) && x < (portal[number+1]->pr_x2 + 10) && y > (portal[number+1]->pr_y1 - 10) && y < (portal[number+1]->pr_y2 + 10))
+                {
+                  DoSpark(30); portal_gun_failhit->Play( 1.0, 1.0, false);
+                } else {
+                  portal_gun_hit->Play( 1.0, 1.0, false);
+                  portal_loop_Params->sprite = portal_orange->Index;
+                  portal[number] = new CPortal(1, x + x_koef, y + y_koef, 40, 50, portal_bullet->SpX, portal_bullet->SpY, false, land_tele, portal2, portal1, true, portal_angle_type);
+//                  if (portal_angle_type2 == 0) portal_loop_Params->rot = -135 + 45 * portal_angle_type;
+//                  else portal_loop_Params->rot = -135 + 45 * portal_angle_type2;
+//                  portal_loop_Params->rot = portal_angle_deg;
+                  portal_a[number] = new CAnimation(Root, x, y, NullObj, portal_loop_Params);
+                  portal_a[number]->rot = ang_rad;
+                  portal_a1[number] = new CAnimation(Root, x - x_koef * 2, y - y_koef * 2, NullObj, portal_team_Params);
+                  portal_name = 2;
+                  portals_made[number] = true;
+                  TakeOffPortalWeap();
+                }
+            } else if (portal[number+1] != NullObj){
+              if (x > (portal[number+1]->pr_x1 - 10) && x < (portal[number+1]->pr_x2 + 10) && y > (portal[number+1]->pr_y1 - 10) && y < (portal[number+1]->pr_y2 + 10))
+              {
+                DoSpark(30); portal_gun_failhit->Play( 1.0, 1.0, false); 
+              }
+              else {
+                portal_gun_hit->Play( 1.0, 1.0, false);
+                portal[number]->Update(1, x + x_koef, y + y_koef, 40, 50, portal_bullet->SpX, portal_bullet->SpY, false, land_tele, portal2, portal1, true, portal_angle_type);
+                portal_a[number]->x = x;
+                portal_a[number]->y = y;
+                portal_a[number]->rot = ang_rad;
+                portal_a1[number]->x = x - x_koef * 2;
+                portal_a1[number]->y = y - y_koef * 2;
+                TakeOffPortalWeap();
+//                portal_a1[number]->y = y + 30;
+              } 
+            }
+        }
+        if (portal_nameP == 2)
+        {
+//            local number = 100 * PortalWT + 10 * PortalWN + 2;
+            local number = 10 * PortalWT + 2;
+            portal1 = MakeNumberString(portal_num2, portal_nameP - 1, "");
+            portal2 = MakeNumberString(portal_num2, portal_nameP, "");
+            if (portals_made[number] == false)
+            {
+                if (portal[number-1] == NullObj)
+                {
+                  portal_gun_hit->Play( 1.0, 1.0, false);
+                  portal_loop_Params->sprite = portal_blue->Index;
+                  portal[number] = new CPortal(2, x + x_koef, y + y_koef, 40, 50, portal_bullet->SpX, portal_bullet->SpY, false, land_tele, portal1, portal2, true, portal_angle_type);
+//                  if (portal_angle_type2 == 0) portal_loop_Params->rot = -135 + 45 * portal_angle_type;
+//                  else portal_loop_Params->rot = -135 + 45 * portal_angle_type2;
+//                  portal_loop_Params->rot = portal_angle_deg;
+                  portal_a[number] = new CAnimation(Root, x, y, NullObj, portal_loop_Params);
+                  portal_a[number]->rot = ang_rad;
+                  portal_a1[number] = new CAnimation(Root, x - x_koef * 2, y - y_koef * 2, NullObj, portal_team_Params);
+                  portal_name = 1;
+                  portals_made[number] = true;
+                  TakeOffPortalWeap();
+                } else if (x > (portal[number-1]->pr_x1 - 10) && x < (portal[number-1]->pr_x2 + 10) && y > (portal[number-1]->pr_y1 - 10) && y < (portal[number-1]->pr_y2 + 10))
+                {
+                  DoSpark(30); portal_gun_failhit->Play( 1.0, 1.0, false); 
+                } else {
+                  portal_gun_hit->Play( 1.0, 1.0, false);
+                  portal_loop_Params->sprite = portal_blue->Index;
+                  portal[number] = new CPortal(2, x + x_koef, y + y_koef, 40, 50, portal_bullet->SpX, portal_bullet->SpY, false, land_tele, portal1, portal2, true, portal_angle_type);
+//                  if (portal_angle_type2 == 0) portal_loop_Params->rot = -135 + 45 * portal_angle_type;
+//                  else portal_loop_Params->rot = -135 + 45 * portal_angle_type2;
+//                  portal_loop_Params->rot = portal_angle_deg;
+                  portal_a[number] = new CAnimation(Root, x, y, NullObj, portal_loop_Params);
+                  portal_a[number]->rot = ang_rad;
+                  portal_a1[number] = new CAnimation(Root, x - x_koef * 2, y - y_koef * 2, NullObj, portal_team_Params);
+                  portal_name = 1;
+                  portals_made[number] = true;
+                  TakeOffPortalWeap();
+                }
+              } else if (portal[number-1] != NullObj){
+              if (x > (portal[number-1]->pr_x1 - 10) && x < (portal[number-1]->pr_x2 + 10) && y > (portal[number-1]->pr_y1 - 10) && y < (portal[number-1]->pr_y2 + 10))
+              {
+                DoSpark(30); portal_gun_failhit->Play( 1.0, 1.0, false); 
+              }
+              else {
+                portal_gun_hit->Play( 1.0, 1.0, false);
+                portal[number]->Update(2, x + x_koef, y + y_koef, 40, 50, portal_bullet->SpX, portal_bullet->SpY, false, land_tele, portal1, portal2, true, portal_angle_type);
+                portal_a[number]->x = x;
+                portal_a[number]->y = y;
+                portal_a[number]->rot = ang_rad;
+                portal_a1[number]->x = x - x_koef * 2;
+                portal_a1[number]->y = y - y_koef * 2;
+                TakeOffPortalWeap();
+//                portal_a1[number]->y = y + 30;
+              } 
+            }
+          }
+}
+
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+//    local ang_rad = (-135 + 45 * portal_angle_type)*MATH_PI/180;
+    local ang_rad = MATH_HALF_PI - portal_angle;
+    if (i_am_portal) {
+       DoSpark(7); 
+       DoFlash(1, 3);
+    }    
+    if (portal_bullet == this)
+    {
+//    if (weap->CheckName("Portal Gun"))     // no longer need this
+//    {
+     if (PosX < -5 || PosX > GS->LevelSX || PosY < -5 || PosY > Env->Water + 150)
+     {
+         open_portal = false;
+     }
+      if (y < Env->Water)
+      {
+//        local type_reader = this;
+//        if (portal_angle_type == 0) portal_angle_type = 2;
+        GetHitAngle(x, y);
+        
+        DoSpark(10);
+
+///////////////////////////////////////////////////////////////////        
+        if (PortalWT == 1){                          // red
+        portal_team_Params->color = ARGB(85, 210, 20, 0);}
+        else if (PortalWT == 2){                     // blue
+        portal_team_Params->color = ARGB(85, 0, 20, 220);}     
+        else if (PortalWT == 3){                     // green
+        portal_team_Params->color = ARGB(85, 0, 220, 0);}
+        else if (PortalWT == 4){                     // yellow
+        portal_team_Params->color = ARGB(85, 250, 220, 0);}
+        else if (PortalWT == 5){                     // purple
+        portal_team_Params->color = ARGB(85, 220, 0, 220);}
+        else if (PortalWT == 6){                     // cyan
+        portal_team_Params->color = ARGB(85, 0, 230, 230);}
+///////////////////////////////////////////////////////////////////
+        portal_team_Params->blend_type = 1;
+
+        if (ignore_wall_mode)                                                    // maded for MapEditor object, "Ignored walls"
+        {
+           open_portal = true;
+           if (open_portal_there) open_portal = false;
+           CheckWall(x, y);                                                  
+//           MakePortal(portal_bullet, x, y);
+        }
+        if (open_portal){                     
+            CheckWall(x, y);                                                     // No more portals in the air! only on landscape.
+//            MakePortal(portal_bullet, x, y);                                     // make portal
+        }
+      }
+    }
+    super;
+}
+
+void CMissile::DoFlash(int k, int lt)        // Moar effects! :D   love this one so much :D
+{
+    for(int i=0 ; i<k ; i += 1)
+	{
+		p = new PxParticle(plazmaballglowSprite->Index, PosX, PosY);
+		
+                p->SetLifeTime(lt);
+		p->GravityFactor(0);
+//		p->SetRandomVelocity(1.5, 0.8);
+		p->SetAlpha(150);
+		s = RandomFloat(2.0,3.2);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.11, 0.11);
+		p->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		p->SetStartColor(255,255 - s,255);
+		p->SetEndColor(200,225 - s,125);
+		
+		p->SetMotionRandomness(0.2);
+	}
+}
+
+void CMissile::DoSpark(int k)        // yyes, do them particles! :D
+{
+    for(int i=0 ; i<k ; i += 1)
+	{
+		p = new PxParticle(portal_glow_sprite->Index, PosX, PosY);
+		
+                p->SetAngle( 1.23);
+                p->SetAngleSpeed( 25.0);
+                p->SetLifeTime(40);
+		p->GravityFactor(1);
+		p->SetRandomVelocity(1.5, 3.8);
+		p->SetAirResistance(0.05);
+		p->SetAlpha(255);
+		s = RandomFloat(0.2,0.4);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.01, 0.01);
+		p->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		p->SetStartColor(255,255 - s,0);
+		p->SetEndColor(255,80 - s,0);
+		
+		p->SetMotionRandomness(0.2);
+	}
+}
+
+void CMissile::DoTrailEffects(int type)            // Moar particles :D
+{
+    if (PosY < Env->Water)
+    {
+    if (type == 1){
+    p0 = new PxParticle(plazmaballglowSprite->Index, PosX, PosY);
+		p0->SetBlendMode(1);
+		p0->SetStartColor(45,10,4);
+		p0->SetEndColor(0,0,0);
+		p0->SetLifeTime(15);
+		p0->SetRandomVelocity(0, 0);
+		p0->SetAirResistance(0);
+		p0->SetAlpha(255);
+		p0->SetStartSize(0.5,0.5);
+		p0->SetEndSize(0.35,0.35);
+		
+    p1 = new PxParticle(plazmaballglowSprite->Index, PosX, PosY);
+		p1->SetBlendMode(1);
+        	p1->SetStartColor(45,25,4);
+		p1->SetEndColor(0,0,0);
+		p1->SetLifeTime(40);
+		p1->SetRandomVelocity(0.0, 0.8);
+		p1->SetAirResistance(0);
+		p1->SetAlpha(255);
+		p1->SetStartSize(0.3,0.3);
+		p1->SetEndSize(0.35,0.35);
+   }
+   if (type == 2){
+    p0 = new PxParticle(plazmaballglowSprite->Index, PosX, PosY);
+		p0->SetBlendMode(1);
+		p0->SetStartColor(4,10,45);
+		p0->SetEndColor(0,0,0);
+		p0->SetLifeTime(15);
+		p0->SetRandomVelocity(0, 0);
+		p0->SetAirResistance(0);
+		p0->SetAlpha(255);
+		p0->SetStartSize(0.5,0.5);
+		p0->SetEndSize(0.35,0.35);
+		
+    p1 = new PxParticle(plazmaballglowSprite->Index, PosX, PosY);
+		p1->SetBlendMode(1);
+        	p1->SetStartColor(4,25,45);
+		p1->SetEndColor(0,0,0);
+		p1->SetLifeTime(40);
+		p1->SetRandomVelocity(0.0, 0.8);
+		p1->SetAirResistance(0);
+		p1->SetAlpha(255);
+		p1->SetStartSize(0.3,0.3);
+		p1->SetEndSize(0.35,0.35);
+   }
+
+  }                		                      
+}
+
+
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+//    local i = MakeNumberString("SoundN: ", sound, "");      // Best way to find what sound playing now!
+//    GG->WriteToChat( 1, i, false);
+    local worm = GetCurrentWorm();
+    if (worm != NullObj && worm->CurWeapon->CheckName("Portal Gun"))
+    {
+        if (sound == 140 || sound == 194) return;      // muting "fire" sounds fpr different soundbanks
+        else if (sound == 177 || sound == 231) return; // muting "watch this" sounds
+        else super;                                    // why? Becouse i love pure Portal gun sound :P
+    } else
+    {
+        super;
+    }
+}
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {       
+        if (portal_bullet == this)
+        {
+             portal_bullet->i_am_portal = true;
+             if (PosX < -5 || PosX > GS->LevelSX || PosY < -5 || PosY > Env->Water + 150)   // Do not open portals out of map.
+             {
+//                 open_portal = false;
+                 GravityFactor = 1.0;
+             } else {GravityFactor = 0.0; 
+//                 GetHitAngle(PosX, PosY);
+             }//open_portal = true;}
+             if (read_portal_name)
+             {
+//                 if (ignore_wall_mode)
+//                 {
+//                    GG->WriteToChat( 2, "ignore_wall_mode ON", false);
+//                    open_portal = false;
+//                 }
+//      let`s switchback to previous portal type after shot with ctrl/alt holded 
+                 if (ctrl_alt_pressed) 
+                 {
+                     if (portal_name == 1) portal_nameP = 2;
+                     else portal_nameP = 1;
+                     portal_type = portal_type_sending;
+                     ctrl_alt_check = true;
+                     read_portal_name = false;
+                 } else if (ctrl_alt_check)
+                 {
+                     portal_nameP = portal_name;
+                     portal_type = portal_type_sending;
+                     ctrl_alt_check = false;
+                     read_portal_name = false;
+                 } else {
+                   portal_type = portal_type_sending;
+                   portal_nameP = portal_name;
+                   read_portal_name = false;
+                 }
+             }
+             DoTrailEffects(portal_nameP);
+        }
+        else if (i_am_portal) DoTrailEffects(portal_nameP);
+        if (i_am_portal)
+        {
+            local number = 10 * PortalWT + 1;
+            if (portal[number] != NullObj || portal[number+1] != NullObj)
+            {
+                portal_readed = true;
+            }
+        }
+    }
+super;
+}
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    portal_firstShot = true;
+    last_WormTeam = 0;
+    disable_all_portals = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_TURNBEGIN)
+    {
+        PortalWT = WormTeam;
+        if (disable_all_portals)                                // Disable all portals if CurrentTeamMode
+         {
+//           GG->WriteToChat( 1, "Game uses CurrentTeamMode. All portals disabled.", false);
+           for (local i = 1; i <= 62; i++)
+           {
+             if (portal[i] != NullObj) 
+             {
+               portal[i]->Disabled = true;
+               portal_a[i]->alpha = 0;
+               portal_a1[i]->alpha = 0;
+               if (i == (10*PortalWT+1))
+               {
+                   portal_a[i]->alpha = portal_alpha;
+//                   portal_a1[i]->alpha = portal_alpha;   
+//                   portal_a1[i]->alpha = 0;                 // apparently we don`t need Team lamp indicator if only 2 portals on map, for current team.
+                   portal[i]->Disabled = false;
+               }
+               if (i == (10*PortalWT+2)) 
+               {
+                   portal_a[i]->alpha = portal_alpha;
+//                   portal_a1[i]->alpha = portal_alpha;
+//                   portal_a1[i]->alpha = 0;
+                   portal[i]->Disabled = false;
+               }
+             }
+           }
+         }
+    }
+    if (Type == M_FRAME)
+    {
+        local worm = GetCurrentWorm();
+        if (worm != NullObj)
+        {
+            if (keySync->KeyPressed( 19))  // Emergency button - deactivate all active portals of current player.
+            {
+              if (switch_pressed)
+              {  
+                local number;
+                if (active_switcher)
+                {
+                   number = 10* worm->WormTeam + 1;   // Orange portal
+                   if (portal[number] != NullObj) portal[number]->active = false;
+                   number = 10* worm->WormTeam + 2;   // Blue portal
+                   if (portal[number] != NullObj) portal[number]->active = false;
+                   portal_inactive_sound->Play( 1.0, 1.0, false);
+                   active_switcher = false;
+                   switch_pressed = false;
+                }
+                else
+                {
+                   number = 10* worm->WormTeam + 1;   // Orange portal
+                   if (portal[number] != NullObj) portal[number]->active = true;
+                   number = 10* worm->WormTeam + 2;   // Blue portal
+                   if (portal[number] != NullObj) portal[number]->active = true;
+                   portal_active_sound->Play( 1.0, 1.0, false);
+                   active_switcher = true;
+                   switch_pressed = false;
+                }
+              }
+            } else switch_pressed = true;    // this boolean limits reading to only one key pressing, not multiple.
+        }
+        if (worm != NullObj && worm->CurWeapon->CheckName("Portal Gun"))
+        {
+            if (portal_glow != NullObj)
+            {
+              if (worm->ObjState == WS_AIMING)
+              {
+                portal_glow->alpha = 100;
+                portal_glow->x = worm->PosX;
+                portal_glow->y = worm->PosY;
+//                portal_glow->rot = worm->FireAngle*5;
+                if (worm->TurnSide < 0) portal_glow->rot = -29.70 + ((worm->FireAngle * 100 / 0.555555 - 26) / 360 + MATH_HALF_PI) * 6.2;   // my best formula ever xD
+                else portal_glow->rot = 240 - ((worm->FireAngle * 100 / 0.555555 - 26) / 360 + MATH_HALF_PI) * 6.2;                         // most funny thing that it works :D
+              } else portal_glow->alpha = 0;
+            } else {
+                portal_glow = new CAnimation(Root, worm->PosX, worm->PosY, NullObj, portal_type_Params);
+            }
+            local koef = 1;
+            if (keySync->KeyPressedNow(109) || keySync->KeyPressedNow(189) || keySync->KeyPressedNow(187) || keySync->KeyPressedNow(107))
+            {
+              if (portal_pressing) // this forbids multiple messages per keyPress. we need only 1, don`t we? :) 
+              {
+                if (keySync->KeyPressedNow(109) || keySync->KeyPressedNow(189))
+                {
+                  portal_name = 1;
+                  ShowTeamMessage( 4, "ORANGE portal", WormTeam);
+                  PlayLocalSound(92, 1.0, 1.0, 1.0);
+                  portal_pressing = false;
+                } 
+                else if (keySync->KeyPressedNow(107) || keySync->KeyPressedNow(187))
+                {
+                  portal_name = 2;
+                  ShowTeamMessage( 2, "BLUE portal", WormTeam);
+                  PlayLocalSound(92, 1.0, 1.0, 1.0);
+                  portal_pressing = false;
+                }
+              }
+            } else portal_pressing = true;
+            // let`s a bit speed up this damn slow arm :D  When Shift pressed ofc.
+            if (keySync->KeyPressed(16) && worm->FireAngle < 1.0)
+            {
+                if (keySync->KeyPressed(40)) worm->FireAngle = worm->FireAngle - 0.0025;
+                if (keySync->KeyPressed(38)) worm->FireAngle = worm->FireAngle + 0.005; // weird huh
+            }
+            if (portal_glow != NullObj)
+            {
+                if (portal_name == 1) portal_glow->col = ARGB(85, 230, 100, 0);
+                else portal_glow->col = ARGB(85, 0, 50, 230);
+            }
+        } else if (portal_glow != NullObj) portal_glow->alpha = 0;
+    }
+    super;
+}
+
+void CWorm::ShotPortal(int x, int y, float fireAngle, float firePower)
+{
+//      GS->Info.AddWeapon(w->WormTeam, w->CurWeapon->GetWeaponIndex(), 1);
+      local worm = GetCurrentWorm();
+      if (fireAngle < 1.0) portal_type_sending = 1;
+      else if (fireAngle < 0.66) portal_type_sending = 2;
+      else if (fireAngle < 0.33) portal_type_sending = 3;
+      
+      if (keySync->KeyPressed(18) || keySync->KeyPressed(17))
+      {
+         ctrl_alt_pressed = true;
+      } else {
+         ctrl_alt_pressed = false;
+      }
+         local ang = (1 - fireAngle) * 3.14159;
+         if (TurnSide < 0) ang = 6.28318 - ang;
+         
+         float PowerInit = firePower * 35.0;          // bullet should be faster then worm`s max speed (32)
+         
+         local sx = sin(ang) * PowerInit;
+         local sy = - cos(ang) * PowerInit;
+                
+         local ang = (1 - fireAngle) * 3.14159;
+         if (TurnSide < 0) ang = 6.28318 - ang;
+         
+         local ldata = GetWeaponByName("Portal Gun");
+         local team = worm->WormTeam;       
+         CShootDesc SDesc;
+         zero(&SDesc);	
+         SDesc.SpX = sx;
+         SDesc.SpY = sy;
+         SDesc.X = x + sin(ang);      // 15 is a worm`s rad
+         SDesc.Y = y - cos(ang);
+         SDesc.Team = team;
+		
+         portal_bullet = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         
+         portal_num2 = MakeNumberString("portal_", WormTeam, "");
+         portal_gun_shoot->Play( 1.0, 1.0, false);
+         read_portal_name = true;   
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+        if (Weap->CheckName("Portal Gun"))
+        {       
+		ShotPortal(PosX, PosY, FireAngle, FirePower);
+		
+                local f_a = FireAngle;          // FireAngle brokes often when adding weapon (somehow), so lets better remember it.
+                 GS->Info.AddWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);
+                 last_WormTeam = WormTeam;
+                 if (FireAngle > 0.99 || FireAngle < 0.01)
+                 {
+                     FireAngle = f_a;
+                 }
+	}
+	
+	else super;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  CWorm* w = GetCurrentWorm();
+  local weap = GetWeaponByName("Portal Gun");
+     if (Type == M_TURNEND)
+     {
+/*         if (portal_firstShot == false)                             // -1 Portal Gun when turn end, if one shot has been made but second - doesn`t.
+         {
+             
+             GS->Info.AddWeaponEx(last_WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(), -1);
+             portal_firstShot = true;
+         }*/
+     }
+     if (w != NullObj)
+     {
+         local read_now;
+         if (Type == M_SPACE)
+         {
+             local f_a;
+             f_a = w->FireAngle;   // remebering last aim position
+             if (w->CurWeapon->CheckName("Portal Gun") && (w->ObjState == WS_SLIDING || w->ObjState == WS_JUMPPREPARE || w->ObjState == WS_JUMP || w->ObjState == WS_FLYING2 || w->ObjState == WS_FLYING || w->ObjState == WS_POWERFLY))
+             {
+/*                 if (read_now) 
+                 {
+                    read_now = false;
+                 }*/
+//                 if (keySync->KeyPressedNow(38) || keySync->KeyPressedNow(40) || keySync->KeyPressedNow(37) || keySync->KeyPressedNow(39))
+//                 {
+                    // Reading key pressing and seeting up the FireAngle;
+                         if (keySync->KeyPressed(38) && keySync->KeyPressed(37)) w->FireAngle = 0.75;
+                    else if (keySync->KeyPressed(38) && keySync->KeyPressed(39)) w->FireAngle = 0.75; 
+                    else if (keySync->KeyPressed(40) && keySync->KeyPressed(37)) w->FireAngle = 0.175;        // 17.5 Degrees (from bottom) is good angle for opening portals on high speed when flying on side.
+                    else if (keySync->KeyPressed(40) && keySync->KeyPressed(39)) w->FireAngle = 0.175;
+                    else if (keySync->KeyPressed(39)) w->FireAngle = 0.5;
+                    else if (keySync->KeyPressed(37)) w->FireAngle = 0.5;
+                    else if (keySync->KeyPressed(40)) w->FireAngle = 0.0;
+                    else if (keySync->KeyPressed(38)) w->FireAngle = 1.0;
+//                 } else {
+//                    read_now = true;
+//                 }
+                    w->SetState(WS_AIMING);         // to avoid "beep" sound when fireing in mid-air
+                    w->CanFire = true;
+                    ShotPortal(w->PosX, w->PosY, FireAngle, 1.0);
+//                    GS->Info.AddWeaponEx(w->WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(), -1);
+                    w->FireAngle = f_a;     // get back my FireAngle;
+             }
+         } else read_now = true;
+     }
+     if (Type == M_FRAME)
+     {
+         if (w != NullObj)
+         {
+             if (w->CurWeapon->CheckName("Portal Gun") &&  (w->ObjState == WS_FLYING || w->ObjState == WS_POWERFLY || w->ObjState == WS_SLIDING))
+             {
+                 w->SetState(WS_SLIDING);  // Do not disable control when high-speed flyes.
+                 w->CanFire = true;
+             }
+             if (w->CurWeapon->CheckName("Portal Gun") && w->ObjState == WS_POING)
+             {
+                 w->SetState(WS_IDLE);
+             }
+         }
+     }
+super;
+}

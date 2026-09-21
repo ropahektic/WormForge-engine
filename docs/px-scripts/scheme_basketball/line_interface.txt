@@ -1,0 +1,116 @@
+CBBInterfaceHandler : CObject;
+CBBInterfaceHandler * centerLineGUI;
+int ScoreCoefficient;
+
+void line_interface::FirstFrame()
+{
+		local centergui = new CBBInterfaceHandler(Root);
+        centergui->KCx = int(GS->LevelSX / 2);
+        centergui->KCy = int(GS->LevelSY / 2);
+        centergui->MapHeight = GS->LevelSY;
+        centerLineGUI = centergui;
+        ScoreCoefficient = 0;
+}
+
+CBBInterfaceHandler::CBBInterfaceHandler(CObject* parent)
+{
+    super(parent, GS);
+    GUIn = MakeBitmap(32, 32);
+    DrawColor = 0;
+    KCx = 0;
+    KCy = 0;
+    MapHeight = 0;
+}
+
+void CBBInterfaceHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+    {
+    local a = 0;
+    local b = 0;
+    
+    if(DrawColor == 1){GS->Disp->DrawText(1, GUIn, 0, 0, "|", &a, &b);} // red
+    if(DrawColor == 2){GS->Disp->DrawText(2, GUIn, 0, 0, "|", &a, &b);} // blue
+    if(DrawColor == 3){GS->Disp->DrawText(3, GUIn, 0, 0, "|", &a, &b);} // green
+    }
+
+if (Type == M_DRAWQUEUE)
+	{
+	if(DrawLine == true)
+	    {
+    	local Cx = GS->ActCameraX;
+    	local Cy = GS->ActCameraY;
+
+    	local Ox = (KCx - Cx);
+    	local Oy = (KCy - Cy);
+
+    	local iter = int(MapHeight / 50);
+
+    	for(int n = 0; n < 36; n++)
+			{
+        	local addm = 17 - n;
+        	AddInterfaceBitmap(0, Ox, Oy + int(addm * iter) - 7, GUIn,1,12,0);
+        	}
+		}
+	}
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if(Type == M_FRAME && gframe > 250)
+   	{
+    local w = GetCurrentWorm();
+    if(w != NullObj)
+		{
+        if(w != this){super;return;}
+        
+        if(BallFired == false)		// if worm has the ball
+        	{
+        	if(GetTeamColor(WormTeam) == 0)		// if red team
+        	    {
+        	    if(RememberPosX < int(GS->LevelSX / 2) && RememberPosX > int(GS->LevelSX / 2 - 332)) // left from center line before 3 point line
+					{
+                	centerLineGUI->DrawColor = 1;
+                	centerLineGUI->KCx = GS->LevelSX / 2;
+                	ScoreCoefficient = 2;		// 2 points zone
+                	}
+                else if(RememberPosX > int(GS->LevelSX / 2)) // right from center line
+					{
+                	centerLineGUI->DrawColor = 2;
+                	centerLineGUI->KCx = GS->LevelSX / 2;
+                	ScoreCoefficient = 1;       // 1 point zone
+                	}
+                else if(RememberPosX < int(GS->LevelSX / 2 - 332)) // left from 3 point line
+					{
+                	centerLineGUI->DrawColor = 3;
+                	centerLineGUI->KCx = GS->LevelSX / 2 - 332;
+                	ScoreCoefficient = 3;       // 3 points zone
+                	}
+        	    }
+        	    
+        	else if(GetTeamColor(WormTeam) == 1)	// if blue team
+        	    {
+                if(RememberPosX > int(GS->LevelSX / 2) && RememberPosX < int(GS->LevelSX / 2 + 332)) // right from center line before 3 point line
+					{
+                	centerLineGUI->DrawColor = 2;
+                	centerLineGUI->KCx = GS->LevelSX / 2;
+                	ScoreCoefficient = 2;		// 2 points zone
+                	}
+                else if(RememberPosX < int(GS->LevelSX / 2)) // left from center line
+					{
+                	centerLineGUI->DrawColor = 1;
+                	centerLineGUI->KCx = GS->LevelSX / 2;
+                	ScoreCoefficient = 1;       // 1 point zone
+                	}
+                else if(RememberPosX > int(GS->LevelSX / 2 + 332)) // right from 3 point line
+					{
+                	centerLineGUI->DrawColor = 3;
+                	centerLineGUI->KCx = GS->LevelSX / 2 + 332;
+                	ScoreCoefficient = 3;       // 3 points zone
+                	}
+        	    }
+			}
+		}
+	}
+}

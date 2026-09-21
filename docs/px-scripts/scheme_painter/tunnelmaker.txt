@@ -1,0 +1,1164 @@
+//Script by StepS
+
+/*
+||///////////////////////////////////////////////////||
+||WARNING! THIS CODE CAN SEEM TOO HARD TO UNDERSTAND.||
+||               BUT I DONT CARE.                    ||
+||///////////////////////////////////////////////////||
+*/
+
+require utils;
+
+int SpecialX;          // Brush X pos.
+int SpecialY;          // Brush Y pos.
+int Brushspeed;        // Brush speed
+int bsz;               // Brush size
+int halfbsz;           // Half-size
+int minefuse;          // Mine fuse
+int brushcolor;        // Brush color
+int teamRGB;           // Team color
+int windex;            // Weapon index
+int lastwindex;        // Last weapon index
+bool FixEraser;        // Eraser fix
+bool blit;             // Destructibility
+bool ShowPointer;      // Painter enabled/disabled
+bool Camlock;          // Camera lock
+bool Minerandom;       // Is the mine fuse random or not
+bool Firebleeding;     // Making fire
+bool Minepissing;      // Making mines
+bool Farting;          // Making gas
+bool Oildrumming;      // Making drums
+bool Crateraining;     // Making crates
+bool Exploding;        // Making explosions
+bool Indypainting;     // Indy Painting
+bool Painting;         // Painting
+bool Spraying;         // Spraying
+bool Indyspraying;     // Indy Spraying 
+bool Erasing;          // Erasing
+bool Supererasing;     // Super Erasing
+bool Ultraerasing;     // Ultra Erasing
+bool Doingshit;        // Doing shit - acting weirdly (using both Painting and Indypainting, for example)
+bool Mousactiv;        // Mouse brush enabled/disabled
+bool CamLocked;        // For IsKeyPressed
+bool campressed;       // For IsKeyPressed
+bool teamcolored;      // Is the brush team colored?
+bool canwarn;          // One-time bool to warn user not to click the mouse.
+bool WormActing;       // Is the worm currently performing a shot?
+bool Fix10BrushER;     // Fix for the very small brush to erase properly on high speeds
+bool Fix10BrushERUS;   // Fix for the very small brush to super/ultra erase properly on high speeds
+bool Fix10BrushPA;     // Fix for the very small brush to paint properly on high speeds
+string cratetype;      // Crate type.
+
+CBitmap32* curfill;    // Current bitmap
+EMASKTYPE maskatype;   // Used to distinguish the super and ultra erasers.
+
+CSprite* yellowpointer;// Pointer for the brush
+CSprite* rcircle;      // Pointer for fire
+CBitmap32* pixel;      // 1x1 bitmap
+CBitmap32* fill10;     // 10x10 bitmap
+CBitmap32* fill20;     // 20x20 bitmap
+CBitmap32* fill30;     // 30x30 bitmap
+CBitmap32* fill40;     // 40x40 bitmap
+CBitmap32* fill50;     // 50x50 bitmap
+CBitmap32* fill60;     // 60x60 bitmap
+CBitmap32* fill70;     // 70x70 bitmap
+CBitmap32* fill80;     // 80x80 bitmap
+CBitmap32* fill90;     // 90x90 bitmap
+CBitmap32* fill100;    // 100x100 bitmap
+
+
+void tunnelmaker::InitGraphic()
+{
+    pixel  = MakeBitmap(1, 1);
+    fill10 = MakeBitmap(10, 10);
+    fill20 = MakeBitmap(20, 20);
+    fill30 = MakeBitmap(30, 30);
+    fill40 = MakeBitmap(40, 40);
+    fill50 = MakeBitmap(50, 50);
+    fill60 = MakeBitmap(60, 60);
+    fill70 = MakeBitmap(70, 70);
+    fill80 = MakeBitmap(80, 80);
+    fill90 = MakeBitmap(90, 90);
+    fill100 = MakeBitmap(100, 100);
+        
+    CFile *f;
+    f = GetAttachment("pointery.png");	yellowpointer = LoadSprite(f, 1, 0);
+    f = GetAttachment("firecircle.png");	rcircle = LoadSprite(f, 1, 0);
+}
+
+void tunnelmaker::Init()
+{
+    keySync->AddKey(8);   // Backspace
+    keySync->AddKey(9);   // Tab
+    keySync->AddKey(17);  // Ctrl
+    keySync->AddKey(219); // [
+    keySync->AddKey(221); // ]
+    keySync->AddKey(186); // ;
+    keySync->AddKey(188); // ,
+    keySync->AddKey(189); // -
+    keySync->AddKey(187); // =
+    keySync->AddKey(190); // .
+    keySync->AddKey(191); // /
+    keySync->AddKey(192); // `
+    keySync->AddKey(73);  // I
+    keySync->AddKey(74);  // J
+    keySync->AddKey(75);  // K
+    keySync->AddKey(76);  // L
+    keySync->AddKey(77);  // M
+    keySync->AddKey(78);  // N
+    keySync->AddKey(79);  // O
+    keySync->AddKey(80);  // P
+    keySync->AddKey(87);  // W
+    keySync->AddKey(65);  // A
+    keySync->AddKey(66);  // B
+    keySync->AddKey(83);  // S
+    keySync->AddKey(85);  // U
+    keySync->AddKey(68);  // D
+    keySync->AddKey(49);  // 1
+    keySync->AddKey(50);  // 2
+    keySync->AddKey(51);  // 3
+    keySync->AddKey(52);  // 4
+    keySync->AddKey(53);  // 5
+    keySync->AddKey(54);  // 6
+    keySync->AddKey(55);  // 7
+    keySync->AddKey(56);  // 8
+    keySync->AddKey(57);  // 9
+    keySync->AddKey(48);  // 0
+    keySync->AddKey(16);  // Shift
+    keySync->AddKey(18);  // Alt
+}
+
+void tunnelmaker::FirstFrame()
+{
+    SpecialX = GS->LevelSX / 2;
+    SpecialY = GS->LevelSY / 2;
+    Brushspeed = 6;
+    bsz = 20;
+    cratetype = CT_HEALTH;
+    curfill = fill20;
+    minefuse = 3000;
+    FixEraser = true;
+    TeamColorSetDfl = true;
+    teamcolored = true;
+    canwarn = true;
+
+    if (!HDisabler) GG->WriteToChat(3, "Welcome to Painter 5.1! To enable Painter, press ]. If you can't see the help, close the chatbox. To close the help, press Ctrl+H.",false);
+    else GG->WriteToChat(3, "Welcome to Painter 5.1! To enable Painter, press ]. To open the help, press Ctrl+H.",false);
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{               
+CWorm* w = GetCurrentWorm();
+
+       bool Kp = false;
+       bool Lp = false;
+       bool Kh = false;
+       bool Lh = false;
+       bool Wp = false;
+       bool Wh = false;
+       bool Ap = false;                            
+       bool Ah = false;
+       bool Sp = false;
+       bool Sh = false;
+       bool Dp = false;
+       bool Dh = false;
+       bool Mp = false;
+       bool Mh = false;
+       bool Ip = false;
+       bool Op = false;
+       bool Ih = false;
+       bool Oh = false;
+       bool Pp = false;
+       bool Ph = false;
+       bool Np = false;
+       bool Nh = false;
+       bool Bp = false;
+       bool Bh = false;
+       bool Jp = false;
+       bool Jh = false;
+       bool Up = false;
+       bool Uh = false;
+       bool 1s = false;
+       bool 2s = false;
+       bool 3s = false;
+       bool 4s = false;
+       bool 5s = false;
+       bool 6s = false;
+       bool 7s = false;
+       bool 8s = false;
+       bool 9s = false;
+       bool 0s = false;
+       bool Vih = false;
+       bool Vip = false;
+       bool Doh = false;
+       bool Dop = false;
+       bool Slh = false;
+       bool Slp = false;
+       bool Tih = false;
+       bool Tip = false;
+       bool Dvip = false;
+       bool Shift = false;
+       bool Ctrl = false;
+       bool Tab = false;
+       bool plus = false;
+       bool minus = false;
+       bool Alt = false;
+       bool Backspace = false;
+       
+       if (Type == M_FRAME)     //M_FRAME BEGIN
+       {  
+         if (w != NullObj && Timer > 20)   //ACWORM BEGIN
+         {
+            Kp = keySync->KeyPressedNow(75);
+            Lp = keySync->KeyPressedNow(76);
+            Vip = keySync->KeyPressedNow(188);
+            Vih = keySync->KeyPressed(188);
+            Dop = keySync->KeyPressedNow(190);
+            Doh = keySync->KeyPressed(190);
+            Slp = keySync->KeyPressedNow(191);
+            Slh = keySync->KeyPressed(191);
+            Tip = keySync->KeyPressedNow(192);
+            Tih = keySync->KeyPressed(192);
+            Kh = keySync->KeyPressed(75);
+            Lh = keySync->KeyPressed(76);
+            Wh = keySync->KeyPressed(87);
+            Ah = keySync->KeyPressed(65);
+            Sh = keySync->KeyPressed(83);
+            Dh = keySync->KeyPressed(68);
+            Ih = keySync->KeyPressed(73);
+            Oh = keySync->KeyPressed(79);
+            Mh = keySync->KeyPressed(77);
+            Ph = keySync->KeyPressed(80);
+            Nh = keySync->KeyPressed(78);
+            Bh = keySync->KeyPressed(66);
+            Jh = keySync->KeyPressed(74);
+            Uh = keySync->KeyPressed(85);
+            Bp = keySync->KeyPressedNow(66);
+            Np = keySync->KeyPressedNow(78);
+            Pp = keySync->KeyPressedNow(80);
+            Wp = keySync->KeyPressedNow(87);
+            Ap = keySync->KeyPressedNow(65);
+            Sp = keySync->KeyPressedNow(83);
+            Dp = keySync->KeyPressedNow(68);
+            Mp = keySync->KeyPressedNow(77);
+            Ip = keySync->KeyPressedNow(73);
+            Op = keySync->KeyPressedNow(79);
+            Jp = keySync->KeyPressedNow(74);
+            Up = keySync->KeyPressedNow(85);
+            Dvip = keySync->KeyPressedNow(186);
+            1s = keySync->KeyPressedNow(49);
+            2s = keySync->KeyPressedNow(50);
+            3s = keySync->KeyPressedNow(51);
+            4s = keySync->KeyPressedNow(52);
+            5s = keySync->KeyPressedNow(53);
+            6s = keySync->KeyPressedNow(54);
+            7s = keySync->KeyPressedNow(55);
+            8s = keySync->KeyPressedNow(56);
+            9s = keySync->KeyPressedNow(57);
+            0s = keySync->KeyPressedNow(48);
+            Shift = keySync->KeyPressed(16);
+            Tab = keySync->KeyPressed(9);
+            Ctrl = keySync->KeyPressed(17);
+            Alt = keySync->KeyPressed(18);
+            plus = keySync->KeyPressedNow(187);
+            minus = keySync->KeyPressedNow(189);
+            Backspace = keySync->KeyPressedNow(8);
+            halfbsz = bsz/2;
+            teamRGB = GetTeamColorRGB(GetWormColor(w));
+            
+            int wthltg = w->TargHealth;
+       
+         //lets go\\
+       
+         local lsx = GS->landSelectX;
+         local lsy = GS->landSelectY;
+         if (lsx & 32768) lsx = lsx | (65535 << 16);
+         if (lsy & 32768) lsy = lsy | (65535 << 16);
+       
+         if (w->ObjState == WS_SETPOWER || w->ObjState == WS_FIRED || w->ObjState == WS_SHOOTINGROPE || w->ObjState == WS_FIRECONT || w->ObjState == WS_FIREPUNCH || w->ObjState == WS_DRILLING || w->ObjState == WS_TELEPORTING || w->ObjState == WS_BLOWTORCH || w->ObjState == WS_SUICIDEBOMBER || w->ObjState == WS_CONTROL_WEAPON || w->ObjState == WS_DEATH || w->ObjState == WS_REPEATFIRE || w->nTotalShoots != 0)
+         {
+             WormActing = true;
+         }
+         
+         else WormActing = false;
+       
+         if (teamcolored && brushcolor != teamRGB)
+         {
+             brushcolor = teamRGB;
+         }
+       
+         if (keySync->KeyPressed(221) && !TimerDisabled)
+         {
+             GS->CameraX = SpecialX;
+             GS->CameraY = SpecialY;
+         
+             if (!ShowPointer) {ShowPointer = true; ShowMessage("Painter: ON");}
+         }
+         
+         if (keySync->KeyPressedNow(219) && !TimerDisabled)
+         {
+            if (ShowPointer)
+            {
+                if (Mousactiv)
+                {
+                    CMessageData *bakweap = new CMessageData;
+                    bakweap->params[0] = CurTeam;
+                    bakweap->params[1] = CurWorm;
+                    bakweap->params[2] = lastwindex;
+                    bakweap->params[3] = 1;
+                    Root->Message(Root, M_SETWEAPON,4,bakweap);
+                    Mousactiv = false;
+                }
+            }
+            
+            ShowPointer = false;
+            ShowMessage("Painter: OFF");
+         }
+         
+         if (Dvip && !TimerDisabled && !WormActing)
+         {
+             Mousactiv = !Mousactiv;
+           
+             if (Mousactiv)
+             {
+                 CMessageData *selweap = new CMessageData;
+                 selweap->params[0] = CurTeam;
+                 selweap->params[1] = CurWorm;
+                 selweap->params[2] = 65;
+                 selweap->params[3] = 1;
+                 Root->Message(Root, M_SETWEAPON,4,selweap);
+             }
+               
+             if (!ShowPointer) ShowPointer = true;
+               
+             if (!Mousactiv)
+             {
+                 CMessageData *bakweap = new CMessageData;
+                 bakweap->params[0] = CurTeam;
+                 bakweap->params[1] = CurWorm;
+                 bakweap->params[2] = lastwindex;
+                 bakweap->params[3] = 1;
+                 Root->Message(Root, M_SETWEAPON,4,bakweap);
+             }
+         }
+         
+         if (windex == 65 && !w->CurWeapon->CheckName("Mouse Brush") && wthltg > w->GotDamage && !TimerDisabled && !WormActing)
+         {
+             ShowMessage("FATAL ERROR: check the chat for information");
+             ShowMessage("FATAL ERROR: check the chat for information");
+             ShowMessage("FATAL ERROR: check the chat for information");
+             GG->WriteToChat(1,"FATAL ERROR: it appears that the Mouse Brush required weapon isn't present in the scheme at the Laser Sight slot. You must copy the Mouse Brush from the original painter scheme to the place of Laser Sight if you wish to use it on your own.",false);
+               
+             CMessageData *bakweap = new CMessageData;
+             bakweap->params[0] = CurTeam;
+             bakweap->params[1] = CurWorm;
+             bakweap->params[2] = 100;
+             bakweap->params[3] = 1;
+             Root->Message(Root, M_SETWEAPON,4,bakweap);
+         }
+         
+         if (windex == 65)
+         {
+             if (!ShowPointer) {ShowPointer = true;}
+             Mousactiv = true;
+         }
+           
+         if (windex != 65)
+         {
+             Mousactiv = false;
+         }
+         
+/////////////////////////////////////////
+         
+         if (ShowPointer && !TimerDisabled)        //PAINTER BEGIN
+         {
+         
+           if (Mousactiv && lsx <= GS->LevelSX+256 && lsx >= -256 && lsy <= GS->LevelSY+256 && lsy >= -256)
+           {
+               SpecialX = lsx;
+               SpecialY = lsy;
+           }
+           
+           if (!Mousactiv && windex == 65)
+           {
+               CMessageData *selweap = new CMessageData;
+               selweap->params[0] = CurTeam;
+               selweap->params[1] = CurWorm;
+               selweap->params[2] = lastwindex;
+               selweap->params[3] = 1;
+               Message(Root, M_SETWEAPON,4,selweap);
+           }  
+            
+           if (Camlock)
+           {
+               GS->CameraX = SpecialX;
+               GS->CameraY = SpecialY;
+           }
+           
+           if (Alt && !Tab && !Shift && !Ctrl)
+           {
+               if (0s)   {minefuse = 0;  ShowMessage("Mine fuse: INSTANT"); Minerandom = false;}
+               if (plus) 
+               {
+                   if (Minerandom) 
+                   {
+                       Minerandom = false;
+                       minefuse = 3000 + 1000;
+                   } 
+               
+                   else 
+                   {
+                       minefuse = minefuse + 1000;
+                       ShowMessage(MakeNumberString("Mine fuse: ",minefuse/1000," sec"));
+                   }
+               }
+               
+               if (minus)
+               {
+                   if (Minerandom)
+                   {
+                       Minerandom = false;
+                       minefuse = 3000;
+                   }
+                 
+                   if (minefuse > 0)
+                   {   
+                       minefuse = minefuse - 1000;
+                   }
+                  
+                   if (minefuse == 0) {ShowMessage("Mine fuse: INSTANT");}
+                   else               {ShowMessage(MakeNumberString("Mine fuse: ",minefuse/1000," sec"));}
+               }
+              
+               if (Backspace) {Minerandom = true; ShowMessage("Mine fuse: RANDOM");}
+           }
+           
+           if (Ctrl && !Shift && !Tab && !Alt)
+           {
+               if (Tip)   {teamcolored = false; brushcolor = RGB(128,0,0);      ShowMessage("Brush color: BROWN");} 
+               if (1s)    {teamcolored = false; brushcolor = RGB(255,0,0);      ShowMessage("Brush color: RED");}
+               if (2s)    {teamcolored = false; brushcolor = RGB(0,255,0);      ShowMessage("Brush color: GREEN");}                                               
+               if (3s)    {teamcolored = false; brushcolor = RGB(0,0,255);      ShowMessage("Brush color: BLUE");}
+               if (4s)    {teamcolored = false; brushcolor = RGB(255,255,0);    ShowMessage("Brush color: YELLOW");}
+               if (5s)    {teamcolored = false; brushcolor = RGB(0,255,255);    ShowMessage("Brush color: CYAN");}
+               if (6s)    {teamcolored = false; brushcolor = RGB(255,0,255);    ShowMessage("Brush color: MAGENTA");}
+               if (7s)    {teamcolored = false; brushcolor = RGB(0,128,0);      ShowMessage("Brush color: DARK GREEN");}
+               if (8s)    {teamcolored = false; brushcolor = RGB(255,128,0);    ShowMessage("Brush color: ORANGE");}
+               if (9s)    {teamcolored = false; brushcolor = RGB(128,128,128);  ShowMessage("Brush color: GREY");}
+               if (0s)    {teamcolored = false; brushcolor = RGB(255,255,255);  ShowMessage("Brush color: WHITE");}
+               if (minus) {teamcolored = false; brushcolor = RGB(128,0,128);    ShowMessage("Brush color: PURPLE");}
+               if (plus)  {teamcolored = false; brushcolor = RGB(0,0,128);      ShowMessage("Brush color: DARK BLUE");}
+               if (Backspace)  {teamcolored = true; brushcolor = teamRGB;       ShowMessage("Brush color: TEAM COLOR");}
+           }
+           
+           if (!Shift && !Tab && !Alt && !Ctrl)
+           {
+               if (!Mousactiv)
+               {                                                              
+                   if (Wh)     {SpecialY = SpecialY - Brushspeed;}
+                   if (Ah)     {SpecialX = SpecialX - Brushspeed;}
+                   if (Sh)     {SpecialY = SpecialY + Brushspeed;}
+                   if (Dh)     {SpecialX = SpecialX + Brushspeed;}
+               
+               
+                   if (1s)  {Brushspeed = 2;                       ShowMessage("Brush speed: 2");}
+                   if (2s)  {Brushspeed = 4;                       ShowMessage("Brush speed: 4");}                                               
+                   if (3s)  {Brushspeed = 6;                       ShowMessage("Brush speed: 6");}
+                   if (4s)  {Brushspeed = 8;                       ShowMessage("Brush speed: 8");}
+                   if (5s)  {Brushspeed = 10;                      ShowMessage("Brush speed: 10");}
+                   if (6s)  {Brushspeed = 12;                      ShowMessage("Brush speed: 12");}
+                   if (7s)  {Brushspeed = 14;                      ShowMessage("Brush speed: 14");}
+                   if (8s)  {Brushspeed = 16;                      ShowMessage("Brush speed: 16");}
+                   if (9s)  {Brushspeed = 18;                      ShowMessage("Brush speed: 18");}
+                   if (0s)  {Brushspeed = 20;                      ShowMessage("Brush speed: 20");}
+               }
+               
+               else
+               {
+                   if (1s || 2s || 3s || 4s || 5s || 6s || 7s || 8s || 9s || 0s)
+                   {
+                       ShowMessage("Mouse is active.");
+                   }
+               }
+           }
+           
+           if (Tab && !Shift && !Alt && !Ctrl)
+           {
+               if (1s)   {cratetype = CT_WEAPON;                   ShowMessage("Crate type: Weapon");}
+               if (2s)   {cratetype = CT_UTILITY;                  ShowMessage("Crate type: Utility");}
+               if (3s)   {cratetype = CT_MWEAPON;                  ShowMessage("Crate type: Donor Card");}
+               if (4s)   {cratetype = CT_HEALTH;                   ShowMessage("Crate type: Health");}
+               if (5s)   {cratetype = CT_TIMED;                    ShowMessage("Crate type: Target");}
+           }
+           
+           if (Shift && !Tab && !Alt && !Ctrl)
+           {
+               if (1s)   {bsz = 10;      curfill = fill10;         ShowMessage("Brush size: 10");}
+               if (2s)   {bsz = 20;      curfill = fill20;         ShowMessage("Brush size: 20");}
+               if (3s)   {bsz = 30;      curfill = fill30;         ShowMessage("Brush size: 30");}
+               if (4s)   {bsz = 40;      curfill = fill40;         ShowMessage("Brush size: 40");}
+               if (5s)   {bsz = 50;      curfill = fill50;         ShowMessage("Brush size: 50");}
+               if (6s)   {bsz = 60;      curfill = fill60;         ShowMessage("Brush size: 60");}
+               if (7s)   {bsz = 70;      curfill = fill70;         ShowMessage("Brush size: 70");}
+               if (8s)   {bsz = 80;      curfill = fill80;         ShowMessage("Brush size: 80");}
+               if (9s)   {bsz = 90;      curfill = fill90;         ShowMessage("Brush size: 90");}
+               if (0s)   {bsz = 100;     curfill = fill100;        ShowMessage("Brush size: 100");}
+           
+               if (!Mousactiv)
+               {
+                   if (Wp)   {SpecialY = SpecialY - Brushspeed;}
+                   if (Ap)   {SpecialX = SpecialX - Brushspeed;}
+                   if (Sp)   {SpecialY = SpecialY + Brushspeed;}
+                   if (Dp)   {SpecialX = SpecialX + Brushspeed;}
+               }
+           }
+           
+           
+           if (SpecialX > GS->LevelSX - halfbsz) {SpecialX = GS->LevelSX - halfbsz;}
+           if (SpecialX < halfbsz)               {SpecialX = halfbsz;}
+           if (SpecialY > Env->Water - halfbsz)  {SpecialY = Env->Water - halfbsz;}
+           if (SpecialY < halfbsz)               {SpecialY = halfbsz;}
+           
+           if (Mousactiv && lsx > GS->LevelSX - halfbsz) {GS->landSelectX = GS->LevelSX - halfbsz;}
+           if (Mousactiv && lsx < halfbsz)               {GS->landSelectX = halfbsz;}
+           if (Mousactiv && lsy > Env->Water - halfbsz)  {GS->landSelectY = Env->Water - halfbsz;}
+           if (Mousactiv && lsy < halfbsz)               {GS->landSelectY = halfbsz;}
+           
+           if (Lp || (Lh && (Wh || Ah || Sh || Dh)) || (Lh && Mousactiv))  //Erasing.
+           {
+               Erasing = true;
+           
+               if (bsz == 10 && Brushspeed > 10)    // fix for the very small brush to work properly on big speeds
+               {
+                   Fix10BrushER = true;
+               }
+             
+               else 
+               {
+                   GG->land->ApplyCustomMask(curfill, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+               }
+           }
+           
+           if (Pp || Op || (Ph && (Wh || Ah || Sh || Dh)) || (Ph && Mousactiv) || (Oh && (Wh || Ah || Sh || Dh)) || (Oh && Mousactiv))  //Super Erasing and Ultra Erasing. It paints then erases, to allow Indy maps support.
+           {
+               Erasing = true;
+           
+               if (Op || Oh)
+               {
+                   maskatype = CM_SOIL;  Supererasing = true;
+               }
+               
+               if (Pp || Ph)
+               {
+                   maskatype = CM_CLEAR; Ultraerasing = true;
+               }
+             
+               GG->land->BitMask->Rect(SpecialX - halfbsz, SpecialY - halfbsz, SpecialX + halfbsz, SpecialY + halfbsz, 1);
+             
+               if (bsz == 10 && Brushspeed > 10)    // fix for the very small brush to work properly on big speeds
+               {
+                   Fix10BrushERUS = true;         
+               }
+                                                                
+               else           
+               {
+                   curfill->Rect(0,0,bsz,bsz,brushcolor);
+                   DestrBlit = true;
+                   GG->land->Draw(curfill, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(curfill, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+               }
+           }
+           
+           
+           if (Kp || Ip || (Ih && (Wh || Ah || Sh || Dh)) || (Ih && Mousactiv) || (Kh && (Wh || Ah || Sh || Dh)) || (Kh && Mousactiv))   //Painting
+           {
+               if ((Ip || Ih) && (!Kp || !Kh)) {Indypainting = true; blit = false;}
+               if ((Kp || Kh) && (!Ip || !Ih)) {Painting = true; blit = true;}
+               if ((Kp || Kh) && (Ip || Ih))   {Doingshit = true; blit = true;}
+           
+               GG->land->BitMask->Rect(SpecialX - halfbsz, SpecialY - halfbsz, SpecialX + halfbsz, SpecialY + halfbsz, 1);
+             
+               if (bsz == 10 && Brushspeed > 10)    // fix for the very small brush to work properly on big speeds
+               {
+                   Fix10BrushPA = true;        
+               }
+             
+               else
+               {
+                   curfill->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(curfill, SpecialX - halfbsz, SpecialY - halfbsz);
+                   DestrBlit = blit;
+               }
+           }
+           
+           if (Jh || Uh)   // Spray brush
+           {
+               if (Uh && !Jh) {Indyspraying = true; blit = false;}
+               if (Jh && !Uh) {Spraying = true; blit = true;}
+               if (Jh && Uh)  {Doingshit = true; blit = true;}
+             
+               local x = RandomInt(SpecialX - halfbsz, SpecialX + halfbsz);
+               local y = RandomInt(SpecialY - halfbsz, SpecialY + halfbsz);
+             
+               GG->land->BitMask->Rect(x, y, x, y, 1);
+               pixel->Rect(0,0,1,1,brushcolor);
+               GG->land->Draw(pixel, x, y);
+               DestrBlit = blit;
+             
+               local x2 = RandomInt(SpecialX - halfbsz, SpecialX + halfbsz);
+               local y2 = RandomInt(SpecialY - halfbsz, SpecialY + halfbsz);
+             
+               GG->land->BitMask->Rect(x2, y2, x2, y2, 1);
+               pixel->Rect(0,0,1,1,brushcolor);
+               GG->land->Draw(pixel, x2, y2);
+               DestrBlit = blit;
+             
+               local x3 = RandomInt(SpecialX - halfbsz, SpecialX + halfbsz);
+               local y3 = RandomInt(SpecialY - halfbsz, SpecialY + halfbsz);
+             
+               GG->land->BitMask->Rect(x3, y3, x3, y3, 1);
+               pixel->Rect(0,0,1,1,brushcolor);
+               GG->land->Draw(pixel, x3, y3);
+               DestrBlit = blit;
+             
+               local x4 = RandomInt(SpecialX - halfbsz, SpecialX + halfbsz);
+               local y4 = RandomInt(SpecialY - halfbsz, SpecialY + halfbsz);
+             
+               GG->land->BitMask->Rect(x4, y4, x4, y4, 1);
+               pixel->Rect(0,0,1,1,brushcolor);
+               GG->land->Draw(pixel, x4, y4);
+               DestrBlit = blit;
+           }
+           
+           if (Doh && !Shift || Dop && Shift)   //Fire brush
+           {
+               Firebleeding = true; 
+                
+               CFireDesc FDesc;
+               zero(&FDesc);
+		
+               FDesc.Duration = 5000;
+               FDesc.Damage = 1;
+               FDesc.UnkB = 1;
+               FDesc.X = SpecialX;
+               FDesc.Y = SpecialY;
+		
+	       new CFire(Root->GetObject(25, 0), &FDesc, 0);
+           }
+           
+           
+           if (Mp && Shift || Mh && !Shift)   //Mine brush
+           {
+               Minepissing = true;
+
+               if (Minerandom) minefuse = RandomInt(0, 3000);
+
+               CShootDesc SDesc;
+               zero(&SDesc);
+		
+	       SDesc.X = SpecialX;
+	       SDesc.Y = SpecialY;
+                
+               CMineParams MParams;
+	       zero(&MParams);
+		
+	       MParams.Radius = 48;
+	       MParams.Prefuse = 0;
+	       MParams.Flags = 60;
+	       MParams.Fuse = minefuse;
+	       MParams.Bias = 50;
+	       MParams.BlastPower = 100;
+	       MParams.Damage = 50;
+		
+	       new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+             
+           }
+           
+           
+           if (Slp && Shift || Slh && !Shift)   //Crate Brush 
+           {
+               Crateraining = true;
+                
+               CCrateDesc CDesc;
+	       zero(&CDesc);
+		
+	       CDesc.X = SpecialX;
+	       CDesc.Y = SpecialY;
+	       CDesc.type = cratetype;
+	       CDesc.health = 1;
+		
+	       new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+		
+           }    
+           
+           
+           if (Bp && Shift || Bh && !Shift)   //Gas Brush
+           {
+               Farting = true;
+               new CGas(Root->GetObject(25, 0), SpecialX, SpecialY, 1, CurTeam);
+           }
+           
+           
+           if (Vip && Shift || Vih && !Shift)   //Drum brush
+           {
+               Oildrumming = true;
+               new COilDrum(Root->GetObject(25, 0), SpecialX, SpecialY, false);
+           }
+           
+           if (!Doh)   Firebleeding = false;
+           if (!Bh)    Farting = false;
+           if (!Vih)   Oildrumming = false;
+           if (!Slh)   Crateraining = false;
+           if (!Mh)    Minepissing = false;
+           if (!Nh)    Exploding = false;
+           if (!Kh)    Painting = false;
+           if (!Ih)    Indypainting = false;
+           if (!Jh)    Spraying = false;
+           if (!Uh)    Indyspraying = false;
+           if (!Lh)    Erasing = false;
+           if (!Oh)    Supererasing = false;
+           if (!Ph)    Ultraerasing = false;
+           
+           if (!Kh && !Ih && !Jh && !Uh) Doingshit = false;
+           
+           
+           
+           if (Nh && !Shift || Np && Shift)     //Explosion brush
+           {
+               Exploding = true;
+               DoExplosion(SpecialX, SpecialY, 100, bsz, 0, CurTeam);
+           }
+           
+           
+           if (Fix10BrushER && (Lp || (Lh && (Wh || Ah || Sh || Dh)) || (Lh && Mousactiv)))
+           {            
+               if (Lp || (Lh && Mousactiv))
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+               }
+                        
+               if ((Wh && !Ah && !Sh && !Dh) || (Wh && Ah && !Sh && Dh))
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY + halfbsz,CM_SOIL);
+               }      
+               
+               if ((!Wh && Ah && !Sh && !Dh) || (Wh && Ah && Sh && !Dh))
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+                   GG->land->ApplyCustomMask(fill10, SpecialX + halfbsz, SpecialY - halfbsz,CM_SOIL);
+               } 
+                        
+               if ((!Wh && !Ah && Sh && !Dh) || (!Wh && Ah && Sh && Dh))
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - 1.5*bsz,CM_SOIL);
+               }     
+                        
+               if ((!Wh && !Ah && !Sh && Dh) || (Wh && Sh && Dh && !Ah))
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - 1.5*bsz, SpecialY - halfbsz,CM_SOIL);
+               }   
+                        
+               if (Wh && !Ah && !Sh && Dh)
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - 1.5*bsz, SpecialY + halfbsz,CM_SOIL);
+               }    
+                        
+               if (Wh && Ah && !Sh && !Dh)
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+                   GG->land->ApplyCustomMask(fill10, SpecialX + halfbsz, SpecialY + halfbsz,CM_SOIL);
+               }     
+                        
+               if (!Wh && !Ah && Sh && Dh)
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - 1.5*bsz, SpecialY - 1.5*bsz,CM_SOIL);
+               }    
+                         
+               if (!Wh && Ah && Sh && !Dh)
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,CM_SOIL);
+                   GG->land->ApplyCustomMask(fill10, SpecialX + halfbsz, SpecialY - 1.5*bsz,CM_SOIL);
+               }
+           }
+           
+           if (Fix10BrushERUS && (Pp || Op || (Ph && (Wh || Ah || Sh || Dh)) || (Ph && Mousactiv) || (Oh && (Wh || Ah || Sh || Dh)) || (Oh && Mousactiv)))
+           {          
+             
+               if (Pp || Op || (Ph && Mousactiv) || (Oh && Mousactiv))
+               {
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+               }
+                        
+               if ((Wh && !Ah && !Sh && !Dh) || (Wh && Ah && !Sh && Dh))
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   DestrBlit = true;
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY + halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY + halfbsz,maskatype);
+               }
+               
+               if ((!Wh && Ah && !Sh && !Dh) || (Wh && Ah && Sh && !Dh))
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   DestrBlit = true;
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+                   GG->land->Draw(fill10, SpecialX + halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX + halfbsz, SpecialY - halfbsz,maskatype);
+               }
+               
+               if ((!Wh && !Ah && Sh && !Dh) || (!Wh && Ah && Sh && Dh))
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   DestrBlit = true;
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - 1.5*bsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - 1.5*bsz,maskatype);
+               }
+               
+               if ((!Wh && !Ah && !Sh && Dh) || (Wh && Sh && Dh && !Ah))
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   DestrBlit = true;
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+                   GG->land->Draw(fill10, SpecialX - 1.5*bsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - 1.5*bsz, SpecialY - halfbsz,maskatype);
+               }
+               
+               if (Wh && !Ah && !Sh && Dh)
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   DestrBlit = true;
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+                   GG->land->Draw(fill10, SpecialX - 1.5*bsz, SpecialY + halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - 1.5*bsz, SpecialY + halfbsz,maskatype);
+               }
+               
+               if (Wh && Ah && !Sh && !Dh)
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   DestrBlit = true; 
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+                   GG->land->Draw(fill10, SpecialX + halfbsz, SpecialY + halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX + halfbsz, SpecialY + halfbsz,maskatype);
+               }
+               
+               if (!Wh && !Ah && Sh && Dh)
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   DestrBlit = true;
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+                   GG->land->Draw(fill10, SpecialX - 1.5*bsz, SpecialY - 1.5*bsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - 1.5*bsz, SpecialY - 1.5*bsz,maskatype);
+               }
+               
+               if (!Wh && Ah && Sh && !Dh)
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   DestrBlit = true;
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX - halfbsz, SpecialY - halfbsz,maskatype);
+                   GG->land->Draw(fill10, SpecialX + halfbsz, SpecialY - 1.5*bsz);
+                   GG->land->ApplyCustomMask(fill10, SpecialX + halfbsz, SpecialY - 1.5*bsz,maskatype);
+               }
+           }
+           
+           if (Fix10BrushPA && (Kp || Ip || (Ih && (Wh || Ah || Sh || Dh)) || (Ih && Mousactiv) || (Kh && (Wh || Ah || Sh || Dh)) || (Kh && Mousactiv)))
+           {
+               if (Kp || Ip || (Kh && Mousactiv) || (Ih && Mousactiv))
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   DestrBlit = blit;
+               }
+             
+               if ((Wh && !Ah && !Sh && !Dh) || (Wh && Ah && !Sh && Dh))
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY + halfbsz);
+                   DestrBlit = blit;
+               }
+             
+               if ((!Wh && Ah && !Sh && !Dh) || (Wh && Ah && Sh && !Dh))
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->Draw(fill10, SpecialX + halfbsz, SpecialY - halfbsz);
+                   DestrBlit = blit;
+               }
+             
+               if ((!Wh && !Ah && Sh && !Dh) || (!Wh && Ah && Sh && Dh))
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - 1.5*bsz);
+                   DestrBlit = blit;
+               }
+             
+               if ((!Wh && !Ah && !Sh && Dh) || (Wh && Sh && Dh && !Ah))
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->Draw(fill10, SpecialX - 1.5*bsz, SpecialY - halfbsz);
+                   DestrBlit = blit;
+               }
+             
+               if (Wh && !Ah && !Sh && Dh)
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->Draw(fill10, SpecialX - 1.5*bsz, SpecialY + halfbsz);
+                   DestrBlit = blit;
+               }
+             
+               if (Wh && Ah && !Sh && !Dh)
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->Draw(fill10, SpecialX + halfbsz, SpecialY + halfbsz);
+                   DestrBlit = blit;
+               }
+             
+               if (!Wh && !Ah && Sh && Dh)
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->Draw(fill10, SpecialX - 1.5*bsz, SpecialY - 1.5*bsz);
+                   DestrBlit = blit;
+               }
+             
+               if (!Wh && Ah && Sh && !Dh)
+               {
+                   fill10->Rect(0,0,bsz,bsz,brushcolor);
+                   GG->land->Draw(fill10, SpecialX - halfbsz, SpecialY - halfbsz);
+                   GG->land->Draw(fill10, SpecialX + halfbsz, SpecialY - 1.5*bsz);
+                   DestrBlit = blit;
+               }
+           }
+           
+           if (bsz != 10 || (bsz == 10 && Brushspeed <= 10))
+           {
+             Fix10BrushER = false;
+             Fix10BrushERUS = false;
+             Fix10BrushPA = false;
+           }
+           
+         }     //PAINTER END
+         
+/////////////////////////////////////////
+         
+         
+            for (local i = 1; i < Env->Objs.Count; i++)
+            {
+                local foundObj = CGObject(Env->Objs.Objs[i]);
+                if ((foundObj is CMine || foundObj is COilDrum) && foundObj->PosX == 0 && foundObj->PosY == -1024)
+                {
+                    foundObj->PosX = SpecialX;
+                    
+                    if (!GS->IsCavern) foundObj->PosY = Env->Water+200;
+                    else foundObj->PosY = GS->LevelSY+200;
+                }
+                  
+                if ((foundObj is CMine || foundObj is COilDrum || foundObj is CCrate) && (foundObj->PosX >= SpecialX - halfbsz && foundObj->PosX <= SpecialX + halfbsz && foundObj->PosY >= SpecialY - halfbsz && foundObj->PosY <= SpecialY + halfbsz) && Ultraerasing)
+                {
+                    foundObj->PosX = SpecialX;
+                    
+                    if(!GS->IsCavern) foundObj->PosY = Env->Water+200;
+                    else foundObj->PosY = GS->LevelSY+200;
+                }
+            } 
+         
+         }    //ACWORM END
+       
+         if (Timer <= 20 || w == NullObj)
+         {
+             ShowPointer = false;
+             Mousactiv = false;
+             Ultraerasing = false;
+             Firebleeding = false;
+             Minepissing = false;
+             Farting = false;
+             Oildrumming = false;
+             Crateraining = false;
+             Exploding = false;
+             Painting = false;
+             Erasing = false;
+             Ultraerasing = false;
+             Indypainting = false;
+             Supererasing = false;
+             Spraying = false;
+             Indyspraying = false;
+             Doingshit = false;
+             plus = false;
+             Tab = false;
+             minus = false;
+             Shift = false;
+             Slp = false;
+             Slh = false;
+             Vip = false;
+             Vih = false;
+             Dop = false;
+             Doh = false;
+             Kp = false;
+             Lp = false;
+             Kh = false;
+             Lh = false;
+             Wh = false;
+             Ah = false;
+             Sh = false;
+             Dh = false;
+             Mp = false;
+             Mh = false;
+             Jh = false;
+             Jp = false;
+             Ip = false;
+             Op = false;
+             Ih = false;
+             Oh = false;
+             Pp = false;
+             Ph = false;
+             Nh = false;
+             Np = false;
+             Bp = false;
+             Bh = false;
+             Up = false;
+             Uh = false;
+             Dvip = false;
+             1s = false;
+             2s = false;
+             3s = false;
+             4s = false;
+             5s = false;
+             6s = false;
+             7s = false;
+             8s = false;
+             9s = false;
+             0s = false;
+         }
+         
+         if (IsKeyPressed(222)  && CamLocked && !campressed) 
+         { 
+             Camlock = false; 
+             campressed = true; 
+         } 
+ 
+         if (!IsKeyPressed(222)  && CamLocked  && campressed) 
+         { 
+             CamLocked = false; 
+             campressed = false; 
+         } 
+ 
+         if (IsKeyPressed(222)  && !CamLocked && !campressed) 
+         { 
+             Camlock = true; 
+             campressed = true; 
+         } 
+ 
+         if (!IsKeyPressed(222)  && !CamLocked  && campressed) 
+         { 
+             CamLocked = true; 
+             campressed = false; 
+         }
+         
+       }   //M_FRAME END
+       
+       
+       if (Type == M_DRAWQUEUE)
+       {
+           float scale = bsz/20;
+       
+           if (ShowPointer && !Firebleeding)
+           {
+               AddSpriteEx(5,SpecialX,SpecialY,yellowpointer->Index,1,0,scale);
+           }
+       
+           if (ShowPointer && Firebleeding)
+           {
+               AddSprite(5,SpecialX,SpecialY,0,rcircle->Index,1);
+           }
+       }  
+         
+       if (Type == M_SETWEAPON)
+       {
+           windex = MData->GetParameter(2);
+             
+           if (!Mousactiv)
+           {
+               lastwindex = MData->GetParameter(2);
+           }
+       }
+             
+       if (FixEraser)    // This is to prevent the normal-eraser bug. Doesn't affect the game at all
+       {
+           GG->land->BitMask->Rect(-1000, -1000, -1000, -1000, 1);
+           fill10->Rect(0,0,10,10,0);
+           GG->land->Draw(fill10, -1000, -1000);
+           fill20->Rect(0,0,20,20,0);
+           GG->land->Draw(fill20, -1000, -1000);
+           fill30->Rect(0,0,30,30,0);
+           GG->land->Draw(fill30, -1000, -1000);
+           fill40->Rect(0,0,40,40,0);
+           GG->land->Draw(fill40, -1000, -1000);
+           fill50->Rect(0,0,50,50,0);
+           GG->land->Draw(fill50, -1000, -1000);
+           fill60->Rect(0,0,60,60,0);
+           GG->land->Draw(fill60, -1000, -1000);
+           fill70->Rect(0,0,70,70,0);
+           GG->land->Draw(fill70, -1000, -1000);
+           fill80->Rect(0,0,80,80,0);
+           GG->land->Draw(fill80, -1000, -1000);
+           fill90->Rect(0,0,90,90,0);
+           GG->land->Draw(fill90, -1000, -1000);
+           fill100->Rect(0,0,100,100,0);
+           GG->land->Draw(fill100, -1000, -1000);
+           FixEraser = false;
+       }
+
+super;      
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+   if (Weap->CheckName("Mouse Brush"))
+   {
+       local cteam = Root->CurTeam;
+       local snd = 159;
+       if (cteam == 1 || cteam == 6) snd = 159;
+       else {snd = 105 + 54 * cteam;}
+   
+       ShowMessage("Do NOT click the mouse!");
+       PlaySound(snd,0,0,1.0);
+       
+       if (canwarn)
+       {
+           GG->WriteToChat(1,"Notice: do not click the mouse. Hold the given keys to paint/erase/etc.",false);
+           GG->WriteToChat(1,"I don't know will or not the painter support clicking. One day it will.",false);
+           canwarn = false;
+       }
+   }
+   
+   else super;
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)    // Button lock & desync fix
+{
+super;
+   
+   for (local i = 0; i < 256; i+=1)
+   {
+        keySync->kRStates[i] = false;
+   };
+}

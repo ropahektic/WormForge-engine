@@ -1,0 +1,131 @@
+require utils, p_sprite_builder, sprite_curtis_452;
+
+CSprite* ascender_aiming;
+CSprite* sascender_aiming;
+CSprite* descender_aiming;
+CSprite* sdescender_aiming;
+
+CSprite* ascender_tr;
+CSprite* descender_tr;
+
+void ascender_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("ascender.png");
+    ascender_aiming = LoadSprite(f, 10, 0);
+    f = GetAttachment("sascender.png");
+    sascender_aiming = LoadSprite(f, 10, 0);
+    
+    f = GetAttachment("descender.png");
+    descender_aiming = LoadSprite(f, 10, 0);
+    f = GetAttachment("sdescender.png");
+    sdescender_aiming = LoadSprite(f, 10, 0);
+
+    f = GetAttachment("ascendert.png");
+    ascender_tr = LoadSprite(f, 4, 0);
+    f = GetAttachment("descendert.png");
+    descender_tr = LoadSprite(f, 4, 0);
+    
+    SetSpriteOverride(459, ascender_tr);
+    SetSpriteOverride(460, descender_tr);
+}
+
+//---------------------------------ASCENDER-----------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Ascender";
+     sprite = ascender_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -13.6;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     Params->animate = true;
+     Params->anim_speed = 1.25;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+//---------------------------------SUPER ASCENDER-----------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Super Ascender";
+     sprite = sascender_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -16.5;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     Params->animate = true;
+     Params->anim_speed = 1.25;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+//---------------------------------DESCENDER----------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Descender";
+     sprite = descender_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -13.6;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     Params->animate = true;
+     Params->anim_speed = 1.25;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+//---------------------------------SUPER DESCENDER----------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Super Descender";
+     sprite = sdescender_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -16.5;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     Params->animate = true;
+     Params->anim_speed = 1.25;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

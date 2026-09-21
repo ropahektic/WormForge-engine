@@ -1,0 +1,37 @@
+require utils;
+
+
+void Default::InitGraphic()  
+{
+
+}
+
+void Default::Init()
+{
+
+}
+
+void Default::FirstFrame()
+{
+
+}
+
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_FRAME)
+{
+  if(GetCurrentWorm() != NullObj)
+  {
+          if(CurrentChallenger == NullObj)   //get current player
+          {
+          CurrentChallenger = GetCurrentWorm();
+          }
+
+  }
+  
+  if(GetCurrentWorm() == NullObj && CurrentChallenger != NullObj)CurrentChallenger = NullObj;   //reset cur player
+}
+
+super;
+}

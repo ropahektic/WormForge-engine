@@ -1,0 +1,15 @@
+CSoundFile* toccata;
+
+void flood_sound::Init()
+{
+	toccata       = new CSoundFile(GetAttachment("bach_toccata.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Great Flood"))
+  {
+             toccata->Play(1.5, 0.0, false);
+  }
+  super;
+}

@@ -1,0 +1,164 @@
+require utils, p_sprite_builder, sprite_curtis_457;
+
+CSprite* ripper_bullet;
+CBitmap32* RipperSBitmap;
+CSoundFile* rippersimpactsnd;
+
+void ripper_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("ripperspb.png");
+    ripper_bullet = LoadSprite(f, 6, 0);
+    
+    local spr       = GetAttachment("rippers.png");
+    RipperSBitmap    = LoadImage(spr);
+}
+
+void ripper_script::FirstFrame()
+{
+	CFile *f;
+    f = GetAttachment("rippers_impact.wav"); rippersimpactsnd = new CSoundFile(f);
+}
+
+//---------------------------------RIPPER-------------------------------------//
+
+ override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+ {
+   if(Weap->CheckName("Ripper"))
+   {
+   Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 45;
+   Desc->SpY = 45*(0.5 - FireAngle);
+   super(GetWeaponByName("Ripper Star"), Desc);
+   return;
+   }
+ super;
+ }
+ 
+//---------------------------------RIPPER STAR--------------------------------//
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Ripper Star")) {
+         if (rippers_anim) {
+              local sprite = ripper_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 8.00;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              rippers_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  rippers_anim = true;
+}
+
+//---------------------------------RIPPER STAR--------------------------------//
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+
+ if(weap->CheckName("Ripper Star") == true)
+ {
+           CGObject *rippersob;
+     	   for(int i = 0; i < Env->Objs.Count; i += 1)
+	   {
+		rippersob = CGObject(Env->Objs.Objs[i]);
+		if(rippersob == this) continue;
+		if(rippersob == NullObj) continue;
+		if(rippersob->IsMaterial == false) continue;
+			if(rippersob->ClType == OC_Worm || rippersob->ClType == OC_Mine || rippersob->ClType == OC_OilDrum || rippersob->ClType == OC_Crate)
+			{
+				local trg = CGObject(rippersob);
+                                if(x > trg->PosX-20 && x < trg->PosX+20 && y > trg->PosY-20 && y < trg->PosY+20)
+                                {
+                                RipperSDamage(trg);
+                                super;
+                                return;
+                                }
+			}
+           }
+
+           if(GetCurrentWorm() != NullObj)
+           {
+                   if(x > GetCurrentWorm()->PosX-25 && x < GetCurrentWorm()->PosX+25 && y > GetCurrentWorm()->PosY-25 && y < GetCurrentWorm()->PosY+25)
+                   {
+                   RipperSDamage(GetCurrentWorm());
+                   super;
+                   return;
+                   }
+           }
+
+           RipStickToLandscape(x,y);
+           rippersimpactsnd->Play(1.0,0.0,false);
+ }
+
+ super;
+}
+
+void CMissile::RipperSDamage(CGObject* target)
+{
+                     local damage = 1;
+                     if(weap->CheckName("Ripper Star") == true)
+                     {damage = 4;}
+
+                     target->SpX = SpX/4;
+                     target->SpY = SpY/4;
+
+                     CMessageData msgdamage;
+                     msgdamage.params[0] = 3;
+                     msgdamage.params[1] = PosX;
+                     msgdamage.params[2] = PosY;
+                     msgdamage.params[3] = SpX/2;
+                     msgdamage.params[4] = SpY/2;
+                     msgdamage.params[5] = damage;
+                     msgdamage.params[6] = 0;
+                     target->Message(NullObj, M_GUNEXP, 1032, &msgdamage);
+}
+
+void CMissile::RipStickToLandscape(fixed x, fixed y)
+{
+local bmp = RipperSBitmap;
+local top = bmp->top;
+int mtp = 0;
+
+      if(SpX == 0.0 && SpY < 0.0){mtp = 0;}
+      if(SpX > 0.0 && SpY == 0.0){mtp = 8;}
+      if(SpX == 0.0 && SpY > 0.0){mtp = 16;}
+      if(SpX < 0.0 && SpY == 0.0){mtp = 24;}
+
+      if(SpX > 0.0 && SpY < 0.0)
+      {
+      mtp = 3*SpX/sqrt(SpY*SpY);
+      if(mtp>7){mtp = 7;}
+      if(mtp<0){mtp = 0;}
+      }
+
+      if(SpX > 0.0 && SpY > 0.0)
+      {
+      mtp = 8+3*SpY/SpX;
+      if(mtp>15){mtp = 15;}
+      }
+
+      if(SpX < 0.0 && SpY > 0.0)
+      {
+      mtp = 16+3*sqrt(SpX*SpX)/SpY;
+      if(mtp>23){mtp = 23;}
+      }
+
+      if(SpX < 0.0 && SpY < 0.0)
+      {
+      mtp = 24+3*sqrt(SpY*SpY)/sqrt(SpX*SpX);
+      if(mtp>31){mtp = 31;}
+      }
+
+top = mtp*60;
+bmp->top = top;
+
+bmp->bottom = bmp->top+60;
+GG->land->Draw(bmp, x-30, y-(30+bmp->top));
+}

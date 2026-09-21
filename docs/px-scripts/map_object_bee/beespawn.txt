@@ -1,0 +1,17 @@
+require utils, weapon_keeper_bee;
+
+$editor
+ $object KprBee
+  $origin -10 -10
+  $image "beespawn.png"
+  $radius 16
+  $func doBee
+ $object_end  
+$end
+
+void doBee(CEditorObject* obj)
+{
+  local x = obj->PosX;
+  local y = obj->PosY;
+  createBee(x,y,0,NullObj);
+}

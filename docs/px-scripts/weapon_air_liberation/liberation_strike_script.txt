@@ -1,0 +1,74 @@
+require utils;
+
+//List of sprites
+CSprite* LiberationMnt;
+CSprite* LiberationMt;
+CSprite* AmericanFighter;
+
+CSoundFile* americanNA;
+CSoundFile* mbooster;
+
+bool LiberationStrikeFired;
+
+void liberation_strike_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("Liberation Missile Non-Thrusting.png"); 
+   LiberationMnt = LoadSprite(f, 32, 1);
+   f = GetAttachment("Liberation Missile Thrusting.png"); 
+   LiberationMt = LoadSprite(f, 24, 1);
+   f = GetAttachment("American Jet Fighter.png"); 
+   AmericanFighter = LoadSprite(f, 1, 0);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(707, LiberationMnt);
+   SetSpriteOverride(708, LiberationMt);
+   SetSpriteOverride(709, AmericanFighter);
+}
+
+void liberation_strike_script::Init()
+{
+   LiberationStrikeFired = false;
+
+   americanNA       = new CSoundFile(GetAttachment("American National Anthem.wav"));
+   mbooster       = new CSoundFile(GetAttachment("Missile Booster.wav"));
+
+   keySync->AddKey(13);
+   keySync->AddKey(32);
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+   if(LiberationStrikeFired == true)
+   {
+      if(Root->RetreatTimer > 2700)
+      {
+         if(keySync->KeyPressedNow(13) || keySync->KeyPressedNow(32))
+         {
+            mbooster->Play(1.0, 0.0, false);
+
+            LiberationStrikeFired = false;
+         }
+      }
+
+      if(Type == M_EXPLOSION)
+      {
+         LiberationStrikeFired = false;
+      }
+   }
+
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+   if(Weap->CheckName("Liberation Strike"))
+   {
+      LiberationStrikeFired = true;
+
+      americanNA->Play(1.5, 0.0, false);
+   }
+
+   super;
+}

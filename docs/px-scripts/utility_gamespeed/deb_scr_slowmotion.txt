@@ -1,0 +1,43 @@
+require utils;
+
+bool deb_slowmotion_state;
+
+override void CTurnGame::Message(CObject* sender, EMType type, int size, CMessageData* data)
+{
+    if (type == M_TURNEND)
+    {
+        // Reset the game speed
+        if (deb_slowmotion_state)
+        {
+            deb_slowmotion_SetSlowmotion(false);
+        }
+    }
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (Weap->CheckName("Slowmotion"))
+    {
+        deb_slowmotion_SwitchSlowmotion();
+    }
+    super; 
+}
+
+void deb_slowmotion_SwitchSlowmotion()
+{
+    deb_slowmotion_SetSlowmotion(!deb_slowmotion_state);
+}
+
+void deb_slowmotion_SetSlowmotion(bool enable)
+{
+    deb_slowmotion_state = enable;
+    if (enable)
+    {
+        deb_gamespeed_SetGameSpeed(deb_gamespeed_GetGameSpeed() / 1.7);
+    }
+    else
+    {
+        deb_gamespeed_SetGameSpeed(deb_gamespeed_GetGameSpeed() * 1.7);   
+    }
+}

@@ -1,0 +1,89 @@
+
+CWZone : CObject;
+
+CWZone* SearchForWeapZone(string ZName)
+{
+  for (local i = 0; i < Root->Childs.Count; i += 1)
+  {
+    local obj = CWZone(Root->Childs.Objs[i]);
+    if (obj is CWZone)
+    {
+      if (StrCmp(obj->zone_name, ZName))
+      {
+        return obj;
+      }
+    }
+  }
+  return NullObj;
+}
+
+CWZone::CWZone(int x, int y, int sizeX, int sizeY, int EachNFrames, bool activeWormOnly, string name, int turns_left, bool foreva)
+{
+  super(Root, GS);
+
+  pr_x1 = x - sizeX / 2;
+  pr_x2 = x + sizeX / 2;
+  pr_y1 = y - sizeY / 2;
+  pr_y2 = y + sizeY / 2;
+
+  AcitveWormOnly = activeWormOnly;
+  fps = EachNFrames + 1;
+
+  active = false;
+  activator = CGObject(NullObj);
+  timer = 0;
+  zone_name = name;
+  turns = turns_left;
+  forever = foreva;
+}
+
+void CWZone::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type == M_TURNEND)
+  {
+      if (forever == false) turns--;
+  }
+  if (Type == M_FRAME)
+  {
+     if (turns <= 0 && forever == false) Free(true);
+  }
+  if (Type != M_FRAME) return;
+  timer += 1;
+  if (timer % fps) return;        //performance
+
+  active = false;
+
+  if (AcitveWormOnly)
+  {
+    local obj = GetCurrentWorm();
+    if (obj == NullObj) return;
+    if (pr_x1 < obj->PosX && pr_x2 > obj->PosX && pr_y1 < obj->PosY && pr_y2 > obj->PosY)
+    {
+        active = true;
+        activator = obj;
+    }
+    return;
+  }
+
+  for (local i = 1; i < Env->Objs.Count; i += 1)
+  {
+    local obj = CGObject(Env->Objs.Objs[i]);
+
+    if (obj == NullObj) continue;
+
+    if (obj->ClType == OC_Mine) continue;
+    if (obj is CStepladder || obj is CMagnet || obj is CRock || obj is StunMine || obj is FriendlyMine ||
+	    obj is CBowlingBall || obj is PxSentryGun || obj is PxSentryGun2 ||
+		obj is PxSentryLaser || obj is CTurretBase || obj is CTrampoline || obj is CTrampolineDestr) continue;
+
+	if (obj->ClType == OC_Worm || obj->ClType == OC_Cross)
+		{
+		if (pr_x1 < obj->PosX && pr_x2 > obj->PosX && pr_y1 < obj->PosY && pr_y2 > obj->PosY)
+    		{
+        	active = true;
+        	activator = obj;
+        	break;
+    		}
+    	}
+  }
+}

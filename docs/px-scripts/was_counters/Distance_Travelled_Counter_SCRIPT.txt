@@ -1,0 +1,69 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a distance travelled-counter to the game (can be used for statistical GUI's)
+
+float distance_travelled_counts[6];
+int dtc_travelling_team;
+int dtc_travelling_worm;
+int dtc_last_position_x;
+int dtc_last_position_y;
+
+void Distance_Travelled_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          distance_travelled_counts[i] = 0.0;
+     }
+     
+     dtc_travelling_team = -1;
+     dtc_travelling_worm = -1;
+     dtc_last_position_x = 0;
+     dtc_last_position_y = 0;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{          
+     if(Root->IsTimerActive() == true)
+     {
+          if(current_worm_team == dtc_travelling_team && current_worm_number == dtc_travelling_worm) // to avoid select worm adding travel distance
+          {     
+               if(dtc_last_position_x == 0 && dtc_last_position_y == 0)
+               {
+                    dtc_last_position_x = Current_Worm->PosX;
+                    dtc_last_position_y = Current_Worm->PosY;
+               }
+               
+               if(Root->Timer % 1000)
+               {
+                    int dx = numericalValueInteger(Current_Worm->PosX - dtc_last_position_x);
+                    int dy = numericalValueInteger(Current_Worm->PosY - dtc_last_position_y);
+                    
+                    distance_travelled_counts[current_worm_team] += (calculateDistance(dx, dy)) / 200;
+                    
+                    dtc_travelling_team = current_worm_team;
+                    dtc_travelling_worm = current_worm_number;
+                    dtc_last_position_x = Current_Worm->PosX;
+                    dtc_last_position_y = Current_Worm->PosY;
+               }
+          }
+          else
+          {
+               dtc_travelling_team = current_worm_team;
+               dtc_travelling_worm = current_worm_number;
+               dtc_last_position_x = Current_Worm->PosX;
+               dtc_last_position_y = Current_Worm->PosY;     
+          }
+     }
+     
+     if(type == M_TURNEND)
+     {                              
+          dtc_last_position_x = 0;
+          dtc_last_position_y = 0;    
+     }
+  
+     super;
+}

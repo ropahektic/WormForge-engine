@@ -1,0 +1,219 @@
+require utils;
+
+CSnowManager : CObject;
+CSnowBlob : CObject;
+
+CSnowManager *SM;
+CSprite* SBlobSprite;
+
+CSoundFile* Jingle;
+
+int SpawnZone;
+int SpawnZoneNum;
+int TimeSpawn[500];
+int BlobsNum;
+
+bool SnowStarted;
+
+void Snow::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("jinglebg.wav");	Jingle = new CSoundFile(f);
+    
+    local spr       = GetAttachment("snowflake.png");
+    SBlobSprite     = LoadSprite(spr, 7, 0);             //1st frame - base
+}
+   
+void Snow::Init()
+{
+SnowStarted = false;
+BlobsNum = 0;
+}
+
+void Snow::FirstFrame()
+{
+	SM = new CSnowManager();
+} 
+
+CSnowManager::CSnowManager()
+{
+	super(Root, GS);
+}
+
+void __DrawSnow()
+{
+	SM->Draw();
+}
+
+void CSnowManager::Draw()
+{
+	for(int i=0 ; i<Childs.Count ; i+=1)
+	{
+		local p = CSnowBlob(Childs.Objs[i]);
+		if(p == CSnowBlob(NullObj)) continue;
+		p->Draw();
+	}
+}
+
+void CSnowManager::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		super;
+	}
+	if(Type == M_DRAWQUEUE)
+	{                         
+		AddCustomRender(6, "__DrawSnow");
+	}
+	
+	if(Type == M_FRAME)
+	{
+		for(int i=0 ; i<Childs.Count ; i+=1)
+		{
+			local p = CSnowBlob(Childs.Objs[i]);
+			if(p == CSnowBlob(NullObj)) continue;
+			
+			if(p->Dead)
+			{
+				BlobsNum = BlobsNum - 1; p->Free(true);
+				break;
+			}
+		}
+	}
+}
+
+void CSnowManager::MakeSnow(float x, float y)
+{
+     local Sblob = new CSnowBlob(this, x, y);
+     Sblob->PosX = x;
+     Sblob->PosY = y;
+}
+
+CSnowBlob::CSnowBlob(CSnowManager* SM, float x, float y)
+{       
+    super(SM, GS);
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+    Dead = false;    
+    
+    RemovingStage = false; //final stage of s blob!
+    AnimPhase = 0.0;   
+}
+
+void CSnowBlob::Draw()
+{
+	if(Dead) return;
+	
+local col = ARGB(240,255,255,255);
+local rot = -Env->Wind;    //rotation
+	
+            //anim
+             if(RemovingStage == false)
+             {
+             CQuad q;
+             FillSpriteQuad(&q, SBlobSprite->Index, AnimPhase, 0);
+             TransformQuad(&q,0/*rot*/,1,0.5,PosX,PosY);
+             q.blend = 0;
+             for (local i = 0; i < 4; i += 1) q.v[i].color = col;      //-1 will not change spr color
+	     RenderQuad(&q, 0);
+             
+             }
+             
+             if(RemovingStage == true)
+             {
+             if(AnimPhase < 1.0){
+             CQuad t;
+             FillSpriteQuad(&t, SBlobSprite->Index, AnimPhase, 0);
+             TransformQuad(&t,0/*rot*/,1,0.5,PosX,PosY);
+             t.blend = 0;
+             for (local i = 0; i < 4; i += 1) t.v[i].color = col;
+	     RenderQuad(&t, 0);
+	     }
+      
+             }
+             
+}
+
+void CSnowBlob::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+             if(Type == M_FRAME && RemovingStage == false)
+             { 
+             PosY = PosY + 3;
+             PosX = PosX + Env->Wind*3;                
+             int hitx1;
+             int hity1;
+             local flags = 2+4;
+             local hit1 = CGObject(TraceLine(this, PosX, PosY, PosX + Env->Wind*6, PosY+16, flags, &hitx1, &hity1));
+                          if(hit1 != NullObj || PosY > GS->LevelSY)
+                          {
+                                             RemovingStage = true;
+                          }
+             }
+            
+             
+             if(Type == M_FRAME && RemovingStage == true)                                                                       
+             {
+                     
+                     if(AnimPhase < 1.0)
+                     {
+                     AnimPhase = AnimPhase + 0.1;
+                     }
+                     else
+                     {
+                     Dead = true; return;
+                     }
+             }
+}
+   
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if(Type == M_FRAME)
+ {
+         if(SnowStarted == false)
+         {
+         SnowStarted = true;
+         Jingle->Play(5.5, 0.0, true);
+         
+         SpawnZone = 50;
+         SpawnZoneNum = int(GS->LevelSX / SpawnZone);
+         for(local t = 0; t < SpawnZoneNum; t++)
+                   {
+                   TimeSpawn[t] = RandomInt(0,60);
+                   }    
+         }
+         if(SnowStarted == true)
+         {
+                        if(BlobsNum < 150)
+                        {        
+                        SpawnSnow();
+                        }
+         }
+ }
+super;
+}
+
+void SpawnSnow()
+{
+     for(local t = 0; t < SpawnZoneNum+1; t++)
+     {    
+         if(TimeSpawn[t] < 1)
+         { 
+         TimeSpawn[t] = RandomInt(25,75);
+         local rndx = RandomInt(1,49);
+         local SpawnX = SpawnZone*t-rndx;
+         local SpawnY = -130;
+         
+         BlobsNum = BlobsNum + 1;
+         SM->MakeSnow(SpawnX, SpawnY);
+         }
+         
+         else
+         
+         {
+         TimeSpawn[t] = TimeSpawn[t] - 1;
+         }
+     }
+     return;
+}                                 

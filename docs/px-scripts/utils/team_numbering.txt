@@ -1,0 +1,22 @@
+int GetTeamNumber(int Team)
+{
+  local TeamColors = 0;
+  local n = 0;
+
+  for(local i=1; i<=6; i++)
+  {
+    local c = GetTeamColor(i);
+
+    if(TeamColors & (1 << c))
+      continue;
+
+    TeamColors = (TeamColors | (1 << c));
+
+    if(GetTeamColor(Team) == c)
+      break;
+
+    n++;
+  }
+
+  return(n+1);
+}

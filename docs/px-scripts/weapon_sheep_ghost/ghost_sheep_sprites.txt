@@ -1,0 +1,20 @@
+require utils;
+
+//List of sprites
+CSprite* ghs1sprite;
+CSprite* ghs2sprite;
+
+void ghost_sheep_sprites::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("ghstshp1.png"); 
+   ghs1sprite = LoadSprite(f, 32, 1);
+   f = GetAttachment("ghstshp2.png"); 
+   ghs2sprite = LoadSprite(f, 32, 1);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(156, ghs1sprite);
+   SetSpriteOverride(157, ghs2sprite);
+   
+}

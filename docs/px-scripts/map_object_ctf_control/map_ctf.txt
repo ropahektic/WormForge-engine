@@ -1,0 +1,324 @@
+require utils, map_object_traps;
+
+#PX_CTF
+
+$editor
+ $object CTFFlag
+  $origin -25 -50
+  $image "flag_1.png"
+  $func SpawnCTFFlag
+  $radius 12
+  $param Team int 1
+ $object_end
+ 
+ $object CTFZone
+  $origin -24 -24
+  $image "ctfcontrol.png"
+  $func SpawnCTFZone
+  $radius 12
+  $param Team int 1
+  $param Size area 50 50
+ $object_end
+$end
+
+CSprite* CTFSprite[6];   //sprites of flags
+CFilter* CTFParent;      //parent of all CTFZones
+fixed CTFPosX[7];        //inital positions of flags
+fixed CTFPosY[7];
+bool CTFFlagPicked[7];   //true if flag is outside the base
+
+CSoundFile* flag_taken;
+CSoundFile* flag_returned;
+
+void map_ctf::InitGraphic()
+{
+  local f = GetAttachment("flag_1.png");
+  CTFSprite[0] = LoadSprite(f, 1, 0);   
+  local f = GetAttachment("flag_2.png");
+  CTFSprite[1] = LoadSprite(f, 1, 0);   
+  local f = GetAttachment("flag_n.png");
+  CTFSprite[2] = LoadSprite(f, 1, 0);
+  
+//  CTFSprite[2] = CTFSprite[0];
+  CTFSprite[3] = CTFSprite[1]; 
+  CTFSprite[4] = CTFSprite[0];
+  CTFSprite[5] = CTFSprite[1];
+};
+
+void map_ctf::Init()
+{
+flag_taken = new CSoundFile(GetAttachment("flag_taken.wav"));
+flag_returned = new CSoundFile(GetAttachment("flag_returned.wav"));
+};
+
+void map_ctf::InitSMap()
+{  //49 and 15 are random numbers. Don't look for meaning of life here.
+  filter = new CFilter(Root, 49);
+  filter->ForbidAll();
+  filter->Allow(M_FRAME);
+  filter->Allow(M_DRAWQUEUE);  
+  CTFParent = filter;
+};
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  CTFHasFlag = false;
+  CTFFlagTeam = 0;
+  super;
+};
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type == M_DRAWQUEUE)
+  {
+    if (CTFHasFlag)
+    {
+//      if (ObjState == WS_IDLE || ObjState == WS_WALKING)
+//      {
+          local si = CTFFlagTeam - 1;
+          local flgs = 0;
+          if (TurnSide < 0) flgs = 262144;
+          
+          if (si < 2) 
+          {
+             AddSprite(10, PosX - 5 * TurnSide, PosY - 30, 0, CTFSprite[si]->Index | flgs, 0); 
+          }else {
+             int r; int g; int b;
+             GetTeamColorRGB(CTFFlagTeam, &r, &g, &b);      
+             if (r < 80) r = 80;                     
+             if (g < 80) g = 80;
+             if (b < 80) b = 80;
+             SetColorMod(RGB(r,g,b), 0);
+             AddSprite(10, PosX - 5 * TurnSide, PosY - 30, 0, CTFSprite[2]->Index | flgs, 0); 
+             ClearColorMod();    
+          }
+   
+//      };
+    };
+  };
+  super;
+};
+
+void CWorm::CTF_DropFlag()
+{
+  if (CTFHasFlag)
+  {
+    if (Sinking == false)
+    {
+     local Flag = new CCTFFlag(PosX, PosY - 25, CTFFlagTeam);
+     CTFFlagPicked[CTFFlagTeam] = true;
+     Flag->IsDropped = true;
+    } else {
+     local Flag = new CCTFFlag(CTFPosX[CTFFlagTeam], CTFPosY[CTFFlagTeam], CTFFlagTeam);
+     CTFFlagPicked[CTFFlagTeam] = false;
+    };
+  };
+}
+
+override void CWorm::Free(bool FreeMem)
+{
+  if (GameStartedToDestroy == false) CTF_DropFlag();
+  super;
+};
+
+//CTFFlag
+
+CCTFFlag : CMine;
+
+CCTFFlag::CCTFFlag(fixed x, fixed y, int team)
+{
+  CMineParams MParams;
+  CShootDesc SDesc;
+  zero(&MParams); 
+  zero(&SDesc);
+  MParams.Prefuse = 0;  //time before ability to activate
+  MParams.Flags = 60;    //flags of objects to react on
+  MParams.Bias = 0;     //Y shift of explosion
+  MParams.Damage = 48;  //damage
+  MParams.BlastPower = 100;
+  MParams.Fuse = 0;
+  MParams.Radius = -1;
+  SDesc.Team = 0;
+  SDesc.X = x;  //position
+  SDesc.Y = y;
+  SDesc.SpX = 0;   //speed
+  SDesc.SpY = 0;
+  super(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+  PosX = x;
+  PosY = y;
+  FlagTeam = team;
+  IsDropped = false;
+  ClType = EObjectClass(7771);
+};
+
+
+void CCTFFlag::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type == M_FRAME)
+  {             
+    if (Sinking)                  //flag sank, restore it to base
+    {
+	  flag_returned->Play(1.0, 0.0, false);                          
+      Sinking = false;
+      SpX = 0;
+      SpY = 0;
+      PosX = CTFPosX[FlagTeam];
+      PosY = CTFPosY[FlagTeam];
+      CTFFlagPicked[FlagTeam] = false;
+    };
+    
+    for (local i = 1; i < Env->Objs.Count; i+=1)
+    {
+      local Obj = CGObject(Env->Objs.Objs[i]);
+      if (Obj is CWorm)
+      {
+        local worm = CWorm(Obj);
+        
+        
+        if (GetWormColor(worm) == FlagTeam && IsDropped == false) continue;
+        
+        local dx = Obj->PosX - PosX;
+        local dy = Obj->PosY - PosY;
+        
+        if (dy < 0 && dy > -25 && abs(dx) < 15)
+        {
+          if (GetWormColor(worm) == FlagTeam)   //restore it
+          {
+            PosX = CTFPosX[FlagTeam]; 
+            PosY = CTFPosY[FlagTeam];
+            CTFFlagPicked[FlagTeam] = false;
+            flag_returned->Play(1.0, 0.0, false);
+          } else {                          //pick it
+            if (worm->CTFHasFlag) continue;
+            worm->CTFHasFlag = true;
+            worm->CTFFlagTeam = FlagTeam;
+            CTFFlagPicked[FlagTeam] = true;
+            flag_taken->Play(1.0, 0.0, false);
+            Free(true);
+            return;
+          };
+        };
+      };
+    };  
+  };
+  if (Type == M_DRAWQUEUE)
+  {
+   local si = FlagTeam - 1;
+   if (si < 2) 
+   {
+      AddSprite(10, PosX, PosY - 25, 0, CTFSprite[si]->Index, 0);
+   } else {
+      int r; int g; int b;
+      GetTeamColorRGB(FlagTeam, &r, &g, &b);      
+      if (r < 80) r = 80;                     
+      if (g < 80) g = 80;
+      if (b < 80) b = 80;
+      SetColorMod(RGB(r,g,b), 0);
+      AddSprite(10, PosX, PosY - 25, 0, CTFSprite[2]->Index, 0);
+      ClearColorMod();    
+   }
+   return;
+  };
+  super;
+};
+
+void SpawnCTFFlag(CEditorObject* aobj)
+{
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+  Team = aobj->GetInt("Team");
+  
+  generateTColorInd();
+  Team = g_tColorInd2[Team]+1;
+  
+  CTFPosX[Team] = PosX;
+  CTFPosY[Team] = PosY;
+  flag = new CCTFFlag(PosX, PosY, Team);
+  CTFFlagPicked[Team] = false;
+};
+
+//CCTFZone
+
+CCTFZone : CObject;
+
+CCTFZone::CCTFZone(CEditorObject* aobj)
+{                            
+  generateTColorInd();
+  Team = g_tColorInd2[aobj->GetInt("Team")]+1;
+  pr_x1 = aobj->PosX;
+  pr_x2 = aobj->PosX + aobj->GetInt("Size");
+  pr_y1 = aobj->PosY;
+  pr_y2 = aobj->PosY + aobj->GetInt2("Size");    
+  super(CTFParent, GS);
+};
+
+void CTFKillTeam(int Team)
+{
+  for (local i = 1; i <= 6; i += 1)
+  {
+    if (GetTeamColor(i) != (Team-1)) continue;
+    for (local j = 1; j <= 8; j+=1)
+    {
+      GS->Info.SetWormHealth( i, j, 0);
+      GS->Info.Teams[i-1].Worms[j-1].State = 135;  //mh where is state
+      GS->Info.Teams[i-1].Worms[j-1].vo32 = 135;   // i forgot it lol.
+      CWorm* worm = Root->GetObject( 2, 16 * i + j);
+      if (worm == NullObj) continue;
+      if (worm->imGhost) worm->Free(true);
+    };
+  };
+};
+
+void CCTFZone::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (CTFFlagPicked[Team]) return;
+  if (Type == M_FRAME)
+  {
+    for (local i = 1; i < Env->Objs.Count; i+=1)
+    {
+      local Obj = CGObject(Env->Objs.Objs[i]);
+      if (Obj is CWorm)
+      {
+        local Worm = CWorm(Obj);
+        if (Worm->CTFHasFlag && (GetWormColor(Worm) == Team))
+        {
+          if (pr_x1 < Obj->PosX && pr_x2 > Obj->PosX)
+          {
+            if (pr_y1 < Obj->PosY && pr_y2 > Obj->PosY)
+            {     
+              Worm->CTFHasFlag = false;
+              CTFKillTeam(Worm->CTFFlagTeam);   
+              rControl->DisableTeam(Worm->CTFFlagTeam);
+            };
+          };
+        };
+        
+      };
+    };
+  };
+  super;
+};
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+      if (rControl != NullObj)
+      {
+        if (rControl->enabled)
+        {
+          if (SuddenDeath)
+          {
+             rControl->Disable();
+          }
+        }
+      }
+      RaiseWater = false;
+    }
+} 
+
+void SpawnCTFZone(CEditorObject* obj)
+{
+  zone = new CCTFZone(obj);
+};

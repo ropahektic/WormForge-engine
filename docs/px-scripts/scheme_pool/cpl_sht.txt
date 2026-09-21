@@ -1,0 +1,61 @@
+require utils;
+
+void cpl_sht::InitGraphic(){}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+	if(Weap->CheckName("Shoot"))
+		{
+		SpX = Desc->SpX;
+		SpY = Desc->SpY;
+		PlaySound(109,1.0,0.8,1.0);
+		PlaySound(109,1.0,0.8,1.0);
+		PlaySound(109,1.0,0.8,1.0);
+		SettingShoot = false;
+		return;
+		}
+super;
+}
+
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+if(sound == 140 && CurWeapon->CheckName("Shoot")) return;
+if(sound == 177 && CurWeapon->CheckName("Shoot")) return;
+super;
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+SettingShoot = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_SPACE)
+	{
+	if(CurWeapon->CheckName("Shoot"))
+		{
+		SettingShoot = true;
+		}
+	}
+	
+if(Type == M_FRAME)
+	{
+	if(SettingShoot == true)
+		{
+		if (ObjState == WS_SETPOWER || ObjState == WS_FIRED || ObjState == WS_FIRECONT)
+			{
+			Anim->Reset();
+			Anim->SetAnimEx(269, FirePower);
+			}
+		else SettingShoot = false;
+		}
+	}
+	
+if(Type == M_TURNEND)
+	{
+	SettingShoot = false;
+	}
+super;
+}

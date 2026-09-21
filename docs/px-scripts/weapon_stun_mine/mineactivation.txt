@@ -1,0 +1,236 @@
+StunMine : CMine;
+CSoundFile* minezapsnd;
+CSprite* minespr;
+
+void mineactivation::FirstFrame()
+{
+f = GetAttachment("minezapsnd.wav");	 minezapsnd = new CSoundFile(f);
+}
+
+void mineactivation::InitGraphic()
+{
+CFile* f;
+f = GetAttachment("minespr.png");
+minespr = LoadSprite(f, 4, 1);
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+Stunned = false;
+}
+
+StunMine::StunMine(CObject* Parent, CMineParams* Params, CShootDesc* Desc, bool Snap, int Unk)
+{
+  if (Desc->Team >= 1)
+  {
+    Params->Radius = 1;
+    Params->Fuse = 250;
+  }
+  Primed = false;
+  
+  Rotation = 0.0;
+  AnimCycle = 0.0;
+  AnimCycleDuration = 1.0;
+  AnimSpeed = 0.08;
+  super;
+}
+
+void StunMine::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+  if (Type != M_FRAME || InitParams.Radius != 1 || ClType != OC_Mine)
+  {
+     super;
+     return;
+  }
+  
+  if(Type == M_FRAME)
+	{
+	UpdateRotation();
+	AnimCycle = AnimCycle + AnimSpeed;
+	if(AnimCycle > AnimCycleDuration) AnimCycle = AnimCycle - AnimCycleDuration;
+	}
+  
+  if (Active != 0 || Prefuse > 0 || Primed == false)
+  {
+     super;
+     return;
+  }
+  
+  for (local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if (obj == NullObj) continue;
+    if (obj->ClType != OC_Worm) continue;
+
+    worm = CWorm(obj);
+		
+	if (GetTeamColor(ShootData.Team) == GetTeamColor(worm->WormTeam)) continue;
+    
+	if (DistBetweenObjs(worm, this) < 60)
+    	{
+    	//stunactivator = worm;
+	  	Active = 1;
+    	nPulses = Fuse / 250;
+	    PlayLocalSound(88, 5, 1.0, 1.0);
+      	break;
+    	}
+  }
+  super;
+}
+
+void StunMine::Render()
+{
+  if (InitParams.Radius == -1) return;
+  if (InitParams.Radius == 1)
+  {
+    local Color = GetTeamColor(ShootData.Team);
+    if (Color == 0){SetColorMod(RGB(100, 0, 0), 4);}
+    else if (Color == 1){SetColorMod(RGB(0, 0, 100), 4);}
+    else if (Color == 2){SetColorMod(RGB(0, 100, 0), 4);}
+    else if (Color == 3){SetColorMod(RGB(80, 80, 0), 4);}
+    else if (Color == 4){SetColorMod(RGB(80, 0, 80), 4);}
+    else if (Color == 5){SetColorMod(RGB(0, 80, 80), 4);}
+    
+    AddSpriteEx(4,PosX,PosY,minespr->Index,AnimCycle,Rotation,1);
+  };
+  //super;
+  ClearColorMod();
+};
+
+void StunMine::Explosion()
+{
+local stunactivator = CWorm(Root->GetObject(2, 16 * 1 + 1));
+/*
+for (local i = 1; i < Env->Objs.Count; i += 1)
+  	{
+    local obj = CGObject(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    if (obj->ClType == OC_Worm)
+        {
+        stunactivator = obj;
+        }
+	}
+*/
+if (stunactivator != NullObj)
+	{
+	stunactivator->SetState(WS_IDLE);
+    minezapsnd->Play(1.0, 0.0, false);
+    stunactivator->Stunned = true;
+    }
+        
+  	EExp = new CElectroExp(Root->GetObject(25, 0), 0, 0);
+  	EExp->PosX = PosX;
+  	EExp->PosY = PosY;
+  	EExp->GravityFactor = 0;
+  	EExp->IsMaterial = false;
+  	EExp->AnimPhaseSpeed = 0.005;
+  	EExp->ClassType = "Electro Explosion";
+  	EExp->HasSprite = true;
+  	MM->MakeSpriter(EExp->PosX, EExp->PosY, EExp);
+	
+	Stun = new CStunSpr(Root->GetObject(25, 0), 0, 0);
+  	Stun->PosX = stunactivator->PosX;
+  	Stun->PosY = stunactivator->PosY;
+  	Stun->GravityFactor = 0;
+  	Stun->IsMaterial = false;
+  	Stun->AnimPhaseSpeed = 0.005;
+  	Stun->ClassType = "Stun Sprite";
+  	Stun->HasSprite = true;
+  	MM->MakeSpriter(Stun->PosX, Stun->PosY, Stun);
+
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Stunned == true)
+ 	{
+  	if(Type == M_PUP || Type == M_PDOWN || Type == M_PLEFT || Type == M_PRIGHT || Type == M_ENTER || Type == M_BACKSPACE){return;}
+  	if(Type == M_SPACE && !CurWeapon->CheckName("Skip Go")){return;}
+
+  	if(Type == M_TURNEND){Stunned = false;}
+ 	}
+
+if(Type == M_TURNBEGIN)
+ 	{
+        for (local i = 1; i < Env->Objs.Count; i+=1)
+        	{
+            local obj = Env->Objs.Objs[i];
+            if (obj == NullObj) continue;
+            if (obj->ClType != OC_Mine) continue;
+            local mine = StunMine(obj);
+
+			if(mine->Primed == false)
+            	{
+                mine->Prefuse = 5000;
+                mine->Primed = true;
+                }
+            }
+ 	}
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+CWorm *w = GetCurrentWorm();
+
+if (w != NullObj)
+    {
+    if (Weap->CheckName("Stun Mine"))
+    	{
+        //local team = w->WormTeam;
+
+        local ang = (1 - FireAngle) * 3.14159;
+        if (TurnSide < 0) ang = 6.28318 - ang;
+
+        CShootDesc SDesc;
+		zero(&SDesc);
+
+		float ForceInit = FirePower * 20.0;
+
+		SDesc.SpX = SpX + sin(ang) * ForceInit;
+		SDesc.SpY = SpY - cos(ang) * ForceInit;
+		SDesc.X = w->PosX;
+		SDesc.Y = w->PosY;
+		SDesc.Team = w->WormTeam;
+
+		CMineParams MParams;
+		zero(&MParams);
+
+		MParams.Prefuse = 2000;
+		MParams.Flags = 60;
+		MParams.Bias = 50;
+		MParams.Damage = 50;
+        MParams.BlastPower = 100;
+		MParams.Fuse = 3000;
+	    MParams.Radius = 48;
+
+		local sm = new StunMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+		
+        sm->DumpingA = 0.3;
+        sm->DumpingB = 0.4;
+        sm->DumpingC = 0.5;
+        }
+	else super;
+    }
+else super;
+}
+
+void StunMine::UpdateRotation()
+{
+	if(SpX==0.0)
+	{
+		if(SpY>0.0)
+		{
+			Rotation = 0.0;
+		}
+		else if(SpY<0.0)
+		{
+			Rotation = 3.141593;
+		}
+	}
+	else
+	{
+		Rotation = -atan2(SpX, SpY);
+	}
+}

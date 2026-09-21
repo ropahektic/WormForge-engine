@@ -1,0 +1,489 @@
+
+require utils, pxparticles;
+
+bool NinjaSheep_Active;
+bool NinjaSheep_SpaceBarFix;
+bool NinjaSheep_Rendering;
+bool NinjaSheep_Hidden;
+bool NinjaSheep_MuteTeamSounds;
+fixed NinjaSheep_SheepSpin;
+
+CSprite *nsWalkSprite;
+CSprite *nsSpinSprite;
+CSprite *nsRopeSprite;
+
+void ninja_sheep_script::FirstFrame()
+{
+	NinjaSheep_Active = false;
+	NinjaSheep_SpaceBarFix = false;
+	NinjaSheep_TWM_Deactivator = false;
+    NinjaSheep_MuteTeamSounds = false;
+}
+
+void ninja_sheep_script::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("nswalk.png");	nsWalkSprite = LoadSprite(f, 8, 24);
+	f = GetAttachment("nsspin.png");	nsSpinSprite = LoadSprite(f, 32, 24);
+	f = GetAttachment("nsrope.png");	nsRopeSprite = LoadSprite(f, 32, 24);
+	
+	NinjaSheep_Hidden = false;
+	NinjaSheep_Rendering = false;
+	NinjaSheep_SheepSpin = 0.0;
+}
+
+override void CDDQueue::AddSprite(fixed z, fixed x, fixed y, int unk, int sprite, fixed frame)
+{
+	if(NinjaSheep_Hidden) return;
+	
+	if(NinjaSheep_Rendering)
+	{
+		int add = 0;
+		if(sprite > 262144)
+		{
+			sprite = sprite - 262144;
+			add = 262144;
+		}
+		
+		if(sprite == 153) // walking sheep
+		{
+			super(z, x, y, unk, nsWalkSprite->Index + add, frame - int(frame));
+		}
+		else if(sprite == 147) // roping worm
+		{
+			super(z, x, y, unk, nsRopeSprite->Index + add, frame - int(frame));
+		}
+		else if(sprite == 148) // spinning worm
+		{
+			super(z, x, y, unk, nsSpinSprite->Index + add, NinjaSheep_SheepSpin);
+		}
+		else
+		{
+			super;
+		}
+	}
+	else
+	{
+		super;
+	}
+}
+
+override void CTurnGame::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_SHOWMESSAGE)
+	{
+		if(NinjaSheep_MuteTeamSounds) return;
+	}
+	
+	super;
+}
+
+override void CTeam::PlaySound(int SIndex, int UnkB, fixed UnkC, fixed Pan)
+{
+	if(NinjaSheep_MuteTeamSounds) return;
+	
+	super;
+}
+
+PxNinjaSheepHelper : CWorm
+
+PxNinjaSheepHelper::PxNinjaSheepHelper(CObject *Parent, CMissile *sheep, int aTeam, int aIndex)
+{
+	Sheep = sheep;
+	Owner = CWorm(Root->GetObject(2, aIndex + 16 * aTeam));
+	PRegister(&Sheep);
+	
+	CWormParams WParam;
+	zero(&WParam);
+	WParam.SetName("Ninja Sheep");
+	WParam.SetPosition(1, Sheep->PosX, Sheep->PosY, true);
+	
+	//SetLayerOverride(LAYER_OTHERWEAPON); // shouldn't trigger mines or anything
+	SetMaskIndexOverride(2);
+	super(Parent, aTeam, aIndex, &WParam);
+	
+	ClType = OC_Missile;
+	PosX = Sheep->PosX;
+	PosY = Sheep->PosY;
+	
+	RopeWeapon = GetWeaponByName("Ninja Rope");
+	
+	TeamObj = CTeam(GetObject(21, aTeam));
+	
+	// Set the current worm to -1 to force the game to reselect the newly created worm
+	TeamObj->CurWorm = -1;
+	
+	// Calling SetCurrentWorm plays the worm selecting sound, we don't want that to happen here
+	NinjaSheep_MuteTeamSounds = true;
+	TeamObj->SetCurrentWorm(aIndex);
+	NinjaSheep_MuteTeamSounds = false;
+	
+	FirstRopeShot = true;
+	DisableRope = false;
+	OrigColMask = Sheep->MaskIndex;
+	
+	//ColGroup = CMASK_TERRAIN;
+	SetState(WS_AFTERROPE);
+	
+	Rotation = 0.0;
+	SpinMultiplierX = 0.0045;
+	SpinMultiplierY = 0.0022;
+	MaxSpinSpeed = 0.07;
+}
+
+void PxNinjaSheepHelper::OnSink()
+{
+	SetState(WS_IDLE);
+	Free(true);
+}
+
+void PxNinjaSheepHelper::OnSheepExplode()
+{
+	SetState(WS_IDLE);
+	Free(true);
+}
+
+void PxNinjaSheepHelper::UpdateRotation()
+{
+	float abs_speedX = Sheep->SpX;
+	float abs_speedY = Sheep->SpY;
+	
+	if(abs_speedX < 0) abs_speedX = 0-abs_speedX;
+	if(abs_speedY < 0) abs_speedY = 0-abs_speedY;
+	
+	float rot = SpinMultiplierX * abs_speedX + SpinMultiplierY * abs_speedY;
+	
+	if(rot > MaxSpinSpeed) rot = MaxSpinSpeed;
+	if(Sheep->SpX<0) rot = 0-rot;
+	
+	Rotation += rot;
+	while(Rotation > 1.0)	Rotation -= 1.0;
+	while(Rotation <= 0.0)	Rotation += 1.0;
+}
+
+void PxNinjaSheepHelper::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	// vo612: 1 if rope is attached
+	// vo616: number of rope shots left
+	// vo620: 1 if rope is being fired but not attached yet
+	// vo628: maximum rope length
+	
+	//if(Type == M_SPACE) ShowMessage("space");
+	//if(Type == M_ENTER) ShowMessage("enter");
+	
+	//if(Type == M_SPACERLS) ShowMessage("enter");
+	
+	// This makes sure the turn ends properly if the controlling worm drowns or gets injured while controlling the sheep
+	if(Type == M_TURNEND)
+	{
+		Sheep->NinjaSheepHelper = PxNinjaSheepHelper(NullObj);
+		Sheep->NextSheepAutoExplode = 150; // Make the sheep automatically blow up after 3 seconds (3*50 fps = 150)
+		// Set the helper's state to idle before deleting it
+		SetState(WS_IDLE);
+		Free(true);
+		return;
+	}
+	
+	// First rope shot is handled here
+	if(Type == M_SPACE && FirstRopeShot)
+	{
+		CShootDesc SDesc;
+		zero(&SDesc);
+		
+		SDesc.Team = WormTeam;
+		SDesc.Worm = 1;
+		
+		// this shit apparently changes nothing
+		SDesc.X = PosX;
+		SDesc.Y = PosY;
+		SDesc.SpX = 10.0 * TurnSide;
+		SDesc.SpY = -10.0;
+		
+		if(CurWeapon != CWeapon(NullObj))
+		{
+			CurWeapon = RopeWeapon;
+			WeaponN = RopeWeapon->GetWeaponIndex();
+			FireAngle = 0.75; // aim at 45° upwards
+			CanFire = true;
+			
+			FireFinal(CurWeapon, &SDesc);
+			SetState(WS_AFTERROPE);
+		}
+		
+		return;
+	}
+	
+	// Not affected by damage
+	if(Type == M_EXPLOSION || Type == M_GUNEXP) return;
+	
+	if(Type == M_DRAWQUEUE)
+	{
+		// Render only the rope and the rope shot
+		RenderRopeShot();
+		RenderRope(RGB(255,255,255), RGB(180,180,180));
+		
+		// If we're attached to the rope or flying after detaching from the rope, render the worm, the CDDQueue override will turn it into a sheep
+		if(RopeAttached == 1 || FirstRopeShot == false)
+		{
+			NinjaSheep_Rendering = true;
+			NinjaSheep_SheepSpin = Rotation;
+			RenderWorm();
+			NinjaSheep_Rendering = false;
+		}
+		
+		return;
+	}
+	
+	super;
+	
+	if(Type == M_FRAME)
+	{
+		if(Sheep == CMissile(NullObj) || Sheep->Sinking > 0)
+		{
+			// The sheep fell into the water, quickly delete the helper to prevent weird stuff from happening
+			SetState(WS_IDLE);
+			Free(true);
+			return;
+		}
+		
+		// The whole controlling of the sheep is done during retreat time, let's just freeze it to 1 second until the sheep explodes
+		if(Root->RetreatTimer > 0 && Root->RetreatTimer < 1000) Root->RetreatTimer = 1000;
+		
+		// Always able to use the rope
+		if(ObjState != WS_AFTERROPE && ObjState != WS_ROPING && ObjState != WS_IDLE)
+		{
+			SetState(WS_AFTERROPE);
+		}
+		
+		if(RopeAttached > 0)
+		{
+			SpY = SpY + 0.3;
+			
+			// Roping, the sheep should follow us
+			Sheep->PosX = PosX;
+			Sheep->PosY = PosY;
+			Sheep->SpX = SpX;
+			Sheep->SpY = SpY;
+			Sheep->Side = TurnSide;
+			
+			IsMaterial = true;
+			//ColGroup = ColGroupRoping;
+			Rotation = 0.0;
+		}
+		else
+		{
+			if(Sheep->SpX < 0 && Sheep->Side > 0) Sheep->Side = -1;
+			if(Sheep->SpX > 0 && Sheep->Side < 0) Sheep->Side = 1;
+			
+			// Not roping, let's follow the sheep
+			PosX = Sheep->PosX;
+			PosY = Sheep->PosY;
+			SpX = Sheep->SpX;
+			SpY = Sheep->SpY;
+			TurnSide = Sheep->Side;
+			
+			IsMaterial = false;
+			//ColGroup = ColGroupFlying;
+			UpdateRotation();
+		}
+		
+		// Current weapon is always the rope
+		CurWeapon = RopeWeapon;
+		WeaponN = RopeWeapon->GetWeaponIndex();
+		FireAngle = 0.75; // aim at 45° upwards
+		CanFire = true;
+		
+		if(FirstRopeShot && RopeAttached > 0)
+		{
+			vo616 = -1; // infinite number of rope shots
+			//vo628 = 500;
+			FirstRopeShot = false;
+			Sheep->SheepExplodesOnImpact = true;
+		}
+	}
+}
+
+override void CMissile::Collide(CGObject* Obj, int type)
+{
+
+	if(Removed)
+		{
+		super;
+		return;
+		}
+	
+	if(	(NinjaSheepHelper != PxNinjaSheepHelper(NullObj) && NinjaSheepHelper->FirstRopeShot == false && NinjaSheepHelper->RopeAttached == 0) ||
+		(NinjaSheepHelper == PxNinjaSheepHelper(NullObj) && SheepExplodesOnImpact))
+		{
+		//ShowMessage("OHSHI");
+		ExplodeAt(PosX, PosY);
+		
+		if(NinjaSheepHelper != PxNinjaSheepHelper(NullObj))
+			{
+			NinjaSheepHelper->OnSheepExplode();
+			NinjaSheepHelper = PxNinjaSheepHelper(NullObj);
+			}
+		
+		IsMaterial = false;
+		SpeedDivider = 1000.0;
+		Removed = true;
+		return;
+		}
+	super;
+}
+
+override void CMissile::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Removed) return;
+		
+		if(NextSheepAutoExplode >= 0 || NinjaSheepHelper != PxNinjaSheepHelper(NullObj))
+		{
+			if(SheepExplodesOnImpact == false)
+			{
+				NinjaSheep_Rendering = true;
+				super;
+				NinjaSheep_Rendering = false;
+			}
+			else
+			{
+				NinjaSheep_Hidden = true;
+				super;
+				NinjaSheep_Hidden = false;
+			}
+			
+			return;
+		}
+	}
+	
+    super;
+	
+	if(Type == M_FRAME)
+	{
+		if(Removed) Free(true);
+
+		if(NextSheepAutoExplode >= 0)
+		{
+			if(NextSheepAutoExplode == 0)
+			{
+				NextSheepAutoExplode = -1;
+				ExplodeAt(PosX, PosY);
+				IsMaterial = false;
+				SpeedDivider = 1000.0;
+				Removed = true;
+			}
+			else
+			{
+				NextSheepAutoExplode = NextSheepAutoExplode - 1;
+			}
+		}
+	}
+}
+
+override CMissile::CMissile(CObject* parent, CWeaponLaunch* ldata, CShootDesc* sdata)
+{
+	NinjaSheepHelper = PxNinjaSheepHelper(NullObj);
+	Removed = false;
+	NextSheepAutoExplode = -1;
+	SheepExplodesOnImpact = false;
+	SheepIsRoaming = true;
+	
+	super;
+	
+	if(ldata->timeBeforeExplosion == 22500) //if(ldata->CheckName("Ninja Sheep"))
+	{
+		NinjaSheepHelper = new PxNinjaSheepHelper(parent, this, sdata->Team, sdata->Worm);
+	}
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{               
+if(Type == M_SPACE)
+    {
+    if(CurWeapon->CheckName("Ninja Sheep"))
+   		{
+      	if(ObjState == WS_JETPACK || ObjState == WS_JUMP || ObjState == WS_JUMPPREPARE)
+      		{
+      		local weap = GetWeaponByName("Bungee");
+
+            local CW = GetCurrentWorm();
+            CW->CurWeapon = weap;
+
+            ShowTeamMessage(1,"This weapon can't be used in air!",CW->WormTeam);
+            PlayLocalSound(120, 3, 1.0, 1.0); // beep
+            }
+		}
+   }
+
+if(NinjaSheep_SpaceBarFix == true)
+   	{
+	if(CurWeapon->CheckName("Ninja Sheep") && ObjState == WS_FIRED)
+   		{
+    	local worm = GetCurrentWorm();
+    	local wp = GetWeaponByName("Ninja Sheep");
+
+    	GS->Info.AddWeaponEx(worm->WormTeam, wp->GetWeaponIndex(), wp->GetPageIndex(), 1);
+    	NinjaSheep_SpaceBarFix = false;
+   		}
+	}
+   
+if(Type == M_TURNEND && NinjaSheep_SpaceBarFix == true)
+   	{
+    NinjaSheep_Active = false;
+    NinjaSheep_SpaceBarFix = false;
+   	}
+
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Ninja Sheep"))
+	{
+    NinjaSheep_Active = true;
+    NinjaSheep_SpaceBarFix = true;
+	}
+
+	super;
+}
+
+// Prevent the sheep helper from triggering mines (such a dirty way geez)
+override CGObject* CMine::GetTarget(int Radius)
+{
+	CGObject *target = super;
+
+	if(target is PxNinjaSheepHelper) return NullObj;
+
+	return target;
+}
+
+/*
+// Old method to fix weapon consumption
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Ninja Sheep"))
+	{
+		int team = GetTeamColor(WormTeam);
+		int index = Weap->GetWeaponIndex()+2;
+
+		if(GS->Info.Stores[team].Count[index] == 1)
+		{
+			NinjaSheep_SpaceBarFix = true;
+			GS->Info.Stores[team].Count[index] = 2;
+		}
+
+		super;
+
+		if(NinjaSheep_SpaceBarFix)
+		{
+			NinjaSheep_SpaceBarFix = false;
+		}
+	}
+	else
+	{
+		super;
+	}
+}
+*/

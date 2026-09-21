@@ -1,0 +1,14 @@
+
+CSprite* circle50;
+
+void explosion_circle50::InitGraphic()
+{
+   CFile *f;
+
+   f = GetAttachment("explosion_circle50.png");
+   circle50 = LoadSprite(f, 8, 0);
+
+   SetSpriteOverride(601, circle50);  
+}   
+
+                        

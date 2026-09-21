@@ -1,0 +1,54 @@
+require p_sprite_builder;
+
+CSprite* hzook_aiming;
+CSprite* hzook_bullet;
+
+void holy_zook_anim::InitGraphic()
+{   CFile* f;                     
+    f = GetAttachment("hzook_aiming.png");
+    hzook_aiming = LoadSprite(f, 1, 0);   
+    f = GetAttachment("hzook_bullet.png");
+    hzook_bullet = LoadSprite(f, 1, 0);   
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {  
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Holy Bazooka";
+     sprite = hzook_aiming->Index;
+     Params->hand_rotation = 0.5;
+     Params->fix_flip_rotation = true;
+     Params->hand_radius = 4.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->hand_type = 3;
+     Params->weap_radius = 0.0;
+     Params->hand_scale = 0.8;
+
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }  
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Holy Bazooka")) {
+         if (hzook_anim) {                 
+              local sprite = hzook_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              hzook_anim = false;
+         }
+     }
+  }   
+}     
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  hzook_anim = true;
+}                   

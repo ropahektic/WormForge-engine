@@ -1,0 +1,61 @@
+//Sequence script by Lucho/reddaz, no need for separate weap.
+require utils;   
+
+CWeapon* g_RipperWeap;
+
+void ripper_fire::FirstFrame()
+{
+g_RipperWeap = GetWeaponByName("Ripper");
+}
+
+//---------------CWorm Class Overrides---------------//
+override CWorm::CWorm(CObject * Parent, int aTeam, int aIndex, CWormParams * params)
+{
+    super;
+    RSShotsFired = 0;
+    rippShooting = false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (Weap->CheckName("Ripper") )
+    {
+       if (RSShotsFired<=15)     //Quantity of shots
+       {            
+         for (int curShots = RSShotsFired; RSShotsFired==curShots; RSShotsFired++) //For some reason PShotsFired++ normally doesn't work.           
+         Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 45;
+         Desc->SpY = 45*(0.5 - FireAngle);
+         Desc->SpY-(RandomInt(-6,6));   //Spread
+         super(g_RipperWeap, Desc); 
+         rippShooting=true;
+         return;   //Return makes it loop.
+       }
+       rippShooting=false;   //Don't reset shots here, it'll just keep looping. 
+       return;
+    }        
+    rippShooting=false; //Shouldn't be neccessary, however i'm insecure.
+    super;
+}
+     
+// --- Main Logic Loop --- //
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+  if (Type == M_FRAME)
+  {
+    if(CurWeapon->CheckName("Ripper") == true)
+    {
+       if (rippShooting)
+       {
+           // Persist animation.  
+           nShoots = 1;
+           nShooted = 0;
+       }
+    }
+  }
+  if (Type==M_SETWEAPON)
+  {
+     if(CurWeapon->CheckName("Ripper") == true)
+     {RSShotsFired=0;rippShooting=false;}       //Reset variables
+  }  
+}

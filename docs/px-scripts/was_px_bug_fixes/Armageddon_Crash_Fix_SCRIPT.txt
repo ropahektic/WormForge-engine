@@ -1,0 +1,34 @@
+
+bool acf_active;
+
+void Armageddon_Crash_Fix_SCRIPT::FirstFrame()
+{
+     // initialize variable 
+     acf_active = false;  
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{
+     // has to run on frame or the message causes a crash
+     if(type == M_FRAME)
+     {
+          if(acf_active == true)
+          {
+               Root->Message(Root, M_SKIPTURN, 0, NullObj);
+          
+               acf_active = false;
+          }
+     }
+     
+     super;
+}
+
+override void CWorm::FireFinal(CWeapon* weap, CShootDesc* desc)
+{
+     if(weap->CheckName("Armageddon") || weap->CheckName("Armageddon+") || weap->CheckName("Meteor Shower") || weap->CheckName("Mole Shower") || weap->CheckName("Acid Rain")) // all based on 'Armageddon'
+     {  
+          acf_active = true;
+     }
+     
+     super;
+}

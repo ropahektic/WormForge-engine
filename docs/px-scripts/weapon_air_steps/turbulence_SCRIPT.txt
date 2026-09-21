@@ -1,0 +1,36 @@
+bool gravgush;
+int ggtick;
+
+void gravitygush_SCRIPT::FirstFrame()
+{
+    ggtick = -1000;
+}
+
+override void CGObject::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type == M_FRAME)
+  {
+      if (gravgush)
+      {
+          SpX = RandomInt(-9,9);
+          SpY = RandomInt(-9,9);
+
+          if (gframe >= ggtick + 50*3) gravgush = false;
+      }
+  }
+
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+
+ if (Weap->CheckName("Turbulence"))
+ {
+     gravgush = true;
+     ggtick = gframe;
+ }
+
+super;
+
+}

@@ -1,0 +1,41 @@
+require utils, p_sprite_builder;
+
+CSprite* beebee_aiming;                                                      
+CSprite* beemisspr;                                                
+
+                                                                             
+
+void bee_spb::InitGraphic()                             
+{   CFile* f;                                                            
+    f = GetAttachment("bee_spb.png");                          
+    beebee_aiming = LoadSprite(f, 1, 0);                                   
+    f = GetAttachment("beemisspr.png");                           
+    beemisspr = LoadSprite(f, 2, 0);                                
+}                                                                             
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Keeper Bee";                                             
+     sprite = beebee_aiming->Index;                                   
+     Params->hand_radius = -14.5;                                                 
+     Params->animate = false;
+     Params->hand_rotation = -0.0;                                             
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;     
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -12.5;
+     Params->draw_hand = false;
+     Params->hand_type = 1;     
+     Params->hand_scale = 1.3;                                              
+
+                                                
+     local WA = new WormSprite(weapName, sprite, Params);              
+    }                                                                           
+  }                                                                             
+}                                                                                

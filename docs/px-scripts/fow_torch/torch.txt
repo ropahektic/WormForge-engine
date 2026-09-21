@@ -1,0 +1,256 @@
+require utils, fow_darkness, pxparticles;
+
+$editor
+ $object TorchSource
+  $origin -15 -15
+  $image "torched.png"
+  $radius 17
+  $func SpawnTorchSource
+  $autoname TorchSource
+  $param Radius radius 50
+  $param FalloffRadius radius 75
+  $param Intensity int 100
+  $param Team int 1
+ $object_end
+$end
+
+CTorch : CGObject;
+
+CSprite* TorchBody;
+CSprite* TorchHead;
+CSprite* TorchGlow;
+CSprite* TorchSpark;
+CSprite* RevealSprite;
+
+int TeamToAddSprite;
+
+void torch::InitGraphic()
+{
+    CFile *f;
+
+    f = GetAttachment("torchhead.png");
+    TorchHead = LoadSprite(f, 4, 0);
+    
+    f = GetAttachment("torchspark.png");
+    TorchSpark = LoadSprite(f, 1, 0);
+
+    f = GetAttachment("reveal.png");
+    RevealSprite = LoadSprite(f, 1, 0);
+
+    f = GetAttachment("torchbody.png");
+    TorchBody = LoadSprite(f, 1, 0);
+    SetSpriteOverride(749, TorchBody);
+
+    f = GetAttachment("torchglow.png");
+    TorchGlow = LoadSprite(f, 1, 0);
+    SetSpriteOverride(750, TorchGlow);
+}
+
+void torch::FirstFrame(){}
+
+CTorch::CTorch(CObject* parent, fixed x, fixed y)
+{
+    super(parent, 7, 7);
+
+    PosX          = x;
+    PosY          = y;
+    IsFarSight    = false;
+    IsMaterial    = true; //activates physics and also used to check if its a lantern or "invisible MED editor light source"
+    HasWobbleGraphics = true; //raffie
+
+    animSeed = GS->Tick;
+
+    ClType        = EObjectClass(9966);
+    ColGroup      = 4423679 ;
+    //Layer = 8192;     //gravestone
+
+    currentSize  = 1.0;
+    currentSizeInv  = 1.0;
+    currentRRot = 0.0;
+    currentRRotInv = 0.0;
+    particleFrameCounter = 0;
+    owningTeam   = 0;
+}
+
+void CTorch::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_DRAWQUEUE)
+	{
+    currentSize =  0.97 + ((sin((GS->Tick/10)+animSeed)) * 0.03);
+    currentSizeInv =  1.0 - ((sin((GS->Tick/10)+animSeed+333)) * 0.03);
+    currentRRot = currentRRot + abs((sin((GS->Tick/50)+animSeed)) * 0.0015) + 0.0015;
+    currentRRotInv = currentRRotInv - abs((sin((GS->Tick/50+animSeed))) * 0.0008) + 0.00012;
+
+    local Colorin = GetTeamColor(owningTeam);
+    if(IsMaterial == true)
+		{
+        TeamToAddSprite = owningTeam;
+        AddSprite(18,PosX-1,PosY-12,0,749,0.0); //base //82,77
+        AddSpriteEx(19,PosX,PosY - 24,TorchHead->Index,abs(sin((GS->Tick/5+animSeed))),0.0,1.0);//86, 92
+        AddSprite(20,PosX,PosY-14,0,750,0.0); //glow
+    	}
+    if(IsFarSight == true && HasWobbleGraphics == true)		//raffie
+        {
+        //Color mod
+        local Color = Colorin;
+
+        if (Color == 0){SetColorMod(RGB(245, 40, 40), 8);}
+        if (Color == 1){SetColorMod(RGB(0, 135, 255), 8);}
+        if (Color == 2){SetColorMod(RGB(99, 211, 60), 8);}
+        if (Color == 3){SetColorMod(RGB(255, 245, 83), 8);}
+        if (Color == 4){SetColorMod(RGB(173, 69, 199), 8);}
+        if (Color == 5){SetColorMod(RGB(62, 244, 255), 8);}
+        //end Color mod
+
+        AddSpriteEx(22,PosX,PosY - 0,RevealSprite->Index,0.0,currentRRot,currentSize);
+        AddSpriteEx(22,PosX,PosY - 0,RevealSprite->Index,0.0,(currentRRotInv),currentSizeInv);
+
+        ClearColorMod();
+    	}
+    }
+
+if (Type == M_FRAME)
+	{
+    if (Sinking == 1) Free(true);
+
+    PxParticle *p;
+    if(IsMaterial == true )
+		{
+        particleFrameCounter = (particleFrameCounter + 1) % 6;
+        if(particleFrameCounter == 0)
+			{
+            p = new PxParticle(TorchSpark->Index, (sin(GS->Tick)*6) + PosX - 2, (PosY-24));
+            p->SetBlendMode(1);
+            p->SetLifeTime(30);
+            p->SetRandomVelocity(0.3, 0.3);
+            p->SetAirResistance(0.0);
+            p->GravityFactor(-0.3);
+            p->SetAlpha(150);
+
+            p->SetColor(255, 255, 255);
+
+            if(sin(GS->Tick) < 0.5){p->SetStartSize(9.0, 13.0); p->SetEndSize(4.0, 6.0);}
+			else{p->SetStartSize(5.0, 7.0); p->SetEndSize(2.0, 3.0);}
+            }
+        }
+    }
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if (Weap->CheckName("Torch"))
+	{
+    local ct = new CTorch(Root->GetObject(25, 0),PosX,PosY - 10);
+    local worm = CWorm(this);
+    local wteam = worm->WormTeam;
+    ct->owningTeam = wteam;
+    ct->SpY = (-1.5) + ((worm->SpY * 1.5));
+
+    if (TurnSide == 1){ct->SpX = 2 + (worm->SpX);}
+	else ct->SpX = -2 + (worm->SpX);
+    }
+}
+
+override void CDDQueue::AddSprite(fixed z,fixed x,fixed y,int unk,int sprite,fixed frame)
+{
+if(sprite == 749 || sprite == 750)
+    {
+    local worm = GetCurrentWorm();
+    local Color = GetTeamColor(TeamToAddSprite);
+
+    if (Color == 0){SetColorMod(RGB(175, 20, 20), 8);}
+    if (Color == 1){SetColorMod(RGB(20, 20, 180), 8);}
+    if (Color == 2){SetColorMod(RGB(20, 180, 20), 8);}
+    if (Color == 3){SetColorMod(RGB(120, 120, 40), 8);}
+    if (Color == 4){SetColorMod(RGB(120, 40, 120), 8);}
+    if (Color == 5){SetColorMod(RGB(40, 120, 120), 8);}
+
+	super;
+    ClearColorMod();
+    }
+else super;
+}
+
+override void CDarknessControl::GenerateLSources()
+{
+super;
+for (local i = 1; i < Env->Objs.Count; i++)
+	{
+    local obj = CGObject(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    
+    if (obj->ClType == EObjectClass(9966))
+		{
+        if (obj != NullObj)
+			{
+        	if (obj->Sinking != 1)
+				{
+        		local team = CTorch(obj)->owningTeam;
+        		if (darkControl->IsTeamVisible(team))
+					{
+            		if(CTorch(obj)->IsMaterial == true)
+						{
+                		SetLight(obj->PosX, obj->PosY, 50, 110, 0.9); //regular lantern
+            			}
+					else
+						{
+                		if(CTorch(obj)->IsFarSight == true)
+							{
+                    		SetLight(obj->PosX, obj->PosY, 75, 155, 0.5); //Far sight
+                			}
+						else
+							{
+                    		SetLight(obj->PosX, obj->PosY, 250, 350, 1.0); //Invisible MED light
+                			}
+            			}
+            		}
+            	}
+            }
+    	}
+	}
+}
+
+void SpawnTorchSource(CEditorObject* obj) //MED editor invisible lantern
+{
+	local ct = new CTorch(Root->GetObject(25, 0),obj->PosX,obj->PosY - 10);
+    ct->owningTeam = obj->GetInt("Team");
+    ct->IsMaterial = false;
+    ct->IsFarSight = false;
+    ct->animSeed = GS->Tick;
+    ct->FixTeamC(); //When first two teams arent different color, we need this hack. Same with turrets.
+
+	//lt->Layer = 8192; //gravestone
+}
+
+void CTorch::FixTeamC()
+{
+    local InTeam = owningTeam;
+
+    //Find first different team color if two first are the same
+    local FirstOtherT = 2;
+    local fi;
+    local c1 = GetTeamColor(1);
+    if(GetTeamColor(1) == GetTeamColor(2))
+		{
+		for(fi = 0; fi < 6; fi++)
+		    {
+            if(GetTeamColor(fi + 1) != c1)
+				{
+				FirstOtherT = fi + 1; break;
+				}
+            }
+
+        if(GetTeamColor(1) > GetTeamColor(FirstOtherT))
+			{
+            if(InTeam == 1){InTeam = FirstOtherT;}
+            if(InTeam == 2){InTeam = 1;}
+            }
+		else
+			{
+            if(InTeam == 2){InTeam = FirstOtherT;}
+            }
+        }
+    owningTeam = InTeam;
+}

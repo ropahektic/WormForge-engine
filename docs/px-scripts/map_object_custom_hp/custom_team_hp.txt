@@ -1,0 +1,97 @@
+require utils;
+
+//////////////////////////////////
+//EXTRA EDITOR OBJECTS
+//////////////////////////////////
+
+$editor
+
+ $object CustomTeamHealth
+  $origin -15 -15
+  $image "edcthealth.png"
+  $radius 17
+  $func SpawnCTHealth
+  $param Team int 1
+  $param Worm1Health int 0
+  $param Worm2Health int 0
+  $param Worm3Health int 0
+  $param Worm4Health int 0
+  $param Worm5Health int 0
+  $param Worm6Health int 0
+  $param Worm7Health int 0
+  $param Worm8Health int 0
+ $object_end
+$end
+
+//////////////////////////////////
+//Classes..
+CTHealthControl : CObject;
+CTHealthControl* hControl;
+CFilter* gTrapParent2;
+int initialhp[70];
+
+//////////////////////////////////
+
+void custom_team_hp::InitSMap() //I'm not sure what this does, I'll leave it here anyway.
+{
+  filter = new CFilter(Root, 50);
+  filter->ForbidAll();
+  filter->Allow(M_FRAME);
+  filter->Allow(M_DRAWQUEUE);  
+  
+  gTrapParent2 = filter;
+  
+  hControl = CTHealthControl(NullObj);
+};
+
+CTHealthControl::CTHealthControl(CEditorObject* aobj) //Team Health Control
+{
+  hControl = this;
+  super(gTrapParent2, GS);
+	CHTeam = aobj->GetInt("Team");
+	W1Health = aobj->GetInt("Worm1Health"); 
+	W2Health = aobj->GetInt("Worm2Health");
+	W3Health = aobj->GetInt("Worm3Health");
+	W4Health = aobj->GetInt("Worm4Health");
+	W5Health = aobj->GetInt("Worm5Health");
+	W6Health = aobj->GetInt("Worm6Health");
+	W7Health = aobj->GetInt("Worm7Health");
+	W8Health = aobj->GetInt("Worm8Health");
+
+        //Set Worm Health values individually:
+
+        if (Root->GetObject(2, 1+ CHTeam * 16))
+           if (W1Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 1, W1Health);
+	if (Root->GetObject(2, 2+ CHTeam * 16))
+	   if (W2Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 2, W2Health);
+	if (Root->GetObject(2, 3+ CHTeam * 16))
+	   if (W3Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 3, W3Health);
+	if (Root->GetObject(2, 4+ CHTeam * 16))
+           if (W4Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 4, W4Health);
+	if (Root->GetObject(2, 5+ CHTeam * 16))
+           if (W5Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 5, W5Health);
+	if (Root->GetObject(2, 6+ CHTeam * 16))
+           if (W6Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 6, W6Health);
+	if (Root->GetObject(2, 7+ CHTeam * 16))
+           if (W7Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 7, W7Health);
+	if (Root->GetObject(2, 8+ CHTeam * 16))
+           if (W8Health > 0)
+          GS->Info.SetWormHealth(CHTeam, 8, W8Health);
+  
+  if (Root->GetObject(2, 1 + 16)) //??
+  {
+     WormsHealth = GS->Info.GetWormHealth(1, 1); //Remove?
+  };
+};
+
+void SpawnCTHealth(CEditorObject* obj)
+{
+  ct = new CTHealthControl(obj);
+};

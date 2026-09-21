@@ -1,0 +1,12 @@
+CSprite* explosivea_tr;
+
+void sprite_259::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("explosiveat.png");
+    explosivea_tr = LoadSprite(f, 8, 0);
+    //f = GetAttachment("explosiveat_old.png");
+    //explosiveat = LoadSprite(f, 9, 0);
+
+    SetSpriteOverride(259, explosivea_tr);
+}

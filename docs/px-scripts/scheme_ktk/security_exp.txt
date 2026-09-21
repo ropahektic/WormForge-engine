@@ -1,0 +1,10 @@
+require utils;
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+super;
+if (weap->CheckName("Security Grenade"))
+	{
+	super;
+	}
+}

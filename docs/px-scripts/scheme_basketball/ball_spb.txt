@@ -1,0 +1,92 @@
+//---------------------------------BASKETBALL (CROSSHAIR)---------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_FRAME)
+	{
+    if (gframe == 1)
+		{
+     	local weapName; local sprite;
+     	CWormAnimParams* Params = new CWormAnimParams;
+     	weapName = "Basketball";
+     	sprite = basketball_sprite->Index;
+     	Params->hand_type = 1;
+     	Params->hand_scale = 1.2;
+     	Params->hand_radius = -17.5;
+     	Params->hand_rotation = -0.0;
+     	Params->hand_radial_rotation = 0.0;
+     	Params->weap_radial_rotation = 0.0;
+     	Params->weap_rotation = 0.5;
+     	Params->weap_radius = -14.5;
+     	local WA = new WormSprite(weapName, sprite, Params);
+    	}
+  	}
+}
+
+//---------------------------------BASKETBALL (THROW)-------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_FRAME)
+	{
+    if (gframe == 1)
+		{
+     	local weapName; local sprite;
+     	CWormAnimParams* Params = new CWormAnimParams;
+     	weapName = "Basketball ";
+     	sprite = basketball_sprite->Index;
+     	Params->hand_type = 1;
+     	Params->hand_scale = 1.2;
+     	Params->hand_radius = -17.5;
+     	Params->hand_rotation = -0.0;
+     	Params->hand_radial_rotation = 0.0;
+     	Params->weap_radial_rotation = 0.0;
+     	Params->weap_rotation = 0.5;
+     	Params->weap_radius = -14.5;
+     	Params->dont_rotate_with_angle = true;
+     	Params->hand_ang_if_static = 0.4;
+     	Params->ang_if_static = 0.1;
+     	local WA = new WormSprite(weapName, sprite, Params);
+    	}
+  	}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_FRAME)
+	{
+    if (weap->CheckName("Basketball"))
+		{
+        if (basketballb_anim)
+			{
+            local sprite = basketball_sprite->Index;
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);
+            weap->launch.anim.spriteIndex = 0;
+            basketballb_anim = false;
+         	}
+     	}
+
+	if (weap->CheckName("Basketball "))
+		{
+        if (basketballa_anim)
+			{
+            local sprite = basketball_sprite->Index;
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);
+            weap->launch.anim.spriteIndex = 0;
+            basketballa_anim = false;
+         	}
+  		}
+	}
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+basketballa_anim = true;
+basketballb_anim = true;
+}

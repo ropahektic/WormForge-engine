@@ -1,0 +1,58 @@
+CSprite* flame1;
+CSprite* petrol1;
+CSprite* petrol2;
+CSprite* petrol3;
+CSprite* petrol4;
+CSprite* petrol5;
+CSprite* petrol6;
+CSprite* petrol_1;
+CSprite* petrol_2;
+CSprite* petrol_3;
+CSprite* petrol_4;
+
+
+void pyro_sfx::InitGraphic()
+{
+   CFile *f;
+   
+   f = GetAttachment("flame1.png");
+   flame1 = LoadSprite(f, 25, 0);
+   SetSpriteOverride(84, flame1);
+   SetSpriteOverride(85, flame1);
+   SetSpriteOverride(620, flame1);
+   SetSpriteOverride(621, flame1);
+   
+   f = GetAttachment("petrol1.png");
+   petrol1 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(124, petrol1);
+   f = GetAttachment("petrol2.png");
+   petrol2 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(125, petrol2);
+   f = GetAttachment("petrol3.png");
+   petrol3 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(126, petrol3);
+   f = GetAttachment("petrol4.png");
+   petrol4 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(127, petrol4);
+   f = GetAttachment("petrol5.png");
+   petrol5 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(128, petrol5);
+   f = GetAttachment("petrol6.png");
+   petrol6 = LoadSprite(f, 20, 0);
+   SetSpriteOverride(129, petrol6);
+   
+   f = GetAttachment("petrol-1.png");
+   petrol_1 = LoadSprite(f, 64, 0);
+   SetSpriteOverride(120, petrol_1);
+   f = GetAttachment("petrol-2.png");
+   petrol_2 = LoadSprite(f, 64, 0);
+   SetSpriteOverride(121, petrol_2);
+   f = GetAttachment("petrol-3.png");
+   petrol_3 = LoadSprite(f, 64, 0);
+   SetSpriteOverride(122, petrol_3);
+   f = GetAttachment("petrol-4.png");
+   petrol_4 = LoadSprite(f, 64, 0);
+   SetSpriteOverride(123, petrol_4);
+   SetSpriteOverride(130, petrol_4);
+   
+}

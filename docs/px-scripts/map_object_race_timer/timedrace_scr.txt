@@ -1,0 +1,334 @@
+require utils, map_object_respawn;
+
+$editor
+ $object RaceControl
+  $origin -15 -15    
+  $image "edrcontrol.png"  
+  $radius 17            
+  $func SpawnTRaceControl    
+  $param DeathPenalty int 30
+  $param WinnerOnly bool false
+ $object_end
+ 
+ $object RaceFinish                 
+  $origin -24 -24    
+  $image "edrfinish.png"  
+  $radius 26            
+  $func SpawnTRaceFinish    
+  $param Size area 100 100
+ $object_end
+ 
+$end
+
+  
+CTRaceControl* gRaceControl; 
+
+CTRaceControl : CObject;
+CTRaceFinish : CObject;
+
+override void CWorm::Free(bool FreeMem)
+{
+  if (gRaceControl != NullObj)
+  {
+    if (!gRaceControl->Completed[WormTeam])
+    {
+      gRaceControl->Times[WormTeam] += gRaceControl->DeathPenalty*1000; 
+    }
+  }
+  super;
+}
+
+int CTRaceControl::UpdatePlaces()
+{           
+  for (local i = 1; i < 7; i++) Places[i] = -1; 
+  local minTime = 0;
+  for (local iter = 1; iter < 7; iter++)
+  {
+    local minI = 0;
+    local bTime = 2000000000;
+    for (local i = 1; i < 7; i++)
+    {
+      if (!IsTeamAlive(i)) continue;  
+      if (Times[i] > minTime && Times[i] < bTime && Completed[i])
+      {
+        bTime = Times[i];
+        minI = i;
+      }
+    }
+    minTime = bTime;
+    if (minI == 0) break;
+    Places[minI] = iter;
+  }
+}
+
+string CTRaceControl::GetPlaceName(int place)
+{
+   if (place == 1) return "1st"; 
+   if (place == 2) return "2nd";
+   if (place == 3) return "3rd";
+   if (place == 4) return "4th";
+   if (place == 5) return "5th";
+   if (place == 6) return "6th";
+   return "";
+   
+}
+
+void CTRaceControl::CheckWinner()
+{
+   if (gameEnd) return;
+   local minTime = 2000000000;
+   local minTeam = -1;
+   local nSkip = 0;
+   local maxTime = 0;
+   for (local i = 1; i <= 6; i++)
+   {
+      if (!IsTeamAlive(i)) continue;
+      if (!Completed[i]) nSkip++; else
+      {
+         if (Times[i] < minTime)
+         {
+            minTime = Times[i];
+            minTeam = i;
+         }
+         if (Times[i] > maxTime) maxTime = Times[i];
+      }
+   }
+   if (nSkip == 1)
+   {
+     killTime = maxTime;
+   }
+   if (nSkip > 0) return;
+   if (minTeam < 0) return;
+   if (Completed[minTeam])
+   {  //we have a winner!
+      rControl->SetWinner(GetTeamColor(minTeam));
+      gameEnd = true;
+   }
+}
+
+void CTRaceControl::OnComplete(int team)
+{
+   Completed[team] = true;
+   rControl->teams[team].skipTurn = true;
+   UpdatePlaces();
+   CheckWinner();
+}
+
+
+
+string CTRaceControl::FormatTime(int time)
+{
+  local secs = time / 1000;
+  local mins = secs / 60;
+  local hrs = mins / 60;
+  
+  local s_t = MakeZeroedNumber((time / 10) % 100, 2);
+  local s_secs = MakeZeroedNumber(secs % 60, 2); 
+  local s_mins = MakeZeroedNumber(mins % 60, 2);
+  local s_hrs = MakeZeroedNumber(hrs, 2);
+  
+  local s_1 = StrCon(s_hrs, ":");         //facepalm.jpg, but what i could do?
+  s_1 = StrCon(s_1, s_mins);    
+  s_1 = StrCon(s_1, ":");
+  s_1 = StrCon(s_1, s_secs);
+  s_1 = StrCon(s_1, ":");    
+  s_1 = StrCon(s_1, s_t);
+  return s_1;
+}
+
+
+int CTRaceControl::GetBestWTime()
+{     
+   local ot = 2000000000;  
+   for (local i = 1; i <= 6; i++)
+   {                                  
+      if (!Completed[i]) continue;
+      if (!IsTeamAlive(i)) continue;   
+      if (Times[i] < ot)
+      {
+        ot = Times[i];
+        bestTeam = i;
+      }
+   }
+   if (ot == 2000000000) ot = 0;
+   return ot;
+}
+
+void CTRaceControl::Draw()
+{
+   local cTeam = Root->CurTeam;
+   if (cTeam >= 1)
+   {
+     cTime = Times[cTeam];
+   }
+   
+   local x = -(GS->ResX / 2) + 5;
+   local y = GS->ResY / 2 - 90;
+   
+   for (local i = 6; i >= 1; i--)
+   {
+     if (!IsTeamAlive(i)) continue;
+     if (Places[i] > 0) continue;
+     local str = StrCon(GetTeamName(i), " : ");
+     str = StrCon(str , FormatTime(Times[i]));
+     
+     local outX = 1;
+     local outY = 1;
+   
+     local outClr = RGB(127,127,127);
+   
+     local bitm = multiGUI[i]->SetText(str, GetTeamColor(i), 0, outClr, &outX, &outY, 1);
+     AddInterfaceBitmap(0, x + outX / 2, y, bitm, outX, outY, 0);
+     y -= outY + 4;
+   }
+   
+   for (local j = 6; j >= 1; j--)
+   {
+     local i = 0;
+     for (i = 1; i <= 6; i++)
+     {              
+       if (!IsTeamAlive(i)) continue;
+       if (Places[i] == j) break;
+     }
+     if (i > 6) continue;
+     
+     local str = StrCon(GetPlaceName(j), " - ");
+     str = StrCon(str, GetTeamName(i));
+     str = StrCon(str, " : ");
+     str = StrCon(str , FormatTime(Times[i]));
+     
+     local outX = 1;
+     local outY = 1;
+     
+     outClr = RGB(192, 64, 64);
+   
+     local bitm = multiGUI[i]->SetText(str, GetTeamColor(i), 0, outClr, &outX, &outY, 1);
+     AddInterfaceBitmap(0, x + outX / 2, y, bitm, outX, outY, 0);
+     y -= outY + 4;
+   }
+   
+   
+   return;
+   
+   local str = StrCon("Your time : " , FormatTime(cTime));
+   
+   local outX = 1;
+   local outY = 1;
+   
+   local outClr = RGB(127,127,127);
+   if (Completed[cTeam]) outClr = RGB(192, 64, 64);
+   
+   local bitm = curTimeGUI->SetText(str, GetTeamColor(cTeam), 0, outClr, &outX, &outY, 1);
+   AddInterfaceBitmap(0, x + outX / 2, y, bitm, outX, outY, 0);
+   
+   local t2 = GetBestWTime();
+   
+   if (t2 != 0)
+   {       
+     y -= 30;
+     str = StrCon("Best time : " , FormatTime(t2));   
+     bitm = bestTimeGUI->SetText(str, GetTeamColor(bestTeam), 0, outClr, &outX, &outY, 1);
+     AddInterfaceBitmap(0, x + outX / 2, y, bitm, outX, outY, 0);
+   }
+}
+
+void CTRaceControl::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_DRAWQUEUE)
+   {
+      Draw();
+   }
+   if (Type == M_FRAME)
+   {
+      if (Root->CurTeam > 0)
+      {
+         if (Root->IsTimerActive())
+         {
+            if (!Completed[Root->CurTeam])
+            {
+               Times[Root->CurTeam] += 20;
+            }
+            if (WinnerOnly) killTime = GetBestWTime();
+            local wTime = killTime;
+            if (wTime > 0 && wTime < Times[Root->CurTeam])
+            {
+               local w = GetCurrentWorm();
+               if (w != NullObj) 
+               {                                                    
+                 rControl->DisableTeam(Root->CurTeam);
+                 GS->Info.SetWormHealth(w->WormTeam, w->WormNumber, 0);     
+                 GS->Info.Teams[w->WormTeam-1].Worms[w->WormNumber-1].State = 135;
+                 Root->DoExplosion(w->PosX, w->PosY, 100, 8, 1, 1);
+                 CheckWinner();
+               }
+            }
+         }
+      }
+   }
+}
+
+CTRaceControl::CTRaceControl(CEditorObject* eobj)
+{
+   super(Root, GS);
+   DeathPenalty = eobj->GetInt("DeathPenalty");
+   WinnerOnly = eobj->GetBool("WinnerOnly");
+   
+   Times = new int[7];
+   Places = new int[7];
+   Completed = new bool[7];
+   cTime = 0;
+   gRaceControl = this;
+   killTime = 0;
+   for (local i = 1; i < 7; i++) Places[i] = -1;
+}
+
+CTRaceFinish::CTRaceFinish(CEditorObject* eobj)
+{
+   super(Root, GS);
+   x = eobj->PosX;
+   y = eobj->PosY;
+   sx = eobj->GetInt("Size");
+   sy = eobj->GetInt2("Size");
+}
+
+void CTRaceFinish::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (gRaceControl == NullObj) return;
+   if (Type == M_FRAME)
+   {
+      local w = GetCurrentWorm();
+      
+      if (w != NullObj)
+      {
+         if (gRaceControl->Completed[w->WormTeam]) return;
+         if (w->PosX >= x && w->PosX <= (x + sx) && w->PosY >= y && w->PosY <= (y + sy))
+         {
+            gRaceControl->OnComplete(w->WormTeam);
+         }
+      }
+   }
+}
+  
+CGUIText* curTimeGUI;
+CGUIText* bestTimeGUI;
+CGUIText* multiGUI[7];
+
+
+void SpawnTRaceControl(CEditorObject* obj)
+{
+  rc = new CTRaceControl(obj);
+};
+void SpawnTRaceFinish(CEditorObject* obj)
+{
+  fn = new CTRaceFinish(obj);
+};
+
+
+
+
+void timedrace_scr::InitGraphic()
+{
+  curTimeGUI = new CGUIText(GS->Disp, 16, 1);    
+  bestTimeGUI = new CGUIText(GS->Disp, 16, 1);
+  for (local i = 1; i <= 6; i++) multiGUI[i] = new CGUIText(GS->Disp, 16, 1);
+}

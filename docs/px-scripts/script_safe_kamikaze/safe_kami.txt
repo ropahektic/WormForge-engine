@@ -1,0 +1,67 @@
+require utils;
+
+bool allow_kami;
+int kami_allow_timer;
+
+void safe_kami::Init()
+{
+    keySync->AddKey(17); // Ctrl button;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+        if (CurWeapon->CheckName("Kamikaze") || CurWeapon->CheckName("Suicide Bomber") || CurWeapon->CheckName("Die"))
+        {
+            local workNow;
+            if (workNow)
+            {
+                if (keySync->KeyPressed(17))
+                {
+                    kami_allow_timer = 0;
+                    workNow = false;
+                }
+            }
+      // you have a bit more then 1 second after ctrl released to get Kami work.
+            if (kami_allow_timer < 55)        
+            {
+                kami_allow_timer++;
+                allow_kami = true;
+            }
+            else 
+            {
+                allow_kami = false;
+                workNow = true;
+            }
+        }
+    }
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if ( (Weap->CheckName("Kamikaze") || Weap->CheckName("Suicide Bomber") || Weap->CheckName("Die") ) && allow_kami) super;
+else if (Weap->CheckName("Kamikaze"))
+	{
+	local TeamNumber = GetTeamNumber(WormTeam);
+    GS->Info.AddWeaponEx(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);
+    ShowMessage("Hold CTRL and press space to use Kamikaze.");
+	return;
+	}
+else if (Weap->CheckName("Suicide Bomber"))
+	{
+	local TeamNumber = GetTeamNumber(WormTeam);
+    GS->Info.AddWeaponEx(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);
+    ShowMessage("Hold CTRL and press space to use Kamikaze.");
+	return;
+	}
+else if (Weap->CheckName("Die"))
+	{
+	local TeamNumber = GetTeamNumber(WormTeam);
+    GS->Info.AddWeaponEx(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);
+    ShowMessage("Hold CTRL and press space to use Kamikaze.");
+	return;
+	}
+else super;
+}

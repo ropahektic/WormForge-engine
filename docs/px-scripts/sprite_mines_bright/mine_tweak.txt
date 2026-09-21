@@ -1,0 +1,11 @@
+//mine tweak
+override void CDDQueue::AddSprite(fixed z,fixed x,fixed y,int unk,int sprite,fixed frame)
+{
+      if(sprite == 45)
+      {
+          SetColorMod(RGB(175,0,0),8);
+          super;
+          ClearColorMod();
+      }
+      else super;  
+}

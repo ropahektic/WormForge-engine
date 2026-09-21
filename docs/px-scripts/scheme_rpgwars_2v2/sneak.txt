@@ -1,0 +1,346 @@
+
+void sneak::InitGraphic()
+{
+}
+
+void sneak::Init()
+{
+}
+
+void sneak::FirstFrame()
+{
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+IsSneaky = false;
+IsVisible = true;
+WasSeenThisTurn = false;
+WasSeenThisFrame = false; //That bug was hard to find
+FrameTimer = 0;
+super;
+}
+
+
+bool IsColorVisible(int clr)
+{
+   if (IsReplay()) return true;
+   if (IsMultiplayer())
+   {
+        if (GG->machColors[GetLocalMachine()] & (1 << clr))
+        {
+           return true;
+        }
+
+   } else {
+        if (clr == GetTeamColor(Root->CurTeam))
+        {
+           return true;
+        }
+   }
+   return false;
+}
+
+bool IsTeamVisible(int team)
+{
+  return IsColorVisible(GetTeamColor(team));
+}
+
+bool DoIKnowHim(CWorm* worm)
+{
+   if (IsReplay()) return true;
+   return IsTeamVisible(worm->WormTeam);
+}
+
+override void CObject::ForceFocus(fixed x,fixed y)
+{
+   if (!IsMultiplayer())
+   {
+     super;
+   } else {
+     if (ClType == OC_Team)
+     {
+        local tm = CTeam(this);
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(tm->Index)))
+        {
+           super;
+        }
+     }
+     if (ClType == OC_Worm)
+     {
+        local wm = CWorm(this);
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(wm->WormTeam)))
+        {
+           super;
+        }
+     }
+   }
+}
+
+override void CGObject::LookAtMe(fixed x,fixed y,int priority)
+{
+/*   if (!IsMultiplayer())
+   {
+     super;
+   } else {
+     if (ClType == OC_Worm)
+     {
+        local wm = CWorm(this);
+        if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(wm->WormTeam)))
+        {
+           super;
+        }
+     }
+   }  */
+}
+
+
+override void CWorm::RenderWorm()
+{
+   if(IsSneaky == true && IsVisible == false)
+   {
+         if(DoIKnowHim(this) != true)
+         {
+         return;
+         }
+         else
+         {
+		 isInvisible = true;
+         SetColorMod(ARGB(100, 0, 0, 0), 4);
+         super;
+         ClearColorMod();
+         return;
+         }
+   }
+   else isInvisible = false;
+super;
+}
+
+override void CWorm::RenderDmgLabel()
+{
+   if(IsSneaky == true && IsVisible == false)
+   {
+         if(DoIKnowHim(this) != true)
+         {
+         return;
+         }
+   }
+super;
+}
+
+override void CWorm::RenderCrosshair()
+{
+   if(IsSneaky == true && IsVisible == false)
+   {
+         if(DoIKnowHim(this) != true)
+         {
+         return;
+         }
+   }
+super;
+}
+
+override void CWorm::RenderLabels()
+{
+   if(IsSneaky == true && IsVisible == false)
+   {
+         if(DoIKnowHim(this) != true)
+         {
+         return;
+         }
+   }
+super;
+}
+
+CWorm* GetRogue(int Team)
+{
+   for(local i = 1; i < Env->Objs.Count; i+=1)
+   {
+   local obj = Env->Objs.Objs[i];
+   if(obj == NullObj) continue;
+        if(obj->ClType == OC_Worm)
+        {
+            CWorm* wyrm;
+            wyrm = obj;
+            if(GetTeamNumber(wyrm->WormTeam) == Team && wyrm->IsSneaky == true)
+            {
+            if(StrCmp(wyrm->Class, "Rogue")) return wyrm;
+            }
+        }
+   }
+   return NullObj;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_FRAME)
+	{
+    if(gamestarted == 2)
+    	{
+    	local TeamNumber = GetTeamNumber(WormTeam);
+    	
+     	if(TeamNumber == 1)
+     		{
+     		int hitx1;
+		    int hity1;
+     		local flags = 2;
+     		//local obj1 = CWorm(Root->GetObject(2, 16 * 2 + 5));
+        	
+        		local obj1 = GetRogue(2);
+        		if (obj1 != NullObj)
+              		{
+            		CWorm* hitObject1 = TraceLine(this, PosX, PosY, obj1->PosX, obj1->PosY, flags, &hitx1, &hity1);
+
+            		if((TurnSide == -1 && obj1->PosX < PosX && hitObject1 == NullObj) || (TurnSide == 1 && obj1->PosX > PosX && hitObject1 == NullObj))
+            			{
+	            		obj1->IsVisible = true;
+	            		obj1->WasSeenThisFrame = true;
+    	        		obj1->WasSeenThisTurn = true;
+        	    		//GG->WriteToChat( 1, "Team 1 Worm is visible", false);
+            			}
+            		else
+	            		{
+	            		if(obj1->WasSeenThisFrame == false){obj1->IsVisible = false;}
+    	        		//GG->WriteToChat( 1, "Team 1 Worm is invisible", false);
+        	    		}
+					}
+        		}
+
+/////////////
+     	if(TeamNumber == 2)
+     		{
+     		int hitx2;
+     		int hity2;
+     		local flags = 2;
+     		//local obj2 = GetRogue(1);
+     		//local obj2 = CWorm(Root->GetObject(2, 16 * 1 + 5));
+        	
+        		local obj2 = GetRogue(1);
+        		if (obj2 != NullObj)
+              		{
+            		CWorm* hitObject2 = TraceLine(this, PosX, PosY, obj2->PosX, obj2->PosY, flags, &hitx2, &hity2);
+            		if((TurnSide == -1 && obj2->PosX < PosX && hitObject2 == NullObj) || (TurnSide == 1 && obj2->PosX > PosX && hitObject2 == NullObj))
+	            		{
+    	        		obj2->IsVisible = true;
+        	    		obj2->WasSeenThisFrame = true;
+            			obj2->WasSeenThisTurn = true;
+            			//GG->WriteToChat( 1, "Team 2 Worm is visible", false);
+            			}
+	            	else
+    	        		{
+        	    		if(obj2->WasSeenThisFrame == false){obj2->IsVisible = false;}
+            			//GG->WriteToChat( 1, "Team 2 Worm is invisible", false);
+            			}
+					}
+        		}
+
+    	}
+   	}
+
+CWorm* snd;
+snd = sender;
+
+if(snd != NullObj && snd->IsSneaky == true && snd->WasSeenThisTurn == false)
+    {
+    if(Type == M_GUNEXP)
+        {
+        if(sender->ClType == OC_Worm)
+            {
+            CMessageData msg;
+            msg.params[0]	= MData->params[0];
+            msg.fparams[1]	= MData->fparams[1];
+            msg.fparams[2]	= MData->fparams[2];
+            msg.fparams[3]	= MData->fparams[3];
+            msg.fparams[4]	= MData->fparams[4];
+            msg.params[5]	= 75;
+
+			if(IsArmored == true){msg.params[5] = 70;}
+            msg.params[6]	= MData->params[6];
+            super(snd,M_GUNEXP, 1032, &msg);
+            return;
+            }
+        }
+    }
+super;
+}
+
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+local w = GetCurrentWorm();
+if (w != NullObj)
+	{
+	local TeamNumber = GetTeamNumber(w->WormTeam);
+
+	if(TeamNumber == 1)
+		{
+		CWorm* rog1 = GetRogue(TeamNumber);
+		if(rog1 != NullObj)
+    		{
+       		if(rog1->WasSeenThisFrame == true)
+       			{
+         		rog1->FrameTimer = rog1->FrameTimer - 1;
+         		if(rog1->FrameTimer <= 0){rog1->FrameTimer = 2;}else{rog1->WasSeenThisFrame = false; rog1->FrameTimer = 0;}
+       			}
+    		}
+		}
+		
+	if(TeamNumber == 2)
+		{
+		CWorm* rog2 = GetRogue(TeamNumber);
+		if(rog2 != NullObj)
+    		{
+       		if(rog2->WasSeenThisFrame == true)
+       			{
+         		rog2->FrameTimer = rog2->FrameTimer - 1;
+         		if(rog2->FrameTimer <= 0){rog2->FrameTimer = 2;}else{rog2->WasSeenThisFrame = false; rog2->FrameTimer = 0;}
+       			}
+    		}
+		}
+	}
+super;
+}
+
+override void CWorm::DrawAim()
+{
+   if(IsSneaky == true && IsVisible == false)
+   {
+         if(DoIKnowHim(this) != true)
+         {
+         return;
+         }
+         else
+         {
+         //SpriteBuilder->aimSprite->handCol = ARGB(255, 255, 255, 255);
+         SpriteBuilder->aimColor = ARGB(50, 0, 0, 0);
+         SpriteBuilder->aimBlend = 4;
+         super;
+         SpriteBuilder->aimColor = ARGB(0, 255, 255, 255);
+         SpriteBuilder->aimBlend = 0;
+         return;
+         }
+   }
+super;
+}
+
+override void CWorm::DrawHand()
+{
+   if(IsSneaky == true && IsVisible == false)
+   {
+         if(DoIKnowHim(this) != true)
+         {
+         return;
+         }
+         else
+         {
+         SpriteBuilder->handColor = ARGB(50, 0, 0, 0);
+         SpriteBuilder->handBlend = 4;
+         super;
+         SpriteBuilder->handColor = ARGB(255, 255, 255, 255);
+         SpriteBuilder->handBlend = 0;
+         return;
+         }
+   }
+super;
+}

@@ -1,0 +1,52 @@
+CSprite* PunchSprite;
+CSprite* PunchStopSprite;
+
+void zombie_animation::InitGraphic()
+{
+    local spr5       = GetAttachment("punch.png");
+    PunchSprite     = LoadSprite(spr5, 3, 0);  
+    
+    local spr6       = GetAttachment("punchstop.png");
+    PunchStopSprite     = LoadSprite(spr6, 13, 0);     
+} 
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+    AnimPhase = 0.0;
+    AnimSpeed = 0.05;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Zombie == true)
+    {
+         if(Type == M_DRAWQUEUE)
+         {
+          //SPRITE DIRECTION CHANGING
+          local SpriteDir = 0;
+          if(TurnSide == 1){SpriteDir = 262144;}
+          //SPRITE LOADING   
+          local spr5 = PunchSprite->Index+SpriteDir;
+          local spr6 = PunchStopSprite->Index+SpriteDir;
+
+          //SPRITE APPLYING
+          if(FirePunchTimer > 1){AddSprite(6,PosX,PosY,1,spr5,AnimPhase);}
+          if(StopFirePunchTimer != 0 && AnimPhase  < 1.00){AddSprite(5,PosX,PosY,1,spr6,AnimPhase);}
+         }
+         
+         if(Type == M_FRAME)
+         {
+         //ANIMSPEED CHANGES
+         local animMP = 22;
+         if(FirePunchTimer != 1){AnimSpeed = 1/(3*animMP);}
+         if(StopFirePunchTimer != 0){AnimSpeed = 1/(1*animMP);}
+         //ANIMPHASE CHANGES
+         AnimPhase = AnimPhase + AnimSpeed;
+         if(FirePunchTimer == 1){StopFirePunchTimer = 1; AnimPhase = 0.00;} 
+         if(StopFirePunchTimer == 1 && AnimPhase > 1.00){StopFirePunchTimer = 0;}     
+         }
+    }    
+super;
+}

@@ -1,0 +1,16 @@
+//List of sprites
+CSprite* stick;
+
+
+void sb_sprites::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("sb.png"); 
+   stick = LoadSprite(f, 12, 0);
+
+   
+   //Let's override the sprites!
+   SetSpriteOverride(467, stick);
+
+}

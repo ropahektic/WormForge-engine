@@ -1,0 +1,511 @@
+require utils, utils_steps;
+
+// Reworked and improved by 0rang3
+
+CWorm* DrawingOne;
+CBitmap32* colour;
+CBitmap1* colour_rem;
+
+CBitmap* LadderRight;
+CBitmap* LadderRightMask;
+CBitmap* LadderLeft;
+CBitmap* LadderLeftMask;
+
+CBitmap* LadderBigRight;
+CBitmap* LadderBigRightMask;
+CBitmap* LadderBigLeft;
+CBitmap* LadderBigLeftMask;
+
+PixelInterface : CObject;
+string pixelmode;
+string pixelshape;
+string pixelfill;
+int lastX;
+int lastY;
+
+void tblox::InitGraphic()
+{
+    colour = MakeBitmap(512, 512);
+    colour_rem = new CBitmap1(512, 512);
+	local spr = GetAttachment("ladderright.png");              LadderRight = LoadImage(spr);
+    local spr = GetAttachment("ladderrightmask.png");          LadderRightMask = LoadImage(spr);
+    local spr = GetAttachment("ladderleft.png");               LadderLeft = LoadImage(spr);
+    local spr = GetAttachment("ladderleftmask.png");           LadderLeftMask = LoadImage(spr);
+    
+    local spr = GetAttachment("ladderbigright.png");              LadderBigRight = LoadImage(spr);
+    local spr = GetAttachment("ladderbigrightmask.png");          LadderBigRightMask = LoadImage(spr);
+    local spr = GetAttachment("ladderbigleft.png");               LadderBigLeft = LoadImage(spr);
+    local spr = GetAttachment("ladderbigleftmask.png");           LadderBigLeftMask = LoadImage(spr);
+}
+
+void tblox::FirstFrame()
+{
+   keySync->AddKey(189); // - button
+   keySync->AddKey(187); // + button
+   keySync->AddKey(16);  // Shift button
+   keySync->AddKey(9);   // Tab button
+   keySync->AddKey(219); // [ button
+   keySync->AddKey(221); // ] button
+   keySync->AddKey(76);  // L button
+   
+   new PixelInterface(Root);
+   
+   GG->WriteToChat(GG->curFont+3, "Pixel Builder controls:", false);
+   GG->WriteToChat(GG->curFont+3, "------------------------------------------------------------------------------------------", false);
+   GG->WriteToChat(GG->curFont+2, "Mode: TAB (Drawing and Erasing)", false);
+   GG->WriteToChat(GG->curFont+2, "Size: - and + (hold Shift to change in increments of 10)", false);
+   GG->WriteToChat(GG->curFont+2, "Shape: [ (Square and Circle)", false);
+   GG->WriteToChat(GG->curFont+2, "Fill: ] (Solid and Hollow)", false);
+   GG->WriteToChat(GG->curFont+2, "Ladder toggle: L (press [ to change direction and ] to change size)", false);
+   GG->WriteToChat(GG->curFont+3, "------------------------------------------------------------------------------------------", false);
+}
+
+PixelInterface::PixelInterface(CObject* parent)
+{
+    super(parent, GS);   
+    GUIn = MakeBitmap(110, 50);    
+}
+
+void PixelInterface::ListNDraw()
+{
+            Obj_Cur = GetCurrentWorm(); 
+            Worm_Cur = CWorm(Obj_Cur);
+
+                   local a = 0;
+                   local b = 0;
+                   local color = RGB(251, 245, 114);
+                                             
+                   local lsx = GS->landSelectX;
+                   local lsy = GS->landSelectY;
+                   
+                   if (lsx & 32768) lsx = lsx | (65535 << 16);
+                   if (lsy & 32768) lsy = lsy | (65535 << 16);       
+
+                          // Horizontal
+                          GUIn->HLine(0, GUIn->SX - 1, 0, color);
+                          GUIn->HLine(0, GUIn->SX - 1, GUIn->SY - 1, color);
+                          
+                          // Vertical
+                          GUIn->VLine(0, 0, GUIn->SY - 1, color);
+                          GUIn->VLine(GUIn->SX - 1, 0, GUIn->SY - 1, color);
+
+                          GUIn->Rect(1, 1, GUIn->SX - 2, GUIn->SY - 2, ARGB(127, 0, 0, 0));
+                                                                                       
+                                            // Desctiptions                          
+                          
+                          GS->Disp->DrawText(4, GUIn, 10, 3,  "Mode TAB : ", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 13, "Size -/+ : ", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 23, "Shape [ : ", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 33, "Fill ] : ", &a, &b);
+                                              
+
+                                            // Parametres                                                   
+                          if (DrawingOne != NullObj)
+                          {                          
+                            GS->Disp->DrawText(1, GUIn, 70, 3, pixelmode, &a, &b); 
+                            GS->Disp->DrawText(1, GUIn, 70, 13, ItoA(DrawingOne->pixelsize), &a, &b);
+                            GS->Disp->DrawText(1, GUIn, 70, 23, pixelshape, &a, &b);
+                            GS->Disp->DrawText(1, GUIn, 70, 33, pixelfill, &a, &b);  
+                          }
+}
+
+void PixelInterface::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if (Type == M_FRAME)
+    {           
+    ListNDraw();
+    }
+ if (Type == M_DRAWQUEUE)
+    {         
+    if (DrawingOne != NullObj) 
+        {
+        if(DrawingOne->CurWeapon->CheckName("Building Pixel"))
+           {
+           AddBitmap(0, DrawingOne->PosX, DrawingOne->PosY+50, GUIn,110,50,0);
+           }
+        }               
+    }
+}
+
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+         super;
+         Size = 10;
+         Circle = false;
+         Add = true;
+         Hollow = false;
+         LadderDraw = false;
+         LadderSide = false;
+		 LadderBig = false;
+			  
+         pixelsize = Size;
+         pixelmode = "Draw";   
+         pixelshape = "Square";
+         pixelfill = "Solid";
+         pixelplaced = false;
+
+		 MaxSize = 512;
+		 MaxPixelSize = MaxSize;
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+   super;
+            
+   if(Type == M_TURNEND)
+   {
+   pixelmode = "Draw";   
+   pixelshape = "Square";
+   pixelfill = "Solid";
+   pixelplaced = false;   
+   }
+   
+   if(Type == M_TURNBEGIN)
+   {
+   pixelmode = "Draw";
+   pixelshape = "Square";
+   pixelfill = "Solid";
+   pixelplaced = false;
+   }
+   
+   if(Type == M_FRAME)
+   {
+      if(CurWeapon->CheckName("Building Pixel"))
+      {            
+         local Team = CTeam(GetObject(21, WormTeam));
+         Team->AllowSelectDelay = false;
+         Team->AllowSelectBounce = false;
+         
+         local cw = GetCurrentWorm();
+		 local dx = cw->PosX - GS->landSelectX;
+         local dy = cw->PosY - GS->landSelectY;
+
+         local distance = sqrt(dx * dx + dy * dy);
+
+         if (distance > 300)
+            {
+            local angle = atan2(dx, dy);
+            GS->landSelectX = cw->PosX - 300 * sin(angle);
+            GS->landSelectY = cw->PosY - 300 * cos(angle);
+            }
+         
+         if(!keySync->KeyPressed(16))
+         {
+            if(keySync->KeyPressedNow(189)) // - button
+            {
+            Size -= 1;
+            pixelsize = Size;
+            }         
+            if(keySync->KeyPressedNow(187)) // + button
+            {
+            Size += 1;
+            pixelsize = Size;
+            }            
+         }
+         
+         else if(keySync->KeyPressed(16)) // Shift & -+ button
+         {
+            if(keySync->KeyPressedNow(189)) 
+            {
+            Size -= 10;
+            pixelsize = Size;
+            }         
+            if(keySync->KeyPressedNow(187)) 
+            {
+            Size += 10;
+            pixelsize = Size;
+            }            
+         }
+         
+         if(keySync->KeyPressedNow(9)) // Tab button
+         {
+         if(Add) {Add = false; pixelmode = "Erase";}
+         else    {Add = true; pixelmode  = "Draw";}
+         }
+
+         if(keySync->KeyPressedNow(219)) // [ button
+         {
+         if(!LadderDraw)
+				{
+         		if(Circle) {Circle = false; pixelshape = "Square";}
+         		else {Circle = true;  pixelshape = "Circle";}
+				}
+         else
+				{
+				if(!LadderSide) {LadderSide = true; pixelshape = "Left";}
+				else {LadderSide = false; pixelshape = "Right";}
+				}
+		 }
+         
+         if(keySync->KeyPressedNow(221)) // ] button
+         {
+         if(!LadderDraw)
+				{
+         		if(Hollow) {Hollow = false; pixelfill = "Solid";}
+         		else {Hollow = true;  pixelfill = "Hollow";}
+				}
+         else
+				{
+				if(!LadderBig) {LadderBig = true; pixelfill = "Big";}
+				else {LadderBig = false; pixelfill = "Small";}
+				}
+         }
+         
+         if(keySync->KeyPressedNow(76)) // L button
+         {
+         if(LadderDraw)
+		 	 {
+			 LadderDraw = false;
+			 Size = 10;
+			 Circle = false;
+			 Add = true;
+			 Hollow = false;
+			 
+			 pixelsize = Size;
+             pixelmode = "Draw";
+			 pixelshape = "Square";
+			 pixelfill = "Solid";
+			 }
+         else
+		 	 {
+			 LadderDraw = true;
+			 LadderSide = false;
+			 LadderBig = false;
+			 pixelmode = "Ladder";
+			 pixelshape = "Right";
+			 pixelfill = "Small";
+			 Size = 1;
+			 pixelsize = Size;
+			 }
+         }
+         
+         if(Size > MaxSize) Size = MaxSize;
+         if(Size < 1) Size = 1;
+         
+         if(pixelsize > MaxPixelSize) pixelsize = MaxPixelSize;
+         if(pixelsize < 1) pixelsize = 1;
+                   
+      }
+   }
+   
+   if (Type == M_SETWEAPON && pixelplaced == true)
+    	{
+    	GS->landSelectX = lastX;
+    	GS->landSelectY = lastY;
+    	}
+
+   if (Type == M_FRAME)
+    	{
+       	local w = GetCurrentWorm();
+       	if (w != NullObj) DrawingOne = CWorm(w);
+
+       	if (selectingWorm && DrawingOne == this)
+       		{
+          	if (ObjState == WS_IDLE || ObjState == WS_AIMING) {}
+          	else {selectingWorm = false;}
+       		}
+    	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MakeCircle(CBitmap1* msk, int rad, int clr)
+{
+   int x = 0;
+   int y = rad;
+   int d = rad - 1;
+   while(y>=x) { 
+        msk->VLine(x+rad, -y+rad, y+rad, clr);
+        msk->VLine(-x+rad, -y+rad, y+rad, clr);
+        msk->VLine(y+rad, -x+rad, x+rad, clr);
+        msk->VLine(-y+rad, -x+rad, x+rad, clr);
+	if(d >= x*2) { 
+		d = d-x*2-1;
+		x++;
+	}
+	else if(d <= 2*(rad-y)) {
+		d = d+2*y-1;
+		y = y-1;
+        }	
+	else { 
+		d = d+2*(y-x-1);
+		y = y-1;
+		x = x+1;
+	}
+  }
+}
+
+void MakeCircleHollow(CBitmap32* msk, int rad, int clr)
+{
+   int x = 0;
+   int y = rad;
+   int d = rad - 1;
+   while(y>=x) { 
+        msk->SetPixel(x+rad, y+rad, clr);
+	msk->SetPixel(y+rad, x+rad, clr);
+	msk->SetPixel(-x+rad, y+rad, clr);
+	msk->SetPixel(-y+rad, x+rad, clr);
+	msk->SetPixel(x+rad, -y+rad, clr);
+	msk->SetPixel(y+rad, -x+rad, clr);  
+	msk->SetPixel(-x+rad, -y+rad, clr);
+	msk->SetPixel(-y+rad, -x+rad, clr);
+	if(d >= x*2) { 
+		d = d-x*2-1;
+		x++;
+	}
+	else if(d <= 2*(rad-y)) {
+		d = d+2*y-1;
+		y = y-1;
+        }	
+	else { 
+		d = d+2*(y-x-1);
+		y = y-1;
+		x = x+1;
+	}
+  }
+}
+
+void MakeCircle(CBitmap32* msk, int rad, int clr)
+{
+   int x = 0;
+   int y = rad;
+   int d = rad - 1;
+   while(y>=x) { 
+        msk->VLine(x+rad, -y+rad, y+rad, clr);
+        msk->VLine(-x+rad, -y+rad, y+rad, clr);
+        msk->VLine(y+rad, -x+rad, x+rad, clr);
+        msk->VLine(-y+rad, -x+rad, x+rad, clr);
+	if(d >= x*2) { 
+		d = d-x*2-1;
+		x++;
+	}
+	else if(d <= 2*(rad-y)) {
+		d = d+2*y-1;
+		y = y-1;
+        }	
+	else { 
+		d = d+2*(y-x-1);
+		y = y-1;
+		x = x+1;
+	}
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if(Weap->CheckName("Building Pixel"))
+    {
+    pixelplaced = true;
+    local X = Desc->AddX+3;  // Moving this a little so that center of BitMap appeared at the point of cursor.
+    local Y = Desc->AddY;
+    lastX = X-3;
+    lastY = Y;
+      
+    if(LadderDraw == true)	// making a ladder
+		{
+		if(LadderSide)
+			{
+			if(LadderBig) {GG->land->Draw(LadderBigLeft, X-12, Y-298);			GG->land->ApplyCustomMask(LadderBigLeftMask, X-12, Y-298, CM_CLEAR);}
+		 	else {GG->land->Draw(LadderLeft, X-12, Y-136);			GG->land->ApplyCustomMask(LadderLeftMask, X-12, Y-136, CM_CLEAR);}
+		 	}
+		 else
+		    {
+		    if(LadderBig) {GG->land->Draw(LadderBigRight, X-12, Y-298);			GG->land->ApplyCustomMask(LadderBigRightMask, X-12, Y-298, CM_CLEAR);}
+		 	else {GG->land->Draw(LadderRight, X-12, Y-136);           GG->land->ApplyCustomMask(LadderRightMask, X-12, Y-136, CM_CLEAR);}
+		    }
+		 }
+
+	else
+    	{
+      	if(Circle == false)   // making a rectangle
+         	{
+            if(Add)
+              	{
+                colour->Rect(0, 0, 512, 512, RGB(0,0,0));
+                colour->Rect(0,0,Size,Size,GetTeamColorRGB(GetWormColor(this)));
+                GG->land->Draw(colour, X-Size/2, Y-Size/2);
+
+        		for(i = 0; i < Env->Objs.Count; i++)
+      				{
+          			local obj = CGObject(Env->Objs.Objs[i]);
+          			if(obj == NullObj) continue;
+          			if(obj != NullObj)
+             			{
+             			if(obj->IsInBox( X-Size/2, Y-Size/2, X+Size/2, Y+Size/2))                  // left, top, right, bottom
+             				{
+		              		GG->land->ApplyMask(4, obj->PosX-5, obj->PosY+5);
+		              		GG->land->ApplyMask(4, obj->PosX-5, obj->PosY-5);
+		              		GG->land->ApplyMask(4, obj->PosX+5, obj->PosY+5);
+		              		GG->land->ApplyMask(4, obj->PosX+5, obj->PosY-5);
+							}
+						}
+					}
+                          
+                if(Hollow && Size > 10)
+                    {
+                    colour_rem->Rect(0,0,512,512,0);
+                    colour_rem->Rect(0,0,Size-10,Size-10,1);
+                    GG->land->ApplyCustomMask(colour_rem, X-(Size-10)/2, Y-(Size-10)/2, CM_CLEAR);
+                    }
+              	}
+
+			else
+             	{
+                colour_rem->Rect(0,0,512,512,0);
+                colour_rem->Rect(0,0,Size,Size,1);
+                GG->land->ApplyCustomMask(colour_rem, X-(Size/2), Y-(Size/2), CM_CLEAR);
+				}
+         	}
+      	else   // making a circle
+         	{
+            if(Add)
+              	{
+                colour->Rect(0, 0, 512, 512, RGB(0,0,0));
+                MakeCircle(colour,Size/2,GetTeamColorRGB(GetWormColor(this))); 
+                GG->land->Draw(colour, X-Size/2, Y-Size/2);
+                          
+                for(i = 0; i < Env->Objs.Count; i++)
+      				{
+          			local obj = CGObject(Env->Objs.Objs[i]);
+          			if(obj == NullObj) continue;
+          			if(obj != NullObj)
+             			{
+             			if(obj->IsInBox( X-Size/2, Y-Size/2, X+Size/2, Y+Size/2))                  // left, top, right, bottom
+             				{
+		              		GG->land->ApplyMask(4, obj->PosX-5, obj->PosY+5);
+		              		GG->land->ApplyMask(4, obj->PosX-5, obj->PosY-5);
+		              		GG->land->ApplyMask(4, obj->PosX+5, obj->PosY+5);
+		              		GG->land->ApplyMask(4, obj->PosX+5, obj->PosY-5);
+							}
+						}
+					}
+                          
+                if(Hollow && Size > 10)
+                	{
+                    colour_rem->Rect(0,0,512,512,0);
+                    MakeCircle(colour_rem, Size/2-5, 1);
+                    GG->land->ApplyCustomMask(colour_rem, X-Size/2+5, Y-Size/2+5, CM_CLEAR);
+                    }
+              	}
+
+			else
+              	{
+                colour_rem->Rect(0,0,512,512,0);
+                MakeCircle(colour_rem, Size/2, 1);
+                GG->land->ApplyCustomMask(colour_rem, X-Size/2, Y-Size/2, CM_CLEAR);
+              	}
+         	}
+      	}
+    return;
+	}
+         
+if (Weap->CheckName("Select Worm"))
+    {
+    selectingWorm = true;
+    }
+         
+super;
+}

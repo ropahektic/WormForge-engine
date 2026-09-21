@@ -1,0 +1,23 @@
+require utils, p_sprite_builder, utils_pyroman, utils_steps;
+
+CSprite* fsworm1;
+CSprite* fsworm2;
+CSprite* sworm_aiming;
+CSprite* wwalker;
+
+void sworm_spr::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("fsworm1.png"); 
+   fsworm1 = LoadSprite(f, 32, 1);
+   f = GetAttachment("fsworm2.png"); 
+   fsworm2 = LoadSprite(f, 32, 1);
+   f = GetAttachment("spb_sworm.png"); 
+   sworm_aiming = LoadSprite(f, 1, 0);
+   f = GetAttachment("wwalker.png"); 
+   wwalker = LoadSprite(f, 15, 1);
+   
+   SetSpriteOverride(154, fsworm1);
+   SetSpriteOverride(155, fsworm2);
+   SetSpriteOverride(728, wwalker);
+}

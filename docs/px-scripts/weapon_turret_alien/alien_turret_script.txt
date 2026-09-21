@@ -1,0 +1,28 @@
+//List of sprites
+CSprite* energyballc;
+CSoundFile* charging;
+
+void alien_turret_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("Energy Ball C.png"); 
+   energyballc = LoadSprite(f, 1, 0);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(730, energyballc);
+}
+
+void alien_turret_script::Init()
+{
+	charging       = new CSoundFile(GetAttachment("AT Charging.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Alien Turret"))
+  {
+             charging->Play(1.25, 0.0, false);
+  }
+  super;
+}

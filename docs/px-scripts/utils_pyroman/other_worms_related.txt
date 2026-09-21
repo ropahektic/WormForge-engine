@@ -1,0 +1,37 @@
+CWorm* CurrentWorm;             // allows know who was current worm efen after turn ended + current worm itself, if turn active.
+
+float CWLastPosX;               // previous positions of CurrentWorm
+float CWLastPosY;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    p_check1 = true;
+    p_px0;
+    p_py0;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    local w = GetCurrentWorm();
+    if (Type == M_FRAME)
+    {
+        if (w != NullObj && w == this) 
+        {
+            CurrentWorm = CWorm(w);
+
+            if (p_check1) 
+            {
+                p_px0 = PosX; p_py0 = PosY;
+                p_check1 = false;
+            }
+            else
+            {
+                CWLastPosX = p_px0;
+                CWLastPosY = p_py0;
+                p_check1 = true;
+            }
+        }
+    }
+}

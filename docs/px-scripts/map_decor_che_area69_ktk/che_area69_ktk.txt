@@ -1,0 +1,730 @@
+require utils;
+
+#che_area69_ktk
+
+$editor
+ 
+ $object area69_base                  // Name your object 1
+  $image "area69_base.png"            // Name of your png file with object
+  $autoname area69_base               // Name for editor
+  $func Spawnarea69_base              // Name of function
+  $origin -98 -51             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_bunker_left                 // Name your object 2
+  $image "area69_bunker_left.png"           // Name of your png file with object
+  $autoname area69_bunker_left              // Name for editor
+  $func Spawnarea69_bunker_left             // Name of function
+  $origin -53 -26             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_bunker_right                   // Name your object 3
+  $image "area69_bunker_right.png"             // Name of your png file with object
+  $autoname area69_bunker_right                // Name for editor
+  $func Spawnarea69_bunker_right               // Name of function
+  $origin -50 -26             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_camper                  // Name your object 4
+  $image "area69_camper.png"            // Name of your png file with object
+  $autoname area69_camper               // Name for editor
+  $func Spawnarea69_camper              // Name of function
+  $origin -121 -52             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_fence                  // Name your object 5
+  $image "area69_fence.png"            // Name of your png file with object
+  $autoname area69_fence               // Name for editor
+  $func Spawnarea69_fence              // Name of function
+  $origin -100 -119             // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_radar                  // Name your object 6
+  $image "area69_radar.png"            // Name of your png file with object
+  $autoname area69_radar               // Name for editor
+  $func Spawnarea69_radar              // Name of function
+  $origin -134 -134                       // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_railing                  // Name your object 7
+  $image "area69_railing.png"            // Name of your png file with object
+  $autoname area69_railing               // Name for editor
+  $func Spawnarea69_railing              // Name of function
+  $origin -90 -45                       // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_screen                  // Name your object 8
+  $image "area69_screen.png"            // Name of your png file with object
+  $autoname area69_screen               // Name for editor
+  $func Spawnarea69_screen              // Name of function
+  $origin -91 -112                       // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_wall_beige                  // Name your object 9
+  $image "area69_wall_beige.png"            // Name of your png file with object
+  $autoname area69_wall_beige               // Name for editor
+  $func Spawnarea69_wall_beige              // Name of function
+  $origin -67 -134                       // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_wall_black                  // Name your object 10
+  $image "area69_wall_black.png"            // Name of your png file with object
+  $autoname area69_wall_black               // Name for editor
+  $func Spawnarea69_wall_black              // Name of function
+  $origin -91 -112                       // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object area69_wall_green                  // Name your object 11
+  $image "area69_wall_green.png"            // Name of your png file with object
+  $autoname area69_wall_green               // Name for editor
+  $func Spawnarea69_wall_green              // Name of function
+  $origin -215 -154                       // Set these numbers as negatives of x = half of width, y = hight
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+
+$end 
+
+////////////////////////////////////////////////////////////////////////////////
+
+CSpriterarea69_base : CObject;           // Object function for 1
+CSpriterarea69_bunker_left : CObject;         // Object function for 2
+CSpriterarea69_bunker_right : CObject;       // Object function for 3
+CSpriterarea69_camper : CObject;            // Object function for 4
+CSpriterarea69_fence : CObject;            // Object function for 5
+CSpriterarea69_radar : CObject;       // Object function for 6
+CSpriterarea69_railing : CObject;           // Object function for 7
+CSpriterarea69_screen : CObject;         // Object function for 8
+CSpriterarea69_wall_beige : CObject;       // Object function for 9
+CSpriterarea69_wall_black : CObject;            // Object function for 10
+CSpriterarea69_wall_green : CObject;            // Object function for 11
+
+CSprite* area69_base;                   // Sprite function for 1
+CSprite* area69_bunker_left;            // Sprite function for 2
+CSprite* area69_bunker_right;           // Sprite function for 3
+CSprite* area69_camper;                 // Sprite function for 4
+CSprite* area69_fence;                  // Sprite function for 5
+CSprite* area69_radar;                  // Sprite function for 6
+CSprite* area69_railing;                // Sprite function for 7
+CSprite* area69_screen;                 // Sprite function for 8
+CSprite* area69_wall_beige;             // Sprite function for 9
+CSprite* area69_wall_black;             // Sprite function for 10
+CSprite* area69_wall_green;             // Sprite function for 11
+
+////////////////////////////////////////////////////////////////////////////////
+
+void che_area69_ktk::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("area69_base.png");				area69_base = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_bunker_left.png");		area69_bunker_left = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_bunker_right.png");		area69_bunker_right = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_camper.png");				area69_camper = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_fence.png");				area69_fence = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_radar.png");				area69_radar = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_railing.png");			area69_railing = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_screen.png");				area69_screen = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_wall_beige.png");			area69_wall_beige = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_wall_black.png");			area69_wall_black = LoadSprite(f, 1, 0);
+    f = GetAttachment("area69_wall_green.png");			area69_wall_green = LoadSprite(f, 1, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// First Object Settings
+
+CSpriterarea69_base::CSpriterarea69_base(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(25*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(25*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Second Object Settings
+
+CSpriterarea69_bunker_left::CSpriterarea69_bunker_left(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(13*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(13*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Third Object Settings
+
+CSpriterarea69_bunker_right::CSpriterarea69_bunker_right(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(13*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(13*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Fourth Object Settings
+
+CSpriterarea69_camper::CSpriterarea69_camper(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(25*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(25*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Fifth Object Settings
+
+CSpriterarea69_fence::CSpriterarea69_fence(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(60*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(60*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Sixth Object Settings
+
+CSpriterarea69_radar::CSpriterarea69_radar(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(67*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(67*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Seventh Object Settings
+
+CSpriterarea69_railing::CSpriterarea69_railing(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+
+  newx = x+(22*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(22*cos(rot))*scale;      // number is half of hight of your image
+
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;
+}
+// Eighth Object Settings
+
+CSpriterarea69_screen::CSpriterarea69_screen(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+
+  newx = x+(56*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(56*cos(rot))*scale;      // number is half of hight of your image
+
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;
+}
+
+// Nineth Object Settings
+
+CSpriterarea69_wall_beige::CSpriterarea69_wall_beige(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+
+  newx = x+(67*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(67*cos(rot))*scale;      // number is half of hight of your image
+
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;
+}
+
+// Tenth Object Settings
+
+CSpriterarea69_wall_black::CSpriterarea69_wall_black(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+
+  newx = x+(56*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(56*cos(rot))*scale;      // number is half of hight of your image
+
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;
+}
+
+// Eleventh Object Settings
+
+CSpriterarea69_wall_green::CSpriterarea69_wall_green(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+
+  newx = x+(77*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(77*cos(rot))*scale;      // number is half of hight of your image
+
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Draw First Object 
+
+void CSpriterarea69_base::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_base->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Second Object 
+        
+void CSpriterarea69_bunker_left::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_bunker_left->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Third Object 
+
+void CSpriterarea69_bunker_right::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_bunker_right->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Fourth Object 
+        
+void CSpriterarea69_camper::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_camper->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Fifth Object 
+        
+void CSpriterarea69_fence::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_fence->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Sixth Object 
+        
+void CSpriterarea69_radar::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_radar->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Seventh Object
+
+void CSpriterarea69_railing::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_railing->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp);
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Eighth Object
+
+void CSpriterarea69_screen::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_screen->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp);
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Nineth Object
+
+void CSpriterarea69_wall_beige::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_wall_beige->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp);
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Tenth Object
+
+void CSpriterarea69_wall_black::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_wall_black->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp);
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Eleventh Object
+
+void CSpriterarea69_wall_green::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = area69_wall_green->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp);
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Spawn Objects
+
+void Spawnarea69_base(CEditorObject* obj){zone = new CSpriterarea69_base(obj);}
+void Spawnarea69_bunker_left(CEditorObject* obj){zone = new CSpriterarea69_bunker_left(obj);}
+void Spawnarea69_bunker_right(CEditorObject* obj){zone = new CSpriterarea69_bunker_right(obj);}
+void Spawnarea69_camper(CEditorObject* obj){zone = new CSpriterarea69_camper(obj);}
+void Spawnarea69_fence(CEditorObject* obj){zone = new CSpriterarea69_fence(obj);}
+void Spawnarea69_radar(CEditorObject* obj){zone = new CSpriterarea69_radar(obj);}
+void Spawnarea69_railing(CEditorObject* obj){zone = new CSpriterarea69_railing(obj);}
+void Spawnarea69_screen(CEditorObject* obj){zone = new CSpriterarea69_screen(obj);}
+void Spawnarea69_wall_beige(CEditorObject* obj){zone = new CSpriterarea69_wall_beige(obj);}
+void Spawnarea69_wall_black(CEditorObject* obj){zone = new CSpriterarea69_wall_black(obj);}
+void Spawnarea69_wall_green(CEditorObject* obj){zone = new CSpriterarea69_wall_green(obj);}

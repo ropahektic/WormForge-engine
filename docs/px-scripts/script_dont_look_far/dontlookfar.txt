@@ -1,0 +1,19 @@
+require utils;
+
+override void CGObject::LookAtMe(fixed x,fixed y,int priority)
+{
+  if (#BEE) if (this is CBee)
+  {
+  CBee* bee = CBee(this);
+  priority = 160;
+  if (bee->beeTarget!=NullObj)  bee->priority = 12;
+  super;
+  return;
+  }
+  else
+  {
+  if (x<290 || y<-240|| x>GS->LevelSX+290 ) priority = 150;
+  if (this is CWorm == true) if (this == GetCurrentWorm()) priority = 12;
+  super;
+  }
+}

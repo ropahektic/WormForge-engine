@@ -1,0 +1,12 @@
+CSprite* sidewinderstt;
+
+void sprite_466::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("sidewinderstt.png");
+    sidewinderstt = LoadSprite(f, 9, 0);
+    //f = GetAttachment("sidewinderst_old.png");
+    //sidewinderst = LoadSprite(f, 7, 0);
+
+    SetSpriteOverride(466, sidewinderstt);
+}

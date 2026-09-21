@@ -1,0 +1,261 @@
+// Golf course elements by raffie
+require utils;
+
+$editor
+
+$object HoleFlag
+  $origin 0 -136
+  $image "flag_prev.png"
+  $radius 17
+  $autoname map_hole
+  $func SpawnHoleFlag
+  $param Hole_Number int 1
+  $param Color enum 3 Grey Red Blue
+  $param Par int 4
+  $param Z_Layer int 11
+  $param LastHole bool false
+ $object_end
+
+ $object HoleStart
+  $origin -15 -15
+  $image "golfzonetype.png"
+  $radius 17
+  $autoname map_start
+  $func SpawnNextHole
+  $param HoleNumber int 2
+  $param Restart_Counter bool false
+  $param Direction enum 2 LEFT_to_RIGHT RIGHT_to_LEFT
+ $object_end 
+$end
+
+CGolfNewSpriterHole : CObject;
+CGolfNewHoleStart : CObject;
+
+//Sprites
+
+CSprite*golfFlag1_blue;
+CSprite*golfFlag1_red;
+CSprite*golfFlag1_grey;
+CSprite*golfFlag2_blue;
+CSprite*golfFlag2_red;
+CSprite*golfFlag2_grey;
+CSprite*golfFlag3_blue;
+CSprite*golfFlag3_red;
+CSprite*golfFlag3_grey;
+CSprite*golfFlag4_blue;
+CSprite*golfFlag4_red;
+CSprite*golfFlag4_grey;
+CSprite*golfFlag5_blue;
+CSprite*golfFlag5_red;
+CSprite*golfFlag5_grey;
+CSprite*golfFlag6_blue;
+CSprite*golfFlag6_red;
+CSprite*golfFlag6_grey;
+CSprite*golfFlag7_blue;
+CSprite*golfFlag7_red;
+CSprite*golfFlag7_grey;
+CSprite*golfFlag8_blue;
+CSprite*golfFlag8_red;
+CSprite*golfFlag8_grey;
+CSprite*golfFlag9_blue;
+CSprite*golfFlag9_red;
+CSprite*golfFlag9_grey;
+CSprite*golfFlag_final;
+
+CSprite*golfStartSign1;
+CSprite*golfStartSign2;
+CSprite*golfStartSign3;
+CSprite*golfStartSign4;
+CSprite*golfStartSign5;
+CSprite*golfStartSign6;
+CSprite*golfStartSign7;
+CSprite*golfStartSign8;
+CSprite*golfStartSign9;
+
+
+void golfcourse_flags::InitGraphic()
+{
+	CFile *f;
+        f = GetAttachment("flag1_blue.png");		        golfFlag1_blue = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag1_red.png");		        golfFlag1_red = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag1_grey.png");		        golfFlag1_grey = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag2_blue.png");		        golfFlag2_blue = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag2_red.png");		        golfFlag2_red = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag2_grey.png");		        golfFlag2_grey = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag3_blue.png");		        golfFlag3_blue = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag3_red.png");		        golfFlag3_red = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag3_grey.png");		        golfFlag3_grey = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag4_blue.png");		        golfFlag4_blue = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag4_red.png");		        golfFlag4_red = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag4_grey.png");		        golfFlag4_grey = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag5_blue.png");		        golfFlag5_blue = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag5_red.png");		        golfFlag5_red = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag5_grey.png");		        golfFlag5_grey = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag6_blue.png");		        golfFlag6_blue = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag6_red.png");		        golfFlag6_red = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag6_grey.png");		        golfFlag6_grey = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag7_blue.png");		        golfFlag7_blue = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag7_red.png");		        golfFlag7_red = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag7_grey.png");		        golfFlag7_grey = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag8_blue.png");		        golfFlag8_blue = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag8_red.png");		        golfFlag8_red = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag8_grey.png");		        golfFlag8_grey = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag9_blue.png");		        golfFlag9_blue = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag9_red.png");		        golfFlag9_red = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag9_grey.png");		        golfFlag9_grey = LoadSprite(f, 5, 0);
+        f = GetAttachment("flag_final.png");		        golfFlag_final = LoadSprite(f, 5, 0);
+        
+        f = GetAttachment("start_sign1.png");		        golfStartSign1 = LoadSprite(f, 1, 0);
+        f = GetAttachment("start_sign2.png");		        golfStartSign2 = LoadSprite(f, 1, 0);
+        f = GetAttachment("start_sign3.png");		        golfStartSign3 = LoadSprite(f, 1, 0);
+        f = GetAttachment("start_sign4.png");		        golfStartSign4 = LoadSprite(f, 1, 0);
+        f = GetAttachment("start_sign5.png");		        golfStartSign5 = LoadSprite(f, 1, 0);
+        f = GetAttachment("start_sign6.png");		        golfStartSign6 = LoadSprite(f, 1, 0);
+        f = GetAttachment("start_sign7.png");		        golfStartSign7 = LoadSprite(f, 1, 0);
+        f = GetAttachment("start_sign8.png");		        golfStartSign8 = LoadSprite(f, 1, 0);
+        f = GetAttachment("start_sign9.png");		        golfStartSign9 = LoadSprite(f, 1, 0);
+}
+
+//Flag
+CGolfNewSpriterHole::CGolfNewSpriterHole(CEditorObject* aobj)
+{
+  super(Root, GS);
+  //scale = 0.33;
+  scale = 1;
+  x = aobj->PosX + 20 *scale;
+  //y = aobj->PosY - 68 *scale;
+  //y = aobj->PosY - 64 *scale;
+  y = aobj->PosY - 58 *scale;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+  hx1 = x-25;
+  hx2 = x-5;
+  hy1 = y+46;
+  hy2 = y+58;
+  par = aobj->GetInt("Par");
+  hole = aobj->GetInt("Hole_Number");
+  flagColor = aobj->GetString("Color");
+
+  lastHole = false;
+  lastHole = aobj->GetBool("LastHole");
+  
+  if(lastHole == false){
+    if(hole == 1)
+    {
+      if (StrCmp(aobj->GetString("Color"), "Red")) sprite = golfFlag1_red->Index;
+      if (StrCmp(aobj->GetString("Color"), "Yellow")) sprite = golfFlag1_grey->Index;
+      if (StrCmp(aobj->GetString("Color"), "Blue")) sprite = golfFlag1_blue->Index;               
+    }else if(hole == 2)
+    {
+      if (StrCmp(aobj->GetString("Color"), "Red")) sprite = golfFlag2_red->Index;
+      if (StrCmp(aobj->GetString("Color"), "Yellow")) sprite = golfFlag2_grey->Index;
+      if (StrCmp(aobj->GetString("Color"), "Blue")) sprite = golfFlag2_blue->Index;               
+    }else if(hole == 3)
+    {
+      if (StrCmp(aobj->GetString("Color"), "Red")) sprite = golfFlag3_red->Index;
+      if (StrCmp(aobj->GetString("Color"), "Yellow")) sprite = golfFlag3_grey->Index;
+      if (StrCmp(aobj->GetString("Color"), "Blue")) sprite = golfFlag3_blue->Index;               
+    }else if(hole == 4)
+    {
+      if (StrCmp(aobj->GetString("Color"), "Red")) sprite = golfFlag4_red->Index;
+      if (StrCmp(aobj->GetString("Color"), "Yellow")) sprite = golfFlag4_grey->Index;
+      if (StrCmp(aobj->GetString("Color"), "Blue")) sprite = golfFlag4_blue->Index;               
+    }else if(hole == 5)
+    {
+      if (StrCmp(aobj->GetString("Color"), "Red")) sprite = golfFlag5_red->Index;
+      if (StrCmp(aobj->GetString("Color"), "Yellow")) sprite = golfFlag5_grey->Index;
+      if (StrCmp(aobj->GetString("Color"), "Blue")) sprite = golfFlag5_blue->Index;               
+    }else if(hole == 6)
+    {
+      if (StrCmp(aobj->GetString("Color"), "Red")) sprite = golfFlag6_red->Index;
+      if (StrCmp(aobj->GetString("Color"), "Yellow")) sprite = golfFlag6_grey->Index;
+      if (StrCmp(aobj->GetString("Color"), "Blue")) sprite = golfFlag6_blue->Index;               
+    }else if(hole == 7)
+    {
+      if (StrCmp(aobj->GetString("Color"), "Red")) sprite = golfFlag7_red->Index;
+      if (StrCmp(aobj->GetString("Color"), "Yellow")) sprite = golfFlag7_grey->Index;
+      if (StrCmp(aobj->GetString("Color"), "Blue")) sprite = golfFlag7_blue->Index;               
+    }else if(hole == 8)
+    {
+      if (StrCmp(aobj->GetString("Color"), "Red")) sprite = golfFlag8_red->Index;
+      if (StrCmp(aobj->GetString("Color"), "Yellow")) sprite = golfFlag8_grey->Index;
+      if (StrCmp(aobj->GetString("Color"), "Blue")) sprite = golfFlag8_blue->Index;               
+    }else if(hole == 9)
+    {
+      if (StrCmp(aobj->GetString("Color"), "Red")) sprite = golfFlag9_red->Index;
+      if (StrCmp(aobj->GetString("Color"), "Yellow")) sprite = golfFlag9_grey->Index;
+      if (StrCmp(aobj->GetString("Color"), "Blue")) sprite = golfFlag9_blue->Index;               
+    }
+  
+
+    }else{ sprite = golfFlag_final->Index; }
+   
+  flagAnimTimer = 0.0;
+}
+
+void CGolfNewSpriterHole::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        AddSpriteEx( z, x, y, sprite, flagAnimTimer, rot, scale);
+//        AddSpriteEx( z, (hx1+hx2)/2, (hy1+hy2)/2, 611, 0.0, rot, scale);
+    }
+    if (Type == M_FRAME)
+    {  
+        if (flagAnimTimer < 1.0) {
+                  flagAnimTimer += 0.06;
+               }
+        else flagAnimTimer = 0.0;
+
+    }
+}
+
+//Start Sign
+CGolfNewHoleStart::CGolfNewHoleStart(CEditorObject* aobj)
+{
+  super(Root, GS);
+  hole = aobj->GetInt("HoleNumber");
+  x = aobj->PosX;
+  y = aobj->PosY;
+  x_sign = aobj->PosX - 90;
+  y_sign = aobj->PosY + 6;
+  z_sign = 1.0/100;
+  restart = aobj->GetBool("Restart_Counter");
+  if (StrCmp(aobj->GetString("Direction"), "LEFT_to_RIGHT")) offset = -13;
+  if (StrCmp(aobj->GetString("Direction"), "RIGHT_to_LEFT"))
+    { 
+    offset = 13;
+    x_sign = aobj->PosX + 90;
+    }
+  
+  if (aobj->GetInt("HoleNumber") == 1) startSignsprite = golfStartSign1->Index;
+  if (aobj->GetInt("HoleNumber") == 2) startSignsprite = golfStartSign2->Index;
+  if (aobj->GetInt("HoleNumber") == 3) startSignsprite = golfStartSign3->Index;
+  if (aobj->GetInt("HoleNumber") == 4) startSignsprite = golfStartSign4->Index;
+  if (aobj->GetInt("HoleNumber") == 5) startSignsprite = golfStartSign5->Index;
+  if (aobj->GetInt("HoleNumber") == 6) startSignsprite = golfStartSign6->Index;
+  if (aobj->GetInt("HoleNumber") == 7) startSignsprite = golfStartSign7->Index;
+  if (aobj->GetInt("HoleNumber") == 8) startSignsprite = golfStartSign8->Index;
+  if (aobj->GetInt("HoleNumber") == 9) startSignsprite = golfStartSign9->Index;
+
+}
+
+void CGolfNewHoleStart::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {     
+        AddSpriteEx( z_sign, x_sign, y_sign, startSignsprite, 0.0, 0.00, 1);
+    }
+}
+
+
+
+void SpawnHoleFlag(CEditorObject* obj)
+{
+  zone = new CGolfNewSpriterHole(obj);
+}
+
+void SpawnNextHole(CEditorObject* obj)
+{
+  zone = new CGolfNewHoleStart(obj);
+}

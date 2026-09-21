@@ -1,0 +1,58 @@
+int TotalShots;
+int TotalSdetShots;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  super;
+
+  isControlWeapon = false;
+  isPlacing = false;
+  isInvisible = false;
+  isWinner = false;
+  isSurrender = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+
+//All worms Message overrides
+  if(Type == M_PRETURNSTART)
+  {
+    TotalShots = 0;
+    TotalSdetShots = 0;
+  }
+
+  else if(Type == M_FRAME)
+  {
+    if(!CanFire && ObjState != WS_DEAD)
+    {
+      fixed x; fixed y; int sprite; fixed frame;    GetWormAnimState(&x, &y, &sprite, &frame);
+      if((sprite >= 242 && sprite <= 244) || (sprite >= 242+262144 && sprite <= 244+262144)) isSurrender = true;
+      else if(sprite == 241 || sprite == 241+262144) isWinner = true;
+
+      isControlWeapon = false;
+    }
+    if(CurWeapon == NullObj)
+    {   
+      isControlWeapon = false;
+    }
+    if(GS->Info.Teams[WormTeam-1].Worms[WormNumber-1].State == 100 || GS->Info.Teams[WormTeam-1].Worms[WormNumber-1].State == 105) isPlacing = true;  else isPlacing = false;
+  }
+
+  else if(Type == M_SETWEAPON)
+  {
+    isControlWeapon = false;
+  }
+
+//Current worm Message overrides  
+  if(this == GetCurrentWorm())
+  {
+    if(Type == M_AFTERSHOOT)
+    {
+      if(!isControlWeapon && CurWeapon->EndsTurn) TotalShots++;
+      if(!isControlWeapon && !CurWeapon->EndsTurn) TotalSdetShots++;
+      isControlWeapon = true;
+    }
+  }
+}

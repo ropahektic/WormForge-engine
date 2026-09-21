@@ -1,0 +1,42 @@
+CMissile* dmis_gravler;
+bool gravler;
+
+//---------------------------------GRAVLER (FAST-DIG)-------------------------//
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    Sdigging = false;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Gravler FD"))
+        {
+          if (gravler)
+          {
+            dmis_gravler = this; dmis_gravler->Sdigging = true; gravler = true;
+          }
+        }
+
+        if (dmis_gravler == this && Sdigging)
+        {
+            GG->land->MakeHole(8,dmis_gravler->PosX,dmis_gravler->PosY-0.0);
+        }
+
+    }
+
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Gravler FD"))
+    {
+        gravler = true;
+    }
+
+    super;
+}

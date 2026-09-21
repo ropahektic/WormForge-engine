@@ -1,0 +1,471 @@
+// Made by StepS, swim sprites by Team17.
+
+require utils, utility_inverse;
+
+CSprite* SwimAnim;
+CSprite* SwimCircle;
+CSprite* SwimFloat;
+CSoundFile* swimsuitup;
+
+bool SwimInGame;
+float GlobAntiZed;
+
+void swimsuit_SCRIPT::Init()
+{
+    keySync->AddKey(16); //Shift
+    keySync->AddKey(32); //Space
+    swimsuitup = new CSoundFile(GetAttachment("putting_on_ssuit.wav"));
+}
+
+void swimsuit_SCRIPT::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("wswim.png");           SwimAnim   = LoadSprite(f, 20, 1);
+    f = GetAttachment("swimround.png");       SwimCircle = LoadSprite(f,  1, 1);
+    f = GetAttachment("wfloat.png");          SwimFloat  = LoadSprite(f, 20, 1);
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    WormAntiZed = 0.0000;
+    plophase = 0.0;
+    flophase = 0.0;
+    fmultipl = 5;
+    antisink_fail = false;
+    helicopter = false;
+    jumpin = false;
+    ghostjet = false;
+    battyswim = false;
+    super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    local Shifth = keySync->KeyPressed(16);
+    CWorm* w = GetCurrentWorm();
+
+    if (Type == M_FRAME)
+    {
+        if (swimsuit)
+        {   
+            antisink_fail = true;   // anti-antisink :D (px antisink.pxl)
+            
+            if (PosY >= Env->Water && plopready && ObjState != WS_TELEPORTING)
+            {
+                PlaySound(57,0,0,1.0);
+                plopready = false;
+                plopped = true;
+                wasinwater = true;
+                GravityFactor = 0;
+                if (SpY > 2.5*swimmultiply) SpY = 2.5*swimmultiply;
+                if (SpX > 2.5*swimmultiply) SpX = 2.5*swimmultiply;
+                if (ObjState == WS_ROPING || ObjState == WS_AFTERROPE || ObjState == WS_BUNGEE || ObjState == WS_JUMP || ObjState == WS_FLYING || ObjState == WS_FLYING2 || ObjState == WS_SLIDING || ObjState == WS_DRILLING) SetState(WS_JUMP);
+                SetState(WS_BUNGEE);
+                plophase = 0;
+                GlobAntiZed = GlobAntiZed + 0.0001;
+                WormAntiZed = GlobAntiZed;
+            }
+            
+            if (plopped)
+            {        
+				if (SpY > 2.5*swimmultiply) SpY = 2.5*swimmultiply;
+                if (SpX > 2.5*swimmultiply) SpX = 2.5*swimmultiply;
+                                        
+                if (SpX <= 0.05*swimmultiply && SpX >= -0.05*swimmultiply && SpY <= 0.05*swimmultiply && SpY >= -0.05*swimmultiply && !leftpress && !uppress && !downpress && !rightpress)
+                {
+                    wfloating = true;
+                    
+                    flophase = flophase + 0.0099*fmultipl;
+                    
+                         if (flophase >= 0.99 && fmultipl ==  5) {flophase = 0.99; fmultipl = -5;}
+                    else if (flophase <= 0.00 && fmultipl == -5) {flophase = 0.00; fmultipl = 5;}
+                }
+                
+                
+                else if (SpX > 0.0 && SpY > 0.0)
+                {
+                    wfloating = false;
+                    
+                    if (SpX >= SpY)
+                    {
+                        if      (TurnSide > 0) plophase = plophase + 0.0099*SpX;
+                        else if (TurnSide < 0) plophase = plophase + 0.0099*-SpX;
+                    }
+                    
+                    else if (SpY > SpX)
+                    {
+                        plophase = plophase + 0.0099*-SpY;
+                    }
+                }
+                
+                else if (SpX < 0.0 && SpY < 0.0)
+                {
+                    wfloating = false;
+                    
+                    if (SpX <= SpY)
+                    {
+                        if      (TurnSide > 0) plophase = plophase + 0.0099*SpX;
+                        else if (TurnSide < 0) plophase = plophase + 0.0099*-SpX;
+                    }
+                    
+                    else if (SpY < SpX)
+                    {
+                        plophase = plophase + 0.0099*-SpY;
+                    }
+                }
+                
+                else if (SpX > 0.0 && SpY < 0.0)
+                {
+                    wfloating = false;
+                    
+                    if (-SpX <= SpY)
+                    {
+                        if      (TurnSide > 0) plophase = plophase + 0.0099*SpX;
+                        else if (TurnSide < 0) plophase = plophase + 0.0099*-SpX;
+                    }
+                    
+                    else if (SpY < -SpX)
+                    {
+                        plophase = plophase + 0.0099*-SpY;
+                    }
+                }
+                
+                else if (SpX < 0.0 && SpY > 0.0)
+                {
+                    wfloating = false;
+                    
+                    if (-SpX >= SpY)
+                    {
+                        if      (TurnSide > 0) plophase = plophase + 0.0099*SpX;
+                        else if (TurnSide < 0) plophase = plophase + 0.0099*-SpX;
+                    }
+                    
+                    else if (SpY > -SpX)
+                    {
+                        plophase = plophase + 0.0099*-SpY;
+                    }
+                }
+                
+                else if (SpY == 0.0 && SpX != 0.0)
+                {
+                    wfloating = false;
+                    plophase = plophase + 0.0099*SpX;
+                }
+                
+                else if (SpX == 0.0  && SpY != 0.0)
+                {
+                    wfloating = false;
+                    plophase = plophase + 0.0099*-SpY;
+                }
+                
+                if (plophase >= 1.0 || plophase <= -1.0) plophase = 0;
+            
+				if (PressedUp == 0 && PressedDown == 0) SpY = SpY / 1.05;
+                if (PressedLeft == 0 && PressedRight == 0) SpX = SpX / 1.05;
+                if (PressedUp == 1 && PressedDown == 1) SpY = SpY / 1.05;
+                if (PressedLeft == 1 && PressedRight == 1) SpX = SpX / 1.05;
+                
+                if (PressedUp == 1)
+                {
+                    PressedUp = 0;
+                    uppress = true;
+                    if(!invertedplaying)
+                 	{
+                    	if (SpY > -2.5*swimmultiply){SpY -= 0.1*swimmultiply;}
+                    	else if (SpY < -2.5*swimmultiply) SpY = -2.5*swimmultiply;
+					}
+					else
+					{
+                    	if (SpY < 2.5*swimmultiply){SpY += 0.1*swimmultiply;}
+                    	else if (SpY > 2.5*swimmultiply) SpY = 2.5*swimmultiply;
+					}
+					
+                }
+                
+                else uppress = false;
+                
+                if (PressedDown == 1)
+                {
+                    PressedDown = 0;
+                    downpress = true;
+                    if(!invertedplaying)
+                	{
+                    	if (SpY < 2.5*swimmultiply){SpY += 0.1*swimmultiply;}
+                    	else if (SpY > 2.5*swimmultiply) SpY = 2.5*swimmultiply;
+					}
+					else
+					{
+                    	if (SpY > -2.5*swimmultiply){SpY -= 0.1*swimmultiply;}
+                    	else if (SpY < -2.5*swimmultiply) SpY = -2.5*swimmultiply;
+					}
+                }
+                
+                else downpress = false;
+                
+                if (PressedLeft == 1)
+                {
+                    PressedLeft = 0;
+                    leftpress = true;
+                    
+                    if (w != NullObj) {if (!Shifth) TurnSide = -1;}
+                    if(!invertedplaying)
+                	{
+                    	if (SpX > -2.5*swimmultiply){SpX -= 0.1*swimmultiply;}
+                    	else if (SpX < -2.5*swimmultiply) SpX = -2.5*swimmultiply;
+					}
+					else
+					{
+                    	if (SpX < 2.5*swimmultiply){SpX += 0.1*swimmultiply;}
+                    	else if (SpX > 2.5*swimmultiply) SpX = 2.5*swimmultiply;
+					}
+					
+                }
+                
+                else leftpress = false;
+                
+                if (PressedRight == 1)
+                {
+                    PressedRight = 0;
+                    rightpress = true;
+                    
+                    if (w != NullObj) {if (!Shifth) TurnSide = 1;}
+                    if(!invertedplaying)
+                	{
+                    	if (SpX < 2.5*swimmultiply){SpX += 0.1*swimmultiply;}
+                    	else if (SpX > 2.5*swimmultiply) SpX = 2.5*swimmultiply;
+					}
+					else
+					{
+                    	if (SpX > -2.5*swimmultiply){SpX -= 0.1*swimmultiply;}
+                    	else if (SpX < -2.5*swimmultiply) SpX = -2.5*swimmultiply;
+					}
+                }
+                 
+                else rightpress = false; 
+                         
+                if (PosY < Env->Water)
+                {
+                    if (ObjState != WS_TELEPORTING)
+                    {
+                        SetState(WS_JUMP);
+                        if (swimmultiply < 2) SpY = SpY*1.7;
+                    }
+
+                    wfloating = false;
+                    GravityFactor = 1;
+                    plopready = true;
+                    plopped = false;
+                }
+
+                if ((ObjState != WS_BUNGEE && ObjState != WS_PARACHUTE && ObjState != WS_JUMP && ObjState != WS_TELEPORTING) || (!GS->IsCavern && PosY > Env->Water + 180) || (GS->IsCavern && Env->Water > 610 && PosY > Env->Water + 180) || (GS->IsCavern && Env->Water <= 610 && PosY > 768))
+                {
+                    swimsuit = false;
+                    plopready = false;
+                    plopped = false;
+                    wasinwater = false;
+                    wfloating = false;
+                    antisink_fail = false;
+                    GravityFactor = 1;
+                    ColGroup += 4194304;
+                    SetState(WS_SINKING);
+                }
+            }
+            
+            if (wasinwater) // workaround for not shooting rope after jumping from water
+				{
+					if (ObjState == WS_JUMP && CurWeapon->CheckName("Ninja Rope"))
+					{
+						if (keySync->KeyPressedNow(32))
+						{
+							SetState(WS_SHOOTINGROPE);
+                    	}
+                	}
+                	
+                	if (ObjState == WS_IDLE || ObjState == WS_WALKING || ObjState == WS_AIMING || ObjState == WS_ROPING)
+                	{
+                	    wasinwater = false;
+                	}
+            	}
+        
+            if (w == NullObj)
+            {
+                if (PosY < Env->Water)
+                {
+					if (!battyswim)
+					{
+						swimsuit = false;
+                    	plopready = false;
+                    	plopped = false;
+                    	wasinwater = false;
+                    	wfloating = false;
+                    	antisink_fail = false;
+                    	GravityFactor = 1;
+                    	ColGroup += 4194304;
+					}
+					else
+					{
+						ColGroup += 4194304;
+					}
+                }
+            }
+        }
+    }    
+
+    
+    if (Type == M_ENTER)
+    {
+        if (plopped) return;
+    }
+
+    super;
+}
+
+override void CWorm::RenderWorm()
+{
+    if (swimsuit)
+    {
+        if (!helicopter && !jumpin)
+        {
+            AddSpriteEx(6+WormAntiZed,PosX,PosY,SwimCircle->Index,1,0,1);
+        }
+    
+        if (ObjState != WS_TELEPORTING)
+        {
+            if (plopped && !wfloating)
+            {
+                if (TurnSide < 0)
+                {
+                    AddSpriteEx(5+WormAntiZed,PosX,PosY,SwimAnim->Index,plophase,0,1);
+                }
+                 
+                else
+                {
+                    AddSpriteEx(5+WormAntiZed,PosX,PosY,SwimAnim->Index+262144,plophase,0,1);
+                }
+                    
+                spriteshown = true;
+            }
+        
+            else if (wfloating)
+            {
+                if (TurnSide < 0)
+                {
+                    AddSpriteEx(5+WormAntiZed,PosX,PosY,SwimFloat->Index,flophase,0,1);
+                }
+                
+                else
+                {
+                    AddSpriteEx(5+WormAntiZed,PosX,PosY,SwimFloat->Index+262144,flophase,0,1);
+                }
+                   
+                spriteshown = true;
+            }
+                
+            else spriteshown = false;
+        }
+                
+        else spriteshown = false;
+    }
+                
+    else spriteshown = false;
+        
+    if (!spriteshown) super;
+}  
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (procexp)
+        {
+            DoExplosion(PosX,PosY,100,50,0,Root->CurTeam);
+            procexp = false;
+            Free(true);
+        }
+                
+    
+        if (SwimInGame)
+        {
+            if (ColGroup == 4194304)
+            {
+                ColGroup = 4194304 + 124;
+            }
+        }
+    }
+    
+    super;
+}
+
+override void CMissile::Collide(CGObject* Obj,int type)
+{
+    if (SwimInGame)
+    {
+        if (ColGroup == 4194428)
+        {
+            local Warm = CWorm(Obj);
+                
+            if (Warm->plopped)
+            {
+                procexp = true;
+            }
+        }
+    }
+    
+    super;
+}    
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Swim Suit"))
+    {
+        if (!swimsuit)
+        {
+            ShowTeamMessage(7,"Swim Suit: ON",WormTeam);
+            vol = CalculateSoundVolume(PosX,PosY);
+     		pan = CalculateSoundPan(PosX,PosY);
+            swimsuitup->Play(vol, pan, false);
+            swimsuit = true;
+            plopready = true;
+            SwimInGame = true;
+            if (!ghostjet) ColGroup = 134342;
+            else ColGroup = 0;
+        }
+        
+        else if (swimsuit)
+        {
+            if (PosY < Env->Water)
+            {
+                swimsuit = false;
+                plopready = false;
+                plopped = false;
+                wfloating = false;
+                antisink_fail = false;
+                GravityFactor = 1;
+                if (!ghostjet) ColGroup = 134342 + 4194304;
+                else ColGroup = 134342;
+            }
+        }
+    }
+
+    else super;
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)    // Button lock & desync fix
+{
+super;
+   
+   for (local i = 0; i < 256; i+=1)
+   {
+        keySync->kRStates[i] = false;
+   };
+}
+
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+    local worm = GetCurrentWorm();
+    if (worm == NullObj)
+    	{
+		if (sound == 58) return;
+		}
+super;
+}

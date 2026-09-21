@@ -1,0 +1,33 @@
+require utils, p_sprite_builder, sprite_curtis_466;
+
+CSprite* fireorb_bullet;
+
+void fire_orb_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("fireorb.png");
+    fireorb_bullet = LoadSprite(f, 8, 0);
+}
+
+//---------------------------------FIRE ORB-----------------------------------//
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Fire Orb")) {
+         if (fireorb_anim) {
+              local sprite = fireorb_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 3.00;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              fireorb_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  fireorb_anim = true;
+}

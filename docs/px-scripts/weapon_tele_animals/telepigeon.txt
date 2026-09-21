@@ -1,0 +1,16 @@
+require utils;
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+  if (weap->CheckName("TelePigeon")){
+      currentworm = GetCurrentWorm();
+      if (currentworm != NullObj){
+        currentworm->PosX = x;
+        currentworm->PosY = y-6;
+        PlayLocalSound(67, 5, 1.0, 1.0);
+        return;
+      }
+      return;  
+  }
+    
+  super;
+}

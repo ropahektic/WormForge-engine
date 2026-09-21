@@ -1,0 +1,47 @@
+
+CSprite* ninja_bomb_aiming;                                                
+                                                                                 
+void ninja_bomb_spb::InitGraphic() {
+    CFile* f;                                                                    
+    f = GetAttachment("ninja_bomb_bullet.png");
+    ninja_bomb_aiming = LoadSprite(f, 1, 0);                                                            
+}                                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Ninja Bomb";                                               
+     sprite = ninja_bomb_aiming->Index;                                     
+     Params->hand_radius = 17.0;                                                         
+     Params->weap_rotation =  0.5;
+     Params->weap_radius = 9.0;
+     Params->hand_type = 1;
+     Params->hand_scale = 0.8;                                                                                   
+                                                  
+     local WA = new WormSprite(weapName, sprite, Params);
+    }                                                                           
+  }                                                                              
+}                                                                                
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;                                                                          
+  if (Type == M_FRAME){                                                          
+     if (weap->CheckName("Ninja Bomb")) {                                
+         if (ninja_bomb_anim2) {                                              
+            local sprite = ninja_bomb_aiming->Index;                      
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);             
+            weap->launch.anim.spriteIndex = 0;
+            ninja_bomb_anim2 = false;                                         
+         } 
+     }                                                                                                                                                                                                                          
+  }                                                                              
+}                                                                                
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           
+  ninja_bomb_anim2 = true;                                                    
+}                                                                                

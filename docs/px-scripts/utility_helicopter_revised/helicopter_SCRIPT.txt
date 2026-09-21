@@ -1,0 +1,1108 @@
+// helicoper falling body mod by Ted
+//todo game crashes after game is finished
+require utils, utils_steps, pxparticles;
+
+CCamSync* camSync; //key event listener
+bool KP[10];
+bool Kprevious[10];
+int KPret;
+int KPctrl;
+int KPup;
+int KPdown;
+
+CSprite* HeliJIb;
+CSprite* HeliJIr;
+CSprite* HeliJIw;
+
+CSprite* HeliAnim;
+CSprite* HeliAnimTurn;
+CSprite* HeliTeamColor;
+CSprite* HeliTurnTeamColor;
+CSprite* HeliDust;
+CSoundFile* HeliWav;
+
+int fallWepID;
+
+CHotWater: CFire;
+
+CHelibody: CGObject;
+CHelibody* HeliRef[10];
+int Hrefat;
+int HSoffY;
+
+int isHighlander;
+CShootDesc emptySD;
+
+CHotWater::CHotWater(CObject* Parent, CFireDesc* Desc, int unk)
+{
+	super(Parent, Desc, unk);
+}
+void CHotWater::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if (Type == M_DRAWQUEUE)
+	{
+		SetColorMod(RGB(75, 160, 255), 1);
+		super;
+		ClearColorMod();
+	}
+	else {
+		super;
+	}
+}
+void helicopter_SCRIPT::Init()
+{
+	fallWepID = 0;
+	isHighlander = 0;
+	Hrefat = 0;
+	HSoffY = -18;
+	//keySync->AddKey(17); // Ctrl button;
+
+	for (int k = 0; k < 10; k++) {
+		KP[k] = false;
+	}
+	KPret = 0;
+	KPctrl = 1;
+	KPup = 2;
+	KPdown = 3;
+	camSync = new CCamSync(RegisterPXMessage());
+}
+//override void CTurnGame::SetCurrentTeam(int Team)
+//{
+//	super;
+//	CWorm* currW = GetCurrentWorm();
+//	if (currW != NullObj)
+//	{
+//		currW->doWork = 2;
+//		currW->doWorkDelay = 20;
+
+//	}
+//}
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	fixed hframenum;
+	bool jumpin = false;
+	int jumpinTS = 999;
+	fixed jumpinframenum;
+	fixed animFrame = 0.0;
+	int heliGrace = 0;
+	bool stolenHeli = false;
+	int stolenHeliColor = 0;
+	int stolenHeliFuel = 0;
+	int doWork = 0;
+	int doWorkDelay = 0;
+	ColMaskC = new CColMask(30, 30, MakeCircleMask(30));
+	super;
+}
+void helicopter_SCRIPT::FirstFrame() {
+	for (int n = 0; n < 70; n++)
+	{
+		local tW = GS->GetWeaponByIndex(1, n);
+		if (tW->CheckName("Hoverboard")) {
+			fallWepID = n;
+			isHighlander = 1;
+		}
+		if (tW->CheckName("Parachute")) {
+			isHighlander = 0;
+			break;
+		}
+	}
+	//local Weap2 = GS->GetWeaponByName("Hang-Glider");
+	//if (Weap2 != NullObj) { isHighlander = 2; fallWep2 = Weap2; }
+}
+void helicopter_SCRIPT::InitGraphic()
+{
+	CFile* f;
+	f = GetAttachment("jibody.png");           HeliJIb = LoadSprite(f, 18, 1);
+	f = GetAttachment("jirotor.png");           HeliJIr = LoadSprite(f, 18, 1);
+	f = GetAttachment("jiworm.png");           HeliJIw = LoadSprite(f, 18, 1);
+	f = GetAttachment("heli-anim.png");           HeliAnim = LoadSprite(f, 10, 1);
+	f = GetAttachment("heli-team-color.png");     HeliTeamColor = LoadSprite(f, 1, 0);
+	f = GetAttachment("heli-turn-team-color.png"); HeliTurnTeamColor = LoadSprite(f, 1, 0);
+	f = GetAttachment("heli-anim-turn.png");      HeliAnimTurn = LoadSprite(f, 10, 1);
+	f = GetAttachment("heli-dust.png");  HeliDust = LoadSprite(f, 1, 0);
+	f = GetAttachment("helicopterloop.wav");      HeliWav = new CSoundFile(f);
+}
+void CWorm::DidThisCrashSorry() {
+	SetState(WS_PARACHUTE);
+	WindFactor = 1.0; //SetState seems to set this to ~10.0 
+}
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	local Shifth = keySync->KeyPressed(16);
+
+	bool isCurrentWorm = false;
+	local CurrWorm = GetCurrentWorm();
+	isCurrentWorm = (CurrWorm != NullObj && CurrWorm == this);
+	if (isCurrentWorm == true) {
+		if (Type == M_FRAME)
+		{
+
+			if (doWork != 0) {
+				doWorkDelay = doWorkDelay - 1;
+				if (doWorkDelay < 0) {
+					doWorkDelay = 0;
+				}
+				if (doWorkDelay == 0) {
+					if (doWork == 1) {
+						if (ObjState == WS_FLYING2 || ObjState == WS_FLYING || ObjState == WS_POWERFLY || ObjState == int(126)) {
+							//is there room for parachute?
+							if (isHighlander == 0) {
+								if (CheckMaskAt(this, ColMaskC, PosX, PosY, -1) == NullObj) {
+									doWork = 2;
+									doWorkDelay = 1;
+									SetState(WS_FLYING2);
+									SpX = 0.0;
+									SpY = 0.0;
+								}
+							}
+							if (isHighlander == 1) {
+								local FWC = GS->GetWeaponByIndex(1, fallWepID);
+								if (FWC != NullObj) {
+									ResetWeapon(); // maybe not the fix after all.. :|
+									CurWeapon = FWC;
+									WeaponN = fallWepID;
+									zero(&emptySD);
+									FireFinal(FWC, &emptySD);
+								}
+							}
+							// disappearing weapon fix does not work with hang-glider :(
+							//if (isHighlander == 2) {
+							//	if (fallWep2 != NullObj) {
+							//		CShootDesc sdesc2;
+							//		zero(&sdesc2);
+							//		ResetWeapon();
+							//		CurWeapon = fallWep2;
+							//		WeaponN = fallWep2->GetWeaponIndex();
+							//		FireFinal(fallWep2, &sdesc2);
+							//	}
+							//}
+
+						}
+					}
+					if (doWork == 2) {
+						if (isHighlander == 0) {
+							DidThisCrashSorry(); //Not very reliable in normal games either
+						}
+					}
+
+					doWork = 0;
+				}
+			}
+
+			for (n = 0; n < 10; n++) {
+				if (Kprevious[n] != KP[n]) {
+					TE_KeyEvent(n, KP[n]);
+				}
+				Kprevious[n] = KP[n];
+			}
+
+			if (animFrame > 1.0) {
+				animFrame = 0.0;
+			}
+			else {
+				animFrame = animFrame + 0.06;
+				local hx = 0;
+				local hy = 0;
+				local hit = TraceLine(this, PosX, PosY - 20, PosX, PosY + 40, -1, &hx, &hy);
+				if (hit != NullObj) {
+					animFrame = animFrame - 0.040;
+				}
+			}
+			if (helicopter && (SpX != 0 || SpY != 0)) { if (gframe % 47) {} else HeliWav->Play(1.2, 0.0, false); }
+
+			if (ObjState == WS_FIRED && CurWeapon->CheckName("Helicopter"))
+			{
+				jumpin = true;
+			}
+			if (jumpin) {
+				if (jumpinframenum < 0.01) {
+					jumpinTS = TurnSide;
+				}
+				jumpinframenum = jumpinframenum + 0.02941;
+				if (jumpinframenum > 1.0) {
+					jumpinframenum = 0.0;
+					jumpin = false;
+				}
+			}
+
+			if (helicopter)
+			{
+				heliGrace = heliGrace + 1;
+				if (helilaunch)
+				{
+					if (!stolenHeli) {
+						JetFuel = 100 * 65536;
+					}
+					else {
+						JetFuel = stolenHeliFuel;
+					}
+					helilaunch = false;
+				}
+
+				if (PressedUp == 0 && PressedDown == 0) SpY = SpY / 1.05;
+				if (PressedLeft == 0 && PressedRight == 0) SpX = SpX / 1.05;
+				if (PressedUp == 1 && PressedDown == 1) SpY = SpY / 1.05;
+				if (PressedLeft == 1 && PressedRight == 1) SpX = SpX / 1.05;
+
+				if (Root->RetreatTimer == 0) JetFuel -= 0.020 * 65536;
+
+				if (hframenum == 0.99) hframenum = 0.00;
+				else if (hframenum == 0.50) hframenum = 0.99;
+				else if (hframenum == 0.00) hframenum = 0.50;
+
+				if (PressedUp == 1 || KP[KPup] == 1)
+				{
+					PressedUp = 0;
+					if (Root->RetreatTimer == 0) JetFuel -= 0.2 * 65536;
+
+					if (SpY > -10 && !jumpin)
+					{
+						SpY -= 0.2;
+					}
+				}
+
+				if (PressedDown == 1 || KP[KPdown] == 1)
+				{
+					PressedDown = 0;
+					if (Root->RetreatTimer == 0) JetFuel -= 0.2 * 65536;
+
+					if (SpY < 10 && !jumpin)
+					{
+						SpY += 0.2;
+					}
+				}
+
+				if (PressedLeft == 1)
+				{
+					PressedLeft = 0;
+					if (Root->RetreatTimer == 0) JetFuel -= 0.2 * 65536;
+					//if (!Shifth) TurnSide = -1;
+
+					if (SpX > -10 && !jumpin)
+					{
+						SpX -= 0.2;
+					}
+				}
+
+				if (PressedRight == 1)
+				{
+					PressedRight = 0;
+					if (Root->RetreatTimer == 0) JetFuel -= 0.2 * 65536;
+					//if (!Shifth) TurnSide = 1;
+
+					if (SpX < 10 && !jumpin)
+					{
+						SpX += 0.2;
+					}
+				}
+
+				if (ObjState != WS_JETPACK)
+				{
+					if (SpY == 0 && ObjState != WS_FIRED && ObjState != WS_TELEPORTING) SetState(WS_SLIDING);
+					if (KP[KPctrl] == 1) {
+						CreateHelibody(15.0, false);
+						GravityFactor = 1;
+						helicopter = false;
+					}
+					else {
+						//DoExplosion(PosX,PosY,100,10,0,0);
+						CreateHelibody(15.0, true);
+						GravityFactor = 1;
+						helicopter = false;
+					}
+				}
+
+				else if (JetFuel <= 1 * 65536)
+				{
+					//DoExplosion(PosX,PosY,100,10,0,0);
+					CreateHelibody(1.0, false);
+					GravityFactor = 1;
+					helicopter = false;
+					//CMessageData msgspace;
+					//msgspace.params[0] = WormTeam;
+					//Message(NullObj, M_SPACE, 1032, &msgspace);
+				}
+
+				else if (disableheli)
+				{
+					int fuelExp = (JetFuel / 65536) * 0.50;
+					DoExplosion(PosX, PosY, 50 + fuelExp, 20 + fuelExp, 0, 0);
+					heliGrace = 0;
+					stolenHeli = false;
+					//CreateHelibody(1.0, false);
+					GravityFactor = 1;
+					helicopter = false;
+					disableheli = false;
+				}
+			}
+		}
+	}
+
+	if (Type == M_TURNEND)
+	{
+		if (helicopter)
+		{
+			//DoExplosion(PosX, PosY, 100, 10, 0, 0);
+			CreateHelibody(1.0, false);
+			GravityFactor = 1;
+			helicopter = false;
+		}
+
+	}
+
+	if (Type == M_DRAWQUEUE)
+	{
+		local Colorin = GetTeamColor(WormTeam);
+		if (stolenHeli) {
+			Colorin = GetTeamColor(stolenHeliColor);
+		}
+		local Color = Colorin;
+
+		if (helicopter && !jumpin)
+		{
+			if (SpX > -1.0 && SpX < 1.0) {
+				AddSpriteEx(4, PosX, PosY + HSoffY, HeliAnim->Index, animFrame, sin(SpX / 24), 1);
+			}
+			else {
+				if (SpX < 0.0) {
+					AddSpriteEx(4, PosX, PosY + HSoffY, HeliAnimTurn->Index, animFrame, sin(SpX / 24), 1);
+				}
+				else {
+					AddSpriteEx(4, PosX, PosY + HSoffY, HeliAnimTurn->Index + 262144, animFrame, sin(SpX / 24), 1);
+				}
+			}
+			if (Color == 0)
+			{
+				SetColorMod(RGB(245, 40, 40), 4); //4 - diffuse color goes to smooth addition
+			}
+			if (Color == 1)
+			{
+				SetColorMod(RGB(0, 135, 255), 4);
+			}
+			if (Color == 2)
+			{
+				SetColorMod(RGB(99, 211, 60), 4);
+			}
+			if (Color == 3)
+			{
+				SetColorMod(RGB(255, 245, 83), 4);
+			}
+			if (Color == 4)
+			{
+				SetColorMod(RGB(173, 69, 199), 4);
+			}
+			if (Color == 5)
+			{
+				SetColorMod(RGB(62, 244, 255), 4);
+			}
+			//end Color mod
+			if (SpX > -1.0 && SpX < 1.0) {
+				AddSpriteEx(3, PosX, PosY + HSoffY, HeliTeamColor->Index, 0.0, sin(SpX / 24), 1);
+			}
+			else {
+				if (SpX < 0.0) {
+					AddSpriteEx(3, PosX, PosY + HSoffY, HeliTurnTeamColor->Index, 0.0, sin(SpX / 24), 1);
+				}
+				else {
+					AddSpriteEx(3, PosX, PosY + HSoffY, HeliTurnTeamColor->Index + 262144, 0.0, sin(SpX / 24), 1);
+				}
+			}
+			ClearColorMod();
+
+		}
+		else if (jumpin)
+		{
+			//worms position was wrong in animation so this lerp fixes it
+			int yP = Lerp(jumpinframenum, 6.0, 0.0);
+			if (jumpinTS > 0) {
+				AddSpriteEx(3, PosX + 3, PosY + HSoffY + yP, HeliJIr->Index, jumpinframenum, 0, 1);
+				AddSpriteEx(2, PosX, PosY + HSoffY + yP + 7, HeliJIw->Index, jumpinframenum, 0, 1);
+			}
+			else {
+				AddSpriteEx(3, PosX - 4, PosY + HSoffY + yP, HeliJIr->Index + 262144, jumpinframenum, 0, 1);
+				AddSpriteEx(2, PosX, PosY + HSoffY + yP + 7, HeliJIw->Index + 262144, jumpinframenum, 0, 1);
+			}
+			if (Color == 0)
+			{
+				SetColorMod(RGB(245, 40, 40), 4); //4 - diffuse color goes to smooth addition
+			}
+			if (Color == 1)
+			{
+				SetColorMod(RGB(0, 135, 255), 4);
+			}
+			if (Color == 2)
+			{
+				SetColorMod(RGB(99, 211, 60), 4);
+			}
+			if (Color == 3)
+			{
+				SetColorMod(RGB(255, 245, 83), 4);
+			}
+			if (Color == 4)
+			{
+				SetColorMod(RGB(173, 69, 199), 4);
+			}
+			if (Color == 5)
+			{
+				SetColorMod(RGB(62, 244, 255), 4);
+			}
+			if (jumpinTS > 0) {
+				AddSpriteEx(4, PosX + 10, PosY + HSoffY + yP + 3, HeliJIb->Index, jumpinframenum, 0, 1);
+			}
+			else {
+				AddSpriteEx(4, PosX - 10, PosY + HSoffY + yP + 3, HeliJIb->Index + 262144, jumpinframenum, 0, 1);
+			}
+			ClearColorMod();
+		}
+
+	}
+	super;
+}
+
+override void CWorm::RenderWorm()
+{
+	if (!helicopter && !jumpin) super;
+}
+
+override void CWorm::Collide(CGObject* Obj, int type)
+{
+	if (helicopter)
+	{
+		if (Obj != NullObj)
+		{
+			if (Obj->ClType != OC_Mine) {
+				if (heliGrace > 100) {
+					disableheli = true;
+				}
+			}
+		}
+	}
+
+	super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if (Weap->CheckName("Helicopter"))
+	{
+		GravityFactor = 0;
+		helicopter = true;
+		helilaunch = true;
+	}
+	super;
+}
+
+CHelibody::CHelibody(CObject* parent, fixed x, fixed y)
+{
+	super(parent, 30, 9);
+	PosX = x;
+	PosY = y;
+	IsMaterial = true;
+	ColGroup = 2;
+	SpX = 0.0;
+	SpY = 0.0;
+	GravityFactor = 0.5;
+	ClType = EObjectClass(776);
+	//ColMask = new CColMask(20, 20, MakeCircleMask(20));
+	ColMask = new CColMask(10, 20, MakeRectMask(20, 40));
+	Mfuel = 0;
+	Ecollided = false;
+	myID = 0;
+	Pticker = 1;
+	ctrlmode = false;
+	landed = false;
+	drumRef = NullObj;
+	lastPosX = 0;
+	lastPosY = 0;
+	animFrame = 0.0;
+	WormTeam = 0;
+	rotorVel = 1.0;
+	oldX = 0;
+	oldY = 0;
+	animTicker = 0;
+}
+void CWorm::TE_KeyEvent(int keyid, bool updown) {
+	if (keyid == KPret && updown == true && (ObjState != WS_FIREPUNCH) && (ObjState != WS_DRILLING) && (ObjState != WS_ROPING) && (ObjState != WS_BLOWTORCH) && (ObjState != WS_SHOOTINGROPE) && (ObjState != WS_BUNGEE) && (ObjState != WS_PARACHUTE) && (ObjState != WS_JETPACK) && (ObjState != WS_JUMP)) {
+		int sqsz = 20;
+		local th = NullObj;
+		for (int n = 0; n < 10; n++)
+		{
+			th = HeliRef[n];
+			if (th != NullObj && th->landed == true && th->drumRef != NullObj) {
+				if ((PosX > (th->PosX - sqsz)) && (PosX < (th->PosX + sqsz)) && (PosY > th->PosY) && (PosY < (th->PosY + 30))) {
+					SpX = 0.0;
+					Spy = 0.0;
+					stolenHeli = true;
+					stolenHeliColor = th->WormTeam;
+					stolenHeliFuel = th->Mfuel * 65536;
+					local dref = th->drumRef;
+
+					SetState(WS_JETPACK);
+					GravityFactor = 0;
+					helicopter = true;
+					helilaunch = true;
+					jumpin = true;
+					jumpinTS = TurnSide;
+					//CMessageData msgselect;
+					//msgselect.params[0] = WormTeam;
+					//msgselect.params[1] = WormNumber;
+					//msgselect.params[2] = heliWeapID;
+					//msgselect.params[3] = 0;
+					//Message(NullObj, M_SETWEAPON, 1032, &msgselect);
+					//CMessageData msgspace;
+					//msgspace.params[0] = WormTeam;
+					//Message(NullObj, M_SPACE, 1032, &msgspace);
+
+					th->Free(true);
+					th = NullObj;
+					dref->Free(true);
+					break;
+				}
+			}
+		}
+	}
+}
+CCamSync::CCamSync(int MType)
+{
+	msgType = MType;
+}
+void CCamSync::ProcessInput() {
+	//This function is running from current playing computer, it seems.
+	if (IsKeyPressed(13)) { // enter pressed
+		GG->queue2->AddPXMessage(msgType, 2, 0);
+	}
+	if (IsKeyPressed(17)) { // ctrl pressed
+		GG->queue2->AddPXMessage(msgType, 2, 1);
+	}
+	if (IsKeyPressed(38)) { // up pressed
+		GG->queue2->AddPXMessage(msgType, 2, 2);
+	}
+	if (IsKeyPressed(40)) { // down pressed
+		GG->queue2->AddPXMessage(msgType, 2, 3);
+	}
+}
+void CCamSync::OnMessage(CMessageData* MData)
+{
+	if (MData->GetParameter(0) == msgType)
+	{
+		local MParam = MData->GetParameter(1);
+		local Mval = MData->GetParameter(2);
+		if (MParam == 0) {
+		}
+		if (MParam == 1) {
+		}
+		if (MParam == 2) {
+			if (Mval == 0) {
+				KP[KPret] = true;
+			}
+			if (Mval == 1) {
+				KP[KPctrl] = true;
+			}
+			if (Mval == 2) {
+				KP[KPup] = true;
+			}
+			if (Mval == 3) {
+				KP[KPdown] = true;
+			}
+		}
+	}
+}
+void CCamSync::OnFrame() {
+	for (int n = 0; n < 10; n++) {
+		KP[n] = false;
+	}
+}
+override void CTurnGame::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if (Type == M_INPUT)
+	{
+		camSync->ProcessInput();
+	}
+	if (Type == M_PXMESSAGE)
+	{
+		camSync->OnMessage(MData);
+	}
+	super;
+	if (Type == M_FRAME)
+	{
+		camSync->OnFrame();
+	}
+};
+void CHelibody::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if (Type == M_FRAME)
+	{
+		if (SpX > 5.0) {
+			SpX = 5.0;
+		}
+		if (SpX < -5.0) {
+			SpX = -5.0;
+		}
+		local CW = GetCurrentWorm();
+		local hx = 0;
+		local hy = 0;
+		local hit = NullObj;
+		if ((animTicker % 3 == 0)) {
+			hit = TraceLine(this, PosX, PosY - 40, PosX, PosY + 40, -1, &hx, &hy);
+			if (animFrame > 1.0) {
+				animFrame = 0.0;
+			}
+			else {
+				animFrame = animFrame + 0.3;
+				local rme = 0.0;
+				if (hit != NullObj) {
+					rme = 0.3 - (0.04 * rotorVel);
+					animFrame = animFrame - rme;
+				}
+				else {
+					if (PosX == oldX && PosY == oldY) {
+						rme = 0.3 - (0.04 * rotorVel);
+						animFrame = animFrame - rme;
+					}
+				}
+			}
+			oldX = PosX;
+			oldY = PosY;
+		}
+		if ((animTicker % 10 == 0) && !landed && !ctrlmode) {
+			hit = TraceLine(this, PosX, PosY - 40, PosX, Env->Water, -1, &hx, &hy);
+			if (hit != NullObj) {
+				CFireDesc fdesc;
+				zero(&fdesc);
+				fdesc.X = PosX;
+				fdesc.Y = PosY;
+				fdesc.Count = 0;
+				fdesc.UnkD = 2147483647;
+				fdesc.Duration = 0;
+				fdesc.UpPower = 100;
+				fdesc.Damage = 0;
+				fdesc.OwnerTeam = WormTeam;
+				fdesc.SpY = 8;
+				fdesc.SpX = SpX;
+				local hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+			}
+		}
+		if (landed) {
+			rotorVel = rotorVel - 0.0015;
+			if (rotorVel < 0.0) {
+				rotorVel = 0.0;
+			}
+			if (animTicker % 120 == 0) { //every 2 seconds
+
+				Mfuel = Mfuel + 1;
+				if (Mfuel > 100) {
+					Mfuel = 100;
+				}
+			}
+		}
+		int ExWater = Env->Water;
+		if (ctrlmode) {
+			ExWater = Env->Water - 25;
+		}
+		if (PosY > ExWater) {
+			Ecollided = true;
+		}
+		if (Ecollided) {
+			Ecollided = false;
+			HeliRef[myID] = NullObj;
+			CFireDesc fdesc;
+			zero(&fdesc);
+			fdesc.X = PosX;
+			fdesc.Y = PosY;
+			fdesc.Count = 0;
+			fdesc.UnkD = 2147483647;
+			fdesc.Duration = 0;
+			fdesc.UpPower = 100;
+			fdesc.Damage = 0;
+			fdesc.OwnerTeam = WormTeam;
+			DoExplosion(PosX, PosY, 50 + (Mfuel * 0.50), 20 + (Mfuel * 0.50), 0, 0);
+			for (int f = 0; f < 5; f++)
+			{
+				fdesc.SpY = 8 + f;
+				fdesc.SpX = -8;
+				local hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = 8;
+				fdesc.Y = PosY + 1 + f;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = 0;
+				fdesc.SpY = -8;
+				fdesc.Y = PosY - 2 - f;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = 4 + f;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = -4 - f;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpY = -2 - f;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = 4 + f;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+			}
+			Free(true);
+		}
+		float s1;
+		int s2;
+		if (Pticker % 2 == 0 && ctrlmode == false) {
+			s1 = RandomFloat(0.5, 1.0);
+			s2 = RandomInt(80, 210);
+			p = new PxParticle(HeliDust->Index, PosX, PosY);
+			if (s2 % 2 == 0) {
+				p->SetBlendMode(0);
+			}
+			else {
+				p->SetBlendMode(1);
+			}
+			p->SetAngle(0.0);
+			p->SetAngleSpeed(0.0);
+			p->SetLifeTime(150);
+			p->GravityFactor(0.05);
+			p->SetRandomVelocity(1.0, 2.0);
+			p->SetAirResistance(3.0);
+			p->SetStartAlpha(255);
+			p->SetEndAlpha(0);
+			p->SetStartSize(s1, s1);
+			//p->SetEndSize(0.01, 0.01);
+			p->SetEndSize(s1 * 2.0, s1 * 2.0);
+			p->SetStartColor(s2, s2, s2);
+			p->SetEndColor(0, 0, 0);
+			p->SetMotionRandomness(0.2);
+		}
+		if (ctrlmode) {
+			local hx = 0;
+			local hy = 0;
+			local dist = 0;
+			float smoothSpY = 0;
+			local hit = TraceLine(this, PosX, PosY - 20, PosX, Env->Water + 5, -1, &hx, &hy);
+			dist = hy - PosY;
+			smoothSpY = dist * 0.01;
+			if (smoothSpY > 2.0) {
+				smoothSpY = 2.0;
+			}
+			if (smoothSpY < 0.2) {
+				smoothSpY = 0.2;
+			}
+			if (dist <= 10) {
+			}
+			else {
+				SpY = smoothSpY;
+			}
+			if (landed && drumRef != NullObj) {
+				if (PosX != lastPosX && PosY != lastPosY) {
+					drumRef->PosX = PosX;
+					drumRef->PosY = PosY - 2;
+					drumRef->SpX = 0.0;
+					drumRef->SpY = 0.0;
+					drumRef->pCounter = 1;
+				}
+				lastPosX = PosX;
+				lastPosY = PosY;
+			}
+		}
+
+		Pticker = Pticker + 1;
+		animTicker = animTicker + 1;
+	}
+
+	if (Type == M_DRAWQUEUE)
+	{
+		float wiggle = 0.2;
+		if (landed) {
+			wiggle = 0.0;
+		}
+		//local inw = abs(sin((GS->Tick / 15))) * wiggle;
+		local inw = sin(SpX / 24);
+		if (SpX > -1.0 && SpX < 1.0) {
+			AddSpriteEx(4, PosX, PosY, HeliAnim->Index, animFrame, inw, 1);
+		}
+		else {
+			if (SpX < 0.0) {
+				AddSpriteEx(4, PosX, PosY, HeliAnimTurn->Index, animFrame, inw, 1);
+			}
+			else {
+				AddSpriteEx(4, PosX, PosY, HeliAnimTurn->Index + 262144, animFrame, inw, 1);
+			}
+		}
+		local Colorin = GetTeamColor(WormTeam);
+		local Color = Colorin;
+		if (Color == 0)
+		{
+			SetColorMod(RGB(245, 40, 40), 4); //4 - diffuse color goes to smooth addition
+		}
+		if (Color == 1)
+		{
+			SetColorMod(RGB(0, 135, 255), 4);
+		}
+		if (Color == 2)
+		{
+			SetColorMod(RGB(99, 211, 60), 4);
+		}
+		if (Color == 3)
+		{
+			SetColorMod(RGB(255, 245, 83), 4);
+		}
+		if (Color == 4)
+		{
+			SetColorMod(RGB(173, 69, 199), 4);
+		}
+		if (Color == 5)
+		{
+			SetColorMod(RGB(62, 244, 255), 4);
+		}
+		//end Color mod
+		if (SpX > -1.0 && SpX < 1.0) {
+			AddSpriteEx(3, PosX, PosY, HeliTeamColor->Index, 0.0, inw, 1);
+		}
+		else {
+			if (SpX < 0.0) {
+				AddSpriteEx(3, PosX, PosY, HeliTurnTeamColor->Index, 0.0, inw, 1);
+			}
+			else {
+				AddSpriteEx(3, PosX, PosY, HeliTurnTeamColor->Index + 262144, 0.0, inw, 1);
+			}
+		}
+		ClearColorMod();
+	}
+}
+
+void CWorm::CreateHelibody(fixed spxMulti, bool safeland) {
+	heliGrace = 0;
+	local h = new CHelibody(Root->GetObject(25, 0), -1000, -1000);
+	local oX = PosX;
+	local oY = PosY;
+	PosX = -1000;
+	PosY = -1000;
+	int tY = oY;
+	bool canSpawn = false;
+	for (int s = 0; s < 20; s++)
+	{
+		if (CheckMaskAt(h, h->ColMask, oX, tY, -1) == NullObj) {
+			canSpawn = true;
+			break;
+		}
+		else {
+			tY = tY - 5;
+		}
+	}
+	if (!canSpawn) {
+		tY = oY;
+		for (int d = 0; d < 20; d++)
+		{
+			if (CheckMaskAt(h, h->ColMask, oX, tY, -1) == NullObj) {
+				canSpawn = true;
+				break;
+			}
+			else {
+				tY = tY + 5;
+			}
+		}
+	}
+	//line here fails sometimes.. re-write it.
+	if (!canSpawn) {
+		h->Free(true);
+		return;
+	}
+	PosX = oX;
+	PosY = oY;
+	h->PosY = tY;
+	h->PosX = PosX;
+	h->SpX = SpX * spxMulti;
+	h->SpY = -3.0;
+	h->Mfuel = int(JetFuel / 65536);
+	h->TurnSide = TurnSide;
+	Hrefat = (Hrefat + 1) % 10;
+	h->myID = Hrefat;
+	if (stolenHeli) {
+		h->WormTeam = stolenHeliColor;
+	}
+	else {
+		h->WormTeam = WormTeam;
+	}
+	stolenHeli = false;
+	if (safeland) {
+		h->GravityFactor = -0.2;
+		h->ctrlmode = true;
+	}
+	else {
+		for (int n = 0; n < 20; n++)
+		{
+			CFireDesc fdesc;
+			zero(&fdesc);
+			fdesc.X = PosX + (25 * TurnSide);
+			fdesc.Y = PosY + 10;
+			fdesc.Count = 0;
+			fdesc.UnkD = 2147483647;
+			fdesc.Duration = 0;
+			fdesc.UpPower = 100;
+			fdesc.Damage = 0;
+			fdesc.OwnerTeam = WormTeam;
+			fdesc.SpY = SpY + (4.0 - (8.0 * ((n % 10) / 10))) - 2.0;
+			fdesc.SpX = SpX + (4.0 - (8.0 * ((n % 10) / 10)));
+			local hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+		}
+	}
+	JetFuel = 1;
+	HeliRef[Hrefat] = h;
+	SpX = 0.0;
+	SpY = -5.0;
+	if (!safeland) {
+	}
+	doWork = 1;
+	doWorkDelay = 30;
+}
+
+override void CGObject::Collide(CGObject* Obj, int type)
+{
+	for (int n = 0; n < 10; n++)
+	{
+		local HR = HeliRef[n];
+		if (HR != NullObj && HR == this) {
+			if (HR->ctrlmode == false) {
+				HR->Ecollided = true;
+			}
+			else {
+				if (!HR->landed) {
+					local helidrum = new COilDrum(Root->GetObject(25, 0), 0, 0, false);
+					helidrum->isInvisible = true;
+					helidrum->heliParent = this;
+					helidrum->PosX = HR->PosX;
+					helidrum->PosY = HR->PosY - 20;
+					helidrum->btype = 999;
+					HR->drumRef = helidrum;
+				}
+				HR->landed = true;
+			}
+			break;
+		}
+	}
+	super;
+}
+override void COilDrum::Explosion()
+{
+	if (!isInvisible) {
+		super;
+	}
+}
+override COilDrum::COilDrum(CObject* Parent, fixed X, fixed Y, bool Snap)
+{
+	isInvisible = false;
+	heliParent = NullObj;
+	barreltype = RandomInt(0, 4);
+	restX = 0;
+	restY = 0;
+	restTC = 0;
+	pCounter = 1;
+
+	btype = 3;
+	super;
+}
+override void COilDrum::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData) {
+	if (isInvisible)
+	{
+		if (Type == M_FRAME) {
+			btype = 999;
+			barreltype = -1;
+			if (SpX < 0.05 && SpY < 0.05 && pCounter < 300) {
+				restX = PosX;
+				restY = PosY;
+			}
+			//if using something that moves drums this should put it in to helis position
+			if (pCounter % 15) {
+				if (PosX != restX && PosY != restY) {
+					PosX = restX;
+					PosY = restY;
+					restTC = restTC + 1;
+					if (restTC > 9) {
+						if (heliParent != NullObj) {
+							restX = heliParent->PosX;
+							restY = heliParent->PosY - 2;
+							PosX = restX;
+							PosY = restY;
+							pCounter = 0;
+						}
+					}
+					if (restTC > 12) {
+						if (heliParent != NullObj) {
+							restX = heliParent->PosX;
+							restY = heliParent->PosY - 2 - (restTC % 10);
+							PosX = restX;
+							PosY = restY;
+							pCounter = 0;
+						}
+					}
+					if (restTC > 100) {
+						restTC = 0;
+					}
+					SpX = 0.0;
+					SpY = 0.0;
+				}
+			}
+			pCounter = pCounter + 2;
+			if (pCounter < 0) {
+				pCounter = 301;
+			}
+		}
+		super;
+		return;
+	}
+	else {
+		super;
+		return;
+	}
+}
+override void COilDrum::Render()
+{
+	if (isInvisible)
+	{
+		return;
+	}
+	else {
+		super;
+		return;
+	}
+}
+override void COilDrum::Free(bool FreeMem) {
+	if (isInvisible) {
+		if (heliParent != NullObj) {
+			CFireDesc fdesc;
+			zero(&fdesc);
+			fdesc.X = PosX;
+			fdesc.Y = PosY;
+			fdesc.Count = 0;
+			fdesc.UnkD = 2147483647;
+			fdesc.Duration = 0;
+			fdesc.UpPower = 100;
+			fdesc.Damage = 0;
+			if (heliParent != NullObj) {
+				fdesc.OwnerTeam = CHelibody(heliParent)->WormTeam;
+				DoExplosion(PosX, PosY, 50 + (CHelibody(heliParent)->Mfuel * 0.50), 20 + (CHelibody(heliParent)->Mfuel * 0.50), 0, 0);
+			}
+			else {
+				fdesc.OwnerTeam = 0;
+				DoExplosion(PosX, PosY, 50 + (15 * 0.50), 20 + (15 * 0.50), 0, 0);
+			}
+			for (int f = 0; f < 5; f++)
+			{
+				fdesc.SpY = 8;
+				fdesc.SpX = -8;
+				local hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = 8;
+				fdesc.Y = PosY + 1;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = 0;
+				fdesc.SpY = -8;
+				fdesc.Y = PosY - 2;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = 4;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = -4;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpY = -2;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+				fdesc.SpX = 4;
+				hotwater = new CHotWater(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+			}
+			heliParent->Free(true);
+		}
+	}
+	super;
+}

@@ -1,0 +1,158 @@
+require p_sprite_builder;
+
+CSprite* TNA;
+
+void telenade_scr::InitGraphic()
+{   CFile* f;
+    f = GetAttachment("telenade.png");
+    TNA = LoadSprite(f, 1, 0);
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "TeleNade";
+     sprite = TNA->Index;
+     Params->hand_radius = 20.0;
+     Params->hand_rotation = 1.0;
+     Params->hand_radial_rotation = 1.05;
+     Params->weap_radial_rotation = 0.9;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = 10.0;
+     Params->hand_type = 1;
+     Params->hand_scale = 0.8;
+//     Params->zplane = 10.0;
+//     Params->scale = 1.0;
+//
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("TeleNade")) {
+         if (TNAN) {
+              local sprite = TNA->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              TNAN = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  TNAN = true;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("TeleNade")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+//DoAnimParticleEffects( sprite, Rad, RelX, RelY, lifeTime, animSpeed, veloMin, veloMax, startAlpha, endAlpha, windFactor, startSize, endSize, angleMin, angleMax, randomMotion, grav);
+            DoAnimParticleEffects(132, 5, -7, -7, 20, 0.03, -3.0, -7.0, 255, 255, 0, 0.5, 0.2, 0.0, 2.31, 0.0, -1.0);
+        }
+    }
+}
+
+
+
+/*
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+  if (weap->CheckName("TeleNade")){
+      currentworm = GetCurrentWorm();
+      if (currentworm != NullObj)
+      {
+        local Obje = Env->CheckCollision( currentworm, x, y-6);
+        local prevx = currentworm->PosX;
+        local prevy = currentworm->PosY;
+        currentworm->PosX = x;
+        currentworm->PosY = y-6;
+        if(Obje != NullObj)
+        {
+                if(Obje->ClType == OC_Landscape)
+                {
+                currentworm->PosX = prevx;
+                currentworm->PosY = prevy;
+                };
+        }
+        return;
+      }
+      return;  
+  }
+    
+  super;
+}
+*/
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+
+  if (weap->CheckName("TeleNade"))
+  {
+      CWorm * w = GetCurrentWorm();
+      if(w == NullObj) return;
+      int rowX = 0;
+      int colY = 0;
+      int limitX = 9;
+      int limitY = 9;
+      int teleX =  x;
+      int teleY =  y;
+
+      CGObject * o = Env->CheckCollision(w, teleX, teleY);
+
+      if(o == NullObj)
+      {
+          PlayLocalSound(67, 5, 1.0, 1.0);
+		  w->PosX = teleX;
+          w->PosY = teleY;
+          return;
+      }
+      else
+      {
+          PlayLocalSound(67, 5, 1.0, 1.0);
+		  teleX =  x - limitX/2;
+          teleY =  y - limitY/2;
+      }
+
+      while(1)
+      {
+         CGObject * obj = Env->CheckCollision(w, teleX, teleY);
+
+         if(obj == NullObj)
+         {
+             w->PosX = teleX;
+             w->PosY = teleY;
+             return;
+         }
+         else
+         {
+             if(rowX <= limitX)                   /////////      000--------
+             {                                    /////////      0000-------
+                 teleX++;                         /////////      00000------
+                 rowX++;                          /////////      00000000000
+             }                                    /////////      00000x00000
+             else if(colY <= limitY)              /////////      -----------
+             {                                    /////////      -----------
+                 teleY++;                         /////////      -----------
+                 colY++;                          /////////      -----------
+                 teleX = x - limitX/2;            /////////      -----------
+                 rowX = 0;
+             }
+             else return;
+         }
+      }
+  }
+  else super;
+}

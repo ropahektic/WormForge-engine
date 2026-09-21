@@ -1,0 +1,30 @@
+require utils, utils_hack;
+
+void hacktests::Init()
+{                            
+    keySync->AddKey(106); // Numpad *
+    keySync->AddKey(107); // Numpad +
+    keySync->AddKey(109); // Numpad .
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{                                       
+    if (Type == M_FRAME)
+        if (GetCurrentWorm() != NullObj)
+            if (keySync->KeyPressed(106))
+            {
+                Hack_SetSuperSheepSpeed(4);
+                Hack_SetRopeGrowthSpeed($140000);
+            }
+            else if (keySync->KeyPressed(107))
+            {
+                Hack_SetSuperSheepSpeed(Hack_GetSuperSheepSpeed()+1);  
+                Hack_SetRopeGrowthSpeed(Hack_GetRopeGrowthSpeed()+$10000);
+            }
+            else if (keySync->KeyPressed(109))
+            {
+                Hack_SetSuperSheepSpeed(Hack_GetSuperSheepSpeed()-1);  
+                Hack_SetRopeGrowthSpeed(Hack_GetRopeGrowthSpeed()-$10000);
+            }
+    super;
+}       

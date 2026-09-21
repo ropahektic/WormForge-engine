@@ -1,0 +1,55 @@
+require utils, p_sprite_builder, sprite_curtis_466;
+
+CSprite* petrolr_bullet;
+
+void petrol_rocket_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("petrolr.png");
+    petrolr_bullet = LoadSprite(f, 6, 0);
+}
+
+//---------------------------------PETROL ROCKET (WIND)-----------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Petrol Rocket";
+     sprite = smartb_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0 ;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 1.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 0.0;
+     Params->animate = true;
+     Params->anim_speed = 1.20;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Petrol Rocket")) {
+         if (petrolrb_anim) {
+              local sprite = petrolr_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.40;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              petrolrb_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  petrolrb_anim = true;
+}

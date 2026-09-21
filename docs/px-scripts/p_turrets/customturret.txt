@@ -1,0 +1,486 @@
+#WEAPON_CUSTOMTURRET
+
+$editor
+  $object  CustomTurret
+   $origin -20 -25
+   $radius 28
+   $image "edturret.png"
+   $func SpawnCustomTurret
+   $param WeapType enum 21 bazooka missile mortar pigeon sheep grenade cluster banana gas longbow dynamite mine flame holynade petrol skunk vase cow granny magicbull random
+   $param Invincible bool false
+   $param Mounted bool false
+   $param ClearMines bool true
+   $param AmmoPerTurn int 10
+   $param Delay int 1000
+   $param Damage int 50
+   $param FireNum int 5
+   $param Health int 50
+   $param MinRadius int 50
+   $param SensorRadius int 350
+   $param ExplDamage int 50
+   $param ArrowsGravity int 50
+$end
+
+CSprite* customturretBase;
+CSprite* customturretTower;
+
+CSprite* customturretBaseF;
+CSprite* customturretTowerF;
+
+CSprite* customturretTowerC;
+CSprite* customturretBaseC;
+
+CSprite* customturretTowerP;
+
+int sprNumW;
+bool sprNumSet;
+bool weaptypeSet;
+float aGrav;
+
+void customturret::InitGraphic()
+{
+  local f = GetAttachment("pyro_baseminez.png");
+  customturretBase = LoadSprite(f, 1, 0);
+  local f = GetAttachment("pyro_towerminez.png");
+  customturretTower = LoadSprite(f, 1, 0);
+
+  local f = GetAttachment("baseflamez.png");
+  customturretBaseF = LoadSprite(f, 1, 0);
+  local f = GetAttachment("towerflamez.png");
+  customturretTowerF = LoadSprite(f, 1, 0);
+
+  local f = GetAttachment("clbaz.png");
+  customturretTowerC = LoadSprite(f, 1, 0);
+  local f = GetAttachment("sentryblueaimrev.png");
+  customturretBaseC = LoadSprite(f, 1, 0);
+
+  local f = GetAttachment("towerpet.png");
+  customturretTowerP = LoadSprite(f, 1, 0);
+}
+
+CCustomTurret : CTurretBase;
+
+void CCustomTurret::CCustomTurret(CObject* parent, fixed x, fixed y)
+{
+  super;
+  breakable = true;
+//  clearMines = false;
+  baseSprite = customturretBase;
+  towerSprite = customturretTower;
+  towerOffset = 20;
+//  sprNum = sprNumW;
+};
+
+
+
+
+void CCustomTurret::ChooseWeapon(int i)
+{
+    i = weapI;
+    if (CheckMaskAt(this, FourCheckMask, ShootX, ShootY, -1) != NullObj) return false;
+    CMineParams MParams;
+    CShootDesc SDesc;
+    zero(&MParams);
+    zero(&SDesc);
+
+    local ForceVar = GS->GetRandom() % 64;
+    local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+
+    SDesc.Team = turretTeam;
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+    local worm = GetCurrentWorm();
+    SDesc.Worm = worm->WormNumber;
+    SDesc.AddX = worm->PosX;
+    SDesc.AddY = worm->PosY;
+
+
+    if (turretTeam < 0) SDesc.Team = 0;
+
+    SDesc.SpX = ShootSX * BaseForce;
+    SDesc.SpY = ShootSY * BaseForce;
+    SDesc.Delay = ExplTimer;
+
+    MParams.Prefuse = 0;
+    MParams.Flags = 60;
+    MParams.Bias = 0;
+    MParams.Damage = 50;
+    MParams.BlastPower = 100;
+    MParams.Fuse = ExplTimer; //20 frames
+    MParams.Radius = 48;
+    local shotWeap;
+
+    if (i == 1) {random = GetWeaponByName("Bazooka"); random->launch.explosion.damage = admg; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); return;}
+    if (i == 2) {random = GetWeaponByName("Homing Missile"); random->launch.explosion.damage = admg; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); return;}
+    if (i == 3) {random = GetWeaponByName("Mortar"); random->launch.explosion.damage = admg; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); return;}
+    if (i == 4) {random = GetWeaponByName("Homing Pigeon"); random->launch.explosion.damage = admg; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); return;}
+    if (i == 5) {random = GetWeaponByName("Sheep"); random->launch.explosion.damage = admg; random->launch.timeBeforeExplosion = ExplTimer; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); if(random->launch.timeBeforeExplosion != 5000)random->launch.timeBeforeExplosion = 5000; return;}
+    if (i == 6) {random = GetWeaponByName("Grenade"); random->launch.explosion.damage = admg; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); return;}
+    if (i == 7) {random = GetWeaponByName("Cluster Bomb"); random->launch.explosion.damage = admg; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); return;}
+    if (i == 8) {random = GetWeaponByName("Banana Bomb"); random->launch.explosion.damage = admg; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); return;}
+    if (i == 9) {random = GetWeaponByName("Dynamite"); random->launch.explosion.damage = admg; random->launch.timeBeforeExplosion = ExplTimer; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); if(random->launch.timeBeforeExplosion != 5000)random->launch.timeBeforeExplosion = 5000; return;}
+    if (i == 10) {random = GetWeaponByName("Holy Hand-Grenade"); random->launch.explosion.damage = admg;  random->launch.timeBeforeExplosion = ExplTimer; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); if(random->launch.timeBeforeExplosion != 5000)random->launch.timeBeforeExplosion = 5000; return;}
+    if (i == 11) {random = GetWeaponByName("Petrol Bomb"); random->launch.explosion.damage = admg; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); return;}
+    if (i == 12) {random = GetWeaponByName("Skunk"); random->launch.explosion.damage = admg;  random->launch.timeBeforeExplosion = ExplTimer; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); if(random->launch.timeBeforeExplosion != 5000)random->launch.timeBeforeExplosion = 5000; return;}
+    if (i == 13) {random = GetWeaponByName("Priceless Ming Vase"); random->launch.explosion.damage = admg;  random->launch.timeBeforeExplosion = ExplTimer; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); if(random->launch.timeBeforeExplosion != 5000)random->launch.timeBeforeExplosion = 5000; return;}
+    if (i == 14) {random = GetWeaponByName("Mad Cow"); random->launch.explosion.damage = admg;  random->launch.timeBeforeExplosion = ExplTimer; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); if(random->launch.timeBeforeExplosion != 5000)random->launch.timeBeforeExplosion = 5000; return;}
+    if (i == 15) {random = GetWeaponByName("Old Woman"); random->launch.explosion.damage = admg; random->launch.timeBeforeExplosion = ExplTimer; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); if(random->launch.timeBeforeExplosion != 5000)random->launch.timeBeforeExplosion = 5000; return;}
+    if (i == 16) {random = GetWeaponByName("Patsy's Magic Bullet"); random->launch.explosion.damage = admg; PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); shotWeap = new CMissile(Root->GetObject(25, 0), &random->launch, &SDesc); return;}
+    if (i == 17) {random = new CGas(Root->GetObject(25, 0), ShootX, ShootY, admg, turretTeam); return;}
+    if (i == 18) {arrow = new CArrow(Root->GetObject(25, 0), &admg, &SDesc); if (CGObject(arrow)->IsValid()){arrow->DontStick = true; arrow->GravityFactor = aGrav;}; return;}
+    if (i == 19) {mine = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0); mine->autoTurnDestruct = clearMines; return;}
+    if (i == 20) {CFireDesc FDesc; FDesc.X = ShootX; FDesc.Y = ShootY;  FDesc.SpX = ShootSX * BaseForce * 4; FDesc.SpY = ShootSY * BaseForce * 4; FDesc.Count = 0; FDesc.Duration = 1500; FDesc.UpPower = 1; FDesc.Damage = FNum-1; FDesc.Unk = 0; FDesc.UnkB = admg/5; FDesc.UnkD = 0; FDesc.OwnerTeam = turretTeam;
+           random = new CFire(Root->GetObject(25, 0), &FDesc, 0); PlaySound(22, 10, RandomFloat(1.0, 1.0+BaseForce/30.0), 0.9); return;}
+}
+
+void CCustomTurret::ShootAtEnemy()
+{
+    if (CheckMaskAt(this, FourCheckMask, ShootX, ShootY, -1) != NullObj) return false;
+    CMineParams MParams;
+    CShootDesc SDesc;
+    zero(&MParams);
+    zero(&SDesc);
+
+    local ForceVar = GS->GetRandom() % 64;
+    local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+
+    SDesc.Team = turretTeam;
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+    local worm = GetCurrentWorm();
+    SDesc.Worm = worm->WormNumber;
+    SDesc.AddX = worm->PosX;
+    SDesc.AddY = worm->PosY;
+
+
+    if (turretTeam < 0) SDesc.Team = 0;
+
+    SDesc.SpX = ShootSX * BaseForce;
+    SDesc.SpY = ShootSY * BaseForce;
+    SDesc.Delay = ExplTimer;
+
+    MParams.Prefuse = 0;
+    MParams.Flags = 60;
+    MParams.Bias = 0;
+    MParams.Damage = 50;
+    MParams.BlastPower = 100;
+    MParams.Fuse = ExplTimer; //20 frames
+    MParams.Radius = 48;
+
+    local weapon;
+    local zook;
+    local missile;
+    local mortar;
+    local pigeon;
+    local sheep;
+    local grenade;
+    local cluster;
+    local banana;
+//    local shotgun;
+//    local longbow;
+    local dynamite;
+//    local mine;
+//    local mole;
+    local holynade;
+    local petrol;
+    local skunk;
+    local vase;
+    local cow;
+    local granny;
+    local magicbull;
+    if (weaptype <= 10)
+    {
+       if (weaptype == 1) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); zook = GetWeaponByName("Bazooka"); zook->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &zook->launch, &SDesc);}
+       if (weaptype == 2) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); missile = GetWeaponByName("Homing Missile"); missile->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &missile->launch, &SDesc);}
+       if (weaptype == 3) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); mortar = GetWeaponByName("Mortar"); mortar->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &mortar->launch, &SDesc);}
+       if (weaptype == 4) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); pigeon = GetWeaponByName("Homing Pigeon"); pigeon->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &pigeon->launch, &SDesc);}
+       if (weaptype == 5) {PlaySound(50, 10, RandomFloat(1.0, 1.0+BaseForce/20.0), 0.9); sheep = GetWeaponByName("Sheep"); sheep->launch.explosion.damage = admg; sheep->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &sheep->launch, &SDesc); if(sheep->launch.timeBeforeExplosion != 20000)sheep->launch.timeBeforeExplosion = 20000;}
+       if (weaptype == 6) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); grenade = GetWeaponByName("Grenade"); grenade->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &grenade->launch, &SDesc);}
+       if (weaptype == 7) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); cluster = GetWeaponByName("Cluster Bomb"); cluster->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &cluster->launch, &SDesc);}
+       if (weaptype == 8) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); banana = GetWeaponByName("Banana Bomb"); banana->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &banana->launch, &SDesc);}
+       if (weaptype == 9) {PlaySound(37, 10, RandomFloat(1.0, 1.0+BaseForce/20.0), 0.9); local gas = new CGas(Root->GetObject(25, 0), ShootX, ShootY, admg, turretTeam);}
+       if (weaptype == 10) {PlaySound(29, 10, RandomFloat(1.0, 1.0+BaseForce/30.0), 0.9); local arrow = new CArrow(Root->GetObject(25, 0), &admg, &SDesc); if (CGObject(arrow)->IsValid()){arrow->DontStick = true; arrow->GravityFactor = aGrav;};}
+    }
+    if (weaptype > 10 && weaptype <= 21)
+    {
+       if (weaptype == 11) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); dynamite = GetWeaponByName("Dynamite"); dynamite->launch.explosion.damage = admg; dynamite->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &dynamite->launch, &SDesc); if(dynamite->launch.timeBeforeExplosion != 5000)dynamite->launch.timeBeforeExplosion = 5000;}
+       if (weaptype == 12) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); local mine = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0); mine->autoTurnDestruct = clearMines;}
+       if (weaptype == 13)
+       {
+           CFireDesc FDesc;
+           FDesc.X = ShootX; FDesc.Y = ShootY;  FDesc.SpX = ShootSX * BaseForce * 4; FDesc.SpY = ShootSY * BaseForce * 4; FDesc.Count = 0; FDesc.Duration = 1500; FDesc.UpPower = 1; FDesc.Damage = FNum-1; FDesc.Unk = 0; FDesc.UnkB = admg/5; FDesc.UnkD = 0; FDesc.OwnerTeam = turretTeam;
+           weapon = new CFire(Root->GetObject(25, 0), &FDesc, 0); PlaySound(22, 10, RandomFloat(1.0, 1.0+BaseForce/30.0), 0.9);
+       }
+       if (weaptype == 14) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); holynade = GetWeaponByName("Holy Hand-Grenade"); holynade->launch.explosion.damage = admg; holynade->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &holynade->launch, &SDesc); if(holynade->launch.timeBeforeExplosion != 5000)holynade->launch.timeBeforeExplosion = 5000;}
+       if (weaptype == 15) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); petrol = GetWeaponByName("Petrol Bomb"); petrol->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &petrol->launch, &SDesc);}
+       if (weaptype == 16) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); skunk = GetWeaponByName("Skunk"); skunk->launch.explosion.damage = admg; skunk->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &skunk->launch, &SDesc); if(skunk->launch.timeBeforeExplosion != 5000) skunk->launch.timeBeforeExplosion = 5000;}
+       if (weaptype == 17) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); vase = GetWeaponByName("Priceless Ming Vase"); vase->launch.explosion.damage = admg; vase->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &vase->launch, &SDesc); if(vase->launch.timeBeforeExplosion != 5000)vase->launch.timeBeforeExplosion = 5000;}
+       if (weaptype == 18) {PlaySound(49, 10, RandomFloat(1.0, 1.0+BaseForce/20.0), 0.9); cow = GetWeaponByName("Mad Cow"); cow->launch.explosion.damage = admg; cow->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &cow->launch, &SDesc); if(cow->launch.timeBeforeExplosion != 10000)cow->launch.timeBeforeExplosion = 10000;}
+       if (weaptype == 19) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/20.0), 0.9); granny = GetWeaponByName("Old Woman"); granny->launch.explosion.damage = admg; granny->launch.timeBeforeExplosion = ExplTimer; weapon = new CMissile(Root->GetObject(25, 0), &granny->launch, &SDesc); if(granny->launch.timeBeforeExplosion != 5000)granny->launch.timeBeforeExplosion = 5000;}
+       if (weaptype == 20) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); magicbull = GetWeaponByName("Patsy's Magic Bullet"); magicbull->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &magicbull->launch, &SDesc);}
+       if (weaptype == 21) {weapI = RandomInt(1,20); ChooseWeapon(weapI);}
+    }
+    return true;
+};
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Flame Turret"))
+   {
+     local sg = new CCustomTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 18;
+     sg->weaptype = 13;
+//   sg->clearMines = true;
+//     sg->FNum = 3;
+     sg->admg = 25;
+//   sg->ExplTimer = 1000;
+//     sg->health = 60;
+//   sg->minimalRadius = 50;
+//   sg->sensorRadius = 400;
+//   sg->lostRadius = sg->sensorRadius + 100;
+     sg->ExpDamage = 45;
+//     sg->maxHealth = sg->health;
+     sg->sprNum = 126;
+//   sg->breakable = true;
+//   sg->ShootSY = FireAngle;
+//   sg->ShootSX = FirePower * TurnSide;
+     sg->towerSprite = customturretTowerF;
+     sg->towerOffset = 19;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Gas Turret"))
+   {
+     local sg = new CCustomTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 20;
+     sg->weaptype = 9;
+//   sg->clearMines = true;
+     sg->FNum = 6;
+     sg->admg = 3;
+     sg->ExplTimer = 1000;
+//     sg->health = 60;
+     sg->minimalRadius = 30;
+     sg->sensorRadius = 100;
+     sg->lostRadius = sg->sensorRadius + 50;
+     sg->ExpDamage = 45;
+//     sg->maxHealth = sg->health;
+    sg->sprNum = 174;
+    sg->breakable = true;
+    sg->ShootSY = FireAngle;
+    sg->ShootSX = FirePower * TurnSide;
+    sg->towerSprite = customturretTowerF;
+    sg->towerOffset = 15;
+    vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+    turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};
+
+ override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Bazooka Turret"))
+   {
+     local sg = new CCustomTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->admg = 45;
+     sg->ammoPerTurn = 6;
+     sg->weaptype = 1;
+     sg->ExpDamage = 50;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};
+
+ override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Missile Turret"))
+   {
+     local sg = new CCustomTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 5;
+     sg->weaptype = 2;
+     sg->ExpDamage = 45;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};
+
+ override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Petrol Turret"))
+   {
+     local sg = new CCustomTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 6;
+     sg->weaptype = 15;
+     sg->sprNum = 55;
+     sg->admg = 15;
+     //sg->baseSprite = customturretBaseF;
+     //sg->towerSprite = customturretTowerP;
+     //sg->towerOffset = 20;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+    turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};
+
+ override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Grenade Turret"))
+   {
+     local sg = new CCustomTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 6;
+     sg->weaptype = 6;
+     sg->ExpDamage = 50;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};
+
+ override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Mortar Turret"))
+   {
+     local sg = new CCustomTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 4;
+     sg->weaptype = 3;
+     sg->ExpDamage = 15;
+     //  sg->FNum = 3;
+     sg->admg = 3;
+     sg->sprNum = 52;
+     sg->towerSprite = customturretTowerF;
+     sg->baseSprite = customturretBaseF;
+     sg->reloadTime = 90;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};
+
+ override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Cluster Turret"))
+   {
+     local sg = new CCustomTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 6;
+     sg->weaptype = 7;
+     sg->sprNum = 54;
+     sg->towerSprite = customturretTowerC;
+     sg->baseSprite = customturretBaseC;
+     sg->towerOffset = 10;
+     sg->minimalRadius = 30;
+     sg->sensorRadius = 60;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};
+void SpawnCustomTurret(CEditorObject* eobj)
+{
+  sprNumSet = true;
+  weaptypeSet = true;
+  if (sprNumSet)        //less lags at start plz
+  {
+      if (StrCmp(eobj->GetString("WeapType"), "bazooka")) {sprNumW = 48; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "mortar")) {sprNumW = 52; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "pigeon")) {sprNumW = 175; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "sheep")) {sprNumW = 61; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "grenade")) {sprNumW = 50; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "cluster")) {sprNumW = 53; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "banana")) {sprNumW = 51; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "gas")) {sprNumW = 106; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "longbow")) {sprNumW = 46; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "dynamite")) {sprNumW = 78; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "mine")) {sprNumW = 47; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "flame")) {sprNumW = 124; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "holynade")) {sprNumW = 56; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "petrol")) {sprNumW = 55; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "skunk")) {sprNumW = 174; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "vase")) {sprNumW = 74; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "cow")) {sprNumW = 164; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "granny")) {sprNumW = 162; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "magicbull")) {sprNumW = 49; sprNumSet = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "random")) {sprNumW = 102; sprNumSet = false;} //599
+  }
+  local sg = new CCustomTurret(Root->GetObject(25, 0), eobj->PosX, eobj->PosY);
+  sg->turretTeam = -1;
+  sg->clearMines = eobj->GetBool("ClearMines");
+  sg->ammoPerTurn = eobj->GetInt("AmmoPerTurn");
+  if (weaptypeSet)        //less lags at start plz
+  {
+     if (StrCmp(eobj->GetString("WeapType"), "bazooka")) {sg->weaptype = 1; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "missile")) {sg->weaptype = 2; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "mortar")) {sg->weaptype = 3; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "pigeon")) {sg->weaptype = 4; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "sheep")) {sg->weaptype = 5; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "grenade")) {sg->weaptype = 6; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "cluster")) {sg->weaptype = 7; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "banana")) {sg->weaptype = 8; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "gas")) {sg->weaptype = 9; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "longbow")) {sg->weaptype = 10; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "dynamite")) {sg->weaptype = 11; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "mine")) {sg->weaptype = 12; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "flame")) {sg->weaptype = 13; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "holynade")) {sg->weaptype = 14; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "petrol")) {sg->weaptype = 15; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "skunk")) {sg->weaptype = 16; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "vase")) {sg->weaptype = 17; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "cow")) {sg->weaptype = 18; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "granny")) {sg->weaptype = 19; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "magicbull")) {sg->weaptype = 20; weaptypeSet = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "random")) {sg->weaptype = 21; weaptypeSet = false;}
+  }
+  sg->FNum = eobj->GetInt("FireNum");
+  sg->admg = eobj->GetInt("Damage");
+  sg->ExplTimer = eobj->GetInt("Delay");
+  sg->health = eobj->GetInt("Health");
+  sg->minimalRadius = eobj->GetInt("MinRadius");
+  sg->sensorRadius = eobj->GetInt("SensorRadius");
+  sg->lostRadius = sg->sensorRadius + 100;
+  sg->ExpDamage = eobj->GetInt("ExplDamage");
+  sg->maxHealth = sg->health;
+  sg->sprNum = sprNumW;
+  aGrav = eobj->GetInt("ArrowsGravity") / 100.0;
+  if (eobj->GetBool("Invincible"))
+  {
+     sg->breakable = false;
+  }
+  if (eobj->GetBool("Mounted"))
+  {
+    sg->SpeedDivider = 32767;
+    for (local i = 0; i < 100; i++)
+    {
+      if (Env->CheckCollision(sg, sg->PosX, sg->PosY + 1) != NullObj) break;
+      sg->PosY += 1;
+    }
+  }
+};

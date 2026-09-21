@@ -1,0 +1,47 @@
+
+CSprite* security_grenade_aiming;
+                                                                                                                                
+void security_grenade_spb::InitGraphic() {
+    CFile* f;                                                                    
+    f = GetAttachment("security_grenade_bullet.png");
+    security_grenade_aiming = LoadSprite(f, 1, 0);                                                            
+}                                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Security Grenade";                                               
+     sprite = security_grenade_aiming->Index;                                     
+     Params->hand_radius = 17.0;                                                         
+     Params->weap_rotation =  0.5;
+     Params->weap_radius = 9.0;
+     Params->hand_type = 1;
+     Params->hand_scale = 0.8;                                                                                   
+                                                  
+     local WA = new WormSprite(weapName, sprite, Params);
+    }                                                                           
+  }                                                                              
+}                                                                                
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;                                                                          
+  if (Type == M_FRAME){                                                          
+     if (weap->CheckName("Security Grenade")) {                                
+         if (security_grenade_anim2) {                                              
+            local sprite = security_grenade_aiming->Index;                      
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);               
+            weap->launch.anim.spriteIndex = 0;
+            security_grenade_anim2 = false;                                         
+         } 
+     }                                                                                                                                                                                                                          
+  }                                                                              
+}                                                                                
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           
+  security_grenade_anim2 = true;                                                    
+}                                                                                

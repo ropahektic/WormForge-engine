@@ -1,0 +1,120 @@
+require utils, p_sprite_builder, pxparticles, utils_curtis, sprite_curtis_461;
+
+CSprite* tflame_bullet;
+CMissile* dmis_torchf;
+bool torchf;
+
+void mini_torch_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("tflame.png");
+    tflame_bullet = LoadSprite(f, 6, 0);
+}
+
+//---------------------------------MINI-TORCH---------------------------------//
+
+/* override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+ {
+   if(Weap->CheckName("Mini-Torch"))
+   {
+   Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 20;
+   Desc->SpY = 20*(0.5 - FireAngle);
+   super(GetWeaponByName("Torch Flame"), Desc);
+   return;
+   }
+ super;
+ }*/
+
+//---------------------------------TORCH FLAME--------------------------------//
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Mini-Torch")) {
+         if (tflame_anim) {
+              local sprite = tflame_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 6.00;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              tflame_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  tflame_anim = true;
+}
+
+//---------------PARTICLE FX---------------//
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("Mini-Torch")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+            DoAnimParticleEffects(
+
+            461,     //   SPRITE
+            1,       //   RADIUS
+            20,      //   RELX
+            15,      //   RELY
+            55,      //   LIFETIME
+            0.015,   //   SPEED
+            1.0,     //   VELO.MIN
+            5.0,     //   VELO.MAX
+            255,     //   START.ALPHA
+            255,     //   END.ALPHA
+            0,       //   WIND
+            0.50,    //   START.SIZE
+            0.05,    //   END.SIZE
+            0.00,    //   ANGLE.MIN
+            0.00,    //   ANGLE.MAX
+            0.0,     //   RANDOMNESS
+            -3.0);   //   GRAVITY
+        }
+    }
+}
+
+//----------------------------------DIGGING-----------------------------------//
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    Sdigging = false;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Mini-Torch"))
+        {
+          if (torchf)
+          {
+            dmis_torchf = this; dmis_torchf->Sdigging = true; torchf = true;
+          }
+        }
+
+        if (dmis_torchf == this && Sdigging)
+        {
+            GG->land->MakeHole(4,dmis_torchf->PosX,dmis_torchf->PosY-5.0);
+        }
+
+    }
+
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Mini-Torch"))
+    {
+        torchf = true;
+    }
+
+    super;
+}

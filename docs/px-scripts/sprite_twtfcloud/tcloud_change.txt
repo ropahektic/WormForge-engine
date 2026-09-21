@@ -1,0 +1,14 @@
+
+CSprite* tcloud;
+
+void tcloud_change::InitGraphic()
+{
+   CFile *f;
+
+   f = GetAttachment("wcloud.png");
+   tcloud = LoadSprite(f, 29, 0);
+
+   SetSpriteOverride(136, tcloud);
+}   
+
+                        

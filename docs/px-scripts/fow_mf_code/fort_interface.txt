@@ -1,0 +1,143 @@
+
+CInterfaceHandler::CInterfaceHandler(CObject* parent)
+{
+    super(parent, GS);
+    GUIn = MakeBitmap(32, 32);
+    GUIn2 = MakeBitmap(32, 32);
+    GUIn3 = MakeBitmap(256, 47);
+
+    bool FreeNow = false;
+    bool isFreeing = false;
+    col = 8; //maybe needed?
+
+    KCx = 0;
+    KCy = 0;
+    KCtl = 0;
+
+    IsAddHealth = false;
+    HFrame = 0;
+    OwningTeam = 0;
+
+    IsWelcome = false;
+    IsCenter = false;
+
+    MapHeight = 0;
+
+    DrawColor = 0;
+    SetDrawColor = 0;
+}
+
+void CInterfaceHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+    {
+    if(FreeNow == true)
+		{
+        if(isFreeing == false)
+			{
+            isFreeing = true;
+            Free(true);
+            }
+            return;
+        }
+
+    local a = 0;
+    local b = 0;
+
+    if(IsAddHealth == true)
+		{
+        if(HFrame == 0){GS->Disp->DrawText(3, GUIn2, 0, 0, "+25", &a, &b);}
+        HFrame = HFrame + 1;
+        if(HFrame > 250){FreeNow = true;}
+        }
+	else
+		{
+        if(IsWelcome == true)
+			{
+            if(HFrame == 0)
+				{
+                GS->Disp->DrawText(3, GUIn3, 0, 0, "Walking past center of map", &a, &b);
+                GS->Disp->DrawText(3, GUIn3, 0, 15, "will disable kaos mode.", &a, &b);
+                GS->Disp->DrawText(3, GUIn3, 0, 30, "Unless Mayhem is active.", &a, &b);
+                }
+            HFrame = HFrame + 1;
+            if(HFrame > 30000){FreeNow = true;}
+            }
+		else
+			{
+            if(IsCenter == true)
+				{
+                if(SetDrawColor != 0)
+					{
+                    if(DrawColor == SetDrawColor){HFrame = 1;}
+					else {DrawColor = SetDrawColor; HFrame = 0;}
+                    SetDrawColor = 0;
+                    }
+
+                if(HFrame == 0)
+					{
+                    if(DrawColor == 1){GS->Disp->DrawText(2, GUIn, 0, 0, "|     ", &a, &b);}
+                    if(DrawColor == 2){GS->Disp->DrawText(1, GUIn, 0, 0, "|     ", &a, &b);}
+                    }
+                HFrame =  1;
+                }
+			else
+				{
+                if(KCtl != 0)
+					{
+                    if(KCtl <= 2){GS->Disp->DrawText(3, GUIn2, 0, 0, ItoA(KCtl - 1), &a, &b);}
+					else {GS->Disp->DrawText(3, GUIn, 0, 0, ItoA(KCtl - 1), &a, &b);}
+                    }
+                }
+            }
+        }
+    }
+    
+if (Type == M_DRAWQUEUE) //Where is crate located on monitor?
+    {
+    local Cx = GS->ActCameraX;
+    local Cy = GS->ActCameraY;
+
+    local Ox = (KCx - Cx) + 14;
+    local Oy = (KCy - Cy)  + 6;
+
+    if(IsAddHealth == true)
+		{
+        Ox = (KCx - Cx);
+        Oy = (KCy - Cy) - int(HFrame / 3);
+        AddInterfaceBitmap(0, Ox, Oy, GUIn2,30,12,0);
+        }
+	else
+		{
+        if(IsWelcome == true)
+			{
+            Ox = (KCx - Cx) + 50;
+            Oy = (KCy - Cy) - KCy - 200;
+            AddInterfaceBitmap(0, Ox, Oy, GUIn3,256,47,0);
+            }
+		else
+			{
+            if(IsCenter == true)
+				{
+                Ox = (KCx - Cx);
+                Oy = (KCy - Cy);
+                local iter = int(MapHeight / 50);
+
+                for(int n = 0; n < 50; n++)
+					{
+                    local addm = 25 - n;
+                    AddInterfaceBitmap(0, Ox, Oy + int(addm * iter), GUIn,1,12,0);
+                    }
+                }
+			else
+				{
+                if(KCtl != 0)
+					{
+                    if(KCtl <= 2){AddInterfaceBitmap(0, Ox, Oy, GUIn2,10,12,0);}
+					else{AddInterfaceBitmap(0, Ox, Oy, GUIn,10,12,0);}
+                    }
+                }
+            }
+        }
+    }
+}

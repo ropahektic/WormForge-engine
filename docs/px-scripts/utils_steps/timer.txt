@@ -1,0 +1,40 @@
+require utils;
+
+int gframe;  //unlike GS->Tick, this calculates the real frames (excluding lags and pauses), a match-time, in other words.
+int MatchTimer;
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{    
+    if (Type == M_FRAME)
+    {
+        gframe += 1;
+        MatchTimer = gframe*20;
+    }
+
+    super;
+}
+
+string MatchTimerView(bool MiniVersion)
+{
+    local csec = MatchTimer/10 % 100;
+    local sec = MatchTimer/1000 % 60;
+    local min = MatchTimer/1000 / 60;
+    local hour = MatchTimer/1000 / 3600;
+    
+    if (hour < 10) local phl = StrCon("0",(ItoA(hour)));
+    else local phl = ItoA(hour);
+    if (min  < 10) local pml = StrCon("0",(ItoA(min)));
+    else local pml = ItoA(min);
+    if (sec  < 10) local psl = StrCon("0",(ItoA(sec)));
+    else local psl = ItoA(sec);
+    if (csec < 10) local pcl = StrCon("0",(ItoA(csec)));
+    else local pcl = ItoA(csec);
+    
+    local hl = StrCon(phl,":");
+    local ml = StrCon(pml,":");
+    local sl = StrCon(psl,".");
+    local cl = pcl;
+    
+    if (!MiniVersion) return StrCon7(phl,":",pml,":",psl,".",pcl);
+    else return StrCon3(phl,":",pml); 
+}                                                  

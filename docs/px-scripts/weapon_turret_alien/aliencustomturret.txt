@@ -1,0 +1,191 @@
+$editor
+  $object  CustomTurret
+   $origin -20 -25
+   $radius 28
+   $image "edturret.png"
+   $func SpawnCustomTurret
+   $param WeapType enum 1 magicbull
+   $param Invincible bool false
+   $param Mounted bool false      
+   $param ClearMines bool true
+   $param AmmoPerTurn int 500
+   $param Delay int 1000
+   $param Damage int 100
+   $param FireNum int 5
+   $param Health int 250
+   $param MinRadius int 150
+   $param SensorRadius int 10000
+   $param ExplDamage int 100
+   $param ArrowsGravity int 50
+$end
+
+CSprite* aliencustomturretBase;
+CSprite* aliencustomturretTower;
+int sprNumW2;
+bool sprNumSet2;
+bool weaptypeSet2;
+float aGrav2;
+
+#WEAPON_ALIENDEFENSESYSTEM
+
+void aliencustomturret::InitGraphic()
+{
+  local f = GetAttachment("alien_base.png");
+  aliencustomturretBase = LoadSprite(f, 1, 0);
+  local f = GetAttachment("alien_tower.png");
+  aliencustomturretTower = LoadSprite(f, 1, 0);
+}
+
+CCustomAlienTurret : CAlienTurretBase;
+
+void CCustomAlienTurret::CCustomAlienTurret(CObject* parent, fixed x, fixed y)
+{
+  super;                 
+  breakable = true;
+//  clearMines = false;
+  baseSprite = aliencustomturretBase;
+  towerSprite = aliencustomturretTower;
+  towerOffset = 30;
+//  sprNum = sprNumW;
+};
+
+
+void CCustomAlienTurret::ChooseWeapon2(int i)
+{
+    i = weapI;
+    if (CheckMaskAt(this, FourCheckMask, ShootX, ShootY, -1) != NullObj) return false;
+    CMineParams MParams;
+    CShootDesc SDesc;
+    zero(&MParams);
+    zero(&SDesc);
+    
+    local ForceVar = GS->GetRandom() % 64;
+    local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+    
+    SDesc.Team = turretTeam;
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+    local worm = GetCurrentWorm();
+    SDesc.Worm = worm->WormNumber;
+    SDesc.AddX = worm->PosX;
+    SDesc.AddY = worm->PosY;
+    
+    
+    if (turretTeam < 0) SDesc.Team = 0;
+
+    SDesc.SpX = ShootSX * BaseForce;
+    SDesc.SpY = ShootSY * BaseForce;
+    SDesc.Delay = ExplTimer;
+    
+    MParams.Prefuse = 0;
+    MParams.Flags = 60;
+    MParams.Bias = 0;
+    MParams.Damage = 50;
+    MParams.BlastPower = 100;
+    MParams.Fuse = ExplTimer; //20 frames
+    MParams.Radius = 48;
+    
+    if (i == 20) {CFireDesc FDesc; FDesc.X = ShootX; FDesc.Y = ShootY;  FDesc.SpX = ShootSX * BaseForce * 4; FDesc.SpY = ShootSY * BaseForce * 4; FDesc.Count = 0; FDesc.Duration = 1500; FDesc.UpPower = 1; FDesc.Damage = FNum-1; FDesc.Unk = 0; FDesc.UnkB = admg/5; FDesc.UnkD = 0; FDesc.OwnerTeam = turretTeam;
+           random = new CFire(Root->GetObject(25, 0), &FDesc, 0); PlaySound(22, 10, RandomFloat(1.0, 1.0+BaseForce/30.0), 0.9); return;}
+}
+
+void CCustomAlienTurret::ShootAtEnemy2()
+{
+    if (CheckMaskAt(this, FourCheckMask, ShootX, ShootY, -1) != NullObj) return false;
+    CMineParams MParams;
+    CShootDesc SDesc;
+    zero(&MParams);
+    zero(&SDesc);
+    
+    local ForceVar = GS->GetRandom() % 64;
+    local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+    
+    SDesc.Team = turretTeam;
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+    local worm = GetCurrentWorm();
+    SDesc.Worm = worm->WormNumber;
+    SDesc.AddX = worm->PosX;
+    SDesc.AddY = worm->PosY;
+    
+    
+    if (turretTeam < 0) SDesc.Team = 0;
+
+    SDesc.SpX = ShootSX * BaseForce;
+    SDesc.SpY = ShootSY * BaseForce;
+    SDesc.Delay = ExplTimer;
+    
+    MParams.Prefuse = 0;
+    MParams.Flags = 60;
+    MParams.Bias = 0;
+    MParams.Damage = 50;
+    MParams.BlastPower = 100;
+    MParams.Fuse = ExplTimer; //20 frames
+    MParams.Radius = 48;
+    
+    local weapon;
+    local magicbull;
+    
+    if (weaptype == 20) {PlaySound(44, 10, RandomFloat(1.0, 1.0+BaseForce/10.0), 0.9); magicbull = GetWeaponByName("Alien Defense System Bullet"); magicbull->launch.explosion.damage = admg; weapon = new CMissile(Root->GetObject(25, 0), &magicbull->launch, &SDesc);}
+    if (weaptype == 21) {weapI = RandomInt(1,20); ChooseWeapon2(weapI);}
+
+    return true;
+};
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Alien Turret"))
+   {
+     local sg = new CCustomAlienTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 1000;
+     sg->weaptype = 20;
+     sg->sprNum = 0;
+   } else {
+     super;
+   };
+};
+
+void CCustomAlienTurret(CEditorObject* eobj)
+{
+  sprNumSet2 = true;
+  weaptypeSet2 = true;
+  if (sprNumSet2)        //less lags at start plz
+  {
+      if (StrCmp(eobj->GetString("WeapType"), "magicbull")) {sprNumW2 = 134; sprNumSet2 = false;}
+      if (StrCmp(eobj->GetString("WeapType"), "random")) {sprNumW2 = 102; sprNumSet2 = false;} //599
+  } 
+  local sg = new CCustomAlienTurret(Root->GetObject(25, 0), eobj->PosX, eobj->PosY);
+  sg->turretTeam = -1;
+  sg->clearMines = eobj->GetBool("ClearMines");   
+  sg->ammoPerTurn = eobj->GetInt("AmmoPerTurn");
+  if (weaptypeSet2)        //less lags at start plz
+  {
+     if (StrCmp(eobj->GetString("WeapType"), "magicbull")) {sg->weaptype = 20; weaptypeSet2 = false;}
+     if (StrCmp(eobj->GetString("WeapType"), "random")) {sg->weaptype = 21; weaptypeSet2 = false;}
+  } 
+  sg->FNum = eobj->GetInt("FireNum");          
+  sg->admg = eobj->GetInt("Damage");
+  sg->ExplTimer = eobj->GetInt("Delay");
+  sg->health = eobj->GetInt("Health");
+  sg->minimalRadius = eobj->GetInt("MinRadius");
+  sg->sensorRadius = eobj->GetInt("SensorRadius");
+  sg->lostRadius = sg->sensorRadius + 100;
+  sg->ExpDamage = eobj->GetInt("ExplDamage");
+  sg->maxHealth = sg->health;
+  sg->sprNum2 = sprNumW2; 
+  aGrav = eobj->GetInt("ArrowsGravity") / 100.0;
+  if (eobj->GetBool("Invincible"))
+  {
+     sg->breakable = false;
+  }
+  if (eobj->GetBool("Mounted"))
+  {
+    sg->SpeedDivider = 32767;
+    for (local i = 0; i < 100; i++)
+    {
+      if (Env->CheckCollision(sg, sg->PosX, sg->PosY + 1) != NullObj) break;
+      sg->PosY += 1;
+    }
+  }
+};

@@ -1,0 +1,31 @@
+/* ----------------------------------
+   ===== BIG SCRIPT WARNING :)) =====
+   ===== ALL SPRITES ARE SORTED =====   
+   =====  PORTED FROM WWP AQUA  =====
+   =====        BY STEPS        =====
+   ----------------------------------
+   ||||  YOU MAY ALSO USE THIS   ||||
+   ||||  SCRIPT AS A TEMPLATE IF ||||
+   ||||  YOU WANNA DO THE SAME   ||||
+   ---------------------------------- */
+
+
+CSprite* wdie;
+
+//CSprite* back;    - use it for the background pic
+
+void fancydie::InitGraphic()
+{
+   CFile *f;
+
+   f = GetAttachment("wdie.png");
+   wdie = LoadSprite(f, 85, 0);
+   
+// f = GetAttachment("back.png");  -  background pic
+// back = LoadSprite(f, 1, 0);
+       
+
+   SetSpriteOverride(506, wdie);
+   
+// SetSpriteOverride(621, back);  -  background picture       
+}

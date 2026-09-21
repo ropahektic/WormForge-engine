@@ -1,0 +1,322 @@
+//- UNDERWATER BOMB 1.1
+//- A placeable bomb into water, it explodes by contact
+//- made by rafa``2  20/03/15
+
+//- v1.1  01/10/15 Some improvements, now waterbomb interacts with another objects like mines or weapons
+//- note: this weapon need bungee to be present in your weapon table
+                          
+require utils, utils_steps;
+
+#UNDERWATERBOMB
+
+CSprite* sprWBomb;
+CSprite* sprWBomb_ch;
+CObjList * WBList;
+//CColMask* MASK_WATERBOMB;
+int OC_WATERBOMB;
+
+void waterbomb_s::Init()
+{
+     OC_WATERBOMB = int(80);
+     //WBList = new CObjList();
+}
+
+void waterbomb_s::InitGraphic()
+{
+    sprWBomb = LoadSprite(GetAttachment("wbomb.png"), 1, 0);
+    sprWBomb_ch = LoadSprite(GetAttachment("wbomb_ch.png"), 1, 0);
+    //MASK_WATERBOMB = new CColMask(35, 35, MakeCircleMask(35));    
+}
+
+CWaterbomb:COilDrum
+CWaterbomb::CWaterbomb(int WormTeam, int WormPosX, int WormPosY, int TSide)    
+{      
+    if(WormPosY < Env->Water + 40)
+        return;
+        
+    WBTeam = WormTeam;
+    WBOffsetX = 65;
+    WBOffsetY = 72;
+    WBPosX = WormPosX + WBOffsetX * TSide;
+    WBPosY = WormPosY;
+    
+    
+    PosX = WBPosX;
+    PosY = WBPosY;
+    SpX = 0;
+    SpY = 0;
+    
+    FactorSpX= RandomInt(65,100);
+    FactorSpY = RandomInt(65,100);
+    FactorSpXDir= Sign(RandomInt(-10,10));
+    FactorSpYDir = Sign(RandomInt(-10,10));
+    FactorAmplitude = 10;
+    zplanebase = 20.0;
+    zplane = zplanebase + RandomFloat(0.01,0.99);
+    
+    super(Root->GetObject(25, 0), WBPosX, WBPosY, false);
+    
+    Dmg = 80;
+    MaxDmg = 100;
+    OwnerTeam = WBTeam; 
+    barreltype = -1;
+    fdesc = CFireDesc(NullObj);
+    
+    WBPushpower = 100;
+    WBDamage = 100;
+    
+    WBRedAct = 50;
+    WBRedMin = 50;
+    WBBlueAct = 125;
+    WBBlueMax = 125;
+    WBGreenAct = 50;
+    WBColfactor = 1.50;
+    WBColornow = true;
+    
+    WBMarked = false;
+    WBActive = true;
+    WBExplodeAt = 0;
+    
+    WBDistanceAct = 0;
+    WBDistanceMin = 14;
+    WBDistanceMax = 75;
+    WBDistanceReal = WBDistanceAct - WBDistanceMin;
+    
+    WBMirror = 0;
+    
+    if(RandomInt(0,20) % 2 == 0)
+        WBMirror = 262144;
+        
+    IsMaterial = true;
+     
+    ClType = OC_WATERBOMB;
+        
+    OnSink();
+    version = 1.1;
+} 
+
+void CWaterbomb::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Type == M_TURNEND)
+    {
+        if(WBMarked)
+        {
+            Free(true);
+        } 
+    }
+    
+    if(!WBActive)
+        return;
+        
+    if(Type == M_FRAME)
+    {
+        local cur_worm = GetCurrentWorm();        
+        
+        if(cur_worm != NullObj) 
+        {
+            WBDistanceAct = DistBetweenObjs(this, cur_worm);
+            WBDistanceReal = WBDistanceAct - WBDistanceMin;
+            
+            //if(WBColornow && WBDistanceReal > WBDistanceMax)
+            //    WBColornow = false;
+                    
+            if(WBColornow)
+            {
+                if(WBDistanceReal <= WBDistanceMax)
+                {
+                    WBRedAct  = WBRedMin + (WBDistanceMax - WBDistanceReal) * WBColfactor;
+                    WBBlueAct = WBBlueMax - (WBDistanceMax - WBDistanceReal);
+                }
+                else
+                {
+                    WBRedAct  = WBRedMin;
+                    WBBlueAct = WBBlueMax;
+                }
+            }     
+        }
+        else
+        {
+            WBRedAct  = WBRedMin;
+            WBBlueAct = WBBlueMax;
+        }
+        
+        Sinking = 1;            
+        PosX = WBPosX + cos(gframe / FactorSpX) * FactorSpXDir * FactorAmplitude;
+        PosY = WBPosY + sin(gframe / FactorSpY) * FactorSpYDir * FactorAmplitude;
+        
+        CheckTrigger();
+        
+        super;        
+    }
+    else if(Type == M_DRAWQUEUE)
+    {
+        SetColorMod(ARGB(250, WBRedAct, WBGreenAct, WBBlueAct), 6);
+        AddSpriteEx(zplane, PosX, PosY + WBOffsetY, sprWBomb->Index + WBMirror, 0, 0,  1.25);
+        SetColorMod(ARGB(250, 50, 50, 125),6);
+        AddSpriteEx(zplane + 0.01, PosX, PosY + WBOffsetY, sprWBomb_ch->Index, 0, 0, 1.25);
+        ClearColorMod();
+    }
+    /*else if(Type == M_EXPLOSION)
+    {
+         if(sender != NullObj && (sender is CWaterbomb) == true && MData != NullObj && MData->GetParameter(0) == OC_WATERBOMB)
+         {
+             CWaterbomb * wbomb = CWaterbomb(sender);
+             
+             if(wbomb != this)
+             {
+                  Boom();
+             }              
+         }       
+    }*/
+              
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+         WBPreview = false;
+         WBAlphaForward = true;
+         WBAlphaPreMax = 40;
+         WBAlphaPreMin = 15;
+         WBAlphaPreAct = WBAlphaPreMin;
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (Type == M_FRAME)
+     {        
+         local curworm = GetCurrentWorm();
+         
+         if(curworm != NullObj)
+         {
+             if(curworm->CurWeapon->CheckName("Underwater Bomb") && PosY >= (Env->Water + 40))
+             {   
+                  WBPreview = true;
+             }
+             else
+             {
+                 WBPreview = false;
+                 WBAlphaForward = true;
+                 WBAlphaPreMax = 40;
+                 WBAlphaPreMin = 15;
+                 WBAlphaPreAct = WBAlphaPreMin;
+             }   
+         }
+         else
+         {
+             WBPreview = false;
+         }
+         
+         if((gframe % 2) == 0)
+         {
+              if(WBAlphaPreAct < WBAlphaPreMax && WBAlphaForward)
+                        WBAlphaPreAct++;
+              else
+                  WBAlphaForward = false;
+                   
+              if(WBAlphaPreAct > WBAlphaPreMin && !WBAlphaForward)
+                  WBAlphaPreAct--;
+              else
+                  WBAlphaForward = true;    
+         }         
+         
+     }
+     else if (Type == M_DRAWQUEUE)
+     {        
+         local curworm = GetCurrentWorm();
+         
+         if(curworm != NullObj && WBPreview)
+         {
+             SetColorMod(ARGB(WBAlphaPreAct, 125, 125, 125), 6);
+             AddSpriteEx(20.0, PosX + 65 * -TurnSide , PosY + 72, sprWBomb->Index, 0, 0, 1.25);
+             //SetColorMod(ARGB(WBAlphaPreAct + 15, 125, 125, 125), 1);
+             //AddSpriteEx(20.1, PosX + 65 * -TurnSide, PosY + 72, sprWBomb_ch->Index, 0, 0, 1.25);
+             ClearColorMod();    
+         }
+     }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+     if(Weap->CheckName("Underwater Bomb"))
+     {          
+          if(PosY >= Env->Water + 40)
+          {   
+             local wmine = new CWaterbomb(WormTeam,PosX, PosY, -1 * TurnSide);
+          }
+          else                                            
+          {
+             local ubweap = GS->GetWeaponByName("Underwater Bomb");
+             GS->Info.AddWeaponEx(WormTeam, ubweap->GetWeaponIndex(), ubweap->GetPageIndex(), 1);
+         
+             local weap = GetWeaponByName("Bungee");
+             local cw = GetCurrentWorm();
+             cw->CurWeapon = weap; 
+             
+             ShowTeamMessage(1,"This weapon must be used while swimming!",WormTeam);
+          }
+     }
+     else super;
+}
+
+void CWaterbomb::CheckTrigger()
+{
+     CGObject * obj;
+     for (int i = 1; i < Env->Objs.Count; i++)
+        {
+           obj = CGObject(Env->Objs.Objs[i]);
+           
+           if(obj == NullObj) continue;
+           if(obj->IsValid() == false) continue;
+           if(obj->ClType == OC_WATERBOMB) continue;
+           
+           if(DistBetweenObjs(this, obj) <= 36 && !WBMarked)
+           {
+               Boom();
+           }        
+        }
+}
+
+void CWaterbomb::Boom()
+{
+    WBActive = false;
+    WBMarked = true;
+    DoExplosion(PosX, PosY, 100, 85, 0, OwnerTeam);
+} 
+
+                    
+void CWaterbomb::Reflect(CGObject* Obj, int type)
+{
+    ;  
+}
+
+void CWaterbomb::Explosion()
+{
+    ;
+}
+
+void CWaterbomb::Collide(CGObject* Obj,int type)
+{
+    ;
+}
+
+void CWaterbomb::ForceFocus(fixed x,fixed y)
+{
+     ;
+}
+
+void CWaterbomb::LookAtMe(fixed x,fixed y,int priority)
+{
+     ;
+}
+
+bool CWaterbomb::IsMoving()
+{                 
+     return false;
+}
+ 
+void CWaterbomb::OnSink()
+{
+    PlayLocalSound(58, 3, 1, 1);
+}            

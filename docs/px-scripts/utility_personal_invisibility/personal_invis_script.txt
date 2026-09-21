@@ -1,0 +1,27 @@
+require utils, wosc_lib;
+
+void personal_invis_script::Init()
+{
+  personalinvisibility = true;
+  invisibilityturns = 4;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(!personalinvisibility) { super;  return; }
+  
+  if(Weap->CheckName("Personal Invisibility"))
+  { 
+    if(isInvisible) isInvisible = false;
+    else
+      isInvisible = true;
+      local cw = GetCurrentWorm();
+      ShowTeamMessage(8, "Invisible for 3 turns",cw->WormTeam);
+      vol = CalculateSoundVolume(PosX,PosY);
+      pan = CalculateSoundPan(PosX,PosY);
+      ding->Play(vol, pan, false);
+    return;
+  }
+
+  super;
+}

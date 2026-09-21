@@ -1,0 +1,156 @@
+CWormAnimationParams::CWormAnimationParams() {
+//   resetAnimation = true;
+//   Color = ARGB(255, 255, 255, 255);
+   ZPlane = 14.0;
+   Size = 1.0;
+   Rotation = 0.0;
+//   StartingSprite = 0;
+//   AnimationSpeed = float(5 / 1000);
+   ReadyDeactive = false;
+//   calculateFrame = true;
+   corrFrame = 0.0;
+   posx = 0.0;
+   posy = 0.0;
+//   Hscale = 1.0;
+//   Vscale = 1.0;
+}
+
+
+/*
+// this whole function is useless now.
+float CWormAnimationParams::CalculateAnimFrame(CWorm* w, int sprite) {
+          
+          local xcorrection = 0.0;                                                         
+          local ycorrection = 0.0;
+          local hcorrection = 1.0;          
+          local vcorrection = 1.0;
+          if (StartingSprite != sprite) {
+             wormFrame = 0.0;                         // reset frame if new sprite appeared
+             StartingSprite = sprite;
+          }
+          local fNum;
+          if (sprite >= 0 && sprite < 1025) fNum = NUM_FRAMES[sprite];
+          if (fNum <= 0) fNum = 0.95;   
+          
+          if ((w->ObjState == WS_AIMING || w->ObjState == WS_SETPOWER || w->ObjState == WS_FIRECONT || w->ObjState == WS_FIRED || w->ObjState == WS_SHOOTINGROPE) && sprite != 242 && sprite != 243 && sprite != 244 && sprite != 263 && sprite != 264 && sprite != 265) wormFrame = w->FireAngle;
+else      if (w->ObjState == WS_BUNGEE) {
+             local ax = w->RopeAX/65536;
+             local ay = w->RopeAY/65536;
+             local px = w->PosX;
+             local py = w->PosY;
+             wormFrame = 0.50;
+             local ang = -atan2(px-ax, py-ay) * MATH_PI;
+             Rotation += ang;
+             calculateFrame = false;
+          }
+else      if (w->ObjState == WS_ROPING) {  //  this took whole day to adjust!
+          Rotation = 0.0;
+          local ax = w->RopeAX/65536;
+          local ay = w->RopeAY/65536;
+          local px = w->PosX;
+          local py = w->PosY;
+          wormFrame = -atan2(px-ax, py-ay) / MATH_TWO_PI + 0.25;       // this equation works brilliant, 
+          if (w->TurnSide > 0) wormFrame = -wormFrame + 0.50;          // made in 10 mins AFTER creation of big formula below
+
+/*             wormFrame = -atan2(w->SpX, w->SpY) / MATH_TWO_PI;
+                                                                       // this long formula made in 10-12 WHOLE hours.
+             if (w->SpX < 0.00) {                                      // works not perfect even D:
+                  vcorrection = 1;                                     // FK ME @ spending so much time for useless equations D: :O :O :O !!?!?!
+                  hcorrection = 1;
+                } else {
+                  vcorrection = -1;
+                  hcorrection = -1;
+                }
+                if (w->PosY < w->RopeAY/65536) {
+                  if (w->SpX < 0.00) {
+                    vcorrection = -1;
+                    hcorrection = -1;
+                  } else {
+                    vcorrection = 1;
+                    hcorrection = 1;
+                }
+             }
+             if (w->TurnSide > 0) {
+                if (w->SpX > 0.00) {
+                   wormFrame = -0.50 - wormFrame;
+                   vcorrection = -1;
+                   hcorrection = -1;
+                } else {
+                   wormFrame = 1.00 - wormFrame;
+                   vcorrection = -1;
+                   hcorrection = -1;
+                }
+                if (w->PosY < w->RopeAY/65536) {
+                  if (w->SpX > 0.00) {
+                    vcorrection = 1;
+                    hcorrection = 1;
+                  } else {
+                    vcorrection = 1;
+                    hcorrection = 1;
+                  }
+                }
+             }*//*  
+             resetAnimation = false;
+             calculateFrame = false;
+          }
+else      if (w->ObjState == WS_AFTERROPE) {
+
+             resetAnimation = true;
+             vcorrection = 1;
+             hcorrection = 1;
+             
+             // cheating here. I`m simply rotating sirst frame of the sprite, against calculate frames.
+             wormFrame = 0.0;
+             // speed X more important than speed Y for rotation when afterrope state
+             Rotation += MATH_PI * abs(w->SpY)/32/16 + MATH_PI * abs(w->SpX)/32/6* (-w->TurnSide);
+             if (w->SpX > 0) {
+                vcorrection = -1.0;
+             } else {
+                vcorrection = 1.0;
+             }
+             calculateFrame = false;
+          }
+else      if (w->ObjState == WS_JUMP) {
+//             if (w->SpY > 0) {
+//             if (wormFrame > 0.90) {
+                resetAnimation = false;
+                calculateFrame = true;
+                hcorrection = 1.0;
+                vcorrection = 1.0;
+                Rotation = 0.0;
+//             }
+//             else resetAnimation = true;
+          }
+else      if (w->ObjState == WS_WALKING) {
+             Rotation = 0.0;
+             resetAnimation = true;
+             wormFrame += AnimationSpeed / fNum * 2;   // copying equation multiplies speed
+             if (wormFrame < 0.99) xcorrection = -wormFrame * w->TurnSide * 10 * Size;
+          }
+else      if (w->ObjState == WS_POING) {
+             Rotation = 0.0;
+             resetAnimation = false;
+             calculateFrame = false;
+             wormFrame += AnimationSpeed / fNum * 0.60;
+          }
+          else {
+             Rotation = 0.0;
+             resetAnimation = true;
+             calculateFrame = true;
+          }
+
+/////////////////////////////////////////////////////////////          
+          if (wormFrame > 1.0 && resetAnimation) wormFrame = 0.0;
+          else if (wormFrame > 1.0) wormFrame = 1.0;
+          else if (calculateFrame) wormFrame += AnimationSpeed / fNum;
+           
+          posx = w->PosX + xcorrection;
+          posy = w->PosY + ycorrection;
+          
+          Hscale = Size * hcorrection;
+          Vscale = Size * vcorrection;
+          
+          if (w->SickDamage > 0) w->animColor = ARGB(255, 180, 255, 180);
+          
+          return wormFrame;
+}  */

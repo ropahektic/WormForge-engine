@@ -1,0 +1,1809 @@
+require utils;
+
+
+bool Ctrl;
+bool one;
+bool two;
+bool three;
+bool four;
+bool five;
+bool six;
+bool seven;
+bool eight;
+bool nine;
+bool zero;
+bool minus;
+bool plus;
+
+int curtable;
+
+void wsounds::Init()
+{
+keySync->AddKey(17); // Ctrl
+keySync->AddKey(48); // 0
+keySync->AddKey(49); // 1
+keySync->AddKey(50); // 2
+keySync->AddKey(51); // 3
+keySync->AddKey(52); // 4
+keySync->AddKey(53); // 5
+keySync->AddKey(54); // 6
+keySync->AddKey(55); // 7
+keySync->AddKey(56); // 8
+keySync->AddKey(57); // 9
+keySync->AddKey(65); // A
+keySync->AddKey(66); // B
+keySync->AddKey(67); // C
+keySync->AddKey(68); // D
+keySync->AddKey(69); // E
+keySync->AddKey(70); // F  
+keySync->AddKey(71); // G
+keySync->AddKey(72); // H
+keySync->AddKey(73); // I
+keySync->AddKey(74); // J
+keySync->AddKey(75); // K
+keySync->AddKey(76); // L
+keySync->AddKey(77); // M
+keySync->AddKey(78); // N
+keySync->AddKey(79); // O
+keySync->AddKey(80); // P
+keySync->AddKey(81); // Q
+keySync->AddKey(82); // R
+keySync->AddKey(83); // S
+keySync->AddKey(84); // T
+keySync->AddKey(85); // U
+keySync->AddKey(86); // V
+keySync->AddKey(87); // W
+keySync->AddKey(88); // X
+keySync->AddKey(89); // Y
+keySync->AddKey(90); // Z
+keySync->AddKey(219); // [
+keySync->AddKey(221); // ]
+keySync->AddKey(186); // :
+keySync->AddKey(222); // "
+keySync->AddKey(188); // <
+keySync->AddKey(190); // >
+keySync->AddKey(191); // /
+keySync->AddKey(189); // -
+keySync->AddKey(187); // +
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         Ctrl = keySync->KeyPressed(17);
+         zero = keySync->KeyPressedNow(48);
+         one = keySync->KeyPressedNow(49);
+         two = keySync->KeyPressedNow(50);
+         three = keySync->KeyPressedNow(51);
+         four = keySync->KeyPressedNow(52);
+         five = keySync->KeyPressedNow(53);
+         six = keySync->KeyPressedNow(54);
+         seven = keySync->KeyPressedNow(55);
+         eight = keySync->KeyPressedNow(56);
+         nine = keySync->KeyPressedNow(57);
+         minus = keySync->KeyPressedNow(189);
+         plus = keySync->KeyPressedNow(187);
+                 
+
+         if (Type == M_FRAME)
+         {       
+             CWorm* w = GetCurrentWorm();
+         
+                  if (w != NullObj)
+                  {
+                  
+                           if (Ctrl)
+                           {
+                                    if (zero)   {curtable = 0;  ShowMessage("Sounds disabled.");}
+                                    if (one)    {curtable = 1;  ShowMessage("Sound table: 1");}
+                                    if (two)    {curtable = 2;  ShowMessage("Sound table: 2");}
+                                    if (three)  {curtable = 3;  ShowMessage("Sound table: 3");}
+                                    if (four)   {curtable = 4;  ShowMessage("Sound table: 4");}
+                                    if (five)   {curtable = 5;  ShowMessage("Sound table: 5");}
+                                    if (six)    {curtable = 6;  ShowMessage("Sound table: 6");}
+                                    if (seven)  {curtable = 7;  ShowMessage("Sound table: 7");}
+                                    if (eight)  {curtable = 8;  ShowMessage("Sound table: 8");}
+                                    if (nine)   {curtable = 9;  ShowMessage("Sound table: 9");}
+                                    
+                                    if (minus && curtable > 1) {curtable = curtable - 1; ShowMessage(MakeNumberString("Sound table: ",curtable,""));}
+                                    if (plus  && curtable < 9) {curtable = curtable + 1; ShowMessage(MakeNumberString("Sound table: ",curtable,""));}
+                           }
+                             
+                             
+                           if (curtable == 1)
+                           {
+                                    if (keySync->KeyPressedNow(81))
+                                    {
+                                        PlaySound(1,0,0,1.0);
+                                        ShowMessage("Sound number: 1");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(87))
+                                    {
+                                        PlaySound(2,0,0,1.0);
+                                        ShowMessage("Sound number: 2");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(69))
+                                    {
+                                        PlaySound(3,0,0,1.0);
+                                        ShowMessage("Sound number: 3");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(82))
+                                    {
+                                        PlaySound(4,0,0,1.0);
+                                        ShowMessage("Sound number: 4");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(84))
+                                    {
+                                        PlaySound(5,0,0,1.0);
+                                        ShowMessage("Sound number: 5");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(89))
+                                    {
+                                        PlaySound(6,0,0,1.0);
+                                        ShowMessage("Sound number: 6");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(85))
+                                    {
+                                        PlaySound(7,0,0,1.0);
+                                        ShowMessage("Sound number: 7");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(73))
+                                    {
+                                        PlaySound(8,0,0,1.0);
+                                        ShowMessage("Sound number: 8");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(79))
+                                    {
+                                        PlaySound(9,0,0,1.0);
+                                        ShowMessage("Sound number: 9");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(80))
+                                    {
+                                        PlaySound(10,0,0,1.0);
+                                        ShowMessage("Sound number: 10");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(219))
+                                    {
+                                        PlaySound(11,0,0,1.0);
+                                        ShowMessage("Sound number: 11");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(221))
+                                    {
+                                        PlaySound(12,0,0,1.0);
+                                        ShowMessage("Sound number: 12");
+                                    }
+                  
+                                    if (keySync->KeyPressedNow(65))
+                                    {
+                                        PlaySound(13,0,0,1.0);
+                                        ShowMessage("Sound number: 13");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(83))
+                                    {
+                                        PlaySound(14,0,0,1.0);
+                                        ShowMessage("Sound number: 14");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(68))
+                                    {
+                                        PlaySound(15,0,0,1.0);
+                                        ShowMessage("Sound number: 15");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(70))
+                                    {
+                                        PlaySound(16,0,0,1.0);
+                                        ShowMessage("Sound number: 16");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(71))
+                                    {
+                                        PlaySound(17,0,0,1.0);
+                                        ShowMessage("Sound number: 17");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(72))
+                                    {
+                                        PlaySound(18,0,0,1.0);
+                                        ShowMessage("Sound number: 18");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(74))
+                                    {
+                                        PlaySound(19,0,0,1.0);
+                                        ShowMessage("Sound number: 19");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(75))
+                                    {
+                                        PlaySound(20,0,0,1.0);
+                                        ShowMessage("Sound number: 20");
+                                    }
+                                             
+                                    if (keySync->KeyPressedNow(76))
+                                    {
+                                        PlaySound(21,0,0,1.0);
+                                        ShowMessage("Sound number: 21");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(186))
+                                    {
+                                        PlaySound(22,0,0,1.0);
+                                        ShowMessage("Sound number: 22");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(222))
+                                    {
+                                        PlaySound(23,0,0,1.0);
+                                        ShowMessage("Sound number: 23");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(90))
+                                    {
+                                        PlaySound(24,0,0,1.0);
+                                        ShowMessage("Sound number: 24");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(88))
+                                    {
+                                        PlaySound(25,0,0,1.0);
+                                        ShowMessage("Sound number: 25");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(67))
+                                    {
+                                        PlaySound(26,0,0,1.0);
+                                        ShowMessage("Sound number: 26");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(86))
+                                    {
+                                        PlaySound(27,0,0,1.0);
+                                        ShowMessage("Sound number: 27");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(66))
+                                    {
+                                        PlaySound(28,0,0,1.0);
+                                        ShowMessage("Sound number: 28");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(78))
+                                    {
+                                        PlaySound(29,0,0,1.0);
+                                        ShowMessage("Sound number: 29");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(77))
+                                    {
+                                        PlaySound(30,0,0,1.0);
+                                        ShowMessage("Sound number: 30");
+                                    }
+                                    
+                                    if (keySync->KeyPressedNow(188))
+                                    {
+                                        PlaySound(31,0,0,1.0);
+                                        ShowMessage("Sound number: 31");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(190))
+                                    {
+                                        PlaySound(32,0,0,1.0);
+                                        ShowMessage("Sound number: 32");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(191))
+                                    {
+                                        PlaySound(33,0,0,1.0);
+                                        ShowMessage("Sound number: 33");
+                                    }
+                           }
+                           
+                           if (curtable == 2)
+                           {
+                                    
+                                    if (keySync->KeyPressedNow(81))
+                                    {
+                                        PlaySound(34,0,0,1.0);
+                                        ShowMessage("Sound number: 34");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(87))
+                                    {
+                                        PlaySound(35,0,0,1.0);
+                                        ShowMessage("Sound number: 35");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(69))
+                                    {
+                                        PlaySound(36,0,0,1.0);
+                                        ShowMessage("Sound number: 36");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(82))
+                                    {
+                                        PlaySound(37,0,0,1.0);
+                                        ShowMessage("Sound number: 37");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(84))
+                                    {
+                                        PlaySound(38,0,0,1.0);
+                                        ShowMessage("Sound number: 38");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(89))
+                                    {
+                                        PlaySound(39,0,0,1.0);
+                                        ShowMessage("Sound number: 39");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(85))
+                                    {
+                                        PlaySound(40,0,0,1.0);
+                                        ShowMessage("Sound number: 40");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(73))
+                                    {
+                                        PlaySound(41,0,0,1.0);
+                                        ShowMessage("Sound number: 41");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(79))
+                                    {
+                                        PlaySound(42,0,0,1.0);
+                                        ShowMessage("Sound number: 42");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(80))
+                                    {
+                                        PlaySound(43,0,0,1.0);
+                                        ShowMessage("Sound number: 43");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(219))
+                                    {
+                                        PlaySound(44,0,0,1.0);
+                                        ShowMessage("Sound number: 44");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(221))
+                                    {
+                                        PlaySound(45,0,0,1.0);
+                                        ShowMessage("Sound number: 45");
+                                    }
+                  
+                                    if (keySync->KeyPressedNow(65))
+                                    {
+                                        PlaySound(46,0,0,1.0);
+                                        ShowMessage("Sound number: 46");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(83))
+                                    {
+                                        PlaySound(47,0,0,1.0);
+                                        ShowMessage("Sound number: 47");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(68))
+                                    {
+                                        PlaySound(48,0,0,1.0);
+                                        ShowMessage("Sound number: 48");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(70))
+                                    {
+                                        PlaySound(49,0,0,1.0);
+                                        ShowMessage("Sound number: 49");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(71))
+                                    {
+                                        PlaySound(50,0,0,1.0);
+                                        ShowMessage("Sound number: 50");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(72))
+                                    {
+                                        PlaySound(51,0,0,1.0);
+                                        ShowMessage("Sound number: 51");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(74))
+                                    {
+                                        PlaySound(52,0,0,1.0);
+                                        ShowMessage("Sound number: 52");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(75))
+                                    {
+                                        PlaySound(53,0,0,1.0);
+                                        ShowMessage("Sound number: 53");
+                                    }
+                                             
+                                    if (keySync->KeyPressedNow(76))
+                                    {
+                                        PlaySound(54,0,0,1.0);
+                                        ShowMessage("Sound number: 54");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(186))
+                                    {
+                                        PlaySound(55,0,0,1.0);
+                                        ShowMessage("Sound number: 55");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(222))
+                                    {
+                                        PlaySound(56,0,0,1.0);
+                                        ShowMessage("Sound number: 56");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(90))
+                                    {
+                                        PlaySound(57,0,0,1.0);
+                                        ShowMessage("Sound number: 57");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(88))
+                                    {
+                                        PlaySound(58,0,0,1.0);
+                                        ShowMessage("Sound number: 58");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(67))
+                                    {
+                                        PlaySound(59,0,0,1.0);
+                                        ShowMessage("Sound number: 59");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(86))
+                                    {
+                                        PlaySound(60,0,0,1.0);
+                                        ShowMessage("Sound number: 60");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(66))
+                                    {
+                                        PlaySound(61,0,0,1.0);
+                                        ShowMessage("Sound number: 61");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(78))
+                                    {
+                                        PlaySound(62,0,0,1.0);
+                                        ShowMessage("Sound number: 62");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(77))
+                                    {
+                                        PlaySound(63,0,0,1.0);
+                                        ShowMessage("Sound number: 63");
+                                    }
+                                    
+                                    if (keySync->KeyPressedNow(188))
+                                    {
+                                        PlaySound(64,0,0,1.0);
+                                        ShowMessage("Sound number: 64");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(190))
+                                    {
+                                        PlaySound(65,0,0,1.0);
+                                        ShowMessage("Sound number: 65");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(191))
+                                    {
+                                        PlaySound(66,0,0,1.0);
+                                        ShowMessage("Sound number: 66");
+                                    }
+                           }
+                           
+                           if (curtable == 3)
+                           {
+                                    
+                                    if (keySync->KeyPressedNow(81))
+                                    {
+                                        PlaySound(67,0,0,1.0);
+                                        ShowMessage("Sound number: 67");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(87))
+                                    {
+                                        PlaySound(68,0,0,1.0);
+                                        ShowMessage("Sound number: 68");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(69))
+                                    {
+                                        PlaySound(69,0,0,1.0);
+                                        ShowMessage("Sound number: 69");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(82))
+                                    {
+                                        PlaySound(70,0,0,1.0);
+                                        ShowMessage("Sound number: 70");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(84))
+                                    {
+                                        PlaySound(71,0,0,1.0);
+                                        ShowMessage("Sound number: 71");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(89))
+                                    {
+                                        PlaySound(72,0,0,1.0);
+                                        ShowMessage("Sound number: 72");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(85))
+                                    {
+                                        PlaySound(73,0,0,1.0);
+                                        ShowMessage("Sound number: 73");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(73))
+                                    {
+                                        PlaySound(74,0,0,1.0);
+                                        ShowMessage("Sound number: 74");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(79))
+                                    {
+                                        PlaySound(75,0,0,1.0);
+                                        ShowMessage("Sound number: 75");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(80))
+                                    {
+                                        PlaySound(76,0,0,1.0);
+                                        ShowMessage("Sound number: 76");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(219))
+                                    {
+                                        PlaySound(77,0,0,1.0);
+                                        ShowMessage("Sound number: 77");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(221))
+                                    {
+                                        PlaySound(78,0,0,1.0);
+                                        ShowMessage("Sound number: 78");
+                                    }
+                  
+                                    if (keySync->KeyPressedNow(65))
+                                    {
+                                        PlaySound(79,0,0,1.0);
+                                        ShowMessage("Sound number: 79");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(83))
+                                    {
+                                        PlaySound(80,0,0,1.0);
+                                        ShowMessage("Sound number: 80");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(68))
+                                    {
+                                        PlaySound(81,0,0,1.0);
+                                        ShowMessage("Sound number: 81");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(70))
+                                    {
+                                        PlaySound(82,0,0,1.0);
+                                        ShowMessage("Sound number: 82");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(71))
+                                    {
+                                        PlaySound(83,0,0,1.0);
+                                        ShowMessage("Sound number: 83");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(72))
+                                    {
+                                        PlaySound(84,0,0,1.0);
+                                        ShowMessage("Sound number: 84");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(74))
+                                    {
+                                        PlaySound(85,0,0,1.0);
+                                        ShowMessage("Sound number: 85");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(75))
+                                    {
+                                        PlaySound(86,0,0,1.0);
+                                        ShowMessage("Sound number: 86");
+                                    }
+                                             
+                                    if (keySync->KeyPressedNow(76))
+                                    {
+                                        PlaySound(87,0,0,1.0);
+                                        ShowMessage("Sound number: 87");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(186))
+                                    {
+                                        PlaySound(88,0,0,1.0);
+                                        ShowMessage("Sound number: 88");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(222))
+                                    {
+                                        PlaySound(89,0,0,1.0);
+                                        ShowMessage("Sound number: 89");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(90))
+                                    {
+                                        PlaySound(90,0,0,1.0);
+                                        ShowMessage("Sound number: 90");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(88))
+                                    {
+                                        PlaySound(91,0,0,1.0);
+                                        ShowMessage("Sound number: 91");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(67))
+                                    {
+                                        PlaySound(92,0,0,1.0);
+                                        ShowMessage("Sound number: 92");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(86))
+                                    {
+                                        PlaySound(93,0,0,1.0);
+                                        ShowMessage("Sound number: 93");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(66))
+                                    {
+                                        PlaySound(94,0,0,1.0);
+                                        ShowMessage("Sound number: 94");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(78))
+                                    {
+                                        PlaySound(95,0,0,1.0);
+                                        ShowMessage("Sound number: 95");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(77))
+                                    {
+                                        PlaySound(96,0,0,1.0);
+                                        ShowMessage("Sound number: 96");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(188))
+                                    {
+                                        PlaySound(97,0,0,1.0);
+                                        ShowMessage("Sound number: 97");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(190))
+                                    {
+                                        PlaySound(98,0,0,1.0);
+                                        ShowMessage("Sound number: 98");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(191))
+                                    {
+                                        PlaySound(99,0,0,1.0);
+                                        ShowMessage("Sound number: 99");
+                                    }
+                           }
+                           
+                           if (curtable == 4)
+                           {
+                                    
+                                    if (keySync->KeyPressedNow(81))
+                                    {
+                                        PlaySound(100,0,0,1.0);
+                                        ShowMessage("Sound number: 100");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(87))
+                                    {
+                                        PlaySound(101,0,0,1.0);
+                                        ShowMessage("Sound number: 101");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(69))
+                                    {
+                                        PlaySound(102,0,0,1.0);
+                                        ShowMessage("Sound number: 102");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(82))
+                                    {
+                                        PlaySound(103,0,0,1.0);
+                                        ShowMessage("Sound number: 103");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(84))
+                                    {
+                                        PlaySound(104,0,0,1.0);
+                                        ShowMessage("Sound number: 104");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(89))
+                                    {
+                                        PlaySound(105,0,0,1.0);
+                                        ShowMessage("Sound number: 105");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(85))
+                                    {
+                                        PlaySound(106,0,0,1.0);
+                                        ShowMessage("Sound number: 106");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(73))
+                                    {
+                                        PlaySound(107,0,0,1.0);
+                                        ShowMessage("Sound number: 107");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(79))
+                                    {
+                                        PlaySound(108,0,0,1.0);
+                                        ShowMessage("Sound number: 108");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(80))
+                                    {
+                                        PlaySound(109,0,0,1.0);
+                                        ShowMessage("Sound number: 109");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(219))
+                                    {
+                                        PlaySound(110,0,0,1.0);
+                                        ShowMessage("Sound number: 110");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(221))
+                                    {
+                                        PlaySound(111,0,0,1.0);
+                                        ShowMessage("Sound number: 111");
+                                    }
+                  
+                                    if (keySync->KeyPressedNow(65))
+                                    {
+                                        PlaySound(112,0,0,1.0);
+                                        ShowMessage("Sound number: 112");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(83))
+                                    {
+                                        PlaySound(113,0,0,1.0);
+                                        ShowMessage("Sound number: 113");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(68))
+                                    {
+                                        PlaySound(114,0,0,1.0);
+                                        ShowMessage("Sound number: 114");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(70))
+                                    {
+                                        PlaySound(115,0,0,1.0);
+                                        ShowMessage("Sound number: 115");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(71))
+                                    {
+                                        PlaySound(116,0,0,1.0);
+                                        ShowMessage("Sound number: 116");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(72))
+                                    {
+                                        PlaySound(117,0,0,1.0);
+                                        ShowMessage("Sound number: 117");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(74))
+                                    {
+                                        PlaySound(118,0,0,1.0);
+                                        ShowMessage("Sound number: 118");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(75))
+                                    {
+                                        PlaySound(119,0,0,1.0);
+                                        ShowMessage("Sound number: 119");
+                                    }
+                                             
+                                    if (keySync->KeyPressedNow(76))
+                                    {
+                                        PlaySound(120,0,0,1.0);
+                                        ShowMessage("Sound number: 120");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(186))
+                                    {
+                                        PlaySound(121,0,0,1.0);
+                                        ShowMessage("Sound number: 121");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(222))
+                                    {
+                                        PlaySound(122,0,0,1.0);
+                                        ShowMessage("Sound number: 122");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(90))
+                                    {
+                                        PlaySound(123,0,0,1.0);
+                                        ShowMessage("Sound number: 123");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(88))
+                                    {
+                                        PlaySound(124,0,0,1.0);
+                                        ShowMessage("Sound number: 124");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(67))
+                                    {
+                                        PlaySound(125,0,0,1.0);
+                                        ShowMessage("Sound number: 125");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(86))
+                                    {
+                                        PlaySound(126,0,0,1.0);
+                                        ShowMessage("Sound number: 126");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(66))
+                                    {
+                                        PlaySound(127,0,0,1.0);
+                                        ShowMessage("Sound number: 127");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(78))
+                                    {
+                                        PlaySound(128,0,0,1.0);
+                                        ShowMessage("Sound number: 128");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(77))
+                                    {
+                                        PlaySound(129,0,0,1.0);
+                                        ShowMessage("Sound number: 129");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(188))
+                                    {
+                                        PlaySound(130,0,0,1.0);
+                                        ShowMessage("Sound number: 130");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(190))
+                                    {
+                                        PlaySound(131,0,0,1.0);
+                                        ShowMessage("Sound number: 131");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(191))
+                                    {
+                                        PlaySound(132,0,0,1.0);
+                                        ShowMessage("Sound number: 132");
+                                    }
+                           }
+                           
+                           if (curtable == 5)
+                           {
+                                    
+                                    if (keySync->KeyPressedNow(81))
+                                    {
+                                        PlaySound(133,0,0,1.0);
+                                        ShowMessage("Sound number: 133");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(87))
+                                    {
+                                        PlaySound(134,0,0,1.0);
+                                        ShowMessage("Sound number: 134");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(69))
+                                    {
+                                        PlaySound(135,0,0,1.0);
+                                        ShowMessage("Sound number: 135");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(82))
+                                    {
+                                        PlaySound(136,0,0,1.0);
+                                        ShowMessage("Sound number: 136");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(84))
+                                    {
+                                        PlaySound(137,0,0,1.0);
+                                        ShowMessage("Sound number: 137");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(89))
+                                    {
+                                        PlaySound(138,0,0,1.0);
+                                        ShowMessage("Sound number: 138");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(85))
+                                    {
+                                        PlaySound(139,0,0,1.0);
+                                        ShowMessage("Sound number: 139");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(73))
+                                    {
+                                        PlaySound(140,0,0,1.0);
+                                        ShowMessage("Sound number: 140");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(79))
+                                    {
+                                        PlaySound(141,0,0,1.0);
+                                        ShowMessage("Sound number: 141");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(80))
+                                    {
+                                        PlaySound(142,0,0,1.0);
+                                        ShowMessage("Sound number: 142");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(219))
+                                    {
+                                        PlaySound(143,0,0,1.0);
+                                        ShowMessage("Sound number: 143");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(221))
+                                    {
+                                        PlaySound(144,0,0,1.0);
+                                        ShowMessage("Sound number: 144");
+                                    }
+                  
+                                    if (keySync->KeyPressedNow(65))
+                                    {
+                                        PlaySound(145,0,0,1.0);
+                                        ShowMessage("Sound number: 145");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(83))
+                                    {
+                                        PlaySound(146,0,0,1.0);
+                                        ShowMessage("Sound number: 146");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(68))
+                                    {
+                                        PlaySound(147,0,0,1.0);
+                                        ShowMessage("Sound number: 147");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(70))
+                                    {
+                                        PlaySound(148,0,0,1.0);
+                                        ShowMessage("Sound number: 148");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(71))
+                                    {
+                                        PlaySound(149,0,0,1.0);
+                                        ShowMessage("Sound number: 149");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(72))
+                                    {
+                                        PlaySound(150,0,0,1.0);
+                                        ShowMessage("Sound number: 150");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(74))
+                                    {
+                                        PlaySound(151,0,0,1.0);
+                                        ShowMessage("Sound number: 151");
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(75))
+                                    {
+                                        PlaySound(152,0,0,1.0);
+                                        ShowMessage("Sound number: 152");
+                                    }
+                                             
+                                    if (keySync->KeyPressedNow(76))
+                                    {
+                                        PlaySound(153,0,0,1.0);
+                                        ShowMessage("Sound number: 153");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(186))
+                                    {
+                                        PlaySound(154,0,0,1.0);
+                                        ShowMessage("Sound number: 154");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(222))
+                                    {
+                                        PlaySound(155,0,0,1.0);
+                                        ShowMessage("Sound number: 155");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(90))
+                                    {
+                                        PlaySound(156,0,0,1.0);
+                                        ShowMessage("Sound number: 156");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(88))
+                                    {
+                                        PlaySound(157,0,0,1.0);
+                                        ShowMessage("Sound number: 157");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(67))
+                                    {
+                                        PlaySound(158,0,0,1.0);
+                                        ShowMessage("Sound number: 158");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(86))
+                                    {
+                                        PlaySound(159,0,0,1.0);
+                                        ShowMessage("Sound number: 159");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(66))
+                                    {
+                                        PlaySound(160,0,0,1.0);
+                                        ShowMessage("Sound number: 160");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(78))
+                                    {
+                                        PlaySound(161,0,0,1.0);
+                                        ShowMessage("Sound number: 161");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(77))
+                                    {
+                                        PlaySound(162,0,0,1.0);
+                                        ShowMessage("Sound number: 162");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(188))
+                                    {
+                                        PlaySound(163,0,0,1.0);
+                                        ShowMessage("Sound number: 163");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(190))
+                                    {
+                                        PlaySound(164,0,0,1.0);
+                                        ShowMessage("Sound number: 164");
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(191))
+                                    {
+                                        PlaySound(165,0,0,1.0);
+                                        ShowMessage("Sound number: 165");
+                                    }
+                           }
+                           
+                           if (curtable == 6)
+                           {
+                                    
+                                    if (keySync->KeyPressedNow(81))
+                                    {
+                                        PlaySound(166,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(87))
+                                    {
+                                        PlaySound(167,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(69))
+                                    {
+                                        PlaySound(168,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(82))
+                                    {
+                                        PlaySound(169,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(84))
+                                    {
+                                        PlaySound(170,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(89))
+                                    {
+                                        PlaySound(171,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(85))
+                                    {
+                                        PlaySound(172,0,0,1.0);
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(73))
+                                    {
+                                        PlaySound(173,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(79))
+                                    {
+                                        PlaySound(174,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(80))
+                                    {
+                                        PlaySound(175,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(219))
+                                    {
+                                        PlaySound(176,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(221))
+                                    {
+                                        PlaySound(177,0,0,1.0);
+                                    }
+                  
+                                    if (keySync->KeyPressedNow(65))
+                                    {
+                                        PlaySound(178,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(83))
+                                    {
+                                        PlaySound(179,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(68))
+                                    {
+                                        PlaySound(180,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(70))
+                                    {
+                                        PlaySound(181,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(71))
+                                    {
+                                        PlaySound(182,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(72))
+                                    {
+                                        PlaySound(183,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(74))
+                                    {
+                                        PlaySound(184,0,0,1.0);
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(75))
+                                    {
+                                        PlaySound(185,0,0,1.0);
+                                    }
+                                             
+                                    if (keySync->KeyPressedNow(76))
+                                    {
+                                        PlaySound(186,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(186))
+                                    {
+                                        PlaySound(187,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(222))
+                                    {
+                                        PlaySound(188,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(90))
+                                    {
+                                        PlaySound(189,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(88))
+                                    {
+                                        PlaySound(190,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(67))
+                                    {
+                                        PlaySound(191,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(86))
+                                    {
+                                        PlaySound(192,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(66))
+                                    {
+                                        PlaySound(193,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(78))
+                                    {
+                                        PlaySound(194,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(77))
+                                    {
+                                        PlaySound(195,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(188))
+                                    {
+                                        PlaySound(196,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(190))
+                                    {
+                                        PlaySound(197,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(191))
+                                    {
+                                        PlaySound(198,0,0,1.0);
+                                    }
+                           }
+                           
+                           if (curtable == 7)
+                           {
+                                    
+                                    if (keySync->KeyPressedNow(81))
+                                    {
+                                        PlaySound(199,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(87))
+                                    {
+                                        PlaySound(200,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(69))
+                                    {
+                                        PlaySound(201,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(82))
+                                    {
+                                        PlaySound(202,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(84))
+                                    {
+                                        PlaySound(203,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(89))
+                                    {
+                                        PlaySound(204,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(85))
+                                    {
+                                        PlaySound(205,0,0,1.0);
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(73))
+                                    {
+                                        PlaySound(206,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(79))
+                                    {
+                                        PlaySound(207,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(80))
+                                    {
+                                        PlaySound(208,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(219))
+                                    {
+                                        PlaySound(209,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(221))
+                                    {
+                                        PlaySound(210,0,0,1.0);
+                                    }
+                  
+                                    if (keySync->KeyPressedNow(65))
+                                    {
+                                        PlaySound(211,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(83))
+                                    {
+                                        PlaySound(212,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(68))
+                                    {
+                                        PlaySound(213,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(70))
+                                    {
+                                        PlaySound(214,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(71))
+                                    {
+                                        PlaySound(215,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(72))
+                                    {
+                                        PlaySound(216,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(74))
+                                    {
+                                        PlaySound(217,0,0,1.0);
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(75))
+                                    {
+                                        PlaySound(218,0,0,1.0);
+                                    }
+                                             
+                                    if (keySync->KeyPressedNow(76))
+                                    {
+                                        PlaySound(219,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(186))
+                                    {
+                                        PlaySound(220,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(222))
+                                    {
+                                        PlaySound(221,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(90))
+                                    {
+                                        PlaySound(222,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(88))
+                                    {
+                                        PlaySound(223,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(67))
+                                    {
+                                        PlaySound(224,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(86))
+                                    {
+                                        PlaySound(225,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(66))
+                                    {
+                                        PlaySound(226,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(78))
+                                    {
+                                        PlaySound(227,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(77))
+                                    {
+                                        PlaySound(228,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(188))
+                                    {
+                                        PlaySound(229,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(190))
+                                    {
+                                        PlaySound(230,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(191))
+                                    {
+                                        PlaySound(231,0,0,1.0);
+                                    }
+                           }
+                           
+                           if (curtable == 8)
+                           {
+                                    
+                                    if (keySync->KeyPressedNow(81))
+                                    {
+                                        PlaySound(232,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(87))
+                                    {
+                                        PlaySound(233,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(69))
+                                    {
+                                        PlaySound(234,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(82))
+                                    {
+                                        PlaySound(235,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(84))
+                                    {
+                                        PlaySound(236,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(89))
+                                    {
+                                        PlaySound(237,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(85))
+                                    {
+                                        PlaySound(238,0,0,1.0);
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(73))
+                                    {
+                                        PlaySound(239,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(79))
+                                    {
+                                        PlaySound(240,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(80))
+                                    {
+                                        PlaySound(241,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(219))
+                                    {
+                                        PlaySound(242,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(221))
+                                    {
+                                        PlaySound(243,0,0,1.0);
+                                    }
+                  
+                                    if (keySync->KeyPressedNow(65))
+                                    {
+                                        PlaySound(244,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(83))
+                                    {
+                                        PlaySound(245,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(68))
+                                    {
+                                        PlaySound(246,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(70))
+                                    {
+                                        PlaySound(247,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(71))
+                                    {
+                                        PlaySound(248,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(72))
+                                    {
+                                        PlaySound(249,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(74))
+                                    {
+                                        PlaySound(250,0,0,1.0);
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(75))
+                                    {
+                                        PlaySound(251,0,0,1.0);
+                                    }
+                                             
+                                    if (keySync->KeyPressedNow(76))
+                                    {
+                                        PlaySound(252,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(186))
+                                    {
+                                        PlaySound(253,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(222))
+                                    {
+                                        PlaySound(254,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(90))
+                                    {
+                                        PlaySound(255,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(88))
+                                    {
+                                        PlaySound(256,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(67))
+                                    {
+                                        PlaySound(257,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(86))
+                                    {
+                                        PlaySound(258,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(66))
+                                    {
+                                        PlaySound(259,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(78))
+                                    {
+                                        PlaySound(260,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(77))
+                                    {
+                                        PlaySound(261,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(188))
+                                    {
+                                        PlaySound(262,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(190))
+                                    {
+                                        PlaySound(263,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(191))
+                                    {
+                                        PlaySound(264,0,0,1.0);
+                                    }
+                           }
+                           
+                           if (curtable == 9)
+                           {
+                                    
+                                    if (keySync->KeyPressedNow(81))
+                                    {
+                                        PlaySound(265,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(87))
+                                    {
+                                        PlaySound(266,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(69))
+                                    {
+                                        PlaySound(267,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(82))
+                                    {
+                                        PlaySound(268,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(84))
+                                    {
+                                        PlaySound(269,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(89))
+                                    {
+                                        PlaySound(270,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(85))
+                                    {
+                                        PlaySound(271,0,0,1.0);
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(73))
+                                    {
+                                        PlaySound(272,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(79))
+                                    {
+                                        PlaySound(273,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(80))
+                                    {
+                                        PlaySound(274,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(219))
+                                    {
+                                        PlaySound(275,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(221))
+                                    {
+                                        PlaySound(276,0,0,1.0);
+                                    }
+                  
+                                    if (keySync->KeyPressedNow(65))
+                                    {
+                                        PlaySound(277,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(83))
+                                    {
+                                        PlaySound(278,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(68))
+                                    {
+                                        PlaySound(279,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(70))
+                                    {
+                                        PlaySound(280,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(71))
+                                    {
+                                        PlaySound(281,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(72))
+                                    {
+                                        PlaySound(282,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(74))
+                                    {
+                                        PlaySound(283,0,0,1.0);
+                                    } 
+                           
+                                    if (keySync->KeyPressedNow(75))
+                                    {
+                                        PlaySound(284,0,0,1.0);
+                                    }
+                                             
+                                    if (keySync->KeyPressedNow(76))
+                                    {
+                                        PlaySound(285,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(186))
+                                    {
+                                        PlaySound(286,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(222))
+                                    {
+                                        PlaySound(287,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(90))
+                                    {
+                                        PlaySound(288,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(88))
+                                    {
+                                        PlaySound(289,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(67))
+                                    {
+                                        PlaySound(290,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(86))
+                                    {
+                                        PlaySound(291,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(66))
+                                    {
+                                        PlaySound(292,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(78))
+                                    {
+                                        PlaySound(293,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(77))
+                                    {
+                                        PlaySound(294,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(188))
+                                    {
+                                        PlaySound(295,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(190))
+                                    {
+                                        PlaySound(296,0,0,1.0);
+                                    }
+                           
+                                    if (keySync->KeyPressedNow(191))
+                                    {
+                                        PlaySound(297,0,0,1.0);
+                                    }
+                           }
+                  }
+         }
+super;
+}   
+
+override void CTurnGame::SetCurrentTeam(int Team)    // Button lock & desync fix
+{
+super;
+   
+   for (local i = 0; i < 256; i+=1)
+   {
+     keySync->kRStates[i] = false;
+   };
+}

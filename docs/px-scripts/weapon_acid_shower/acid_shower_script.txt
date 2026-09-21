@@ -1,0 +1,16 @@
+// By PyroMan.
+
+require utils;
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Acid Shower")) // 5 Shots
+    {
+        super;
+        super;
+        super;
+        super;
+    }
+    super;
+}

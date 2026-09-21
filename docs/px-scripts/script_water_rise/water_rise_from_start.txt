@@ -1,0 +1,9 @@
+require utils, utils_steps;
+
+void water_rise_from_start::FirstFrame()
+{
+	GG->WriteToChat(GG->curFont+3,"['PX'0rang3] This map has water rise from the start.",false);
+	Root->SuddenDeath = true;
+	Root->SD_Check = true;
+	Root->RaiseWater = true;
+}

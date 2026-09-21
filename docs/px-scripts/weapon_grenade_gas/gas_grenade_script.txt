@@ -1,0 +1,73 @@
+require utils, p_sprite_builder;
+
+CSprite* orangegren;
+CSprite* orangeg_aim;
+
+void gas_grenade_script::InitGraphic()
+{
+   CFile *f;
+
+   f = GetAttachment("orange_grenade_small.png");
+   orangegren = LoadSprite(f, 32, 0);
+   SetSpriteOverride(719, orangegren);
+   
+   f = GetAttachment("orange_grenade_single.png");
+   orangeg_aim = LoadSprite(f, 1, 0);
+}
+
+//---------------------------SPRITE-BUILDER-------------------------------------
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+	if (Type == M_FRAME)
+		{
+		if (gframe == 1)
+			{
+			local weapName = "Gas Grenade";
+			local sprite = orangeg_aim->Index;
+			CWormAnimParams* Params = new CWormAnimParams;
+
+//-------------------------AIMING-ANIMATIONS------------------------------------
+
+			Params->hand_type = 1;
+			Params->hand_scale = 1.2;
+			Params->hand_radius = -9.8;
+			Params->hand_rotation = -0.05;
+			Params->hand_radial_rotation = 0.09;
+			Params->weap_radial_rotation = 0.0;
+			Params->weap_rotation = 0.5;
+			Params->weap_radius = -10.0;
+			Params->animate = true;
+			Params->anim_speed = 1.00;
+//------------------------------------------------------------------------------
+			local WA = new WormSprite(weapName, sprite, Params);
+			}
+		}
+}
+
+//-------------------------BULLET-ANIMATIONS------------------------------------
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+	if (Type == M_FRAME)
+		{
+		if (weap->CheckName("Gas Grenade"))
+			{
+			if (gasg_anim)
+				{
+				local sprite = orangeg_aim->Index;
+				WeapSpriteParams* Params = new WeapSpriteParams;
+				Params->animate = true;
+				new WeapSprite(this, sprite, Params);
+				weap->launch.anim.spriteIndex = 0;
+				gasg_anim = false;
+				}
+			}
+		}
+}
+//------------------------------------------------------------------------------
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+gasg_anim = true;
+}

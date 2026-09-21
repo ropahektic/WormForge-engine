@@ -1,0 +1,37 @@
+CSprite* wbazlnk;
+CSprite* wbazlnku;
+CSprite* wbazlnkd;
+CSprite* wbaz;
+CSprite* wbazu;
+CSprite* wbazd;
+
+void zook_grey_scr::InitGraphic()
+{
+   CFile *f;
+
+   f = GetAttachment("p - zooka - grey ( e ).png");
+   wbazlnk = LoadSprite(f, 7, 1);
+
+   f = GetAttachment("p - zooka - grey ( u ).png");
+   wbazlnku = LoadSprite(f, 7, 1);
+
+   f = GetAttachment("p - zooka - grey ( d ).png");
+   wbazlnkd = LoadSprite(f, 7, 1);
+
+   f = GetAttachment("a - zooka - grey ( e ).png");
+   wbaz = LoadSprite(f, 1, 0);
+
+   f = GetAttachment("a - zooka - grey ( u ).png");
+   wbazu = LoadSprite(f, 1, 0);
+
+   f = GetAttachment("a - zooka - grey ( d ).png");
+   wbazd = LoadSprite(f, 1, 0);
+
+   SetSpriteOverride(436, wbazlnk);
+   SetSpriteOverride(437, wbazlnku);
+   SetSpriteOverride(438, wbazlnkd);
+
+   SetSpriteOverride(525, wbaz);
+   SetSpriteOverride(526, wbazu);
+   SetSpriteOverride(527, wbazd);
+}

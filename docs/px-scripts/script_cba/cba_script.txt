@@ -1,0 +1,166 @@
+require utils, utility_swimsuit;
+
+int cratescollected;
+int cratesneeded;
+bool can_attack;
+
+CSoundFile* can_attack_snd;
+
+void cba_script::FirstFrame()
+{
+cratesneeded = 4;
+}
+
+void cba_script::Init()
+{
+can_attack_snd = new CSoundFile(GetAttachment("can_attack_snd.wav"));
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+cratescollected = 0;
+can_attack = false;
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_TURNEND || Type == M_TURNBEGIN || Root->Timer == 0)
+	{
+	cratescollected = 0;
+    can_attack = false;
+	}
+	
+local w = GetCurrentWorm();
+
+if (w != NullObj)
+	{
+	if (cratescollected != cratesneeded)
+	    {
+	    if (CurWeapon->CheckName("Ninja Rope") ||
+	    	CurWeapon->CheckName("Bungee") ||
+			CurWeapon->CheckName("Parachute") ||
+			CurWeapon->CheckName("Skip Go") ||
+			CurWeapon->CheckName("Surrender") ||
+			CurWeapon->CheckName("Select Worm") ||
+        	CurWeapon->CheckName("EMP Unlimited") ||
+			CurWeapon->CheckName("Low Gravity") ||
+			CurWeapon->CheckName("Slowmotion") ||
+			CurWeapon->CheckName("Medkit 25") ||
+			CurWeapon->CheckName("Antifire Suit") ||
+			CurWeapon->CheckName("Swim Suit") ||
+			CurWeapon->CheckName("Snow Ball"))
+        	{
+        	CanFire = true;
+			}
+		else
+			{
+			CanFire = false;
+			if(Type == M_SPACE && ObjState != WS_AFTERROPE)
+			    {
+			    ShowMessage("Collect all crates before attack!");
+				PlayLocalSound(120, 3, 1, 1);
+				w->setWeapon(w,"Ninja Rope",true);
+        		if(ObjState != WS_ROPING && ObjState != WS_PARACHUTE)
+					{
+					w->setWeapon(w,"Ninja Rope",true);
+					if (!plopped) SetState(WS_AIMING);
+					return;
+        			}
+			    }
+			}
+		}
+		
+	else
+	    {
+	    if (can_attack == false)
+	        {
+        	can_attack_snd->Play(1.0, 0.0, false);
+        	ShowMessage("You can attack now!");
+        	can_attack = true;
+        	}
+        	
+		if(ObjState == WS_ROPING || ObjState == WS_AFTERROPE || ObjState == WS_PARACHUTE || CurWeapon->CheckName("Ninja Rope"))
+			{
+			CanFire = true;
+			}
+		else
+		    {
+		    if(CurWeapon != NullObj)
+			    {
+    		   	if (
+				CurWeapon->Row == 0 ||
+				CurWeapon->CheckName("Underwater Bomb") ||
+				CurWeapon->CheckName("Ninja Rope") ||
+				CurWeapon->CheckName("Bungee") ||
+				CurWeapon->CheckName("Parachute") ||
+				CurWeapon->CheckName("Skip Go") ||
+				CurWeapon->CheckName("Surrender") ||
+	        	CurWeapon->CheckName("EMP Unlimited") ||
+				CurWeapon->CheckName("Low Gravity") ||
+				CurWeapon->CheckName("Medkit 25") ||
+				CurWeapon->CheckName("Antifire Suit") ||
+				CurWeapon->CheckName("Swim Suit") ||
+				CurWeapon->CheckName("Slowmotion") ||
+	        	CurWeapon->CheckName("Ice Arrow") ||
+				CurWeapon->CheckName("Select Worm") ||
+				CurWeapon->CheckName("Inverse") ||
+				CurWeapon->CheckName("Random Trap Crate"))
+	        		{
+					CanFire = true;
+					}
+				else
+				    {
+			    	CanFire = false;
+					if(Type == M_SPACE)
+				    	{
+			    		PlayLocalSound(120, 3, 1, 1);
+        				ShowMessage("Attack from rope!");
+        				w->CurWeapon = GetWeaponByName("Ninja Rope");
+        				if (!plopped) SetState(WS_AIMING);
+        				return;
+        				}
+					}
+				}
+			}
+		}
+	}
+super;
+}
+
+override void CCrate::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+	{
+	local PlayingWorm = GetCurrentWorm();
+	
+    for (local i = 1; i < Env->Objs.Count; i++)
+        {
+        local obj = CCrate(Env->Objs.Objs[i]);
+        if (obj == NullObj) continue;
+        if (obj is CCrate) // obj->ClType == OC_Crate
+            {
+            if (obj->PosY > GS->LevelSY)
+				{
+				remX = obj->PosX;
+				remY = obj->PosY;
+
+				if(PlayingWorm != NullObj)
+				    {
+					obj->PosX = PlayingWorm->PosX;
+					obj->PosY = PlayingWorm->PosY;
+					}
+				
+				DoExplosion(remX,remY, 100, 25, 0, 0);
+            	}
+			}
+		}
+	}
+super;
+}
+
+override void CCrate::Free(bool FreeMem)
+{
+if (cratescollected < cratesneeded) cratescollected++;
+super;
+}

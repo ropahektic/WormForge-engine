@@ -1,0 +1,12 @@
+CSprite* bumperb_tr;
+
+void sprite_253::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("bumperbt.png");
+    bumperb_tr = LoadSprite(f, 6, 0);
+    //f = GetAttachment("bumperbt_old.png");
+    //bumperbt = LoadSprite(f, 7, 0);
+
+    SetSpriteOverride(253, bumperb_tr);
+}

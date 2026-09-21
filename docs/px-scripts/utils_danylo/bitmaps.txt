@@ -1,0 +1,47 @@
+//-----------------------------------------------------------------------------
+CBitmap1* makeCircleMask(int radius) {
+  msk = new CBitmap1(radius * 2, radius * 2);
+  rsq = radius * radius;
+  dradius = radius * 2;
+  for (int i = 0; i < dradius; i+=1)
+  {
+    cwidth = int(sqrt(rsq - (i - radius) * (i - radius)));
+    lborder = radius - cwidth;
+    rborder = radius + cwidth;
+    msk->HLine(lborder, rborder, i, 1);
+  };
+  return msk;
+};
+//-----------------------------------------------------------------------------
+CBitmap1* makeRectMask(int sx, int sy)
+{
+  msk = new CBitmap1(sx, sy);
+  msk->Rect( 0, 0, sx, sy, 1);
+  return msk;
+}
+//-----------------------------------------------------------------------------
+CBitmap1* makePixelMask()
+{
+  msk = new CBitmap1(1, 1);
+  msk->SetPixel(0, 0, 1);
+  return msk;
+};
+//-----------------------------------------------------------------------------
+CGObject* checkMaskAt(CGObject* Obj, CColMask* msk, fixed x, fixed y, int flags)
+{
+    nObj = Env->Objs.Count;
+    for (i = 0; i < nObj; i += 1)
+    {
+        trg = CGObject(Env->Objs.Objs[i]);
+        if (trg == Obj) continue;
+        if (trg == NullObj) continue;
+        if (flags >= 0 && flags != trg->Layer) continue;
+        if (msk->Check(x, y, trg->ColMask, trg->PosX, trg->PosY))
+        {
+           return trg;                           
+        };
+    };
+    
+    return NullObj;
+};
+//-----------------------------------------------------------------------------

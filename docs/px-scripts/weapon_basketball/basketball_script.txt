@@ -1,0 +1,101 @@
+require utils;
+
+CSprite* basketballt;
+CColMask* basketball_COLMASK;
+
+void basketball_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("basketballt.png");
+   basketballt = LoadSprite(f, 7, 0);
+   
+   SetSpriteOverride(731, basketballt);
+}
+
+void basketball_script::Init(){}
+
+void basketball_script::FirstFrame()
+{
+     basketball_COLMASK = new CColMask(10,10,MakeRectMask(20,20));
+}
+
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+SType = false;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+ if(Weap->CheckName("Basketball"))
+ {
+    	CGObject *basketo;
+        CMissile *basketm;
+	basketo = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+	     if(basketo->ClType == OC_Missile)
+             {
+             basketm = basketo;
+             basketm->SType = true;
+             }
+ }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(SType == true)
+   {
+              if(Type == M_FRAME)
+              {
+                      BasketCollision(15.0);
+              }
+   }
+super;
+}
+
+void CMissile::BasketCollision(float Speed)
+{
+	CGObject *basketob;
+
+	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		basketob = CGObject(Env->Objs.Objs[i]);
+		if(basketob == this) continue;
+		if(basketob == NullObj) continue;
+		if(GetCurrentWorm() != NullObj)
+		                    {
+		                    if(basketob == GetCurrentWorm()) continue;
+		                    }
+
+
+		if(basketob->ClType == OC_Worm)
+		{
+			if(basketball_COLMASK->Check(PosX, PosY, basketob->ColMask, basketob->PosX, basketob->PosY))
+			{
+				float ForceX = basketob->PosX - PosX;
+				float ForceY = basketob->PosY - PosY;
+				float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+				if(dist > 0)
+				{
+					ForceX = 0.7*sqrt(Speed) * ForceX / dist;
+					ForceY = 0.7*sqrt(Speed) * ForceY / dist;
+
+					CMessageData msg;
+					msg.params[0]	= 0;
+					msg.fparams[1]	= PosX;
+					msg.fparams[2]	= PosY;
+					msg.fparams[3]	= ForceX;
+					msg.fparams[4]	= ForceY;
+					msg.params[5]	= 1;
+					msg.params[6]	= 0;
+
+					basketob->Message(this, M_GUNEXP, 1032, &msg);
+				}
+			}
+		}
+	}
+}

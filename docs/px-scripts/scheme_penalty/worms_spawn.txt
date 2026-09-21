@@ -1,0 +1,37 @@
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+        if (gframe < 10)
+        {
+            if(GetTeamColor(WormTeam) != 2) // all teams but green
+            {
+                if (GetFreeWormIndex(WormTeam) < 9 && GetFreeWormIndex(WormTeam) > 0 && gframe < 10)
+        			{
+            		local newWorm = RessurectWorm(GetFreeWormIndex(WormTeam), WormTeam, PosX, PosY);
+            		local hp = GS->Info.GetWormHealth( WormTeam, 1);
+            		GS->Info.SetWormHealth(WormTeam, newWorm->WormNumber, hp);
+            		local name = MakeNumberString("Worm ", newWorm->WormNumber, "");
+            		newWorm->SetName(name);
+        			}
+            }
+            
+            if(GetTeamColor(WormTeam) == 2) // only green team
+            {
+                for (local wormIndex = 2; wormIndex <= 8; wormIndex++) // removing worms
+				{
+   			 	GS->Info.SetWormHealth( WormTeam, wormIndex, 0);
+      			GS->Info.Teams[WormTeam-1].Worms[wormIndex-1].State = 135;
+      			CWorm* worm = Root->GetObject( 2, 16 * WormTeam + wormIndex);
+      			if (worm == NullObj) continue;
+      			worm->Free(true);
+      			
+      			CWorm* goalkeeper = Root->GetObject( 2, 16 * WormTeam + 1); // getting only first worm
+      			if (goalkeeper == NullObj) continue;
+      			goalkeeper->SetName("Goalkeeper");
+  				}
+			}
+        }
+    }
+}

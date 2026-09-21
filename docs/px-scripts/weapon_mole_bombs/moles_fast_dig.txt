@@ -1,0 +1,86 @@
+require utils;
+
+CMissile* DiggingMole;
+CMissile* NormalMole;
+
+int DiggingMolePosX;
+int DiggingMolePosY;
+int DiggingMoleExplodeTimer;
+
+bool speedmole;
+
+void moles_fast_dig::Init()
+{
+    keySync->AddKey(16); // Shift
+    DiggingMolePosX = 0;
+	DiggingMolePosY = 0;
+	DiggingMoleExplodeTimer = 0;
+}
+
+//---------------------------------MOLES (FAST-DROP)---------------------------//
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    speedmole = false;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+    	if(DiggingMole == NullObj)
+        {
+        	if(weap->CheckName("Mole Bombs") == true)
+            {
+            	NormalMole = this;
+            }
+        }
+         
+        if(DiggingMoleExplodeTimer > 0 && DiggingMole == NullObj)
+        {
+         	DiggingMoleExplodeTimer = DiggingMoleExplodeTimer - 1;
+            if(PosX <= DiggingMolePosX + 10 && PosX >= DiggingMolePosX - 10)
+            {
+                if(PosY <= DiggingMolePosY + 10 && PosY >= DiggingMolePosY - 10)
+                {
+                 	DiggingMole = this;
+                 	DiggingMoleExplodeTimer = 0;
+                }
+            }
+        }
+         
+        if(DiggingMole != NullObj)
+        {
+        	if(DiggingMole == this)
+            {
+            	if (speedmole)
+          		{
+					if(DiggingMole->SpY < 10) // && DiggingMole->SpY > -1
+					{
+            			DiggingMole->SpY = DiggingMole->SpY + 8;
+            		}
+          		}
+            }
+        }
+
+        if (keySync->KeyPressed(16))
+        {
+        	speedmole = true;
+        }
+		else speedmole = false;
+    }
+super;
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    if(weap->CheckName("Mole Bombs") == true && DiggingMole == NullObj)
+    {
+         DiggingMolePosX = x;
+         DiggingMolePosY = y;
+         DiggingMoleExplodeTimer = 10;
+         NormalMole = NullObj;
+    }
+super;
+}

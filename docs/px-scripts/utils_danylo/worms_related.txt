@@ -1,0 +1,14 @@
+//-----------------------------------------------------------------------------
+bool isAllies(CWorm* a, CWorm* b) { 
+  local ac = GetTeamColor(a->WormTeam); local bc = GetTeamColor(b->WormTeam);
+  if (ac == bc) return true; return false;
+}
+bool isEnemies(CWorm* a, CWorm* b) {
+  local r = !isAllies(a, b); return r;
+}
+//-----------------------------------------------------------------------------
+bool isWorm(CObject* o) {
+  if (o == NullObj) return false; if (o->ClType == OC_Worm) return true;
+  return true;
+}
+//-----------------------------------------------------------------------------

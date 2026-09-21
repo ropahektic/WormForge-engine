@@ -1,0 +1,134 @@
+
+
+void SetTeamWon(int team)
+{
+
+      local w = GetCurrentWorm();
+      if (w != NullObj && GetTeamColor(w->WormTeam) != GetTeamColor(team))
+      {
+        Root->DoExplosion(w->PosX, w->PosY, 100, 8, 1, 0);
+      }
+      
+  if (#RESPAWN_CONTROL)
+  {
+    if (rControl->enabled) 
+    {
+      rControl->SetWinner(GetTeamColor(team));
+      return;
+    }
+  }
+  for (local i = 1; i <= 6; i++)
+  {
+    if (team == i) continue;
+     for (local worm = 1; worm <= 8; worm++)
+     {
+        GS->Info.SetWormHealth(i, worm, 0);
+     }   
+  }   
+}
+
+bool IsTeamAlive(int team)
+{
+  if (Root->GetObject(TI_Team, team) == NullObj) return false;
+  for (local i = 1; i <= 8; i++)
+  {
+     if (GS->Info.Teams[team-1].Worms[i-1].Health > 0) return true;
+  }
+  return false;
+}
+
+CWorm* GetCurrentWorm()
+{
+  local CurWorm = Root->CurWorm;
+  local CurTeam = Root->CurTeam;
+  
+  if (CurWorm <= 0 || CurWorm > 8) return NullObj;
+  if (CurTeam <= 0 || CurTeam > 6) return NullObj;
+  return Root->GetObject(2, CurWorm + 16 * CurTeam);
+};
+
+int GetWormColor(CWorm* worm)
+{
+  return GetTeamColor(worm->WormTeam) + 1;
+};
+
+bool CGObject::IsInBox(fixed left, fixed top, fixed right, fixed bottom)
+{
+   if (PosX > left && PosX < right)
+   {
+     if (PosY > top && PosY < bottom)
+     {
+       return true;
+     }
+   }
+   return false;
+}
+
+bool CGObject::IsValid()
+{
+   if ((this is CGObject) == false) return false;
+   for (local i = 1; i < Env->Objs.Count; i+= 1)
+   {
+     if (Env->Objs.Objs[i] == this)
+     {
+       return true;
+     }
+   }
+   return false;
+}
+
+int GetFreeWormIndex(int Team)
+{
+    TNW = GS->Info.Teams[Team-1].NWorms;
+    for (i = 1; i <= TNW; i+=1)
+    {
+      if (GS->Info.Teams[Team-1].Worms[i-1].State == 135) return i;
+    };
+    if (TNW < 8)
+    {
+      return TNW + 1;
+    };
+    return -1;
+};
+
+void ExpandNWorms(int Team, int ExpTo)
+{
+  local LIndex = GS->Info.Teams[Team-1].NWorms;
+  GS->Info.Teams[Team-1].NWorms = ExpTo;
+  for (i = LIndex + 1; i < ExpTo; i+=1)
+  {
+    GS->Info.Teams[Team-1].Worms[i-1].State = 135; //DEAD NAU
+  };
+  GS->Info.Teams[Team-1].Worms[ExpTo].State = 100;
+};
+
+CWorm* RessurectWorm(int Index, int Team, fixed x, fixed y)
+{
+  return RessurectWormEx(Index, Team, x, y, "New Worm", 100);
+}
+
+
+CWorm* RessurectWormEx(int Index, int Team, fixed x, fixed y, string wName, int Health)
+{
+  T = Root->GetObject(TI_Team, Team);
+  if (T == NullObj) 
+  {
+     return T;
+  };
+  CWormParams wParam;
+  zero(&wParam);
+  wParam.SetName(wName);
+  wParam.SetPosition(Health, x, y, true);
+  
+  GS->Info.Teams[Team-1].Worms[Index-1].Health = Health;
+  worm = new CWorm(T, Team, Index, &wParam);
+  GS->Info.Teams[Team-1].Worms[Index-1].Health = Health;
+  
+  if (Index > GS->Info.Teams[Team-1].NWorms)
+  {
+    ExpandNWorms(Team, Index);
+  }; 
+   
+  
+  return worm;
+};

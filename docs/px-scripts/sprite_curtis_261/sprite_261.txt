@@ -1,0 +1,12 @@
+CSprite* rebounder_tr;
+
+void sprite_261::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("reboundert.png");
+    rebounder_tr = LoadSprite(f, 8, 0);
+    //f = GetAttachment("reboundert.png");
+    //reboundert = LoadSprite(f, 9, 0);
+
+    SetSpriteOverride(261, rebounder_tr);
+}

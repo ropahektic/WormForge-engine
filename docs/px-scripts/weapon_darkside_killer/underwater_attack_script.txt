@@ -1,0 +1,247 @@
+/*require utils, stepsutils, pyroman_sfx;
+
+CMissile* Missile_HTargetUA;
+             
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+       if (ldata->CheckName("Underwater Attack"))
+       {
+       alwaysHomeTargetUA = Missile_HTargetUA;
+       Missile_HTargetUA = CGObject(Root->GetObject(25, 0));
+       }
+       super;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+   {
+     if (alwaysHomeTargetUA != NullObj)
+     {
+       local worm = GetCurrentWorm();
+       if (worm != NullObj && worm->DarksideKillerUA){
+       if (GS->GetRandom() % 5 == 2)
+       {
+         initdesc.AddX = alwaysHomeTargetUA->PosX; 
+         initdesc.AddY = alwaysHomeTargetUA->PosY;
+       }
+       }
+     }
+   }
+   super;
+}
+
+void CWorm::DoItUA()
+{
+     if (DarksideKillerUA)
+     {
+     CShootDesc SDesc;
+     zero(&SDesc);
+//     local WT = WormTeam;
+//     local WN = WormNumber;
+//     if (WT == 1) {
+//     SDesc.Team = WormTeam;
+//     SDesc.Worm = WormNumber;
+//     } else {
+     SDesc.Team = WormTeam;
+     SDesc.Worm = WormNumber;
+//     }       
+     SDesc.X = PosX;
+     SDesc.Y = PosY-25;
+     SDesc.SpX = 0;
+     SDesc.SpY = -17.0;
+     SDesc.AddX = UAtargetX0 + RandomFloat(-20.0, 20.0);
+     SDesc.AddY = UAtargetY0 + RandomFloat(-20.0, 20.0);
+     SDesc.Delay = 5;
+     local ldata;
+     local weapon;
+     ldata = GetWeaponByName("Underwater Attack");
+     
+     if (DoingItUA)
+     {
+         local memorise = ldata->launch.timeBeforeExplosion;
+         local mathematicsX = (GS->LevelSX/2)/(GS->LevelSX - worm->PosX);
+         local mathematicsY = (GS->LevelSY/2)/(GS->LevelSY - PosY);
+         UAmX = mathematicsX;
+         UAmY = mathematicsY;
+         if (mathematicsX > 5) {mathematicsX = 5;}
+         if (mathematicsY > 5) {mathematicsY = 5;}
+         ldata->Remember = true;
+         
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-2.0, 2.0) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = (-15.0 + 50 - 1/(FireAngle/50) - mathematicsY/2)/1.15;
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-2.0, 2.0) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = (-15.0 + 50 - 1/(FireAngle/50) - mathematicsY/2)/1.15;
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-2.0, 2.0) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = (-15.0 + 50 - 1/(FireAngle/50) - mathematicsY/2)/1.15;
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-2.0, 2.0) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = (-15.0 + 50 - 1/(FireAngle/50) - mathematicsY/2)/1.15;
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         ldata->launch.timeBeforeExplosion -= 50;
+         SDesc.SpX = (RandomFloat(-2.0, 2.0) - 75 + 1/(FireAngle/75))*TurnSide;
+         SDesc.SpY = (-15.0 + 50 - 1/(FireAngle/50) - mathematicsY/2)/1.15;
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+/*         if (mathematicsX >= 1)
+         {
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 + mathematicsX + mathematicsY;
+             SDesc.SpY = -15.0 - mathematicsX/2 - mathematicsY/1.75;
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 + mathematicsX + mathematicsY;
+             SDesc.SpY = -15.0 - mathematicsX/2 - mathematicsY/1.75;
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 + mathematicsX + mathematicsY;
+             SDesc.SpY = -15.0 - mathematicsX/2 - mathematicsY/1.75;
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 + mathematicsX + mathematicsY;
+             SDesc.SpY = -15.0 - mathematicsX/2 - mathematicsY/1.75;
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 + mathematicsX + mathematicsY;
+             SDesc.SpY = -15.0 - mathematicsX/2 - mathematicsY/1.75;
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         } else {
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 - 1/(mathematicsX/2) - 1/(mathematicsY/4);
+             SDesc.SpY = -15.0 - 1/(mathematicsX/2) - 1/(mathematicsY/2);
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 - 1/(mathematicsX/2) - 1/(mathematicsY/4);
+             SDesc.SpY = -15.0 - 1/(mathematicsX/2) - 1/(mathematicsY/2);
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 - 1/(mathematicsX/2) - 1/(mathematicsY/4);
+             SDesc.SpY = -15.0 - 1/(mathematicsX/2) - 1/(mathematicsY/2);
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 - 1/(mathematicsX/2) - 1/(mathematicsY/4);
+             SDesc.SpY = -15.0 - 1/(mathematicsX/2) - 1/(mathematicsY/2);
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+             ldata->launch.timeBeforeExplosion -= 100;
+             SDesc.SpX = RandomFloat(-5.0, 5.0) / 2 - 1/(mathematicsX/2) - 1/(mathematicsY/4);
+             SDesc.SpY = -15.0 - 1/(mathematicsX/2) - 1/(mathematicsY/2);
+             weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         }
+*//*         ldata->launch.timeBeforeExplosion -= 100;
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         SDesc.SpX = RandomFloat(-5.0, 5.0);
+         ldata->launch.timeBeforeExplosion -= 100;
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         SDesc.SpX = RandomFloat(-5.0, 5.0);
+         ldata->launch.timeBeforeExplosion -= 100;
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+         SDesc.SpX = RandomFloat(-5.0, 5.0);
+         ldata->launch.timeBeforeExplosion -= 100;
+         weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+*/
+/*         ldata->launch.timeBeforeExplosion = memorise;
+         DoingItUA = false;
+     }
+     }
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (CurWeapon->CheckName("Underwater Attack") && ObjState == WS_AIMING)
+        {
+                 if (FireAngle < 0.875) FireAngle = 0.875;
+                 if (FireAngle > 1.000) FireAngle = 1.000;
+        }
+        local worm = GetCurrentWorm();
+        if (worm != NullObj)
+        {
+        if (DarksideKillerUA)
+        {
+            local hutick2 = gframe-hutickUA;
+            DoItUA();
+            if (DoingIt == false)
+            {
+                 Missile_HTargetUA->PosX = UAtargetX0 + RandomInt(-hutick2, hutick2)*1.5;
+                 Missile_HTargetUA->PosY = UAtargetY0 - RandomInt(0, hutick2) - 100;
+            }
+            if (UAmX >= 1){
+                 if (hutick2 >= 250)
+                 {
+                     Missile_HTargetUA->PosX = UAtargetX0;
+                     Missile_HTargetUA->PosY = UAtargetY0;
+                 } else
+                 if (hutick2 >= 200)
+                 {
+                     Missile_HTargetUA->PosX = UAtargetX0;
+                     Missile_HTargetUA->PosY = GS->env->Water + 100;
+                 } else
+                 if (hutick2 >= 135)
+                 {
+                     Missile_HTargetUA->PosX = GS->LevelSX + 100;
+                     Missile_HTargetUA->PosY = GS->env->Water + 50;
+                 } else
+                 if (hutick2 >= 40)
+                 {
+                     Missile_HTargetUA->PosX = GS->LevelSX + 250;
+                     Missile_HTargetUA->PosY = -250;
+                 }
+            } else {
+                 if (hutick2 >= 250)
+                 {
+                     Missile_HTargetUA->PosX = UAtargetX0;
+                     Missile_HTargetUA->PosY = UAtargetY0;
+                 } else
+                 if (hutick2 >= 200)
+                 {
+                     Missile_HTargetUA->PosX = UAtargetX0;
+                     Missile_HTargetUA->PosY = GS->env->Water + 100;
+                 } else
+                 if (hutick2 >= 135)
+                 {
+                     Missile_HTargetUA->PosX = -100;
+                     Missile_HTargetUA->PosY = GS->env->Water + 50;
+                 } else
+                 if (hutick2 >= 40)
+                 {
+                     Missile_HTargetUA->PosX = -250;
+                     Missile_HTargetUA->PosY = -250;
+                 }
+            }
+        }
+        if (Root->Timer < 500 && DarksideKillerUA)
+        {
+            Missile_HTargetUA->PosX = RandomInt(0, GS->LevelSX);
+            Missile_HTargetUA->PosY = GS->LevelSY;
+            DarksideKillerUA = false;
+        }
+        } else {
+            DoingItUA = false;
+            DarksideKillerUA = false;
+        }
+    }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Underwater Attack"))
+    {
+        UAtargetX0 = Desc->AddX;
+        UAtargetY0 = Desc->AddY;
+        DarksideKillerUA = true;
+        hutickUA = gframe;
+        DoingItUA = true;
+    }
+    
+super;
+} 
+*/                                                         

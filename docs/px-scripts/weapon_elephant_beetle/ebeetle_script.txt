@@ -1,0 +1,99 @@
+//Thanks to Zed for help
+
+require utils;
+
+CColMask* ebeetle_COLMASK;
+CSprite* ebeetle_Sprite;
+
+void ebeetle_script::InitGraphic()
+{
+    CFile *f;
+	f = GetAttachment("ebeetlewalk.png");	ebeetle_Sprite = LoadSprite(f, 4, 0);
+}
+
+void ebeetle_script::Init(){}
+
+void ebeetle_script::FirstFrame()
+{
+     ebeetle_COLMASK = new CColMask(10,10,MakeRectMask(20,20));   
+}
+
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+SType = false;  //Elephtant Beetle flag
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) 
+{
+super;  
+if(Weap->CheckName("Elephant Beetle"))
+	{
+    CGObject *sobj;
+    CMissile *smis;	
+	sobj = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+	if(sobj->ClType == OC_Missile)
+    	{
+        smis = sobj;
+        smis->SType = true;
+        }                
+	}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(SType == true)
+   {
+              if(Type == M_FRAME)
+              {
+                      BeetleCollision(15.0);
+              }
+   }
+super;
+}
+
+void CMissile::BeetleCollision(float Speed)
+{
+	CGObject *obj;
+	
+	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(GetCurrentWorm() != NullObj)
+		                    {
+		                    if(obj == GetCurrentWorm()) continue;
+		                    }
+		
+		
+		if(obj->ClType == OC_Worm)
+		{
+			if(ebeetle_COLMASK->Check(PosX, PosY, obj->ColMask, obj->PosX, obj->PosY))
+			{
+				float ForceX = obj->PosX - PosX;
+				float ForceY = obj->PosY - PosY;
+				float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+				
+				if(dist > 0)
+				{
+					ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+					ForceY = 4.6*sqrt(Speed) * ForceY / dist;
+					
+					CMessageData msg;
+					msg.params[0]	= 0;
+					msg.fparams[1]	= PosX;
+					msg.fparams[2]	= PosY;
+					msg.fparams[3]	= ForceX;
+					msg.fparams[4]	= ForceY;
+					msg.params[5]	= 1;
+					msg.params[6]	= 0;
+					
+					obj->Message(this, M_GUNEXP, 1032, &msg);
+				}
+			}
+		}
+	}
+}

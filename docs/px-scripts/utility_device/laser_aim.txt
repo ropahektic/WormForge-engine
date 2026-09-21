@@ -1,0 +1,25 @@
+require utility_laser_pointer;
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+ if(GetCurrentWorm() != NullObj)
+ {
+  if(GetCurrentWorm() == this && ObjState == WS_AIMING)
+  {
+    if(CurWeapon->CheckName("Aim on reaction"))
+    {
+      if(Type == M_DRAWQUEUE)
+      {
+      local LaserLen = 15000;
+      local ang = (1 - FireAngle) * 3.14159;
+      if (TurnSide < 0)
+      {
+         ang = 6.28318 - ang;
+      };
+      MakeLaserRay(this, PosX + sin(ang) * 12, PosY - cos(ang) * 12, 2, ang, LaserLen);
+      }
+    }
+  }
+ }
+}

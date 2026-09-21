@@ -1,0 +1,434 @@
+require weapon_sentry_laser, weapon_lightning, p_gravity_gun;
+
+//tweak no enemy worms gravity gun by 0rang3
+override void CWorm::SuckObject()
+{
+     GG_calculate_angle();
+
+    float endX = PosX + GG_ang_x * gg_throw_distance*3;
+    float endY = PosY + GG_ang_y * gg_throw_distance*3;
+
+    int hitX; int hitY;
+    CGObject *hitObject = TraceLine(this, PosX, PosY, endX, endY, 2+4+8+16+32+64+128+256+512+1024+2048+4096+8192+16384+32768+65536+131072+262144+524288, &hitX, &hitY);
+
+    if(hitObject != NullObj)
+    {
+                        for(i = 1; i < Env->Objs.Count; i += 1)
+            {
+                obj = CGObject(Env->Objs.Objs[i]);
+                if(obj == NullObj) continue;
+                if(obj->ClType == OC_Landscape) continue;
+                if(obj->ClType == OC_Worm)
+					{
+					worm = CWorm(obj);
+					if(GetTeamColor(GetCurrentWorm()->WormTeam) == GetTeamColor(worm->WormTeam))
+						{
+						}
+					else continue;
+					}
+
+                if (obj == hitObject)
+                {
+                    gg_prev_px = obj->PosX - obj->SpX;       // !
+                    gg_prev_py = obj->PosY - obj->SpY;
+                    local hit = CheckMaskAt(obj, obj->ColMask, hitX, hitY, 2); // checking landscape collision only
+
+                                        float dx = PosX - hitX;
+                    float dy = PosY - hitY;
+                    float dsqr = dx*dx+dy*dy;
+
+                    if (#WEAPON_BOWLINGBALL)
+                                        {
+                                            if (obj is CBowlingBall)
+                                            {
+                                            CBowlingBall* m = CBowlingBall(obj);
+                                            m->Wake();
+                                            m->SpX = 0.0;
+                                            m->SpY = 0.0;
+                                            }
+                                        }
+                    local g = obj->GravityFactor;
+                    obj->GravityFactor = 0.0;
+
+                                        local dist = sqrt(dsqr);
+                    if (dist <= (gg_stop_radius + 0.5))
+                    {
+                        gg_play_if_pickup = true;
+                        gg_active_holder = true;
+                                                gg_hold = true;
+                                                ggun_used = false;
+                        holded_obj = obj;
+                        gg_just_opened_holder = true;
+                    } else
+                    if (dist <= gg_throw_distance/2)
+                    {
+                        if (hit == NullObj)
+                        {
+                            obj->PosX = hitX+GG_ang_x*obj->MaskIndex;
+                            obj->PosY = hitY+GG_ang_y*obj->MaskIndex;
+                        }
+                                                obj->SpX    = -GG_ang_x * gg_suck_speed*2.5;
+                        obj->SpY    = -GG_ang_y * gg_suck_speed*2.5;
+                        if (gg_play_if_pickup)
+                        {
+                            gg_pickup_s->Play( 1.0, 1.0, false);
+                                                    gg_play_if_pickup = false;
+                        }
+                                                gg_active_holder = true;
+                    }
+                                         else
+                                        {
+                        gg_play_if_pickup = true;
+                        if (hit == NullObj)
+                        {
+                            obj->PosX = hitX+GG_ang_x*obj->MaskIndex;
+                            obj->PosY = hitY+GG_ang_y*obj->MaskIndex;
+                        }
+                                                obj->SpX    = -GG_ang_x * gg_suck_speed;
+                        obj->SpY    = -GG_ang_y * gg_suck_speed;
+                        gg_active_holder = false;
+                    }
+
+                    if (obj->PosX == gg_prev_px && obj->PosY == gg_prev_py)
+                    {
+                        if (hit == NullObj)
+                        {
+                            obj->PosX = hitX+GG_ang_x*obj->MaskIndex;
+                            obj->PosY = hitY+GG_ang_y*obj->MaskIndex;
+                        }
+                                                obj->SpY += RandomFloat(-5.0, 0.0);
+                        obj->SpX += RandomFloat(-5.0, 5.0);
+                    }
+
+                    obj->GravityFactor = g;
+                    return;
+
+                                }
+            }
+    }
+}
+
+override void CWorm::CheckPossibleSuck()
+{
+//    local w = GetCurrentWorm();
+//    if (w == NullObj || w != this) return;
+    GG_calculate_angle();
+
+    float endX = PosX + GG_ang_x * gg_throw_distance*3;
+    float endY = PosY + GG_ang_y * gg_throw_distance*3;
+
+    int hitX; int hitY;
+    CGObject *hitObject = TraceLine(this, PosX, PosY, endX, endY, 2+4+8+16+32+64+128+256+512+1024+2048+4096+8192+16384+32768+65536+131072+262144+524288, &hitX, &hitY);
+
+    if(hitObject != NullObj)
+    {
+            for(i = 1; i < Env->Objs.Count; i += 1)
+            {
+                obj = CGObject(Env->Objs.Objs[i]);
+                if(obj == NullObj) continue;
+                if(obj->ClType == OC_Landscape) continue;
+                if(obj->ClType == OC_Worm)
+					{
+					worm = CWorm(obj);
+					if(GetTeamColor(GetCurrentWorm()->WormTeam) == GetTeamColor(worm->WormTeam))
+						{
+						}
+					else continue;
+					}
+
+                if (obj == hitObject)
+                {
+
+                    gg_active_holder = true;
+                    if (gg_play_if_possible)
+                                        {
+                                           gg_possible_hit_s->Play(1.0, 1.0, false);
+                                           gg_play_if_possible = false;
+                                        }
+                    return;
+
+                                }
+            }
+            gg_active_holder = false;
+            gg_play_if_possible = true;
+    } else
+        {
+           gg_active_holder = false;
+           gg_play_if_possible = true;
+        }
+}
+
+//Sentry Laser Gun
+
+
+override PxSentryLaser::PxSentryLaser(CObject* Parent, CShootDesc* Desc)
+{
+super;
+SensorRadius = 300.0; //default max distance when weps are detected
+SensorMinRadius = 0.0; //default
+Ammunition = 5; //deafult
+TurretRotationSpeedActive = 10.0; //default
+DelayBeforeFiring = 5; //default frames or 'time' before firing
+}
+
+
+//Zombie Worm
+int wrmTm;
+int wrmNmbr;
+void script_overrides::Init()
+{
+   keySync->AddKey(9); // tab
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+         if(FirePunchTimer != 0 && GG->land->Undestructable == false){GG->land->ApplyMask(4, PosX, PosY - 7);}
+         Death();
+         if(cooldown != 0){cooldown = cooldown - 1;}
+                     if(Zombie == true && Act == true && Root->TimerDisabled == false)
+                     {
+                     ZombieBehavior();
+                     }
+         }
+
+
+         if(Type == M_TURNBEGIN)
+         {
+         if(cooldown == 0){cooldown = 10;Player = CWorm(Root->GetObject(2, 16 * WormTeam + WormNumber));MakeActive();}
+
+         wrmTm = WormTeam;
+         wrmNmbr = WormNumber;
+         //GG->WriteToChat(15, StrCon(StrCon("WormTeam: ", display(wrmTm)), ""), false);
+         //GG->WriteToChat(15, StrCon(StrCon("WormNumber: ", display(wrmNmbr)), ""), false);
+         }
+
+         if(Type == M_FRAME){
+         if (keySync->KeyPressed(9))
+        {
+         wrmNmbr = wrmNmbr + 1;
+         if(wrmNmbr == 6){ wrmNmbr = 1; }
+         //GG->WriteToChat(15, StrCon(StrCon("WormTeam: ", display(wrmTm)), ""), false);
+         //GG->WriteToChat(15, StrCon(StrCon("WormNumber: ", display(wrmNmbr)), ""), false);
+         //if(cooldown == 0){cooldown = 10;Player = CWorm(Root->GetObject(2, 16 * WormTeam + WormNumber));MakeActive();}
+         cooldown = 10;
+         Player = CWorm(Root->GetObject(2, 16 * wrmTm + wrmNmbr));
+         MakeActive();
+        }
+         }
+
+         if(Type == M_TURNEND)
+         {
+         if(cooldown == 0){cooldown = 10;MakeInactive();Player = NullObj;}
+                     if(Zombie == true && cooldown == 0)
+                     {
+                     return;
+                     }
+         }
+
+super;
+}
+
+
+
+override void CWorm::Death()
+{
+  if(PosY > GS->LevelSY)
+  {
+  CanBeZombie = false;
+  Zombie = false;
+  Act = false;
+  }
+
+  if(GS->Info.GetWormHealth(WormTeam,WormNumber) <= 0 && CanBeZombie == true && WormNumber == 1)
+  {
+  Zombie = true;
+  CanBeZombie = false;
+  GS->Info.SetWormHealth( WormTeam, WormNumber, 100);
+  }
+}
+
+
+override // Applies the lightning strike effect to a particular object
+void PxLightningStrike::LightningHit(CGObject *obj)
+{
+	if(#WEAPON_MAGNET)
+	{
+		if(obj is CMagnet)
+		{
+			// Recharge magnets
+			local mag = CMagnet(obj);
+			mag->Recharge();
+			return;
+		}
+	}
+
+	if(#WEAPON_BOWLINGBALL)
+	{
+		if(obj is CBowlingBall)
+		{
+			// Overcharge bowling balls
+			local ball = CBowlingBall(obj);
+			ball->Zap(0);
+			return;
+		}
+	}
+
+	if(#WEAPON_FAN)
+	{
+		if(obj is PxFan)
+		{
+			// Recharge fan
+			local fanobj = PxFan(obj);
+			fanobj->Recharge();
+			return;
+		}
+	}
+
+    if(#WEAPON_SENTRYLASER)
+	{
+	  	if(obj is PxSentryLaser)
+        {
+        PxSentryLaser *sentry = PxSentryLaser(obj);
+	    sentry->OwnerTeam = OwnerTeam;
+	    sentry->TurretActive = false;
+	    return;
+	    }
+    }
+
+
+	if(#WEAPON_KSENTRY)
+	{
+	  	if(obj is PxSentryGun)
+	  	{
+		// Changes sentry teams
+		local sentry = PxSentryGun(obj);
+		sentry->OwnerTeam = OwnerTeam;
+		sentry->TurretActive = false;
+		return;
+	  	}
+    }
+
+    if(#WEAPON_BARRELLAUNCHER)
+	{
+	  	if(obj is NapalmDrum || obj is MinesDrum || obj is ElectroDrum || obj is IceDrum || obj is TeleportDrum)
+	  	{
+		CMessageData msg;
+		msg.params[0]	= 0;
+		msg.fparams[1]	= EndX;
+		msg.fparams[2]	= EndY;
+		msg.fparams[3]	= 0.0;
+		msg.fparams[4]	= 0.0;
+		msg.params[5]	= 100;
+		msg.params[6]	= 0;
+
+		obj->Message(this, M_GUNEXP, 1032, &msg);
+	  	}
+    }
+
+	if(#WEAPON_TURRET)
+	{
+		if(obj is CTurretBase)
+		{
+            local turret = CTurretBase(obj);
+            turret->turretTeam = OwnerTeam;
+			return;
+		}
+	}
+
+	if(#LAMP_MISSILE)
+	{
+		if(obj is CLampMissile)
+		{
+			// Recharge lamps
+			local lamp = CLampMissile(obj);
+			lamp->Recharge();
+			return;
+		}
+	}
+
+	if(obj->ClType == OC_Mine)
+	{
+		// Trigger mines
+		local mine = CMine(obj);
+
+		// If the mine is not a special mine, can be triggered, and has not been triggered yet
+		if(mine->Radius > 0 && mine->Active == 0 && mine->Prefuse <= 0)
+		{
+			// If the mine has a random timer
+			if(mine->Fuse < 0)
+			{
+				// Give it a random fuse time (between 1 and 5)
+				mine->Fuse = RandomInt(1000, 5000);
+			}
+
+			// Trigger the mine
+			mine->Active = 1;
+			mine->nPulses = mine->Fuse / 250;
+		}
+	}
+	else if(obj->ClType == OC_OilDrum || obj->ClType == OC_Crate)
+	{
+		// Blow up oil drums and crates
+		CMessageData msg;
+		msg.params[0]	= 0;
+		msg.fparams[1]	= EndX;
+		msg.fparams[2]	= EndY;
+		msg.fparams[3]	= 0.0;
+		msg.fparams[4]	= 0.0;
+		msg.params[5]	= 100;
+		msg.params[6]	= 0;
+
+		obj->Message(this, M_GUNEXP, 1032, &msg);
+	}
+	else if(obj->ClType == OC_Worm)
+	{
+		// Heal worms
+		local worm = CWorm(obj);
+
+		if(worm->ResurrectedByLightning == false)
+		{
+			if(worm->Zombie == true)
+			    {
+			    worm->Zombie = false;
+			    worm->CanBeZombie = true;
+				int health = GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber);
+				GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, health);
+				}
+			else
+			    {
+			    int health = GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber);
+				GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, health + 25);
+				}
+		}
+	}
+	else if(obj->ClType == OC_Cross)
+	{
+		// Resurrect worms from their grave
+		local deadworm = DW_M->DeadWormFromGrave(obj);
+
+		if(deadworm != PxDeadWorm(NullObj))
+		{
+			deadworm->Resurrect(25);
+		}
+		else
+		{
+			ShowMessage("Grave has no bound worm, could not resurrect!");
+		}
+	}
+}
+
+
+//Print game description on start
+void script_overrides::FirstFrame()
+{
+    ShowMessage("SPECIALISTS");
+    GG->WriteToChat(GG->curFont+2," ------------------------------------------------ S P E C I A L I S T S  2.3 ------------------------------------------------",false);
+    GG->WriteToChat(GG->curFont+6,"    - Each Worm Class has it's own weapon arsenal and capabilities.",false);
+    GG->WriteToChat(GG->curFont+6,"    - Select worm (TAB) is possible throughout your turn (even after a worm dies if you're quick).",false);
+    GG->WriteToChat(GG->curFont+6,"    - Worms within your Medic's healing aura receive +25hp each turn.",false);
+    GG->WriteToChat(GG->curFont+6,"    - When the Soldier dies, he comes back as a Zombie worm!",false);
+    GG->WriteToChat(GG->curFont+6,"    - If the last worm alive in your team will receive a weapon or utility upgrade.",false);
+    GG->WriteToChat(GG->curFont+2," --------------------------------------------- G O O D  L U C K  &  H A V E  F U N ---------------------------------------------",false);
+}

@@ -1,0 +1,24 @@
+//List of sprites
+
+CSprite* smkdrk20;
+CSprite* smkdrk30;
+CSprite* smkdrk40;
+
+void smoke_change::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+     
+   f = GetAttachment("smkdrk20.png");
+   smkdrk20 = LoadSprite(f, 23, 0);
+   f = GetAttachment("smkdrk30.png");
+   smkdrk30 = LoadSprite(f, 23, 0);
+   f = GetAttachment("smkdrk40.png");
+   smkdrk40 = LoadSprite(f, 23, 0);  
+  
+   //Let's override the sprites!
+   
+   SetSpriteOverride(613, smkdrk20);
+   SetSpriteOverride(614, smkdrk30);
+   SetSpriteOverride(615, smkdrk40);
+}

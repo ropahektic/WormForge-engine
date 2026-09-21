@@ -1,0 +1,24 @@
+require utils;
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+   super;
+
+   local w = GetCurrentWorm();
+   if(w == NullObj) return;
+   if(GS->Info.Teams[w->WormTeam-1].Worms[w->WormNumber-1].State == 100) return;
+
+   local lastWeap = w->CurWeapon;  local lastWeapN = w->WeaponN;
+   local weap = GetWeaponByName("Fast Walk");
+  
+   if(weap == NullObj) return;
+
+   CShootDesc sdesc;
+   zero(&sdesc);
+
+   w->CurWeapon = weap;  w->WeaponN = weap->GetWeaponIndex();
+   w->FireFinal(weap, &sdesc);
+   
+   if(lastWeap == NullObj) return;
+   w->CurWeapon = lastWeap;  w->WeaponN = lastWeapN;     
+}

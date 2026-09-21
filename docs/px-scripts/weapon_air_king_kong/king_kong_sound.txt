@@ -1,0 +1,15 @@
+CSoundFile* kongroar;
+ 
+void king_kong_sound::Init()
+{
+	kongroar       = new CSoundFile(GetAttachment("Angry Kong.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("King Kong"))
+  {  
+             kongroar->Play(3.0, 0.0, false);
+  }
+  super;
+}

@@ -1,0 +1,75 @@
+$editor
+ $object CrateSupply
+  $origin -15 -15
+  $image "edcross.png"
+  $func SpawnCrateSupply
+  $radius 17
+  $param CrateType enum 2 Health Weapon
+  $param Delay int 1
+  $param Health int 50
+ $object_end
+$end
+
+
+CCrateSupply : CObject;
+
+void CCrateSupply::Spawn()
+{
+  CCrateDesc cDesc;
+  zero(&cDesc);
+  cDesc.X = PosX;
+  cDesc.Y = PosY;
+  cDesc.type = CrateType;
+
+  if (CrateType == CT_HEALTH)
+    cDesc.health = Health;
+
+  if (CrateType == CT_WEAPON || CrateType == CT_UTILITY)
+  {
+    cDesc.wType = WCT_RANDOM;
+  }
+
+  spawnee = new CCrate(Root, &cDesc, DT_NONE);
+
+  timer = Delay;
+}
+
+CCrateSupply::CCrateSupply(CEditorObject* obj)
+{
+   super(Root, GS);
+
+   PosX = obj->PosX;
+   PosY = obj->PosY;
+
+   Delay = obj->GetInt("Delay");
+   Health = obj->GetInt("Health");
+   if (StrCmp(obj->GetString("CrateType"), "Health")) CrateType = CT_HEALTH;
+   if (StrCmp(obj->GetString("CrateType"), "Weapon")) CrateType = CT_WEAPON;
+
+   //fields
+   timer = Delay;
+
+
+   spawnee = CCrate(NullObj);
+   Spawn();
+}
+
+void CCrateSupply::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_TURNEND)
+   {
+     if (spawnee == NullObj)
+     {
+       if (timer <= 0)
+       {
+         Spawn();
+       } else
+       timer--;
+     } else timer = Delay;
+   }
+}
+
+void SpawnCrateSupply(CEditorObject* obj)
+{
+  cs = new CCrateSupply(obj);
+};

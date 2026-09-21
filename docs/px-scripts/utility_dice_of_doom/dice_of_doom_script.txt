@@ -1,0 +1,130 @@
+require utils;
+
+bool DoD_GoodLuck;
+bool DoD_BadLuck;
+bool DoD_Informer;
+
+void dice_of_doom_script::Init()
+{
+   DoD_GoodLuck = false;
+   DoD_BadLuck = false;
+   DoD_Informer = true;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{       
+   if(Type == M_FRAME)
+   {
+      if(CurWeapon->CheckName("Dice of Doom"))
+      {
+         if(DoD_Informer == true)
+         {
+            PlayLocalSound(45, 5, 2.0,1.0);
+         
+            ShowMessage("1-4 = DEATH.");
+            ShowMessage("5 and 6 = REWARD.");
+            ShowMessage("Do you dare???"); 
+         
+            DoD_Informer = false;
+         }   
+      }
+   }
+   
+   if(Type == M_SETWEAPON)
+   {
+      if(DoD_Informer == false)
+      {
+         DoD_Informer = true;
+      }  
+   }
+   
+   if(Type == M_TURNEND)
+   {
+      if(DoD_Informer == false)
+      {
+         DoD_Informer = true;
+      }  
+   }
+   
+   if(DoD_GoodLuck == true)
+   {     
+      ShowMessage("You got lucky...");
+      ShowMessage("Damage*2: ON");
+      local cw = GetCurrentWorm();
+      
+      local weapreward = GS->GetWeaponByName("Damage*2");
+      GS->Info.AddWeaponEx(cw->WormTeam, weapreward->GetWeaponIndex(), weapreward->GetPageIndex(), 1);
+      GS->Info.SetWormHealth(cw->WormTeam, cw->WormNumber, 200);
+      
+      DoD_GoodLuck = false;
+   }
+   
+   if(DoD_BadLuck == true)
+   {
+      ShowMessage("Too bad... NOW DIE!");
+      
+      local cw = GetCurrentWorm();
+      
+      if(cw != NullObj)
+      {
+         GS->Info.SetWormHealth(cw->WormTeam, cw->WormNumber, 0);
+         cw->SetState(WS_DEATH);
+         
+         DoD_BadLuck = false;
+      }
+   }
+   
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{ 
+   if(Weap->CheckName("Dice of Doom"))
+   {     
+      local DoD_DiceRoll = RandomInt(1,6);
+      if      (DoD_DiceRoll == 1)
+      { 
+         DoD_BadLuck = true; 
+         ShowMessage("You rolled 1!");
+         
+         PlayLocalSound(31, 5, 2.0,1.0);
+      }
+      else if (DoD_DiceRoll == 2)
+      { 
+         DoD_BadLuck = true; 
+         ShowMessage("You rolled 2!"); 
+         
+         PlayLocalSound(31, 5, 2.0,1.0);
+      } 
+      else if (DoD_DiceRoll == 3)
+      { 
+         DoD_BadLuck = true; 
+         ShowMessage("You rolled 3!"); 
+         
+         PlayLocalSound(31, 5, 2.0,1.0);
+      }
+      else if (DoD_DiceRoll == 4)
+      { 
+         DoD_BadLuck = true; 
+         ShowMessage("You rolled 4!"); 
+         
+         PlayLocalSound(31, 5, 2.0,1.0);
+      }
+      else if (DoD_DiceRoll == 5)
+      { 
+         DoD_GoodLuck = true;
+         ShowMessage("You rolled 5!");
+         
+         PlayLocalSound(3, 5, 2.0,1.0);
+      }
+      else if (DoD_DiceRoll == 6)
+      { 
+         DoD_GoodLuck = true; 
+         ShowMessage("You rolled 6!");
+         
+         PlayLocalSound(3, 5, 2.0,1.0);
+      }
+   }      
+ 
+   super;
+}

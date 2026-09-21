@@ -1,0 +1,99 @@
+///////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////  ANIMATE WORM  ///////////////////////////////////
+//```````````````````````````````````````````````````````````````````````````````//
+CSprite* fireb_aiming;                                                 //   1.   rename as "YOUR_WEAP_aiming"
+CSprite* fireb_bullet;
+CSprite* stafftr;
+CSprite* firebtr;
+//WormSprite* toxicPaintBallWS;
+//WeapSprite* toxicPaintBallws;
+                                                                                 //
+
+void fireball_anim::InitGraphic()                                  //   name of your sript in LibEditor
+{   CFile* f;                                                                    //
+    f = GetAttachment("staff_spb.png");
+    fireb_aiming = LoadSprite(f, 6, 0);                               //    4.  (replace with variable from 1.)
+    f = GetAttachment("fireb.png");
+    fireb_bullet = LoadSprite(f, 20, 0);
+    f = GetAttachment("stafftr.png");
+    stafftr = LoadSprite(f, 8, 0);
+    f = GetAttachment("firebt.png");
+    firebtr = LoadSprite(f, 6, 0);
+
+
+   SetSpriteOverride(453, stafftr);
+   SetSpriteOverride(458, firebtr);
+}                                                                                //
+                                                                                 //
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Fireball Spell";
+     sprite = fireb_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 1.15;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}                                                                              //
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("Fireball Spell")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+            DoAnimParticleEffects(
+
+            453,     //   SPRITE
+            1,       //   RADIUS
+            20,      //   RELX
+            20,      //   RELY
+            70,      //   LIFETIME
+            0.02,    //   SPEED
+            1.0,     //   VELO.MIN
+            5.0,     //   VELO.MAX
+            255,     //   START.ALPHA
+            255,     //   END.ALPHA
+            0,       //   WIND
+            0.65,    //   START.SIZE
+            0.01,    //   END.SIZE
+            0.00,    //   ANGLE.MIN
+            0.00,    //   ANGLE.MAX
+            0.0,     //   RANDOMNESS
+            -3.0);   //   GRAVITY
+        }
+    }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Fireball Spell")) {
+         if (fireb_anim) {
+              local sprite = fireb_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.50;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              fireb_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  fireb_anim = true;
+}

@@ -1,0 +1,47 @@
+// new icon by 0rang3
+
+require utils;
+
+void Fire_Jump_script::InitGraphic()
+{
+}
+
+void Fire_Jump_script::Init()
+{
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Fire Jump"))
+  {
+        FJw = true;
+        FJt = 0;
+          
+  }
+  super;
+}
+
+
+override void CWorm::Message( CObject *sender, EMType Type, int mSize, CMessageData *mData )
+{
+        CWorm *w = GetCurrentWorm();
+        if(Type == M_FRAME && w != NullObj)
+	{
+	        if(FJw != false)
+              	{
+
+                      FJt = FJt + 1;
+       	              if (FJt==1){SpY = -9;}
+       	              if (FJt==30){SpX = TurnSide*4;}
+                      if (FJt==60){SpY = SpY-1;}
+                      if (FJt>80 && FJt<210 && SpY>5){SpY = 4;}  
+                      if (FJt==211)
+                      {
+                         FJt = 0;
+                         FJw = false;                         
+                      }
+              	}
+	}
+	
+	super;
+}

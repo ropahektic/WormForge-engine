@@ -1,0 +1,76 @@
+
+CSprite* wbatrope;
+
+CSprite* wbatlnk;
+CSprite* wbatlnku;
+CSprite* wbatlnkd;
+
+CSprite* wbatbk2;
+CSprite* wbatbk2u;
+CSprite* wbatbk2d;
+
+CSprite* wbataim;
+CSprite* wbataimu;
+CSprite* wbataimd;
+
+CSprite* wbatfrd;
+CSprite* wbatfrdu;
+CSprite* wbatfrdd;
+
+
+void rope_change::InitGraphic()
+{
+   CFile *f;
+ 
+   f = GetAttachment("wbatrope.png");
+   wbatrope = LoadSprite(f, 64, 1);
+
+   f = GetAttachment("wbatlnk.png");
+   wbatlnk = LoadSprite(f, 10, 0);
+   f = GetAttachment("wbatlnku.png");
+   wbatlnku = LoadSprite(f, 10, 0);
+   f = GetAttachment("wbatlnkd.png");
+   wbatlnkd = LoadSprite(f, 10, 0);
+   
+   f = GetAttachment("wbatbk2.png");
+   wbatbk2 = LoadSprite(f, 10, 0);
+   f = GetAttachment("wbatbk2u.png");
+   wbatbk2u = LoadSprite(f, 10, 0);
+   f = GetAttachment("wbatbk2d.png");
+   wbatbk2d = LoadSprite(f, 10, 0);
+   
+   f = GetAttachment("wbataim.png");
+   wbataim = LoadSprite(f, 32, 0);
+   f = GetAttachment("wbataimu.png");
+   wbataimu = LoadSprite(f, 32, 0);
+   f = GetAttachment("wbataimd.png");
+   
+   wbataimd = LoadSprite(f, 32, 0);
+   f = GetAttachment("wbatfrd.png");
+   wbatfrd = LoadSprite(f, 32, 0);
+   f = GetAttachment("wbatfrdu.png");
+   wbatfrdu = LoadSprite(f, 32, 0);
+   f = GetAttachment("wbatfrdd.png");
+   wbatfrdd = LoadSprite(f, 32, 0);
+   
+   SetSpriteOverride(147, wbatrope);
+
+   SetSpriteOverride(482, wbatlnk);
+   SetSpriteOverride(483, wbatlnku);
+   SetSpriteOverride(484, wbatlnkd);
+   
+   SetSpriteOverride(485, wbatbk2);
+   SetSpriteOverride(486, wbatbk2u);
+   SetSpriteOverride(487, wbatbk2d);
+   
+   SetSpriteOverride(537, wbataim);
+   SetSpriteOverride(538, wbataimu);
+   SetSpriteOverride(539, wbataimd);
+   
+   SetSpriteOverride(540, wbatfrd);
+   SetSpriteOverride(541, wbatfrdu);
+   SetSpriteOverride(542, wbatfrdd);
+     
+}   
+
+                        

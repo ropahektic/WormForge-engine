@@ -1,0 +1,44 @@
+// by PyroMan
+
+// !!! i recommend copy all this script text and create script inside you scheme, 
+//  paste it there and adjust all necessary parameters there.
+//  For example if your scheme has long after turn processing (like golf) and portals should stay active longer,
+//  then u can increase deactivation timer.
+
+require p_portal2;
+
+override CPortal::CPortal(int type,int x,int y,int sizeX,int sizeY,int TurnSide,int spy,bool ExitOnly,bool LandTele,string linkedTo,string name,bool trap,int ang_type)
+{
+    super;
+      
+    teleMissiles = true;
+    teleWorms = true;
+    teleMines = true;
+    teleCrates = false;
+    teleDrums = true;
+    teleBowl = true;
+    teleArrow = true;
+    teleCross = true;
+    teleMagnets = true;
+  
+    timer_to_deactivate = 150;     // 50 = 1 sec
+  
+}
+
+override void CPortal::Update(int type,int x,int y,int sizeX,int sizeY,int TurnSide,int spy,bool ExitOnly,bool LandTele,string linkedTo,string name,bool trap,int ang_type)
+{
+    super;
+      
+    teleMissiles = true;
+    teleWorms = true;
+    teleMines = true;
+    teleCrates = false;
+    teleDrums = true;
+    teleBowl = true;
+    teleArrow = true;
+    teleCross = true;
+    teleMagnets = true;
+  
+    timer_to_deactivate = 150;     // 50 = 1 sec
+  
+}

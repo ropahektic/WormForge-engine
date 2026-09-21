@@ -1,0 +1,306 @@
+//script by StepS, improved by 0rang3
+
+require utils;
+CMine* StickyMine;
+        
+bool mineselector;
+int minetype;
+
+void minelauncher_scr::FirstFrame()
+{               
+        keySync->AddKey(49); // 1 button
+        keySync->AddKey(50); // 2 button
+        keySync->AddKey(51); // 3 button                                
+}
+
+override void CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
+{    
+stuck = false;
+released = false;             
+super;
+}
+
+override void CMine::Collide(CGObject* Obj,int type)
+{  
+    if (StickyWork)
+     {
+     if (released == false)
+        {
+        if (stuck == false)
+           {
+           SpX = 0;
+           SpY = 0;
+           GravityFactor=0;
+           PlayLocalSound(107, 1.0, 1.0, 1.0);
+           PlayLocalSound(56, 1.0, 1.0, 1.0);
+           stuck = true;
+           }
+        else
+           {
+           GravityFactor=1;
+           released = true;
+           }
+        }
+     }      
+super;            
+}
+
+override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  
+     if (released == false)
+        {
+        if (Type == M_FRAME)
+           {
+           if ( (stuck == true) && ((SpX != 0) || (SpY != 0)) )
+              {
+              GravityFactor = 1;                            
+              released = true;
+              }  
+           }           
+        }
+                    
+super;
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{  
+   if(Type == M_TURNBEGIN || Type == M_TURNEND || Type == M_SETWEAPON)
+   {
+   mineselector = true;
+   minetype = 0;
+   }
+   
+   if(Type == M_FRAME)
+   {
+      if(CurWeapon->CheckName("Mine Launcher") && mineselector != false)
+      {
+         if(keySync->KeyPressedNow(49))
+         {         
+         minetype = 0;                   
+         ShowTeamMessage(7,"Instant Mine, 0 SEC",WormTeam);
+         PlayLocalSound(92, 1.0, 1.0, 1.0);
+         }          
+         else if(keySync->KeyPressedNow(50))
+         {                  
+         minetype = 1;         
+         ShowTeamMessage(7,"Sticky Mine, 1.5 SEC",WormTeam);
+         PlayLocalSound(92, 1.0, 1.0, 1.0);
+         }                  
+         else if(keySync->KeyPressedNow(51))
+         {         
+         minetype = 2;         
+         ShowTeamMessage(7,"Invisible Mine, 3 SEC",WormTeam);
+         PlayLocalSound(92, 1.0, 1.0, 1.0);
+         }
+      }      
+   }   
+   
+super;
+}      
+      
+override void CMine::Render()
+{
+    if (!invimine) super;                                             
+}  
+                                                                             
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+		CWorm *w = GetCurrentWorm();
+     
+        if (Weap->CheckName("Mine Launcher") && mineselector == true)
+        {       
+           if (minetype == 0)
+                {
+                local team = w->WormTeam;
+                
+                local ang = (1 - FireAngle) * 3.14159;
+                if (TurnSide < 0) ang = 6.28318 - ang;
+                
+                CShootDesc SDesc;
+				zero(&SDesc);
+		
+				float ForceInit = FirePower * 20.0;
+		
+				SDesc.SpX = SpX + sin(ang) * ForceInit;
+				SDesc.SpY = SpY - cos(ang) * ForceInit;
+				SDesc.X = w->PosX;
+				SDesc.Y = w->PosY;
+				SDesc.Team = team;
+		
+				CMineParams MParams;
+				zero(&MParams);
+		
+				MParams.Prefuse = 400;
+				MParams.Flags = 60;
+				MParams.Bias = 50;
+				MParams.Damage = 50;
+                MParams.BlastPower = 100;
+				MParams.Fuse = 0;
+	        	MParams.Radius = 48;
+                
+                local m = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+                
+	        	m->DumpingA = 0.6;
+                m->DumpingB = 0.6;
+                m->DumpingC = 0.96;
+                
+                mineselector = false;
+                }
+                
+           else if (minetype == 1)
+                {
+                local team = w->WormTeam;
+                
+                local ang = (1 - FireAngle) * 3.14159;
+                if (TurnSide < 0) ang = 6.28318 - ang;
+                
+                CShootDesc SDesc;
+				zero(&SDesc);
+		
+				float ForceInit = FirePower * 20.0;
+		
+				SDesc.SpX = SpX + sin(ang) * ForceInit;
+				SDesc.SpY = SpY - cos(ang) * ForceInit;
+				SDesc.X = w->PosX;
+				SDesc.Y = w->PosY;
+				SDesc.Team = team;
+		
+				CMineParams MParams;
+                zero(&MParams); 
+                MParams.Prefuse = 2000;  
+                MParams.Flags = 60;    
+                MParams.Bias = 50;     
+                MParams.Damage = 50;  
+                MParams.BlastPower = 100;
+                MParams.Fuse = 1500;
+                MParams.Radius = 48;
+                
+                StickyMine = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+                StickyMine->StickyWork = true;
+                                               
+                mineselector = false;                                                                                                 	        
+                }    
+                
+           else if (minetype == 2)
+                {
+                local team = w->WormTeam;
+                
+                local ang = (1 - FireAngle) * 3.14159;
+                if (TurnSide < 0) ang = 6.28318 - ang;
+                
+                CShootDesc SDesc;
+				zero(&SDesc);
+		
+				float ForceInit = FirePower * 20.0;
+		
+				SDesc.SpX = SpX + sin(ang) * ForceInit;
+				SDesc.SpY = SpY - cos(ang) * ForceInit;
+				SDesc.X = w->PosX;
+				SDesc.Y = w->PosY;
+				SDesc.Team = team;
+		
+				CMineParams MParams;
+				zero(&MParams);
+		
+				MParams.Prefuse = 2000;
+				MParams.Flags = 60;
+				MParams.Bias = 50;
+				MParams.Damage = 50;
+                MParams.BlastPower = 100;
+				MParams.Fuse = 3000;
+	        	MParams.Radius = 48;
+                
+                local m = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+                
+	        	m->DumpingA = 0.6;
+                m->DumpingB = 0.6;
+                m->DumpingC = 0.96;
+                
+                m->invimine = true;
+                
+                mineselector = false;
+                }                                                		
+			}
+
+        else if (Weap->CheckName("Instant Mine Launcher") || Weap->CheckName("Random Mine Launcher") || Weap->CheckName("Invisible Mine Launcher"))
+        	{
+                int fuse;
+                                
+                if (Weap->CheckName("Instant Mine Launcher"))   fuse = 0;
+                if (Weap->CheckName("Random Mine Launcher"))    fuse = RandomInt(0,3000);
+                if (Weap->CheckName("Invisible Mine Launcher")) fuse = 3000;
+                
+                
+                local team = w->WormTeam;
+                
+                local ang = (1 - FireAngle) * 3.14159;
+                if (TurnSide < 0) ang = 6.28318 - ang;
+                
+                CShootDesc SDesc;
+				zero(&SDesc);
+		
+				float ForceInit = FirePower * 20.0;
+		
+				SDesc.SpX = SpX + sin(ang) * ForceInit;
+				SDesc.SpY = SpY - cos(ang) * ForceInit;
+				SDesc.X = w->PosX;
+				SDesc.Y = w->PosY;
+				SDesc.Team = team;
+
+				CMineParams MParams;
+				zero(&MParams);
+		
+				MParams.Prefuse = 1000;
+				MParams.Flags = 60;
+				MParams.Bias = 50;
+				MParams.Damage = 50;
+                MParams.BlastPower = 100;
+				MParams.Fuse = fuse;
+	        	MParams.Radius = 48;
+		
+				local m = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+		
+				if (Weap->CheckName("Invisible Mine Launcher")) m->invimine = true;
+		
+				m->DumpingA = 0.6;
+                m->DumpingB = 0.6;
+                m->DumpingC = 0.96;
+			}
+        
+        else if (Weap->CheckName("Sticky Mine Launcher"))
+        	{
+        		local team = w->WormTeam;
+                
+                local ang = (1 - FireAngle) * 3.14159;
+                if (TurnSide < 0) ang = 6.28318 - ang;
+                
+                CShootDesc SDesc;
+				zero(&SDesc);
+		
+				float ForceInit = FirePower * 20.0;
+		
+				SDesc.SpX = SpX + sin(ang) * ForceInit;
+				SDesc.SpY = SpY - cos(ang) * ForceInit;
+				SDesc.X = w->PosX;
+				SDesc.Y = w->PosY;
+				SDesc.Team = team;
+		
+				CMineParams MParams;
+                zero(&MParams); 
+                MParams.Prefuse = 2000;  
+                MParams.Flags = 60;    
+                MParams.Bias = 50;     
+                MParams.Damage = 50;  
+                MParams.BlastPower = 100;
+                MParams.Fuse = 1500;
+                MParams.Radius = 48;
+                
+                StickyMine = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+                StickyMine->StickyWork = true;
+        	}
+		else
+			{
+			super;
+			}
+}

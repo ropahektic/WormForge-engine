@@ -1,0 +1,134 @@
+require utils;
+
+CBitmap32* JavelinBitmap;
+CSoundFile* bowimpactsnd;
+
+
+void javelin_script::InitGraphic()
+{
+    local spr       = GetAttachment("javelin.png");
+    JavelinBitmap     = LoadImage(spr);
+}
+
+void javelin_script::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("longbowimpact.wav");	bowimpactsnd = new CSoundFile(f);
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+
+ if(weap->CheckName("Javelin") == true)
+ {
+           CGObject *javob;
+     	   for(int i = 0; i < Env->Objs.Count; i += 1)
+	   {
+		javob = CGObject(Env->Objs.Objs[i]);
+		if(javob == this) continue;
+		if(javob == NullObj) continue;
+		if(javob->IsMaterial == false) continue;
+			if(javob->ClType == OC_Worm || javob->ClType == OC_Mine || javob->ClType == OC_OilDrum || javob->ClType == OC_Crate)
+			{
+				local trg = CGObject(javob);
+                                if(x > trg->PosX-20 && x < trg->PosX+20 && y > trg->PosY-20 && y < trg->PosY+20)
+                                {
+                                JavelinDamage(trg);
+                                super;
+                                return;
+                                }
+			}
+           }
+
+           if(GetCurrentWorm() != NullObj)
+           {
+                   if(x > GetCurrentWorm()->PosX-25 && x < GetCurrentWorm()->PosX+25 && y > GetCurrentWorm()->PosY-25 && y < GetCurrentWorm()->PosY+25)
+                   {
+                   JavelinDamage(GetCurrentWorm());
+                   super;
+                   return;
+                   }
+           }
+
+           StickToLandscape(x,y);
+           vol = CalculateSoundVolume(x,y);
+     	   pan = CalculateSoundPan(x,y);
+           bowimpactsnd->Play(vol,pan,false);
+ }
+
+ super;
+}
+
+void CMissile::JavelinDamage(CGObject* target)
+{
+                     local damage = 1;
+                     if(weap->CheckName("Javelin") == true)
+                     {damage = 20;}
+
+                     target->SpX = SpX/4;
+                     target->SpY = SpY/4;
+
+                     CMessageData msgdamage;
+                     msgdamage.params[0] = 3;
+                     msgdamage.params[1] = PosX;
+                     msgdamage.params[2] = PosY;
+                     
+                     if(target is PxSentryGun || target is PxSentryLaser || target is CMagnet)
+                     {
+                         msgdamage.params[3] = 0;
+                         msgdamage.params[4] = 0;
+                         bowimpactsnd->Play(1.0,0.0,false);
+                     }
+                     else
+                     {
+                         msgdamage.params[3] = SpX/2;//doesnt work for some reason..
+                         msgdamage.params[4] = SpY/2;
+                     }
+                     
+                     msgdamage.params[5] = damage;
+                     msgdamage.params[6] = 0;
+                     target->Message(NullObj, M_GUNEXP, 1032, &msgdamage);
+}
+
+void CMissile::StickToLandscape(fixed x, fixed y)
+{
+local bmp = JavelinBitmap;
+local top = bmp->top;
+int mtp = 0;
+
+      if(SpX == 0.0 && SpY < 0.0){mtp = 0;}
+      if(SpX > 0.0 && SpY == 0.0){mtp = 8;}
+      if(SpX == 0.0 && SpY > 0.0){mtp = 16;}
+      if(SpX < 0.0 && SpY == 0.0){mtp = 24;}
+
+      if(SpX > 0.0 && SpY < 0.0)
+      {
+      mtp = 3*SpX/sqrt(SpY*SpY);
+      if(mtp>7){mtp = 7;}
+      if(mtp<0){mtp = 0;}
+      }
+
+      if(SpX > 0.0 && SpY > 0.0)
+      {
+      mtp = 8+3*SpY/SpX;
+      if(mtp>15){mtp = 15;}
+      }
+
+      if(SpX < 0.0 && SpY > 0.0)
+      {
+      mtp = 16+3*sqrt(SpX*SpX)/SpY;
+      if(mtp>23){mtp = 23;}
+      }
+
+      if(SpX < 0.0 && SpY < 0.0)
+      {
+      mtp = 24+3*sqrt(SpY*SpY)/sqrt(SpX*SpX);
+      if(mtp>31){mtp = 31;}
+      }
+
+top = mtp*60;
+bmp->top = top;
+
+bmp->bottom = bmp->top+60;
+GG->land->Draw(bmp, x-30, y-(30+bmp->top));
+}

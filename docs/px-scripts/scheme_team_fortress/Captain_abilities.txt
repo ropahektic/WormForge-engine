@@ -1,0 +1,58 @@
+CSoundFile* cap_heal;
+
+void Captain_abilities::FirstFrame()
+{
+}
+
+void Captain_abilities::Init()
+{
+	cap_heal = new CSoundFile(GetAttachment("cap_heal.wav"));
+}
+
+void CWorm::HealingAura()    //msg
+{
+    for(local i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+        if(obj == NullObj) continue;
+		if(obj == this) continue;
+		if(obj->ClType != OC_Worm) continue;
+		if(DistBetweenObjs(obj, this) > 20) continue;
+		
+		local worm = CWorm(obj);
+    	if(GetTeamColor(WormTeam) == GetTeamColor(worm->WormTeam))
+    	    {
+    	    if(GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber) < 100) cap_heal->Play(2.0, 0.0, false);
+    	    GS->Info.SetWormHealth( worm->WormTeam, worm->WormNumber, GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber)+10);
+            local health = GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber);
+      		if(isPlacing == true)
+      			{
+      			if(health > 100) GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, 100);
+      			}
+		    }
+	}
+}
+
+void CWorm::CaptainAlive()      //msg
+{
+if(GS->Info.GetWormHealth(WormTeam, WormNumber) == 0)   //if cap dies, you'll lose
+    {
+    CGObject *eobj;
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+		{
+		eobj = CGObject(Env->Objs.Objs[i]);
+		if(eobj == this) continue;
+		if(eobj == NullObj) continue;
+		if(eobj->IsMaterial == false) continue;
+		if(eobj->ClType == OC_Worm)
+			{
+			local worm = CWorm(eobj);
+			if(GetTeamColor(worm->WormTeam) == GetTeamColor(WormTeam))
+				{
+				GS->Info.SetWormHealth( worm->WormTeam, worm->WormNumber, 0);
+				worm->AimingMode = false;
+				}
+			}
+		}
+	}
+}

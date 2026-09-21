@@ -1,0 +1,71 @@
+void CMine::Swap()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+      if(this != obj)
+      {
+           if(obj->ClType == OC_Worm)
+           {
+               if(RandomInt(0,1) == 1)
+               {
+               SwapAwayCheck(obj); 
+               break;
+               }
+               else
+               {
+               continue;
+               }     
+           }
+      }
+  }
+}
+
+void CMine::SwapAwayCheck(CGObject *obje)
+{
+     local myposx = PosX;
+     local myposy = PosY;
+     local hisposx = obje->PosX;
+     local hisposy = obje->PosY;
+     PosX = hisposx;
+     PosY = hisposy - 25;
+     obje->PosX = myposx;
+     obje->PosY = myposy - 25;
+}
+
+void COilDrum::Swap()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+      if(this != obj)
+      {
+           if(obj->ClType == OC_Worm)
+           {
+               if(RandomInt(0,1) == 1)
+               {
+               SwapAwayCheck(obj); 
+               break;
+               }
+               else
+               {
+               continue;
+               }     
+           }
+      }
+  }
+}
+
+void COilDrum::SwapAwayCheck(CGObject *obje)
+{
+     local myposx = PosX;
+     local myposy = PosY;
+     local hisposx = obje->PosX;
+     local hisposy = obje->PosY;
+     PosX = hisposx;
+     PosY = hisposy - 25;
+     obje->PosX = myposx;
+     obje->PosY = myposy - 25;
+}

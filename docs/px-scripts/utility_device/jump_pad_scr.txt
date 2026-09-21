@@ -1,0 +1,96 @@
+require utils;
+
+//$editor
+// $object JumpPad
+//  $origin -45 5
+//  $image "jumppad.png"
+//  $func MakeJumpPad
+//  $radius 45;
+// $object_end
+//$end
+
+CJumpPad : CDevice;
+
+CColMask* MASK_JPCHECKMASK;
+
+
+void jump_pad_scr::FirstFrame()
+{
+	MASK_JPCHECKMASK = new CColMask(22,8,MakeRectMask(44,16));
+}
+
+
+void jump_pad_scr::InitGraphic()
+{
+}
+
+
+
+CJumpPad::CJumpPad(CObject* parent, fixed x, fixed y)
+{
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+
+    ColMask = new CColMask(22,8,MakeRectMask(44,16));
+}
+
+void CJumpPad::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)            // Root->GetObject(2, 16 * Team + Number);
+{
+ super;
+   if (Type == M_FRAME)
+   {
+      JumpPadProcess();
+      if(SpX != 0)SpX = 0;
+   }
+}
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+GotJumpBoost = false;
+JumpBoostDelay = 60;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if(Type == M_FRAME)
+        {
+        if(JumpBoostDelay < 1) {JumpBoostDelay = 60; GotJumpBoost = false;}
+        if(GotJumpBoost == true) JumpBoostDelay = JumpBoostDelay - 1;
+        }
+}
+
+void CJumpPad::JumpPadProcess()
+{
+    if(GetCurrentWorm() != NullObj)
+    {
+        CGObject *obj;
+     	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(obj->IsMaterial == false) continue;
+
+		if(MASK_JPCHECKMASK->Check(PosX, PosY-7, obj->ColMask, obj->PosX, obj->PosY))
+		{
+			if(obj->ClType == OC_Worm)
+			{
+				local worm = CWorm(obj);
+				if(worm->WormTeam == worm->WormTeam) //it was == Team, but after i thought about it...
+				{
+                                                  if(worm->GotJumpBoost == false && worm->ObjState == WS_JUMP)
+                                                  {
+                                                  worm->SpX = worm->SpX*1.7;
+                                                  if (worm->SpY<0){worm->SpY=worm->SpY*1.7;}
+                                                  worm->GotJumpBoost = true;
+                                                  }
+                                }
+			}
+		}
+	}
+    }
+}

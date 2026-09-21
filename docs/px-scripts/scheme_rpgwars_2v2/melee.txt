@@ -1,0 +1,62 @@
+void melee::InitGraphic()
+{
+}
+
+void melee::Init()
+{
+}
+
+void melee::FirstFrame()
+{
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+         if(Weap->CheckName("Dagger") || Weap->CheckName("Longsword"))
+         {
+            local ang = (1 - FireAngle) * 3.14159;
+            if (TurnSide < 0)
+            {
+               ang = 6.28318 - ang;
+            };
+            local len = 0;
+            local damage = 0;
+            if(Weap->CheckName("Dagger")){len = 12; damage = 25;} //range and dmg
+            if(Weap->CheckName("Longsword")){len = 14; damage = 50;} //px stop playing wiz me
+
+            local dx = PosX + sin(ang) * len;
+            local dy = PosY - cos(ang) * len;
+               for(local i = 1; i < Env->Objs.Count; i+=1)
+               {
+               local obj = Env->Objs.Objs[i];
+                   if(obj == NullObj || obj == this) continue;
+                   if(obj->ClType == OC_Worm)
+                   {
+                   CWorm* wirm;
+                   wirm = obj;
+                        int tx = dx - wirm->PosX;       //distance between a target dot and a worm
+                        int ty = dy - wirm->PosY;
+                        int r = sqrt(tx * tx + ty * ty);
+                         if(r <= len)                    //
+                         {
+                         DealDamage(wirm, this, damage, WormTeam);
+                         //GG->WriteToChat( 1, ItoA(len), false);
+                         }
+                   }
+               }
+         }
+super;
+}
+
+void DealDamage(CGObject *target, CObject *parent, int damage, int team)
+{
+   CMessageData msg;
+   msg.params[0]	= 0;              //type
+   msg.fparams[1]	= target->PosX;   //hitxy
+   msg.fparams[2]	= target->PosY;
+   msg.fparams[3]	= 0;     //spxy
+   msg.fparams[4]	= 0;
+   msg.params[5]	= damage;         //dmg
+   msg.params[6]	= team;    //tm
+   target->Message(parent, M_GUNEXP, 1032, &msg);
+}

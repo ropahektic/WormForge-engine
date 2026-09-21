@@ -1,0 +1,273 @@
+require utils, p_sprite_builder, pxparticles;
+
+///////////////////////////////////////////Mark and Homing Code///////////////////////////////////////////
+
+override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+ homingCD = 20;
+ homingIterations = 0; //Holy Hand Grenade or others.
+ homeActive = false;
+ CurseTarget = CWorm(NullObj);
+ super;
+} 
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if (Type==M_FRAME)
+   {
+      if (CurseTarget == NullObj && !deleteTracking){homeActive = false; CurseTarget = FindClosestVisibleCursedWorm(this);}  //Check for targets with the function
+     
+      if (CurseTarget != NullObj) homeActive = true;   //If it finds target, activate homing
+     
+      if (homeActive)  //Homing
+      {
+                        // --- NEW DIRECT GUIDANCE LOGIC ---   thank you deep seek i cant do math
+                float missX = PosX;
+                float missY = PosY;  
+                if (homingIterations>=230)
+                   {
+                   homingCD = 99000;       //Holy Grenade or others
+                   SpX = 0;
+                   deleteTracking = true;
+                   homeActive = false;
+                   }
+                if (homingCD==0)
+                {
+                  // 1. Get the direction vector pointing straight at the target.
+                  float dirX = CurseTarget->PosX - missX;
+                  float dirY = CurseTarget->PosY - missY;
+
+                  // 2. Normalize the vector to get a pure direction (length of 1).
+                  float distanceToTarget = sqrt(dirX * dirX + dirY * dirY);
+                  if (distanceToTarget > 0) // Avoid division by zero
+                  {
+                    dirX = dirX / distanceToTarget;
+                    dirY = dirY / distanceToTarget;
+                  }
+
+                  float missileSpeed = 13.0;   // How fast the missile tries to fly.
+                  float homingStrength = 0.38; // How sharply it can turn (0.0 to 1.0).
+
+                  // 4. Calculate the ideal velocity (direction * speed).
+                  float requiredSpX = dirX * missileSpeed;
+                  float requiredSpY = dirY * missileSpeed;
+
+                  // 5. Gently steer the current velocity towards the ideal velocity.
+                  // This prevents the zig-zagging and creates a smooth turn.
+                  SpX += (requiredSpX - SpX) * homingStrength;
+                  SpY += (requiredSpY - SpY) * homingStrength;
+                
+                  homingCD = 6; // Cooldown before the next minor adjustment. 
+                  homingIterations++;
+                }
+                else if (homingCD > 0)
+                {
+                     homingCD--;
+                     homingIterations++;
+                }
+        }         
+   }
+ super;
+}
+
+bool CMissile::IsTargetVisibleAll(CMissile* missile, CGObject* target)
+{
+    if (missile == NullObj || target == NullObj)
+    {
+        return false;
+    }
+    int hitX; int hitY;
+    if (TraceLine(missile, missile->PosX, missile->PosY, target->PosX, target->PosY, CMASK_TERRAIN, &hitX, &hitY) == NullObj)
+    {
+        return true;
+    }
+    return false;
+}
+
+CWorm* CMissile::FindClosestVisibleCursedWorm(CMissile* curMis)
+{
+    CWorm* closestWorm = CWorm(NullObj);
+    
+    CWorm* currWorm = GetCurrentWorm();
+    float closestDistance = 999999.0; // Large number
+    
+    for(int i = 0; i < Env->Objs.Count; i++)
+    {
+        local obj = CGObject(Env->Objs.Objs[i]);
+        if (obj is NullObj) continue;
+        if(obj is CWorm == false) continue;
+        
+        local worm = CWorm(obj);
+        if(worm->isCursed && worm != currWorm) // Don't target yourself
+        {
+            // Check if visible
+            if(IsTargetVisibleAll(curMis, worm))
+            {
+                // Calculate distance
+                float dx = worm->PosX - PosX;
+                float dy = worm->PosY - PosY;
+                float distance = sqrt(dx*dx + dy*dy);
+                
+                // Find closest
+                if(distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    worm->timesTargeted++;
+                    closestWorm = worm;
+                }
+            }
+        }
+    }
+    return closestWorm;
+}
+
+/////////////////////////////////////////// Worm Code ///////////////////////////////////////////
+
+CWorm * CWorm::SCFindWorm(int l, int r, int t, int b)   // left, right, top, bottom  Copied from MineFinder
+{
+      for(int i = 0; i < Env->Objs.Count; i++)
+      {
+          local obj = CGObject(Env->Objs.Objs[i]);
+          if(obj == NullObj) continue;
+          if(obj == this) continue;
+          if(obj->IsInBox( l, t, r, b) == false) continue;   //discard everything out of bounds
+          
+          if(obj is CWorm == false) continue; 
+          
+          returnWorm = CWorm(obj); 
+          return returnWorm;
+          
+      }
+      return NullObj;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type == M_FRAME)
+  {
+  if (isCursed && timesTargeted >=2 || curseCoolDown == 0)   //Disable the curse
+  {
+    isCursed = false; timesTargeted = 0; curseCoolDown = 0;
+  }
+  if (timesHit >3 && isMarked) isMarked = false;  //Remove mark and reset variables
+  if (!isMarked) { markCoolDown = 0; timesHit=0; dmgMultilplier = 1.0; }
+  if (WasHit && dmgMultiplier!=0.0 && targtHP!=GS->Info.GetWormHealth(WormTeam, WormNumber))
+     {
+         // GG->WriteToChat( 5, "fuck", false);
+          local dmgAmount = targtHP - GS->Info.GetWormHealth(WormTeam, WormNumber); //Calculate the damage done with the stored HP
+          local FinalHealth2 = targtHP - (dmgAmount*dmgMultiplier);                //Calculate the damage it should do
+          GS->Info.SetWormHealth(WormTeam, WormNumber, int(FinalHealth2));        //Apply damage
+          targtHP =  FinalHealth2;                                               //Store new health value
+          timesHit + 1;
+          WasHit = false; 
+          if (FinalHealth2 <=0){ GS->Info.SetWormHealth(WormTeam, WormNumber, int(0)); if (ObjState!=WS_DEATH) this->SetState( WS_DEATH ); }     //Apply death 
+     }  
+  }
+  if (Type == M_TURNEND)
+  {
+    if (curseCoolDown>0) curseCoolDown--;
+    if (markCoolDown>0) markCoolDown--;    
+    if (isMarked && markCoolDown == 0) isMarked = false;
+    if (curseCoolDown == 0 && isCursed) isCursed = false;
+  }
+  if (Type==M_GUNEXP || Type == M_EXPLOSION) WasHit = true; //Send the signal to modify HP
+  if (Type==M_DRAWQUEUE)
+     {              
+      local animcycle = GS->Tick*0.02;
+       //CURSE         
+      if (isCursed)    
+       {
+         CrossHairCol = GetTeamColor(WormTeam) + 1;
+         AddSpriteEx(14, PosX, PosY, CrossHairCol, 0, 0, 1.4);
+       }
+      if (isMarked) 
+       //MARK
+       {
+         	DoAnimParticleEffects(
+		 	616,     //  SPRITE
+			1,       //  RADIUS
+			0,       //  RELX
+			0,       //  RELY
+			40,      //  LIFETIME
+			0.01,    //  SPEED
+			1.0,     //  VELO.MIN
+			1.5,     //  VELO.MAX
+			0,       //  START.ALPHA
+			255,     //  END.ALPHA
+			0.5,     //  WIND
+			0.3,     //  START.SIZE
+			0.01,    //  END.SIZE
+			0.00,    //  ANGLE.MIN
+			0.00,    //  ANGLE.MAX
+			0.3,     //  RANDOMNESS
+			-2.5);   //  GRAVITY
+
+		 //AddSpriteEx(14, PosX+10.2, PosY-12, 106, animcycle, 0, 0.8);
+       }
+     }
+ super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if (Weap->CheckName("Wish Of Death"))
+{
+                  local Sx = SelectX/65536;
+                  local Sy = SelectY/65536;
+                  local obj = SCFindWorm(Sx-12, Sx+12, Sy-15, Sy+15);
+		
+		  if(obj != NullObj)                  
+        	      {               
+                       obj->isCursed = true; 
+                       obj->curseCoolDown = 2;     //Set variables from here
+                       obj->timesTargeted = 0;
+        	      }
+                  if (obj==NullObj)
+		      {
+         	       local wepMR = GS->GetWeaponByName("Wish Of Death");
+                       GS->Info.AddWeapon(WormTeam, wepMR->GetWeaponIndex(), 1);   // adding one weapon back
+        	       ShowMessage("Nothing found!");
+                       PlayLocalSound(120, 3, 1.0, 1.0);
+                       return;
+                      }  
+                }
+if (Weap->CheckName("Marked For Death"))
+{
+                  local Sx = SelectX/65536;
+                  local Sy = SelectY/65536;
+                  local obj = SCFindWorm(Sx-12, Sx+12, Sy-15, Sy+15);
+		
+		  if(obj != NullObj)                  
+        	      {               
+                       obj->isMarked = true;           //Set variables from here
+                       obj->markCoolDown = 2;          //Worms Reloaded makes it so that it lasts some turns
+                       obj->dmgMultiplier = 1.5;       //Can be revised/balanced     
+                       obj->timesHit=0;   
+                       obj->targtHP = GS->Info.GetWormHealth(obj->WormTeam, obj->WormNumber);
+        	      }
+                  if (obj==NullObj)
+		      {
+         	       local wepMR = GS->GetWeaponByName("Marked For Death");
+                       GS->Info.AddWeapon(WormTeam, wepMR->GetWeaponIndex(), 1);   // adding one weapon back
+        	       ShowMessage("Nothing found!");
+                       PlayLocalSound(120, 3, 1.0, 1.0);
+                      return;
+                      }  
+                }
+ super;
+}         
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+ isCursed = false;  
+ isMarked = false;
+ 
+ timesHit = 0;
+ dmgMultiplier = 0.0;
+ targtHP =  GS->Info.Teams.Worms.Health;
+ timesTargeted = 0;
+ curseCoolDown = 0;
+ markCoolDown = 0;
+ 
+ super;
+}

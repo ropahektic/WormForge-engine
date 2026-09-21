@@ -1,0 +1,409 @@
+int SheDevilActive;
+int SheDevilManipulation;
+int ManipulationLimiter;
+int TeleportDecider;
+int WeaponChanger;
+int ExcuseDecider;
+int SD_Team;
+int SD_TeamChecker;
+
+//List of sprites
+CSprite* fakeheart;
+
+void she_devil_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("Fake Pink Heart.png");
+   fakeheart = LoadSprite(f, 1, 0);
+
+   //Let's override the sprites!
+   SetSpriteOverride(850, fakeheart);
+}
+
+void SheDevil_SCRIPT::Init() 
+{
+   SheDevilActive = false;
+   SheDevilManipulation = 0;
+   ManipulationLimiter = false;
+   TeleportDecider = 0;
+   WeaponChanger = 0;
+   ExcuseDecider = 0;
+   SD_Team = 0;
+   SD_TeamChecker = 0;
+   
+   keySync->AddKey(187); // + button
+   keySync->AddKey(32); // Space button
+   keySync->AddKey(13); // Enter button
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(SheDevilActive == true)
+   {
+      local worm = GetCurrentWorm();
+      
+      if(worm != NullObj && worm->SickDamage == 1)
+      {     
+         if(ExcuseDecider == 0)
+         {  
+            local ed = RandomInt(1,4);
+            if      (ed == 1) ExcuseDecider = 1;
+            else if (ed == 2) ExcuseDecider = 2;
+            else if (ed == 3) ExcuseDecider = 3;
+            else if (ed == 4) ExcuseDecider = 4;
+         
+            if(ExcuseDecider == 1)
+            {
+               bcomeback->Play(1.5, 0.0, false);
+            }
+            else if(ExcuseDecider == 2)
+            {
+               everythingaboutyou->Play(2.0, 0.0, false);
+            }
+            else if(ExcuseDecider == 3)
+            {
+               blameitall->Play(1.5, 0.0, false);
+            }
+            else if(ExcuseDecider == 4)
+            {
+               cantlive->Play(1.5, 0.0, false);
+            }
+         }
+         
+         if(SheDevilManipulation == 1)
+         {
+            if(Type == M_PLEFT)
+            {  
+               worm->SetState(WS_JUMP);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 2)
+         {
+            if(ObjState == WS_JETPACK && Type == M_PRIGHT)
+            {  
+               worm->SetState(WS_WALKING);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 3)
+         {
+            if(Type == M_PUP)
+            {  
+               worm->PosX = PosX;
+               worm->PosY = PosY - 300;
+               
+               SetState(WS_TELEPORTING);
+               
+               PlayLocalSound(68, 5, 1.0,1.0);
+               PlayLocalSound(67, 5, 1.0,1.0);
+               
+               Root->Timer = 0;
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+            else if(Type == M_PDOWN)
+            {  
+               worm->PosX = PosX;
+               worm->PosY = PosY + 150;
+               
+               PlayLocalSound(68, 5, 1.0,1.0);
+               PlayLocalSound(67, 5, 1.0,1.0);
+               
+               Root->Timer = 0;
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 4)
+         {
+            if(ObjState == WS_JUMP)
+            {  
+               worm->SetState(WS_FROZEN);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 5)
+         {
+            if(Type == M_SETWEAPON)
+            {  
+               local weap = GetWeaponByName("Fire Punch");
+               
+               CShootDesc sdesc;
+               zero(&sdesc);
+
+               worm->CurWeapon = weap;  
+               worm->FireFinal(weap, &sdesc);
+               
+               Root->Timer = 0;
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 6)
+         {
+            if(ObjState == WS_AIMING && Type == M_PDOWN)
+            {  
+               worm->SetState(WS_SHOOTINGROPE);
+               worm->SetState(WS_AFTERROPE);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 7)
+         {
+            if(ObjState == WS_WALKING)
+            {  
+               worm->SetState(WS_PARACHUTE);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 8)
+         {
+            if(ObjState == WS_FIRED)
+            {  
+               worm->SetState(WS_IDLE);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 9)
+         {
+            if(ObjState == WS_JETPACK)
+            {  
+               GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, 0);
+               worm->SetState(WS_DEATH);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         
+         else if(SheDevilManipulation == 10)
+         {
+            if(ObjState == WS_JETPACK || ObjState == WS_ROPING || ObjState == WS_PARACHUTE || ObjState == WS_BUNGEE)
+            {
+               if(keySync->KeyPressedNow(13))
+               {
+                  SetState(WS_FLYING);
+                  
+                  ShowMessage("You are being manipulated by the she-devil!");
+               }  
+            }
+            else if(CurWeapon->CheckName("BlowTorch") || CurWeapon->CheckName("Pneumatic Drill"))
+            {
+               if(keySync->KeyPressedNow(32))
+               {
+                  worm->SetState(WS_SINKING);
+                  
+                  ShowMessage("You are being manipulated by the she-devil!");
+               }
+            }
+         }
+         else if(SheDevilManipulation == 11)
+         {
+            if(Type == M_SETWEAPON)
+            {  
+               local wep = worm->CurWeapon;
+               
+               if(wep != NullObj)
+               {
+                  GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 0);
+               
+                  ShowMessage("You are being manipulated by the she-devil!");
+               }
+            }
+            if(ObjState == WS_FIRED)
+            {
+               worm->SetState(WS_IDLE);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }  
+         }
+         else if(SheDevilManipulation == 12)
+         {
+            if(CurWeapon->CheckName("Teleport") || CurWeapon->CheckName("Super Tele"))
+            {     
+               if(ObjState == WS_FIRED)
+               {
+                worm->SetState(WS_IDLE);
+               
+                worm->PosX = GS->GetRandom() % GS->LevelSX;
+                worm->PosY = GS->GetRandom() % GS->LevelSY;
+               
+                PlayLocalSound(68, 5, 1.0,1.0);
+                PlayLocalSound(67, 5, 1.0,1.0);
+               
+                ShowMessage("You are being manipulated by the she-devil!");
+               }
+            }
+         }
+         else if(SheDevilManipulation == 13)
+         {
+            if(Type == M_EXPLOSION)
+            {  
+               GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, 0);
+               worm->SetState(WS_DEATH);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 14)
+         {
+            if(ObjState == WS_FIRED)
+            {  
+               local weap = GetWeaponByName("Pneumatic Drill");
+               
+               CShootDesc sdesc;
+               zero(&sdesc);
+ 
+               worm->CurWeapon = weap;
+               worm->FireFinal(weap, &sdesc);
+               
+               Root->Timer = 0;  
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 15)
+         {
+            if(ObjState == WS_ROPING && Type == M_ENTER)
+            {  
+               worm->SetState(WS_WALKING);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 16)
+         {
+            if(Type == M_PLEFT || Type == M_PRIGHT)
+            {  
+               SetState(WS_FLYING);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+            else if(Type == M_PUP || Type == M_PDOWN)
+            {
+               SetState(WS_FLYING2);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+         else if(SheDevilManipulation == 17)
+         { 
+            if(Type == M_SETDELAY)
+            {
+               worm->SetState(WS_BUNGEE);
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+            
+            if(ObjState == WS_IDLE)
+            {  
+               worm->PressedRight = true;
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+            
+            if(ObjState == WS_AIMING)
+            {  
+               local wdm = RandomInt(1,2);
+               if      (wdm == 1) WormDrunkMode = 1;
+               else if (wdm == 2) WormDrunkMode = 2;
+               
+               if(WormDrunkMode == 1)
+               {
+                  worm->PressedUp = true;
+                  
+                  ShowMessage("You are being manipulated by the she-devil!");
+               }
+               else if(WormDrunkMode == 2)
+               {
+                  worm->PressedDown = true;
+                  
+                  ShowMessage("You are being manipulated by the she-devil!");
+               }
+            }
+            
+            if(ObjState == WS_JETPACK)
+            {  
+               worm->PressedUp = true;
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+            
+            if(ObjState == WS_ROPING)
+            {  
+               worm->PressedDown = true;
+               
+               ShowMessage("You are being manipulated by the she-devil!");
+            }
+         }
+      }
+   }
+   
+   if(Type == M_TURNBEGIN && SheDevilActive == true)
+   {      
+      local sdm = RandomInt(1,17);
+      if      (sdm == 1) SheDevilManipulation = 1;
+      else if (sdm == 2) SheDevilManipulation = 2;
+      else if (sdm == 3) SheDevilManipulation = 3;
+      else if (sdm == 4) SheDevilManipulation = 4;
+      else if (sdm == 5) SheDevilManipulation = 5;
+      else if (sdm == 6) SheDevilManipulation = 6;
+      else if (sdm == 7) SheDevilManipulation = 7;
+      else if (sdm == 8) SheDevilManipulation = 8;
+      else if (sdm == 9) SheDevilManipulation = 9;
+      else if (sdm == 10) SheDevilManipulation = 10;
+      else if (sdm == 11) SheDevilManipulation = 11;
+      else if (sdm == 12) SheDevilManipulation = 12;
+      else if (sdm == 13) SheDevilManipulation = 13;
+      else if (sdm == 14) SheDevilManipulation = 14;
+      else if (sdm == 15) SheDevilManipulation = 15;
+      else if (sdm == 16) SheDevilManipulation = 16;
+      else if (sdm == 17) SheDevilManipulation = 17;
+      
+      if(ExcuseDecider > 0)
+      {
+         ExcuseDecider = 0;
+      }
+   }
+   
+   if(Type == M_TURNEND && SheDevilActive == true)
+   {
+      local worm = GetCurrentWorm();
+      SD_TeamChecker = GetTeamColor(worm->WormTeam);
+      
+      if(SD_Team != SD_TeamChecker && worm->SickDamage != 1)
+      {
+         worm->SickDamage = 1;
+         
+         ShowMessage("You fell in love with the she-devil...");
+      }
+      
+      if(ManipulationLimiter == true)
+      {
+         ManipulationLimiter = false;
+      }
+   }
+   
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{ 
+  if(Weap->CheckName("She-Devil"))
+  {  
+     SheDevilActive = true;
+     
+     local worm = GetCurrentWorm();
+     SD_Team = GetTeamColor(worm->WormTeam);
+     
+     ShowMessage("SUCCUBUS ALERT!");   
+  } 
+  super;
+}

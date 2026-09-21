@@ -1,0 +1,210 @@
+
+require utils;
+
+PxParticleManager : CObject
+PxParticle : CObject
+
+PxParticleManager *PM;
+
+void particle::FirstFrame()
+{
+	PM = new PxParticleManager();
+}
+
+PxParticleManager::PxParticleManager()
+{
+	super(Root, GS);
+}
+
+void __DrawPxParticles()
+{
+	PM->Draw();
+}
+
+void PxParticleManager::Draw()
+{
+        for(int i=0 ; i<Childs.Count ; i+=1)
+	{
+		local p = PxParticle(Childs.Objs[i]);
+		if(p == PxParticle(NullObj)) continue;
+		p->Draw();
+	}
+}
+
+void PxParticleManager::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		super;
+	}
+	if(Type == M_DRAWQUEUE)
+	{
+		AddCustomRender(6, "__DrawPxParticles");
+	}
+	
+	if(Type == M_FRAME) // way MUCH faster!!! (PyroMan`s comment :D) - i changed that coz in M_FRAME game lagged with my portal gun.
+	{
+                for(int i=0 ; i<Childs.Count ; i+=1)
+		{
+			local p = PxParticle(Childs.Objs[i]);
+			if(p == PxParticle(NullObj)) continue;
+			
+			if(p->Dead)
+			{
+				p->Free(true);
+				break;
+			}
+		}
+	}
+}
+
+PxParticle::PxParticle(int sprite, float x, float y)
+{
+	super(PM, GS);
+	
+	PosX = x;
+	PosY = y;
+	SpX = 0.0;
+	SpY = 0.0;
+	Sprite = sprite;
+	
+	AirResistance = 0.0;
+	LifeTime = 50;
+	StartR = 255;	StartG = 255;	StartB = 255;	StartA = 255;
+	EndR = 255;		EndG = 255;		EndB = 255;		EndA = 0;
+	StartSizeX = 1.0;
+	StartSizeY = 1.0;
+	EndSizeX = 1.0;
+	EndSizeY = 1.0;
+	GravityFactor = 0.0;
+	WindFactor = 0.0;
+	AngleSpeed = 0.0;
+	BlendMode = 0;
+	Randomness = 0;
+	
+	AnimSpeed = 0.0;
+	AnimCycle = 0.0;
+	
+	//Collision = false;
+	//CollisionDamping = 1.0;
+	
+	Rotation = 0.0;
+	CurFrame = 0.0;
+	Dead = false;
+	
+	AirResistance = 1.0 / (AirResistance + 1.0);
+	
+	RelativeObj = CGObject(NullObj);
+}
+
+void PxParticle::SetAirResistance(float a)		{ AirResistance = 1.0 / (a + 1.0); }
+void PxParticle::SetLifeTime(int t)				{ CurFrame = 0;	LifeTime = t; }
+void PxParticle::SetStartColor(int r, int g, int b)
+												{ StartR = r;	StartG = g;	StartB = b; }
+void PxParticle::SetEndColor(int r, int g, int b)
+												{ EndR = r;		EndG = g;	EndB = b; }
+void PxParticle::SetColor(int r, int g, int b)
+												{ StartR = r;	StartG = g;	StartB = b; 
+												  EndR = r;		EndG = g;	EndB = b; }
+void PxParticle::SetStartAlpha(int a)			{ StartA = a; }
+void PxParticle::SetEndAlpha(int a)				{ EndA = a; }
+void PxParticle::SetAlpha(int a)				{ StartA = a; EndA = a; }
+void PxParticle::SetStartSize(float x, float y)	{ StartSizeX = x	; StartSizeY = y; }
+void PxParticle::SetEndSize(float x, float y)	{ EndSizeX = x		; EndSizeY = y; }
+void PxParticle::SetSize(float x, float y)		{ StartSizeX = x	; StartSizeY = y; 
+												  EndSizeX = x		; EndSizeY = y; }
+void PxParticle::GravityFactor(float g)			{ GravityFactor = g; }
+void PxParticle::SetWindFactor(float f)			{ WindFactor = f; }
+void PxParticle::SetAngle(float r)				{ Rotation = r; }
+void PxParticle::SetAngleSpeed(float s)			{ AngleSpeed = s; }
+void PxParticle::SetVelocity(float x, float y)	{ SpX = x;	SpY = y; }
+
+void PxParticle::SetBlendMode(int mode)			{ BlendMode = mode; }
+void PxParticle::SetMotionRandomness(float r)	{ Randomness = r; }
+
+//void PxParticle::SetRelativeObject(CGObject *obj)	{ RelativeObj = obj; }
+//void PxParticle::SetWorldCollision(bool c)		{ Collision = c; }
+//void PxParticle::SetBounce(float d)				{ CollisionDamping = d; }
+
+void PxParticle::SetAnimSpeed(float s)	{ AnimSpeed = s; }
+
+void PxParticle::SetRandomVelocity(float min, float max)
+{
+	float s = RandomFloat(min, max);
+	float a = (RandomInt(0,360) * 3.141593) / 180.0;
+	
+	SpX = s * cos(a);
+	SpY = s * sin(a);
+}
+
+void PxParticle::Draw()
+{
+	if(Dead) return;
+	
+	float cycle = CurFrame / LifeTime;
+	if(cycle >= 1.0) return;
+	
+	float animcycle = cycle;
+	
+	if(AnimSpeed > 0.0)
+	{
+		animcycle = AnimCycle;
+	}
+	
+	float xsize = StartSizeX + cycle * (EndSizeX - StartSizeX);
+	float ysize = StartSizeY + cycle * (EndSizeY - StartSizeY);
+	float r = StartR + cycle * (EndR - StartR);
+	float g = StartG + cycle * (EndG - StartG);
+	float b = StartB + cycle * (EndB - StartB);
+	float a = StartA + cycle * (EndA - StartA);
+	int col = ARGB(a, r, g, b);
+	
+	CQuad q;
+	FillSpriteQuad(&q, Sprite, animcycle, 0);
+	TransformQuad(&q, Rotation, xsize, ysize, PosX, PosY);
+	q.blend = BlendMode;
+	for(int i=0 ; i<4 ; i+=1) q.v[i].color = col;
+	
+	RenderQuad(&q, 0);
+}
+
+void PxParticle::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Dead) return;
+	
+	if(Type == M_FRAME)
+	{
+		if(CurFrame >= LifeTime)
+		{
+			Randomness = 0;
+//			Dead = true;
+                        Free (true);        // THAT`s WHAT IM TALKING ABOUT!
+			return;
+		}
+		Rotation += AngleSpeed;
+		while(Rotation > 3.141593)		Rotation -= 6.283186;
+		while(Rotation <= 0 - 3.141593)	Rotation += 6.283186;
+		
+		PosX = PosX + SpX;
+		PosY = PosY + SpY;
+		SpX = (SpX * AirResistance) + (WindFactor * Env->Wind);
+		SpY = (SpY * AirResistance) + (GravityFactor * Env->Gravity);
+		
+		if(Randomness > 0)
+		{
+			float s = RandomFloat(0, Randomness);
+			float a = (RandomInt(0,360) * 3.141593) / 180.0;
+			
+			SpX = SpX + s * cos(a);
+			SpY = SpY + s * sin(a);
+		}
+		
+		CurFrame += 1.0;
+		
+		if(AnimSpeed > 0.0)
+		{
+			AnimCycle = AnimCycle + AnimSpeed;
+			if(AnimCycle >= 1.0) AnimCycle -= 1.0;
+		}
+	}
+}

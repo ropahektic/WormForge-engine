@@ -1,0 +1,126 @@
+/* 
+
+Made by: DannyB, February 2023
+
+*/
+
+// This script makes it possible to use the W, A, S and D keys to control worms.
+
+require utils, utils_pyroman;
+
+bool turn_start;
+bool activate_timer_now;
+
+void WASD_Control_SCRIPT::Init()
+{
+     // add keyboard input
+     keySync->AddKey(87); // w key
+     keySync->AddKey(65); // a key
+     keySync->AddKey(83); // s key
+     keySync->AddKey(68); // d key
+}
+
+void WASD_Control_SCRIPT::FirstFrame()
+{
+     // initialize variable
+     turn_start = false;
+     activate_timer_now = false;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{        
+     // disable when the chat is open to not interfere with writing 
+     if(GameChatOpened == false)
+     {      
+          local cw = GetCurrentWorm();
+          
+          // prevent use outside turns
+          if(cw != NullObj)
+          {    
+               // if w key is pressed, move up
+               if(keySync->KeyPressed(87))
+               {
+                    cw->PressedUp = 1;
+                    
+                    if(turn_start == true)
+                    {  
+                         activate_timer_now = true;
+                    }            
+               }
+                    
+                // if a key is pressed, move left
+               if(keySync->KeyPressed(65))
+               {
+                    cw->PressedLeft = 1;
+                    
+                    if(turn_start == true)
+                    {  
+                         activate_timer_now = true;
+                    }            
+               }
+                    
+                // if s key is pressed, move down
+               if(keySync->KeyPressed(83))
+               {
+                    cw->PressedDown = 1;
+                    
+                    if(turn_start == true)
+                    {
+                         activate_timer_now = true;
+                    }             
+               }
+                    
+                // if d key is pressed, move right
+               if(keySync->KeyPressed(68))
+               {
+                    cw->PressedRight = 1;
+                    
+                    if(turn_start == true)
+                    {
+                         activate_timer_now = true;
+                    }               
+               }
+               
+               // disable the pre turn state if turn time is active
+               if(turn_start == true)
+               {
+                    if(Root->IsTimerActive() == true)
+                    {
+                         turn_start = false;
+                    }
+               }
+               
+               if(type == M_FRAME)
+               {
+                    if(activate_timer_now == true)
+                    {
+                         moveToActivateTimer(cw);
+                    }
+               }
+          }
+     }
+     
+     super;         
+}
+
+void CWorm::moveToActivateTimer(CWorm* cw)
+{
+     local object = CGObject(Root->GetObject(2, 16 * cw->WormTeam + cw->WormNumber));
+     local worm = CWorm(Root->GetObject(2, 16 * cw->WormTeam + cw->WormNumber));
+     
+     CMessageData msgdown;
+     msgdown.params[0] = worm->WormTeam;
+     object->Message(NullObj, M_PDOWN, 1032, &msgdown);
+          
+     activate_timer_now = false;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)  
+{
+     if(Type == M_TURNBEGIN)
+     {  
+          turn_start = true;
+     }
+  
+     super;
+}

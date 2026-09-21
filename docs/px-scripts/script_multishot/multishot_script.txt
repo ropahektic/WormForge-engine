@@ -1,0 +1,31 @@
+require utils;
+
+int g_multiShots;
+
+void multishot_script::Init()
+{
+    g_multiShots = 3; 
+    keySync->AddKey(20); //CapsLock
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    multishot = g_multiShots;
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+super;
+if (keySync->KeyPressed(20))
+  	{
+    ShowMessage("Multishot active!");
+
+	if (multishot > 0)
+    	{
+        multishot -= 1;
+        FireFinal(Weap, Desc);
+        }
+    else multishot = g_multiShots;
+  	}
+}

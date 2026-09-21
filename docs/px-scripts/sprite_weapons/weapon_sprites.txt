@@ -1,0 +1,35 @@
+   CSprite* grenade;
+   CSprite* missile;
+   CSprite* airmisl;
+   CSprite* cluster;
+   CSprite* clustlet;
+   CSprite* dynamite;
+
+   void weapon_sprites::InitGraphic()
+{
+   CFile *f;
+   
+   f = GetAttachment("grenade.png");
+   grenade = LoadSprite(f, 32, 1);
+   SetSpriteOverride(50, grenade);
+   
+   f = GetAttachment("missile.png");
+   missile = LoadSprite(f, 32, 1);
+   SetSpriteOverride(48, missile);
+   
+   f = GetAttachment("airmisl.png");
+   airmisl = LoadSprite(f, 32, 1);
+   SetSpriteOverride(60, airmisl);
+   
+   f = GetAttachment("cluster.png");
+   cluster = LoadSprite(f, 32, 1);
+   SetSpriteOverride(53, cluster);
+   
+   f = GetAttachment("clustlet.png");
+   clustlet = LoadSprite(f, 6, 1);
+   SetSpriteOverride(54, clustlet);
+   
+   f = GetAttachment("dynamite.png");
+   dynamite = LoadSprite(f, 129, 1);
+   SetSpriteOverride(78, dynamite);
+}

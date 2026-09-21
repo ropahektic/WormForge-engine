@@ -1,0 +1,64 @@
+require utils;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  super;
+
+  superkamikaze = false;
+  superkamiPosX = PosX;
+  superkamiPosY = PosY;
+  superkamiAngle = FireAngle;
+  superkamiSpeed = 10.0;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(superkamikaze)
+  {
+    if(Type == M_FRAME)
+    {
+      if(PressedLeft == 1) { superkamiAngle += 0.06; }
+      if(PressedRight == 1) { superkamiAngle -= 0.06; }
+      if(PressedDown == 1) { superkamiSpeed = 8.0; } else { superkamiSpeed = 10.0; }
+
+      superkamiPosX += superkamiSpeed*sin(superkamiAngle*MATH_PI);  superkamiPosY += superkamiSpeed*cos(superkamiAngle*MATH_PI);
+
+      PosX = superkamiPosX;
+      PosY = superkamiPosY;
+    }
+    else if(Type == M_DRAWQUEUE)
+    {
+      if(TurnSide == 1)
+        AddSpriteEx( 0.5, PosX, PosY, 225+262144, GS->Tick*0.1, -superkamiAngle*MATH_PI, 1.0);
+      else
+        AddSpriteEx( 0.5, PosX, PosY, 225, GS->Tick*0.1, -superkamiAngle*MATH_PI, 1.0);
+      return;
+    }
+  }
+  super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Super Kamikaze"))
+  {
+    superkamikaze = true;
+
+    superkamiPosX = PosX;  superkamiPosY = PosY;
+    superkamiAngle = FireAngle*TurnSide;
+  }
+  super;
+}
+
+/*
+*    FireAngle:
+*
+*        1.0
+*    0.75   0.75
+* 0.5           0.5
+*    0.25   0.25
+*        0.0
+*
+*    TurnSide:
+* -1           1
+*/
