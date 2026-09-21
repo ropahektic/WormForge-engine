@@ -188,6 +188,14 @@ pub fn on_gfx_ready(display: *mut u8) {
     // would make it vanish rather than fall back.
     install_gpu_atlas(gpu_sheets);
 
+    // The 223 slots in CUSTOM_SPRITE_SLOT_MIN..=MAX are shared by every
+    // loaded pack and are the ceiling this fork exists to lift, so report the
+    // total rather than leaving it to be counted from the per-slot lines.
+    log_line(&format!(
+        "sprite budget: {} of 223 WA slots used across all packs",
+        sprite::slots_used()
+    ));
+
     lua_host::park_lua(scripts.lua);
     if let Ok(mut g) = GFX.lock() {
         *g = Some(GfxPass {

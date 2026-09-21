@@ -996,3 +996,12 @@ pub fn clear_gpu_sheets() {
         *next = VIRTUAL_SPRITE_BASE;
     }
 }
+
+/// How many of the 223 shared custom slots are currently occupied.
+///
+/// The ceiling is global: every loaded pack draws from the same range, so one
+/// pack baking rotations costs every other pack. GPU sheets are deliberately
+/// absent from this count -- that is the point of them.
+pub fn slots_used() -> usize {
+    LOADED.lock().map(|g| g.len()).unwrap_or(0)
+}
