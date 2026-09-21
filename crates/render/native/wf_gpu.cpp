@@ -186,7 +186,16 @@ int wf_gpu_draw(const void* verts, uint32_t count) {
 
     // WA's device is shared and its own draw follows immediately, so capture
     // everything we are about to touch and put it back before returning.
-    if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &saved))) return 0;
+    //
+    // The block is created ONCE and re-captured per call, not allocated each
+    // time. D3DSBT_ALL is an expensive object under wined3d, and with two
+    // occlusion bands this runs twice a frame -- allocating and destroying it
+    // at that rate is both wasteful and a slow-burn way to exhaust driver
+    // resources.
+    if (!saved && FAILED(device->CreateStateBlock(D3DSBT_ALL, &saved))) {
+        saved = nullptr;
+        return 0;
+    }
     if (FAILED(saved->Capture())) {
         saved->Release(); saved = nullptr;
         return 0;
@@ -228,9 +237,9 @@ int wf_gpu_draw(const void* verts, uint32_t count) {
         device->EndScene();
     }
 
+    // Kept for the next call; released only on device loss, where every
+    // DEFAULT-pool object must go before WA resets the shared device.
     saved->Apply();
-    saved->Release();
-    saved = nullptr;
     return ok;
 }
 
