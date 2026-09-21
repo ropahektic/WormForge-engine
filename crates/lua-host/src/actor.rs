@@ -44,7 +44,7 @@ pub struct ActorNative {
     /// Hold the actor on one frame of its current sheet.
     pub set_frame: fn(handle: u32, frame: i32),
     /// GPU renderer presentation: angle in degrees, scale, premultiplied tint.
-    pub set_gfx: fn(handle: u32, angle: f32, scale: f32, tint: u32),
+    pub set_gfx: fn(handle: u32, angle: f32, scale: f32, tint: u32, depth: u32),
     pub despawn: fn(handle: u32),
     pub in_water: fn(handle: u32) -> bool,
     pub on_feet: fn(handle: u32) -> bool,
@@ -89,7 +89,7 @@ impl Default for ActorNative {
         Self {
             explode: |_, _, _, _| {},
             despawn: |_| {},
-            set_gfx: |_, _, _, _| {},
+            set_gfx: |_, _, _, _, _| {},
             in_water: |_| false,
             on_feet: |_| false,
             gravity: |_| {},
@@ -522,8 +522,11 @@ impl UserData for ActorHandle {
                 Some("add") | Some("additive")
             );
             let tint = if additive { rgb } else { 0xFF00_0000 | rgb };
+            // 0 means "leave it alone", so a caller setting only an angle
+            // does not silently reset the sprite's layer.
+            let depth = spec.get::<Option<u32>>("depth")?.unwrap_or(0);
             if let Some(set) = native_set_gfx() {
-                set(this.0, angle, scale, tint);
+                set(this.0, angle, scale, tint, depth);
             }
             Ok(())
         });
@@ -818,7 +821,7 @@ pub fn native_land_solid() -> Option<fn(i32, i32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_solid)
 }
 
-pub fn native_set_gfx() -> Option<fn(u32, f32, f32, u32)> {
+pub fn native_set_gfx() -> Option<fn(u32, f32, f32, u32, u32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.set_gfx)
 }
 

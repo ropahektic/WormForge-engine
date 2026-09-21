@@ -281,6 +281,12 @@ pub const ACTOR_ANGLE: usize = 0x140;
 pub const ACTOR_SCALE: usize = 0x144;
 /// Premultiplied D3DCOLOR. Alpha 0 is additive, not invisible.
 pub const ACTOR_TINT: usize = 0x148;
+/// Which occlusion band this sprite belongs to, as a render-queue depth.
+/// At or behind TERRAIN (0x180000) it is occluded by terrain; in front of it
+/// terrain is ignored and only the HUD occludes. Both bands ignore worms --
+/// that combination is the whole point of the per-source mask, and is not
+/// expressible as a single painter-order depth.
+pub const ACTOR_DEPTH: usize = 0x14C;
 pub const SHARED_WORLD_ROOT: u32 = 0x14;
 pub const GAME_WORLD_LANDSCAPE: usize = 0x20;
 pub const GAME_WORLD_WATER_LEVEL: usize = 0x5E0;

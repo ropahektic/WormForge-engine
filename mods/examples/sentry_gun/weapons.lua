@@ -74,6 +74,11 @@ local GUN   = "sprites/turret_gun"
 -- a white colour and q.blend = 1 for the same reason.
 local FLARE = "sprites/turret_flare"
 
+-- Occlusion band for the parts that sit above the landscape. Terrain's own
+-- queue depth is 0x180000; anything below that ignores terrain and is
+-- occluded only by the HUD.
+local IN_FRONT_OF_TERRAIN = 0x10000
+
 -- Tints for a greyscale housing, from PX's own render rather than its script.
 -- Sampling its red housing gives G/R about 0.39 and B/R about 0.28; the
 -- script's flat 0.15/0.65 reads far more saturated than PX actually looks.
@@ -494,15 +499,25 @@ local function sync(a, s)
       angle = (90 - s.angle) % 360,
       tint = 0xFFFFFF,
       blend = "add",
+      depth = IN_FRONT_OF_TERRAIN,
     })
   end
   -- s.angle is 0 down / 90 right; the art faces right and the renderer takes
   -- clockwise screen degrees, so right (90) must map to 0.
   -- Normalised to 0..360 so a logged angle is always comparable; -180 and
   -- 180 are the same rotation but only one of them reads clearly.
+  -- The tripod keeps the default depth and is occluded by terrain, so its
+  -- sunk feet disappear into the ground. The gun sits in front of terrain:
+  -- it is mounted above the landscape and should never be buried by it.
+  --
+  -- Neither is occluded by worms, which no single painter-order depth can
+  -- express -- WA draws terrain behind worms, so "in front of worms and
+  -- behind terrain" is an empty interval. The renderer's mask decides per
+  -- pixel by source instead of inheriting one order.
   gun:gfx({
     angle = (90 - s.angle) % 360,
     tint = TEAM_TINT[s.team] or TEAM_TINT[1],
+    depth = IN_FRONT_OF_TERRAIN,
   })
 end
 

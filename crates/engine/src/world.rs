@@ -1093,3 +1093,18 @@ mod tests {
         assert_eq!(trace_pixels(0, 0, 2, 0, |_, _| false), None);
     }
 }
+
+/// Per-pixel solid test against the landscape's collision mask, in world
+/// pixels, with the grid resolved once for a whole batch of lookups.
+///
+/// The renderer needs this because terrain and soil reach the screen as ONE
+/// `tiled_terrain` draw, so no amount of splitting WA's render queue can tell
+/// them apart. The collision mask can: solid ground is solid, and a crater's
+/// exposed soil is not. wkFOW reached the same conclusion for its own sprite
+/// occlusion and documents the reasoning in `Vision::occludesSprites` --
+/// notably that matching soil's palette indices instead would need a table
+/// per level theme and would break on custom levels.
+pub fn solid_sampler() -> Option<impl Fn(i32, i32) -> bool> {
+    let grid = live_grid()?;
+    Some(move |x: i32, y: i32| grid.solid_px(x, y))
+}

@@ -444,6 +444,9 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     // A zeroed allocation would otherwise mean "scale 0", i.e. invisible.
     write_i32(this, ACTOR_SCALE, 0x1_0000);
     write_i32(this, ACTOR_TINT, 0xFFFF_FFFFu32 as i32);
+    // Behind terrain by default: the conservative choice, matching how a
+    // stock sprite at this depth would behave.
+    write_i32(this, ACTOR_DEPTH, 0x0019_0000);
 
     let parent = physics_parent(owner).unwrap_or(owner);
     let ctor: WorldCtorFn = std::mem::transmute(rb(WORLD_ENTITY_CTOR) as usize);
@@ -906,7 +909,7 @@ fn native_look(handle: u32, id: i32, delta: u32, w: i32, h: i32) {
 /// Writes only into our own actor struct and is read only by the renderer, so
 /// it cannot reach the simulation and cannot desync a lockstep game. An actor
 /// on the palette path ignores all of it.
-fn native_set_gfx(handle: u32, angle: f32, scale: f32, tint: u32) {
+fn native_set_gfx(handle: u32, angle: f32, scale: f32, tint: u32, depth: u32) {
     let this = handle as *mut u8;
     unsafe {
         if !is_actor(this) || read_i32(this, ACTOR_DEAD) != 0 {
@@ -917,6 +920,9 @@ fn native_set_gfx(handle: u32, angle: f32, scale: f32, tint: u32) {
         // Guard against a pack asking for an invisible or absurd sprite.
         write_i32(this, ACTOR_SCALE, fixed(scale.clamp(0.01, 64.0)));
         write_i32(this, ACTOR_TINT, tint as i32);
+        if depth != 0 {
+            write_i32(this, ACTOR_DEPTH, depth as i32);
+        }
     }
 }
 

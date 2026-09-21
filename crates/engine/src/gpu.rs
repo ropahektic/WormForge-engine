@@ -59,6 +59,7 @@ static RESOLVED_IDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static CAPTURE_LOGGED: AtomicBool = AtomicBool::new(false);
 static NO_SHADER_LOGGED: AtomicBool = AtomicBool::new(false);
 static MASK_LOGGED: AtomicBool = AtomicBool::new(false);
+static DEPTHS_LOGGED: AtomicBool = AtomicBool::new(false);
 static HIDDEN_LOGGED: Mutex<Vec<(i32, i32)>> = Mutex::new(Vec::new());
 static WARNED: AtomicBool = AtomicBool::new(false);
 
@@ -95,13 +96,21 @@ struct Frame {
     surface: usize,
     width: usize,
     height: usize,
-    /// 255 where our sprites may paint, 0 where a nearer stock draw won.
+    /// 255 where our sprites may paint, 0 where something that should occlude
+    /// them won. Two bands: `mask` is occluded by terrain and the HUD, and
+    /// `mask_front` only by the HUD. Neither is occluded by worms.
     mask: Vec<u8>,
-    /// Framebuffer snapshots either side of the cut.
-    behind: Vec<u8>,
+    mask_front: Vec<u8>,
+    /// Framebuffer either side of the HUD, the one occluder that IS its own
+    /// draw. Terrain is decided from the collision mask instead.
     front: Vec<u8>,
-    /// Transformed quads, rebuilt each frame from `PENDING`.
+    hud: Vec<u8>,
+    /// Transformed quads, rebuilt each frame from `PENDING`, split by which
+    /// mask they use. Two draw calls rather than one, which the measured
+    /// cost (0.25 ms for a full-surface mask upload at 1280x800) makes a
+    /// non-issue.
     vertices: Vec<render::Vertex>,
+    vertices_front: Vec<render::Vertex>,
     valid: bool,
 }
 
@@ -114,9 +123,11 @@ impl Frame {
             width,
             height,
             mask: vec![255; pixels],
-            behind: vec![0; pixels],
+            mask_front: vec![255; pixels],
             front: vec![0; pixels],
+            hud: vec![0; pixels],
             vertices: Vec::new(),
+            vertices_front: Vec::new(),
             valid: false,
         }
     }
@@ -150,6 +161,7 @@ pub fn clear() {
     CAPTURE_LOGGED.store(false, Ordering::SeqCst);
     NO_SHADER_LOGGED.store(false, Ordering::SeqCst);
     MASK_LOGGED.store(false, Ordering::SeqCst);
+    DEPTHS_LOGGED.store(false, Ordering::SeqCst);
     if let Ok(mut seen) = HIDDEN_LOGGED.lock() {
         seen.clear();
     }
@@ -169,6 +181,7 @@ pub fn begin_frame() {
     if let Ok(mut state) = FRAME.lock() {
         if let Some(frame) = state.as_mut() {
             frame.vertices.clear();
+            frame.vertices_front.clear();
             frame.valid = false;
         }
     }
@@ -239,46 +252,139 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize, cut_depth: u32) ->
     }
     let frame = state.as_mut().unwrap();
     resolve(frame, display, clip);
-    if frame.vertices.is_empty() {
+    if frame.vertices.is_empty() && frame.vertices_front.is_empty() {
         // Everything of ours was culled or unresolvable.
         return false;
     }
 
+    // Report the scene's actual depth bands once. Choosing where a sprite
+    // belongs is otherwise guesswork against half-remembered constants, and
+    // the values differ per map and per renderer.
+    if !DEPTHS_LOGGED.swap(true, Ordering::SeqCst) {
+        // Kind as well as depth: "which layer is the soil" cannot be answered
+        // from depth alone, and guessing it wrong puts the whole mask on the
+        // wrong side of a layer.
+        let mut seen: Vec<(u32, u32, u32)> = Vec::new();
+        for c in &q.commands {
+            match seen.iter_mut().find(|(d, k, _)| *d == c.depth && *k == c.kind) {
+                Some((_, _, n)) => *n += 1,
+                None => seen.push((c.depth, c.kind, 1)),
+            }
+        }
+        seen.sort_by(|a, b| b.0.cmp(&a.0));
+        let name = |k: u32| match k {
+            0 => "fill_rect",
+            1 => "bitmap",
+            2 => "textbox",
+            4 => "sprite_g",
+            5 => "sprite_l",
+            6 => "sprite_o",
+            13 => "tiled_bitmap",
+            14 => "TERRAIN",
+            _ => "?",
+        };
+        let list: Vec<String> = seen
+            .iter()
+            .map(|(d, k, n)| format!("{d:#x}:{}x{n}", name(*k)))
+            .collect();
+        crate::log_line(&format!(
+            "gpu depths: back to front {} (ours cut at {cut_depth:#x})",
+            list.join(" ")
+        ));
+    }
+
     let ordered = q.ordered();
-    // `ordered` runs back to front, so the first command at or in front of our
-    // depth is the cut. Everything before it is behind us.
-    let cut = ordered
+
+    // Per-source occlusion rather than a single painter-order cut.
+    //
+    // WA draws terrain (0x180000) BEHIND worms (0xd0xxx), so no single depth
+    // can put the sentry in front of worms and behind terrain at once: that
+    // needs 0x180000 < d < 0xd0000, an empty interval. A painter's algorithm
+    // simply cannot express it.
+    //
+    // The mask can, because it is built from framebuffer differences and so
+    // chooses per PIXEL what occludes us, by source rather than by order:
+    //
+    //   a  after background and soil      (never occlude us)
+    //   b  after terrain                  -> terrain painted where b != a
+    //   c  after objects, worms, effects  -> terrain still visible where c == b
+    //   d  after the HUD                  -> HUD painted where d != c
+    //
+    // A worm walking past changes the pixel between b and c, so it fails the
+    // `c == b` test and does not mask us -- the sentry draws over it. Terrain
+    // that nothing covered keeps its pixel and does mask us.
+    //
+    // Terrain is found by command kind (14 = tiled_terrain), not by a depth
+    // constant: the kind is structural, the depth is per map.
+    const HUD_DEPTH_MAX: u32 = 0x100;
+
+    let hud_start = ordered
         .iter()
-        .position(|c| c.depth <= cut_depth)
+        .position(|c| c.depth <= HUD_DEPTH_MAX)
         .unwrap_or(ordered.len());
 
-    q.draw(&ordered[..cut], display, clip);
-    read(&mut frame.behind);
-    q.draw(&ordered[cut..], display, clip);
+    q.draw(&ordered[..hud_start], display, clip);
     read(&mut frame.front);
+    q.draw(&ordered[hud_start..], display, clip);
+    read(&mut frame.hud);
 
-    // Any pixel a nearer draw changed belongs to it, not to us.
+    // The HUD is a real separate draw, so a framebuffer diff identifies it
+    // exactly. Terrain is not: it and the soil arrive as one tiled_terrain
+    // command, so the collision mask decides that instead -- see
+    // world::solid_sampler.
     let mut covered = 0usize;
     for i in 0..frame.mask.len() {
-        if frame.behind[i] == frame.front[i] {
-            frame.mask[i] = 255;
-        } else {
-            frame.mask[i] = 0;
+        let hud_here = frame.hud[i] != frame.front[i];
+        let open = if hud_here { 0 } else { 255 };
+        frame.mask[i] = open;
+        frame.mask_front[i] = open;
+        if hud_here {
             covered += 1;
         }
     }
 
-    // A sprite can be fully present, correctly transformed, and still
-    // invisible because the coverage mask zeroed every pixel it touches.
-    // That failure is indistinguishable from "not drawn at all" on screen,
-    // so report it rather than leaving it to be guessed at: an occlusion
-    // problem and a pipeline problem need completely different fixes.
+    // Solid ground occludes the back band, sampled only inside the pixels our
+    // sprites actually cover. A full-surface sweep would be a million lookups
+    // a frame to answer a question about a few thousand pixels.
+    let mut solid_px = 0usize;
+    if let Some(solid) = crate::world::solid_sampler() {
+        let clip_x = *(clip as *const i32) >> 16;
+        let clip_y = *((clip + 4) as *const i32) >> 16;
+        let cam_x = *((display + 0x3560) as *const i32);
+        let cam_y = *((display + 0x3564) as *const i32);
+        let w = frame.width as i64;
+        let h = frame.height as i64;
+        for chunk in frame.vertices.chunks(render::VERTICES_PER_QUAD) {
+            let (mut x0, mut y0) = (i64::MAX, i64::MAX);
+            let (mut x1, mut y1) = (i64::MIN, i64::MIN);
+            for v in chunk {
+                x0 = x0.min(v.x as i64);
+                y0 = y0.min(v.y as i64);
+                x1 = x1.max(v.x as i64);
+                y1 = y1.max(v.y as i64);
+            }
+            for y in y0.max(0)..=y1.min(h - 1) {
+                for x in x0.max(0)..=x1.min(w - 1) {
+                    // screen = world - clip + cam, so invert to sample.
+                    let wx = (x + clip_x as i64 - cam_x as i64) as i32;
+                    let wy = (y + clip_y as i64 - cam_y as i64) as i32;
+                    if solid(wx, wy) {
+                        let i = (y * w + x) as usize;
+                        if frame.mask[i] != 0 {
+                            frame.mask[i] = 0;
+                            solid_px += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if !MASK_LOGGED.swap(true, Ordering::SeqCst) {
-        let total = frame.mask.len().max(1);
         crate::log_line(&format!(
-            "gpu mask: {covered}/{total} pixels claimed by nearer draws \
-             ({:.1}% of the surface)",
-            100.0 * covered as f64 / total as f64
+            "gpu mask: hud claims {covered} px, solid ground {solid_px} px \
+             within sprite bounds; hud cut at {hud_start} of {} commands",
+            ordered.len()
         ));
     }
     report_hidden_sprites(frame);
@@ -360,7 +466,10 @@ pub unsafe fn present(device: *mut c_void) {
     let Ok(mut state) = FRAME.lock() else {
         return;
     };
-    let Some(frame) = state.as_mut().filter(|f| f.valid && !f.vertices.is_empty()) else {
+    let Some(frame) = state
+        .as_mut()
+        .filter(|f| f.valid && !(f.vertices.is_empty() && f.vertices_front.is_empty()))
+    else {
         return;
     };
     // Consume once: a stale frame must never be drawn twice.
@@ -373,13 +482,22 @@ pub unsafe fn present(device: *mut c_void) {
     if !ensure_atlas() {
         return;
     }
-    if wf_gpu_mask(frame.width as u32, frame.height as u32, frame.mask.as_ptr()) == 0 {
-        warn("coverage mask upload failed");
-        return;
-    }
-    let count = frame.vertices.len() as u32;
-    if wf_gpu_draw(frame.vertices.as_ptr() as *const c_void, count) == 0 {
-        warn("sprite draw failed");
+    // Back band first: it is occluded by terrain, so it must not paint over
+    // the front band.
+    for (mask, verts) in [
+        (&frame.mask, &frame.vertices),
+        (&frame.mask_front, &frame.vertices_front),
+    ] {
+        if verts.is_empty() {
+            continue;
+        }
+        if wf_gpu_mask(frame.width as u32, frame.height as u32, mask.as_ptr()) == 0 {
+            warn("coverage mask upload failed");
+            return;
+        }
+        if wf_gpu_draw(verts.as_ptr() as *const c_void, verts.len() as u32) == 0 {
+            warn("sprite draw failed");
+        }
     }
 }
 
@@ -437,6 +555,8 @@ struct Pending {
     angle: f32,
     scale: f32,
     tint: u32,
+    /// Occlusion band, as a render-queue depth.
+    depth: u32,
 }
 
 /// Take over one sprite draw, or decline it.
@@ -469,8 +589,8 @@ pub fn intercept(
         return false;
     }
     // Read presentation state now: the actor can be freed before dispatch.
-    let (angle, scale, tint) = if actor.is_null() {
-        (0.0, 1.0, 0xFFFF_FFFF)
+    let (angle, scale, tint, depth) = if actor.is_null() {
+        (0.0f32, 1.0f32, 0xFFFF_FFFFu32, 0x0019_0000u32)
     } else {
         unsafe {
             let fixed = |v: i32| v as f32 / 65536.0;
@@ -478,13 +598,14 @@ pub fn intercept(
                 fixed(game::entity::read_i32(actor, game::offsets::ACTOR_ANGLE)),
                 fixed(game::entity::read_i32(actor, game::offsets::ACTOR_SCALE)),
                 game::entity::read_i32(actor, game::offsets::ACTOR_TINT) as u32,
+                game::entity::read_i32(actor, game::offsets::ACTOR_DEPTH) as u32,
             )
         }
     };
     let Ok(mut pending) = PENDING.lock() else {
         return false;
     };
-    pending.push(Pending { x, y, sprite, anim, angle, scale, tint });
+    pending.push(Pending { x, y, sprite, anim, angle, scale, tint, depth });
     true
 }
 
@@ -496,6 +617,7 @@ pub fn intercept(
 /// what makes the sprites follow wkZoom and camera motion for free.
 unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
     frame.vertices.clear();
+    frame.vertices_front.clear();
     let Ok(pending) = PENDING.lock() else {
         return;
     };
@@ -527,6 +649,10 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
             tint: render::Tint(p.tint),
             mirror_x: p.sprite & 0x40000 != 0,
         };
+        // At or behind terrain's own depth, terrain occludes; in front of it
+        // only the HUD does.
+        const TERRAIN_DEPTH: u32 = 0x0018_0000;
+        let behind_terrain = p.depth >= TERRAIN_DEPTH;
         if !sprite.offscreen(w, h) {
             // Once per distinct sprite id, so every sheet reports itself
             // rather than only whichever happens to resolve first. A sheet
@@ -556,7 +682,11 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
                     p.x >> 16, p.y >> 16,
                 ));
             }
-            sprite.emit(w, h, &mut frame.vertices);
+            if behind_terrain {
+                sprite.emit(w, h, &mut frame.vertices);
+            } else {
+                sprite.emit(w, h, &mut frame.vertices_front);
+            }
         }
     }
 }
