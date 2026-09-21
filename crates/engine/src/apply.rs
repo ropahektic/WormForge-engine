@@ -403,10 +403,6 @@ fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>) {
         log_error("gpu atlas: sheets do not fit 4096x4096; stock rendering retained");
         return;
     };
-    if !crate::gpu::upload_atlas(&atlas) {
-        log_error("gpu atlas: upload failed; stock rendering retained");
-        return;
-    }
     let mut installed = 0;
     for (i, (key, strip)) in sheets.iter().enumerate() {
         let Some(packed) = atlas.sheets.iter().find(|s| s.id == i as u32) else {
@@ -430,5 +426,8 @@ fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>) {
         "gpu atlas: {installed} sheets in {}x{}, 0 WA sprite slots used",
         atlas.width, atlas.height
     ));
+    // The device does not exist yet -- this runs at LoadSprites -- so the
+    // pixels are handed over and uploaded on the first present instead.
+    crate::gpu::set_atlas(atlas);
     crate::gpu::set_active(true);
 }

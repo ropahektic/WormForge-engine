@@ -312,6 +312,14 @@ unsafe extern "thiscall" fn missile_hook(this: *mut u8, a: u32, msg: u32, b: u32
 }
 
 unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
+    // BEFORE the original, which is where entities blit and therefore where
+    // the GPU draw list is filled. Clearing after it would wipe the list
+    // between being built and being consumed at dispatch. truecolor's own
+    // begin_frame stays below because it reads WA's queue commands, which WA
+    // owns and rebuilds itself.
+    if msg == MSG_RENDER_SCENE {
+        crate::gpu::begin_frame();
+    }
     let orig = ORIG_ROOT.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
@@ -321,7 +329,6 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     // in ordinary play, so anything behind it never runs during a normal turn.
     if msg == MSG_RENDER_SCENE {
         crate::truecolor::begin_frame();
-        crate::gpu::begin_frame();
     }
     if !holding() {
         return;

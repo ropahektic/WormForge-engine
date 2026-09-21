@@ -335,18 +335,31 @@ def bake_gpu(src, dst):
         frame = Image.new('RGBA', FIRE_FRAME_SIZE, (0, 0, 0, 0))
         frame = over(frame, scale(barrel_frame), BARREL_OFFSET[0], 0)
         frame = over(frame, scale(body), 0, 0)
-        if pose == 1:
-            # Additive at draw time now, so the luminance-to-alpha hack that
-            # faked it for a baked sprite is not needed -- the muzzle keeps
-            # its own colour and the renderer adds it.
-            flare = rot(scale(muzzle, MUZZLE_SCALE, resample=Image.BICUBIC),
-                        90.0, resample=Image.BICUBIC)
-            frame = over(frame, flare, BARREL_OFFSET[0] + MUZZLE_OFFSET[0], 0)
         frame.save(os.path.join(folder, 'frame%03d.png' % pose))
 
+    # The flare is its own sheet, drawn as a separate additive quad.
+    #
+    # It cannot live in the gun sheet: tint is per-quad, so the team colour
+    # would multiply the flame too and a blue turret's muzzle would come out
+    # dark olive rather than yellow. PX drew it separately with a white colour
+    # and q.blend = 1 for exactly this reason.
+    #
+    # Frame 0 is empty so the flare actor can always exist and simply select
+    # nothing while idle -- with premultiplied additive, a fully transparent
+    # texel adds zero.
+    folder = os.path.join(sprites, 'turret_flare')
+    os.makedirs(folder, exist_ok=True)
+    empty = Image.new('RGBA', FIRE_FRAME_SIZE, (0, 0, 0, 0))
+    empty.save(os.path.join(folder, 'frame000.png'))
+    lit = Image.new('RGBA', FIRE_FRAME_SIZE, (0, 0, 0, 0))
+    flare = rot(scale(muzzle, MUZZLE_SCALE, resample=Image.BICUBIC),
+                90.0, resample=Image.BICUBIC)
+    lit = over(lit, flare, BARREL_OFFSET[0] + MUZZLE_OFFSET[0], 0)
+    lit.save(os.path.join(folder, 'frame001.png'))
+
     print('baked into %s' % sprites)
-    print('  turret_base 1 frame, turret_gun %d frames' % len(barrels))
-    print('  2 GPU sheets, 0 of 223 WA sprite slots '
+    print('  turret_base 1, turret_gun %d, turret_flare 2 frames' % len(barrels))
+    print('  3 GPU sheets, 0 of 223 WA sprite slots '
           '(the palette bake used 72 for rotation alone)')
     return 0
 

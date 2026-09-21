@@ -55,9 +55,26 @@ static ACTIVE: AtomicBool = AtomicBool::new(false);
 /// dispatcher does not draw it a second time.
 pub static DREW: AtomicBool = AtomicBool::new(false);
 static ANNOUNCED: AtomicBool = AtomicBool::new(false);
+static RESOLVED_IDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+static CAPTURE_LOGGED: AtomicBool = AtomicBool::new(false);
 static WARNED: AtomicBool = AtomicBool::new(false);
 
 static FRAME: Mutex<Option<Frame>> = Mutex::new(None);
+/// Draws intercepted this frame.
+///
+/// Deliberately independent of `FRAME`: the frame is sized from WA's surface,
+/// which is only readable at dispatch, while intercepts happen earlier during
+/// entity render. Hanging the draw list off the frame made the two circular --
+/// nothing could be intercepted until a frame existed, and no frame was built
+/// until something had been intercepted -- so every sprite fell through to WA.
+static PENDING: Mutex<Vec<Pending>> = Mutex::new(Vec::new());
+/// The packed atlas, held until a device exists to upload it to.
+///
+/// Sheets are registered at `on_gfx_ready`, which runs at LoadSprites — long
+/// before WA has created its D3D9 device. Uploading there always fails, so the
+/// pixels wait here and go up on the first present instead.
+static ATLAS: Mutex<Option<render::Atlas>> = Mutex::new(None);
+static ATLAS_UPLOADED: AtomicBool = AtomicBool::new(false);
 
 pub fn is_active() -> bool {
     ACTIVE.load(Ordering::SeqCst)
@@ -80,11 +97,7 @@ struct Frame {
     /// Framebuffer snapshots either side of the cut.
     behind: Vec<u8>,
     front: Vec<u8>,
-    /// Draws intercepted this frame, still in WA's coordinates. The screen
-    /// transform needs `clip` and `display`, which only exist at dispatch
-    /// time, so it is deferred to `capture` rather than done at intercept.
-    pending: Vec<Pending>,
-    /// Transformed quads, rebuilt each frame from `pending`.
+    /// Transformed quads, rebuilt each frame from `PENDING`.
     vertices: Vec<render::Vertex>,
     valid: bool,
 }
@@ -100,7 +113,6 @@ impl Frame {
             mask: vec![255; pixels],
             behind: vec![0; pixels],
             front: vec![0; pixels],
-            pending: Vec::new(),
             vertices: Vec::new(),
             valid: false,
         }
@@ -123,8 +135,19 @@ pub fn set_active(active: bool) {
 /// Drop everything owned per match.
 pub fn clear() {
     ACTIVE.store(false, Ordering::SeqCst);
+    ATLAS_UPLOADED.store(false, Ordering::SeqCst);
+    if let Ok(mut held) = ATLAS.lock() {
+        *held = None;
+    }
     DREW.store(false, Ordering::SeqCst);
     WARNED.store(false, Ordering::SeqCst);
+    if let Ok(mut seen) = RESOLVED_IDS.lock() {
+        seen.clear();
+    }
+    CAPTURE_LOGGED.store(false, Ordering::SeqCst);
+    if let Ok(mut pending) = PENDING.lock() {
+        pending.clear();
+    }
     if let Ok(mut frame) = FRAME.lock() {
         *frame = None;
     }
@@ -132,9 +155,11 @@ pub fn clear() {
 
 /// Start of a rendered frame: nothing from the previous one carries over.
 pub fn begin_frame() {
+    if let Ok(mut pending) = PENDING.lock() {
+        pending.clear();
+    }
     if let Ok(mut state) = FRAME.lock() {
         if let Some(frame) = state.as_mut() {
-            frame.pending.clear();
             frame.vertices.clear();
             frame.valid = false;
         }
@@ -167,7 +192,13 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize, cut_depth: u32) ->
         return false;
     };
     // Nothing of ours this frame: let the caller do its normal single draw.
-    if state.as_ref().is_none_or(|f| f.pending.is_empty()) {
+    let queued = PENDING.lock().map(|p| p.len()).unwrap_or(0);
+    if !CAPTURE_LOGGED.swap(true, Ordering::SeqCst) {
+        crate::log_line(&format!(
+            "gpu capture: first call, {queued} sprites queued, clip={clip:#x}"
+        ));
+    }
+    if queued == 0 {
         return false;
     }
     let Some((surface, width, height, read)) = surface_reader(display) else {
@@ -178,13 +209,7 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize, cut_depth: u32) ->
         .as_ref()
         .is_some_and(|f| f.matches(display, surface, width, height))
     {
-        // Carry this frame's intercepted draws across the reallocation.
-        let pending = state.as_mut().map(|f| std::mem::take(&mut f.pending));
-        let mut frame = Frame::new(display, surface, width, height);
-        if let Some(pending) = pending {
-            frame.pending = pending;
-        }
-        *state = Some(frame);
+        *state = Some(Frame::new(display, surface, width, height));
     }
     let frame = state.as_mut().unwrap();
     resolve(frame, display, clip);
@@ -235,6 +260,9 @@ pub unsafe fn present(device: *mut c_void) {
         warn("device init failed");
         return;
     }
+    if !ensure_atlas() {
+        return;
+    }
     if wf_gpu_mask(frame.width as u32, frame.height as u32, frame.mask.as_ptr()) == 0 {
         warn("coverage mask upload failed");
         return;
@@ -245,10 +273,43 @@ pub unsafe fn present(device: *mut c_void) {
     }
 }
 
-/// Upload the packed atlas. Once per match, not per frame: it is
-/// `D3DPOOL_MANAGED` and survives a device reset untouched.
-pub fn upload_atlas(atlas: &render::Atlas) -> bool {
-    unsafe { wf_gpu_atlas(atlas.width, atlas.height, atlas.pixels.as_ptr()) != 0 }
+/// Hand over the packed atlas, to be uploaded when a device first appears.
+///
+/// Deliberately cannot fail: the sheets it describes have already been
+/// registered and have no palette fallback, so refusing here would make them
+/// vanish rather than degrade. Upload problems surface at `present`.
+pub fn set_atlas(atlas: render::Atlas) {
+    if let Ok(mut held) = ATLAS.lock() {
+        *held = Some(atlas);
+    }
+    ATLAS_UPLOADED.store(false, Ordering::SeqCst);
+}
+
+/// Upload the held atlas once a device exists. `D3DPOOL_MANAGED`, so it
+/// survives a device reset and this runs once per match rather than per frame.
+fn ensure_atlas() -> bool {
+    if ATLAS_UPLOADED.load(Ordering::SeqCst) {
+        return true;
+    }
+    let Ok(held) = ATLAS.lock() else {
+        return false;
+    };
+    let Some(atlas) = held.as_ref() else {
+        return false;
+    };
+    let ok = unsafe {
+        wf_gpu_atlas(atlas.width, atlas.height, atlas.pixels.as_ptr()) != 0
+    };
+    if ok {
+        ATLAS_UPLOADED.store(true, Ordering::SeqCst);
+        log_line(&format!(
+            "gpu atlas uploaded: {}x{}",
+            atlas.width, atlas.height
+        ));
+    } else {
+        warn("atlas upload failed");
+    }
+    ok
 }
 
 /// One intercepted draw, in WA's own coordinates.
@@ -283,19 +344,20 @@ pub fn intercept(
     if !is_active() {
         return false;
     }
-    let id = sprite & 0xffff;
+    // Virtual ids are 0x01000000 | n, so masking to 16 bits throws the tag
+    // away and leaves a small number that looks like a stock sprite. The only
+    // flag WA packs alongside the id here is the mirror bit.
+    let id = sprite & !game::offsets::SPRITE_MIRROR_X;
     if !crate::sprite::is_gpu_sheet(id) {
+        // A virtual id that reached here without a sheet must NOT be passed
+        // on: WA would index its own sprite table with it and draw whatever
+        // happens to live there. Swallow the draw and say so once.
+        if crate::sprite::is_virtual(id as i32) {
+            warn("virtual sprite id with no GPU sheet");
+            return true;
+        }
         return false;
     }
-    let Ok(mut state) = FRAME.lock() else {
-        return false;
-    };
-    let Some(frame) = state.as_mut() else {
-        // Before the first capture the surface size is unknown. Declining
-        // here lets WA draw it normally for that one frame, which is far
-        // better than dropping the sprite.
-        return false;
-    };
     // Read presentation state now: the actor can be freed before dispatch.
     let (angle, scale, tint) = if actor.is_null() {
         (0.0, 1.0, 0xFFFF_FFFF)
@@ -309,7 +371,10 @@ pub fn intercept(
             )
         }
     };
-    frame.pending.push(Pending { x, y, sprite, anim, angle, scale, tint });
+    let Ok(mut pending) = PENDING.lock() else {
+        return false;
+    };
+    pending.push(Pending { x, y, sprite, anim, angle, scale, tint });
     true
 }
 
@@ -321,14 +386,17 @@ pub fn intercept(
 /// what makes the sprites follow wkZoom and camera motion for free.
 unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
     frame.vertices.clear();
+    let Ok(pending) = PENDING.lock() else {
+        return;
+    };
     let (w, h) = (frame.width as u32, frame.height as u32);
     let clip_x = *(clip as *const i32) >> 16;
     let clip_y = *((clip + 4) as *const i32) >> 16;
     let cam_x = *((display + 0x3560) as *const i32);
     let cam_y = *((display + 0x3564) as *const i32);
 
-    for p in &frame.pending {
-        let id = p.sprite & 0xffff;
+    for p in pending.iter() {
+        let id = p.sprite & !game::offsets::SPRITE_MIRROR_X;
         let Some((rect, frames, looping)) = crate::sprite::gpu_frame(id) else {
             continue;
         };
@@ -350,6 +418,34 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
             mirror_x: p.sprite & 0x40000 != 0,
         };
         if !sprite.offscreen(w, h) {
+            // Once per distinct sprite id, so every sheet reports itself
+            // rather than only whichever happens to resolve first. A sheet
+            // that never appears here is not reaching the renderer at all,
+            // which is a different bug from one that draws wrongly.
+            let first_time = RESOLVED_IDS
+                .lock()
+                .map(|mut seen| {
+                    if seen.contains(&id) {
+                        false
+                    } else {
+                        seen.push(id);
+                        true
+                    }
+                })
+                .unwrap_or(false);
+            if first_time {
+                let (bx0, by0, bx1, by1) = sprite.bounds();
+                crate::log_line(&format!(
+                    "gpu resolve: id={id} frame={index}/{frames} \
+                     rect=({},{} {}x{} in {}x{}) angle={:.1} scale={:.3} \
+                     tint={:#010x} raw=({},{}) clip=({clip_x},{clip_y}) \
+                     cam=({cam_x},{cam_y}) -> screen=({x},{y}) \
+                     bounds=({bx0},{by0})..({bx1},{by1}) surface={w}x{h}",
+                    rect.x, rect.y, rect.w, rect.h, rect.atlas_w, rect.atlas_h,
+                    sprite.angle, sprite.scale, sprite.tint.0,
+                    p.x >> 16, p.y >> 16,
+                ));
+            }
             sprite.emit(w, h, &mut frame.vertices);
         }
     }

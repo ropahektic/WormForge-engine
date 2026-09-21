@@ -2,7 +2,7 @@
 return function(load_pack)
   local PX = 0x10000
   local spec, turn, bodies, rounds = nil, nil, {}, 0
-  local guns = {}
+  local guns, flares = {}, {}
   local owner = { id = 1, team = 1, x = 100 * PX, y = 100 * PX,
                   vx = 0, vy = 0, facing = 1 }
   -- Planted anchor sinks 8px; head is 25px above it.
@@ -25,6 +25,16 @@ return function(load_pack)
     actors = { spawn = function(s)
       if s.kind == "casing" then
         return {}          -- cosmetic shell ejection, not a fired round
+      end
+      if s.kind == "sentry_flare" then
+        -- Additive muzzle flash: its own quad so the team tint cannot reach
+        -- it. Display only, like the gun.
+        local fl = s
+        function fl:frame(i) self.selected_frame = i end
+        function fl:gfx(spec) self.tint, self.blend = spec.tint, spec.blend end
+        function fl:despawn() self.dead = true end
+        flares[#flares + 1] = fl
+        return fl
       end
       if s.kind == "sentry_gun" then
         -- The rotating gun: display only, no physics. It records what the
@@ -69,8 +79,9 @@ return function(load_pack)
   local a = bodies[1]
   assert(a.x == owner.x and a.y == owner.y)
   assert(a.vx == 19661 and a.vy == -9830 and a.loop == false)
-  local gun = guns[1]
+  local gun, flare = guns[1], flares[1]
   assert(gun, "the turret spawns its rotating gun")
+  assert(flare, "and a separate additive muzzle flash")
   assert(a.sprite == nil or a.sprite:find("base"), "the turret actor is the tripod")
   assert(gun.angle == 0, "facing right is 0 degrees of rotation")
   a.on(a) -- plants
@@ -82,12 +93,16 @@ return function(load_pack)
   assert(rounds == 0, "activation delay")
   a.on(a)
   assert(rounds == 1 and gun.selected_frame == 1, "first firing frame")
+  assert(flare.selected_frame == 1, "the flare lights on the first firing pose")
+  assert(flare.blend == "add" and flare.tint == 0xFFFFFF,
+         "the flare is additive and untinted, so a blue turret still flashes yellow")
   assert(terrain_hits == 1, "firing exercised the terrain-hit table")
   for _ = 1, 3 do a.on(a) end
   assert(gun.selected_frame == 2, "second firing frame")
   blocked = true
   for _ = 1, 8 do a.on(a) end
   assert(rounds == 1 and gun.selected_frame == 0, "lost sight returns to idle art")
+  assert(flare.selected_frame == 0, "and the flare goes dark")
   blocked = false
   for _ = 1, 300 do a.on(a) end
   assert(rounds == 20, "exactly 20 rounds per turn")

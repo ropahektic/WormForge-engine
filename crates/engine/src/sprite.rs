@@ -581,7 +581,18 @@ fn punch_letterbox(bgra: &mut [u8], w: u32, h: u32) {
 }
 
 /// Frames in an installed sheet, for turning a frame index into an anim phase.
+///
+/// GPU sheets are checked first and deliberately: their pixels live in the
+/// atlas, not in RGBA_SHEETS, so counting that empty pixel vector would
+/// report zero frames. frame_phase then refuses to produce a phase and
+/// `a:frame()` silently does nothing -- which looks exactly like a sprite
+/// that will not animate, with no error anywhere to say why.
 pub fn frame_count(id: i32) -> Option<usize> {
+    if let Ok(gpu) = GPU_SHEETS.lock() {
+        if let Some(sheet) = gpu.iter().find(|s| s.id == id) {
+            return Some(sheet.frames.len());
+        }
+    }
     let g = RGBA_SHEETS.lock().ok()?;
     g.iter().find(|s| s.id == id).map(|s| s.frames.len())
 }
@@ -966,7 +977,11 @@ pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) 
             w: strip.frames.first().map(|f| f.width).unwrap_or(0),
             h: strip.frames.first().map(|f| f.height).unwrap_or(0),
             looping: strip.looping,
-            frames: Vec::new(), // the atlas holds the pixels now
+            // The atlas holds the pixels; this entry exists only so lookups
+            // keyed on RGBA_SHEETS still find the sheet. Anything that needs
+            // a frame COUNT must use frame_count(), which checks GPU_SHEETS
+            // first for exactly this reason.
+            frames: Vec::new(),
         });
     }
     id

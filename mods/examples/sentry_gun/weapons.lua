@@ -66,8 +66,13 @@ end
 -- Greyscale is deliberate: the team colour is a vertex tint, and keeping the
 -- source art's own shading is what makes it read as tinted metal rather than
 -- a flat colour.
-local BASE = "sprites/turret_base"
-local GUN  = "sprites/turret_gun"
+local BASE  = "sprites/turret_base"
+local GUN   = "sprites/turret_gun"
+-- The muzzle flash is its own additive quad, never part of the gun sheet:
+-- tint is per-quad, so the team colour would multiply the flame too and a
+-- blue turret's muzzle would come out dark olive. PX drew it separately with
+-- a white colour and q.blend = 1 for the same reason.
+local FLARE = "sprites/turret_flare"
 
 -- Tints for a greyscale housing, from PX's own render rather than its script.
 -- Sampling its red housing gives G/R about 0.39 and B/R about 0.28; the
@@ -91,7 +96,7 @@ local IMPACT = "sprites/impact.png"
 
 -- Pack sprites are installed at gfx init from this list only. A sprite missing
 -- from it does not exist at runtime, whatever a:look() asks for later.
-local SPRITES = { IMPACT, CASING, BASE, GUN }
+local SPRITES = { IMPACT, CASING, BASE, GUN, FLARE }
 
 -- 0 = down, 90 = right: the source art faces right, and screen y grows down.
 local function angle_to(ax, ay, tx, ty)
@@ -471,6 +476,26 @@ local function sync(a, s)
     gun:frame(pose)
     s.pose = pose
   end
+
+  -- The flare rides the same pivot and aim as the gun. It is always present
+  -- and simply selects an empty frame while idle: with premultiplied additive
+  -- a fully transparent texel adds nothing, so there is no cost to leaving it
+  -- in the batch.
+  local flare = s.flare
+  if flare and not flare.dead then
+    flare.x, flare.y = gun.x, gun.y
+    flare.vx, flare.vy = 0, 0
+    local lit = (pose == 1) and 1 or 0
+    if lit ~= s.lit then
+      flare:frame(lit)
+      s.lit = lit
+    end
+    flare:gfx({
+      angle = (90 - s.angle) % 360,
+      tint = 0xFFFFFF,
+      blend = "add",
+    })
+  end
   -- s.angle is 0 down / 90 right; the art faces right and the renderer takes
   -- clockwise screen degrees, so right (90) must map to 0.
   -- Normalised to 0..360 so a logged angle is always comparable; -180 and
@@ -495,6 +520,9 @@ local function brain(a, ev)
     if s.health <= 0 then
       if s.gun and not s.gun.dead then
         s.gun:despawn()
+      end
+      if s.flare and not s.flare.dead then
+        s.flare:despawn()
       end
       state[a.id] = nil
       -- PX explodes at PosY-20 -- the turret's body, not its feet. explode()
@@ -525,6 +553,9 @@ local function brain(a, ev)
     if a:in_water() then
       if s.gun and not s.gun.dead then
         s.gun:despawn()
+      end
+      if s.flare and not s.flare.dead then
+        s.flare:despawn()
       end
       state[a.id] = nil
       a:despawn()
@@ -633,10 +664,12 @@ wa.weapons.replace({
       lost = false,
       seen = {},
       pose = nil,
+      lit = nil,
       gun = nil,
+      flare = nil,
     }
-    -- The gun rides along with no physics of its own: sync() places it every
-    -- frame from the tripod's position.
+    -- The gun and its muzzle flash ride along with no physics of their own:
+    -- sync() places both every frame from the tripod's position.
     state[body.id].gun = wa.actors.spawn({
       sprite = GUN,
       x = worm.x,
@@ -648,6 +681,20 @@ wa.weapons.replace({
       origin = "center",
       owner = worm,
       kind = "sentry_gun",
+      persist = true,
+      on = function() end,
+    })
+    state[body.id].flare = wa.actors.spawn({
+      sprite = FLARE,
+      x = worm.x,
+      y = worm.y - MUZZLE_UP * PX,
+      vx = 0, vy = 0,
+      gravity = false,
+      collide = false,
+      loop = false,
+      origin = "center",
+      owner = worm,
+      kind = "sentry_flare",
       persist = true,
       on = function() end,
     })

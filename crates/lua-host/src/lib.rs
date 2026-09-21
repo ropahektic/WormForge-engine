@@ -186,7 +186,7 @@ mod tests {
         // The headline of the GPU renderer: the turret's 6 teams x 3 poses x
         // 120 baked angles collapse to two sheets, rotated and tinted at draw
         // time. 10 sheets total, none of them consuming a WA sprite slot.
-        assert_eq!(claim.params.extra_sheets.len(), 10);
+        assert_eq!(claim.params.extra_sheets.len(), 11);
         assert_eq!(claim.params.gpu_prefix.as_deref(), Some("sprites/turret_"));
         assert_eq!(claim.params.depth, Some(0x190000));
         assert_eq!(
@@ -201,10 +201,18 @@ mod tests {
             .map(|(p, _)| p)
             .filter(|p| p.contains("turret_"))
             .collect();
-        assert_eq!(turret.len(), 2, "one base sheet and one gun sheet: {turret:?}");
+        assert_eq!(
+            turret.len(),
+            3,
+            "base, gun and a separate additive flare: {turret:?}"
+        );
         for (path, sheet) in &claim.params.extra_sheets {
             if path.contains("turret_base") {
                 assert_eq!(sheet.frames.len(), 1, "the tripod never animates");
+            } else if path.contains("turret_flare") {
+                // Empty and lit: the flare is always present and selects
+                // nothing while idle.
+                assert_eq!(sheet.frames.len(), 2);
             } else if path.contains("turret_gun") {
                 // Idle plus the two firing frames; every angle is a rotation.
                 assert_eq!(sheet.frames.len(), 3);
