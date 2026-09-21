@@ -223,6 +223,83 @@ mod tests {
         }
     }
 
+    /// The colourtest pack exists to make the renderer's new capabilities
+    /// visible, so the properties that carry that meaning are asserted here
+    /// rather than left to a screenshot. Each one is something the palette
+    /// path could not represent.
+    #[test]
+    fn colourtest_pack_is_truecolour_and_costs_no_sprite_slots() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/colourtest");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        // Sits in the mortar slot, throws like a grenade.
+        assert_eq!(claim.slot, StockWeapon::Mortar);
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::Grenade));
+        assert_ne!(claim.params.on_fire_id, 0);
+
+        // Every sheet goes to the GPU atlas, so the pack spends none of the
+        // 223 WA sprite slots that all packs share.
+        assert_eq!(claim.params.gpu_prefix.as_deref(), Some("sprites/"));
+        assert_eq!(claim.params.extra_sheets.len(), 3);
+        for (path, sheet) in &claim.params.extra_sheets {
+            assert!(
+                path.contains("sprites/"),
+                "{path} would miss gpu_prefix and take a real slot"
+            );
+            assert_eq!(sheet.frames.len(), 1, "{path}: motion is angle/scale/tint");
+        }
+
+        let sheet = |name: &str| {
+            &claim
+                .params
+                .extra_sheets
+                .iter()
+                .find(|(p, _)| p.contains(name))
+                .unwrap_or_else(|| panic!("{name} missing"))
+                .1
+                .frames[0]
+        };
+
+        // More colours in one 32x32 sprite than an indexed palette has
+        // entries. This is the claim the pack is named for.
+        let prism = sheet("prism");
+        let colours: std::collections::HashSet<[u8; 3]> = prism
+            .rgba
+            .chunks_exact(4)
+            .filter(|p| p[3] > 0)
+            .map(|p| [p[0], p[1], p[2]])
+            .collect();
+        assert!(
+            colours.len() > 256,
+            "prism has {} distinct colours; the point is that it exceeds a \
+             256-entry palette",
+            colours.len()
+        );
+
+        // Partial alpha survives. The palette path thresholded it away --
+        // below 16 dropped, everything else forced to 255 -- which turns
+        // every one of these ramps into a hard-edged disc.
+        for name in ["halo", "spark"] {
+            let partial = sheet(name)
+                .rgba
+                .chunks_exact(4)
+                .filter(|p| p[3] > 0 && p[3] < 255)
+                .count();
+            assert!(
+                partial > 64,
+                "{name} has only {partial} partially transparent pixels; its \
+                 additive falloff would read as a hard circle"
+            );
+        }
+    }
+
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
     }
