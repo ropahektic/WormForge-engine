@@ -56,7 +56,6 @@ static ACTIVE: AtomicBool = AtomicBool::new(false);
 pub static DREW: AtomicBool = AtomicBool::new(false);
 static ANNOUNCED: AtomicBool = AtomicBool::new(false);
 static RESOLVED_IDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
-static CAPTURE_LOGGED: AtomicBool = AtomicBool::new(false);
 static NO_SHADER_LOGGED: AtomicBool = AtomicBool::new(false);
 static MASK_LOGGED: AtomicBool = AtomicBool::new(false);
 static DEPTHS_LOGGED: AtomicBool = AtomicBool::new(false);
@@ -158,7 +157,6 @@ pub fn clear() {
     if let Ok(mut seen) = RESOLVED_IDS.lock() {
         seen.clear();
     }
-    CAPTURE_LOGGED.store(false, Ordering::SeqCst);
     NO_SHADER_LOGGED.store(false, Ordering::SeqCst);
     MASK_LOGGED.store(false, Ordering::SeqCst);
     DEPTHS_LOGGED.store(false, Ordering::SeqCst);
@@ -199,13 +197,15 @@ pub fn shutdown() {
     clear();
 }
 
-/// Split WA's dispatch around our sprites' depth and derive the coverage mask.
+/// Draw the stock frame ourselves, in parts, and derive the coverage mask.
 ///
-/// `cut_depth` is the render-queue depth our sprites occupy. Commands with a
-/// HIGHER depth draw first and are behind us; everything else is in front.
+/// Occlusion comes from two different sources because the two occluders are
+/// different in kind: the HUD is its own draw, so a framebuffer diff around
+/// it is exact; terrain shares one `tiled_terrain` command with the soil, so
+/// no split can separate them and the collision mask decides instead.
 ///
 /// Returns true when it performed the stock drawing itself.
-pub unsafe fn capture(q: &Queue, display: usize, clip: usize, cut_depth: u32) -> bool {
+pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
     if !is_active() || clip == 0 {
         return false;
     }
@@ -232,11 +232,6 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize, cut_depth: u32) ->
     };
     // Nothing of ours this frame: let the caller do its normal single draw.
     let queued = PENDING.lock().map(|p| p.len()).unwrap_or(0);
-    if !CAPTURE_LOGGED.swap(true, Ordering::SeqCst) {
-        crate::log_line(&format!(
-            "gpu capture: first call, {queued} sprites queued, clip={clip:#x}"
-        ));
-    }
     if queued == 0 {
         return false;
     }
@@ -260,6 +255,7 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize, cut_depth: u32) ->
     // Report the scene's actual depth bands once. Choosing where a sprite
     // belongs is otherwise guesswork against half-remembered constants, and
     // the values differ per map and per renderer.
+    #[cfg(debug_assertions)]
     if !DEPTHS_LOGGED.swap(true, Ordering::SeqCst) {
         // Kind as well as depth: "which layer is the soil" cannot be answered
         // from depth alone, and guessing it wrong puts the whole mask on the
@@ -288,7 +284,7 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize, cut_depth: u32) ->
             .map(|(d, k, n)| format!("{d:#x}:{}x{n}", name(*k)))
             .collect();
         crate::log_line(&format!(
-            "gpu depths: back to front {} (ours cut at {cut_depth:#x})",
+            "gpu depths: back to front {}",
             list.join(" ")
         ));
     }

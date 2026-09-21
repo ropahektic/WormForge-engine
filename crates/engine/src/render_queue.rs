@@ -14,11 +14,6 @@ use std::{
     },
 };
 
-/// Depth the GPU renderer's sprites occupy, and therefore where it cuts the
-/// dispatch. Measured in a live match: soil 0x1b0000, terrain 0x180000, so
-/// 0x190000 sits between them -- occluded by the landscape, drawn over soil.
-pub const GPU_CUT_DEPTH: u32 = 0x0019_0000;
-
 pub const COUNT: usize = 0x10004;
 const PTRS: usize = 0x10008;
 const MAX: usize = 0x800;
@@ -172,7 +167,7 @@ unsafe extern "C" fn dispatch(base: usize, display: usize, clip: usize) {
             crate::queue_census::observe(&q);
             // The GPU path owns the split when it is active; the two must
             // never both cut the dispatch, so this is exclusive by construction.
-            if !crate::gpu::capture(&q, display, clip, GPU_CUT_DEPTH) {
+            if !crate::gpu::capture(&q, display, clip) {
                 crate::truecolor::capture(&q, display, clip);
             }
         }
