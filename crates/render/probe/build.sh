@@ -32,13 +32,27 @@ INC=(
   /imsvc "$XWIN/sdk/include/shared"
 )
 
-"$LLVM/clang-cl" --target=i686-pc-windows-msvc /std:c++17 /O2 /MT /W3 \
-  "${INC[@]}" /c crates/render/probe/gpu_probe.cpp /Fo"$OUT/gpu_probe.obj"
+compile() {  # compile <source> <object>
+  "$LLVM/clang-cl" --target=i686-pc-windows-msvc /std:c++17 /O2 /MT /W3 \
+    "${INC[@]}" /c "$1" /Fo"$2"
+}
+link() {     # link <exe> <object>...
+  local out=$1; shift
+  "$LLD/lld-link" /out:"$out" /subsystem:console \
+    "/libpath:$XWIN/crt/lib/x86" \
+    "/libpath:$XWIN/sdk/lib/um/x86" \
+    "/libpath:$XWIN/sdk/lib/ucrt/x86" \
+    "$@" d3d9.lib user32.lib kernel32.lib
+}
 
-"$LLD/lld-link" /out:"$OUT/gpu_probe.exe" /subsystem:console \
-  "/libpath:$XWIN/crt/lib/x86" \
-  "/libpath:$XWIN/sdk/lib/um/x86" \
-  "/libpath:$XWIN/sdk/lib/ucrt/x86" \
-  "$OUT/gpu_probe.obj" d3d9.lib user32.lib kernel32.lib
+# S0: can this machine's D3D9 do what the design needs? Inline test code.
+compile crates/render/probe/gpu_probe.cpp "$OUT/gpu_probe.obj"
+link "$OUT/gpu_probe.exe" "$OUT/gpu_probe.obj"
 
-echo "built $OUT/gpu_probe.exe"
+# S1: is the production renderer correct? Links native/wf_gpu.cpp itself, so
+# what passes here is the code that will run inside WA.
+compile crates/render/native/wf_gpu.cpp "$OUT/wf_gpu.obj"
+compile crates/render/probe/gpu_render_probe.cpp "$OUT/gpu_render_probe.obj"
+link "$OUT/gpu_render_probe.exe" "$OUT/wf_gpu.obj" "$OUT/gpu_render_probe.obj"
+
+echo "built $OUT/gpu_probe.exe and $OUT/gpu_render_probe.exe"

@@ -99,3 +99,68 @@ S0 covers the GPU primitives only. Still open, and belonging to S1/S2:
 - how often queue **kind-3 (callback)** commands appear — a one-line histogram
   in `dispatch`, and the gate on whether a world renderer is possible at all
 - coexistence with wkFOW/wkZoom when both want the same hook sites
+
+---
+
+# S1 (renderer half) — the production shim is correct
+
+S0 proved the primitives with inline test code. This proves the code that will
+actually run inside WA: `crates/render/probe/gpu_render_probe.cpp` links
+`native/wf_gpu.cpp` itself and drives its real entry points. Still no WA, no
+hooks, no game state — so a failure here is a renderer bug and nothing else.
+
+```sh
+crates/render/probe/build.sh
+WFGPU_PREFIX="/Users/eule/Applications/Worms Armageddon.app/Contents/SharedSupport/prefix" \
+  crates/render/probe/run.sh s1
+```
+
+## Result: PASS, in the live game prefix
+
+```
+  ok   wf_gpu_init/atlas/mask/draw renders a masked rotated batch
+  ok   tint modulates and additive saturates in one batch
+  ok   invalid input is refused, not drawn
+  ok   device state is handed back exactly as found
+  ok   cleanup + Reset keeps the MANAGED atlas usable
+  ..    40 sprites/frame incl. full-surface mask: 0.22 ms
+  ..   500 sprites/frame incl. full-surface mask: 0.23 ms
+```
+
+Geometry and atlas packing are verified separately by `cargo test -p render`
+(13 tests, host-runnable) rather than here: the arithmetic is cheap to test
+where a failure prints a number, and only COM behaviour needs a device.
+
+## A finding that contradicts the plan
+
+The plan called the dirty-rect mask "the single largest perf lever in the
+design; build it in from the start, not later." **That is wrong on this
+machine.** 40 sprites and 500 sprites both cost ~0.22 ms *including* a
+full-surface 256x128 mask upload every frame — the cost is fixed per-frame
+work (the state block and the upload), not sprite count, and the whole thing
+is ~1% of a 20 ms budget.
+
+So the dirty-rect optimisation is **deferred, not dropped**. It should be
+reconsidered only if a real 640x480 or 1280x800 surface changes the picture —
+this probe runs at 256x128, so the mask upload here is 32 KB against 1 MB at
+1280x800. Re-measure at full size before assuming either way. What this does
+establish is that per-sprite cost is not the constraint, so nothing about the
+draw path needs redesigning for throughput.
+
+## What is proven, and what S1 still needs
+
+Proven: the renderer draws correctly, batches, tints, blends additively,
+refuses bad input rather than drawing something wrong, hands WA's device back
+untouched, and survives a device reset with its atlas intact.
+
+Not yet touched — the WA-side half of S1:
+
+- the `draw_sprite_local` intercept in `crates/engine/src/actor.rs`
+- building the coverage mask from the split-dispatch snapshots
+- `gpu::install` / the `after_shader_present` call site
+- deciding `gpu_active` once per match, never per frame
+
+Also still open and worth an hour before any M2 decision: a histogram of
+**kind-3 (callback) queue commands**, which `truecolor.rs` already bails the
+whole frame on. If they appear in most frames, a world renderer is impossible
+regardless of how well the sprite renderer works.

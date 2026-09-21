@@ -15,7 +15,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
-EXE=target/gpu-probe/gpu_probe.exe
+# Which probe: s0 = can this machine's D3D9 do it at all (inline test code);
+# s1 = is the production renderer correct (links native/wf_gpu.cpp).
+case "${1:-s1}" in
+  s0) EXE=target/gpu-probe/gpu_probe.exe ;;
+  s1) EXE=target/gpu-probe/gpu_render_probe.exe ;;
+  *)  echo "usage: run.sh [s0|s1]" >&2; exit 2 ;;
+esac
 if [ ! -f "$EXE" ]; then
   echo "no probe binary; run crates/render/probe/build.sh first" >&2
   exit 1
@@ -32,9 +38,14 @@ else
   echo "prefix: $WINEPREFIX"
 fi
 
-# WA bundles an i386 Wine that modern macOS cannot execute, and a shell started
-# from the game bundle can put it first on PATH. Resolve deliberately.
+# The game prefix is 32-bit and Homebrew's Wine is WoW64, which refuses it, so
+# running there needs the bundle's own wine32on64. The bundle's plain `wine` is
+# an i386 Mach-O binary that modern macOS cannot execute at all.
+BUNDLE_WINE="/Users/eule/Applications/Worms Armageddon.app/Contents/SharedSupport/wine/bin/wine32on64"
 wine_bin="${WFGPU_WINE:-}"
+if [ -z "$wine_bin" ] && [ -n "${WFGPU_PREFIX:-}" ] && [ -x "$BUNDLE_WINE" ]; then
+  wine_bin=$BUNDLE_WINE
+fi
 if [ -z "$wine_bin" ] && [ -x /usr/local/bin/wine ]; then
   wine_bin=/usr/local/bin/wine
 fi
