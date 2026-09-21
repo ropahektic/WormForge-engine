@@ -260,13 +260,26 @@ struct Pending {
     /// Low 16 bits are the sprite id; 0x40000 is WA's horizontal mirror flag.
     sprite: u32,
     anim: u32,
+    /// Presentation state, read from the actor at intercept time. Kept per
+    /// draw rather than looked up later because the actor may be freed
+    /// between here and the dispatch.
+    angle: f32,
+    scale: f32,
+    tint: u32,
 }
 
 /// Take over one sprite draw, or decline it.
 ///
 /// Returns true when this draw is ours, in which case the caller must NOT
 /// enqueue it: WA would otherwise draw a palette copy underneath our quad.
-pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32) -> bool {
+pub fn intercept(
+    _layer: u32,
+    x: i32,
+    y: i32,
+    sprite: u32,
+    anim: u32,
+    actor: *mut u8,
+) -> bool {
     if !is_active() {
         return false;
     }
@@ -283,7 +296,20 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32) -> bool {
         // better than dropping the sprite.
         return false;
     };
-    frame.pending.push(Pending { x, y, sprite, anim });
+    // Read presentation state now: the actor can be freed before dispatch.
+    let (angle, scale, tint) = if actor.is_null() {
+        (0.0, 1.0, 0xFFFF_FFFF)
+    } else {
+        unsafe {
+            let fixed = |v: i32| v as f32 / 65536.0;
+            (
+                fixed(game::entity::read_i32(actor, game::offsets::ACTOR_ANGLE)),
+                fixed(game::entity::read_i32(actor, game::offsets::ACTOR_SCALE)),
+                game::entity::read_i32(actor, game::offsets::ACTOR_TINT) as u32,
+            )
+        }
+    };
+    frame.pending.push(Pending { x, y, sprite, anim, angle, scale, tint });
     true
 }
 
@@ -318,12 +344,9 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
             x: x as f32,
             y: y as f32,
             rect,
-            // S1 draws at parity with the stock blit. Rotation, scale and
-            // tint arrive with the Lua surface in S2; the renderer and its
-            // geometry already support all three.
-            angle: 0.0,
-            scale: 1.0,
-            tint: render::Tint::OPAQUE,
+            angle: p.angle,
+            scale: p.scale,
+            tint: render::Tint(p.tint),
             mirror_x: p.sprite & 0x40000 != 0,
         };
         if !sprite.offscreen(w, h) {

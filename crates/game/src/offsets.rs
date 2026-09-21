@@ -227,7 +227,10 @@ pub const GAME_RUNTIME_WORLD_ROOT: usize = 0x8;
 pub const COLLISION_LAYER_MISSILE: u32 = 0xF;
 pub const DROP_SKY_Y: i32 = -0x00D0_0000;
 pub const LUA_ACTOR_MAGIC: u32 = 0x774B_4C41;
-pub const LUA_ACTOR_SIZE: usize = 0x140;
+/// Grown from 0x140 to make room for the GPU renderer's presentation state.
+/// The allocation is ours (`spawn_lua_actor` mallocs and zeroes it), so this
+/// is safe to extend; nothing in WA reads past ACTOR_MAGIC.
+pub const LUA_ACTOR_SIZE: usize = 0x150;
 pub const ACTOR_MAGIC: usize = 0xFC;
 pub const ACTOR_SPRITE: usize = 0x100;
 pub const ACTOR_PHASE: usize = 0x104;
@@ -266,6 +269,18 @@ pub const ACTOR_FEET_Y: usize = 0x134;
 pub const ACTOR_CONTACT: usize = 0x138;
 /// Lua brain id (`0` = spawn-table sugar). Last dword of `LUA_ACTOR_SIZE`.
 pub const ACTOR_BRAIN: usize = 0x13C;
+/// Presentation state for the GPU renderer, in the actor struct rather than a
+/// side table keyed by handle: `actor_free` recycles the address, so a side
+/// table that is not pruned would hand a freshly spawned actor a dead one's
+/// rotation. Struct fields die with the object. Nothing in the simulation
+/// reads these, so lockstep safety is by construction rather than discipline.
+/// Degrees clockwise, 16.16 fixed.
+pub const ACTOR_ANGLE: usize = 0x140;
+/// 16.16 fixed; 0x10000 is the sheet's native size. Initialised at spawn, so
+/// a zeroed allocation never means "scale 0".
+pub const ACTOR_SCALE: usize = 0x144;
+/// Premultiplied D3DCOLOR. Alpha 0 is additive, not invisible.
+pub const ACTOR_TINT: usize = 0x148;
 pub const SHARED_WORLD_ROOT: u32 = 0x14;
 pub const GAME_WORLD_LANDSCAPE: usize = 0x20;
 pub const GAME_WORLD_WATER_LEVEL: usize = 0x5E0;

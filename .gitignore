@@ -48,3 +48,6 @@ tools/
 WA.exe
 gfx.dir
 sprites.dat
+
+# Preview renders for review; never committed.
+tmp/

@@ -91,6 +91,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         move_body: native_move,
         advance: native_advance,
         set_frame: native_set_frame,
+        set_gfx: native_set_gfx,
         spawn: native_spawn,
         list_actors: native_list_actors,
         list_worms: native_list_worms,
@@ -440,6 +441,9 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         return Err("malloc failed".into());
     }
     std::ptr::write_bytes(this, 0, LUA_ACTOR_SIZE);
+    // A zeroed allocation would otherwise mean "scale 0", i.e. invisible.
+    write_i32(this, ACTOR_SCALE, 0x1_0000);
+    write_i32(this, ACTOR_TINT, 0xFFFF_FFFFu32 as i32);
 
     let parent = physics_parent(owner).unwrap_or(owner);
     let ctor: WorldCtorFn = std::mem::transmute(rb(WORLD_ENTITY_CTOR) as usize);
@@ -762,7 +766,7 @@ unsafe fn blit(this: *mut u8) {
             0
         };
     let anim = read_i32(this, ACTOR_PHASE) as u32;
-    draw_sprite_local(rq, 0x0005_0001, blit_x, blit_y, sprite, anim);
+    draw_sprite_local(rq, 0x0005_0001, blit_x, blit_y, sprite, anim, this);
 }
 
 #[allow(dead_code)]
@@ -774,7 +778,8 @@ pub(crate) unsafe fn enqueue_sprite(world: *mut u8, x: i32, y: i32, sprite: u32,
     if rq.is_null() {
         return;
     }
-    draw_sprite_local(rq, 0x0005_0001, x, y, sprite, anim);
+    // No actor: a bare enqueue carries no presentation state.
+    draw_sprite_local(rq, 0x0005_0001, x, y, sprite, anim, std::ptr::null_mut());
 }
 
 unsafe fn apply_gravity(this: *mut u8) {
@@ -896,6 +901,25 @@ fn native_look(handle: u32, id: i32, delta: u32, w: i32, h: i32) {
 /// `(phase * frames) >> 16`, which is the mapping overlay_frame uses, so this
 /// inverts it. Lets one multi-frame sheet stand in for many sprites -- baked
 /// rotations cost a slot each, frames of one sheet cost nothing.
+/// Presentation state for the GPU renderer: rotation, scale and tint.
+///
+/// Writes only into our own actor struct and is read only by the renderer, so
+/// it cannot reach the simulation and cannot desync a lockstep game. An actor
+/// on the palette path ignores all of it.
+fn native_set_gfx(handle: u32, angle: f32, scale: f32, tint: u32) {
+    let this = handle as *mut u8;
+    unsafe {
+        if !is_actor(this) || read_i32(this, ACTOR_DEAD) != 0 {
+            return;
+        }
+        let fixed = |v: f32| (v * 65536.0) as i32;
+        write_i32(this, ACTOR_ANGLE, fixed(angle));
+        // Guard against a pack asking for an invisible or absurd sprite.
+        write_i32(this, ACTOR_SCALE, fixed(scale.clamp(0.01, 64.0)));
+        write_i32(this, ACTOR_TINT, tint as i32);
+    }
+}
+
 fn native_set_frame(handle: u32, frame: i32) {
     let this = handle as *mut u8;
     unsafe {
@@ -1189,14 +1213,22 @@ unsafe fn try_move(this: *mut u8, x: i32, y: i32) -> u32 {
     ret
 }
 
-unsafe fn draw_sprite_local(queue: *mut u8, layer: u32, x: i32, y: i32, sprite: u32, anim: u32) {
+unsafe fn draw_sprite_local(
+    queue: *mut u8,
+    layer: u32,
+    x: i32,
+    y: i32,
+    sprite: u32,
+    anim: u32,
+    actor: *mut u8,
+) {
     // The GPU renderer draws its own sprites as quads after WA's composite, so
     // they must not also be queued: a queued copy would be drawn by WA in
     // palette colour underneath ours, and would keep occupying one of the 223
     // shared sprite slots the GPU path exists to escape. Intercepting here
     // rather than in `blit` catches every producer -- blit, enqueue_sprite,
     // and anything added later -- in one place.
-    if crate::gpu::intercept(layer, x, y, sprite, anim) {
+    if crate::gpu::intercept(layer, x, y, sprite, anim, actor) {
         return;
     }
     let f = rb(RQ_DRAW_SPRITE_LOCAL) as u32;

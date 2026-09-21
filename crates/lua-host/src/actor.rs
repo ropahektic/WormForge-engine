@@ -43,6 +43,8 @@ pub struct ActorNative {
     pub explode: fn(handle: u32, damage: i32, explosion_id: i32, below: bool),
     /// Hold the actor on one frame of its current sheet.
     pub set_frame: fn(handle: u32, frame: i32),
+    /// GPU renderer presentation: angle in degrees, scale, premultiplied tint.
+    pub set_gfx: fn(handle: u32, angle: f32, scale: f32, tint: u32),
     pub despawn: fn(handle: u32),
     pub in_water: fn(handle: u32) -> bool,
     pub on_feet: fn(handle: u32) -> bool,
@@ -87,6 +89,7 @@ impl Default for ActorNative {
         Self {
             explode: |_, _, _, _| {},
             despawn: |_| {},
+            set_gfx: |_, _, _, _| {},
             in_water: |_| false,
             on_feet: |_| false,
             gravity: |_| {},
@@ -501,6 +504,29 @@ impl UserData for ActorHandle {
             advance(this.0);
             Ok(())
         });
+        // One method rather than four setters: this file is edited often
+        // upstream, so the fork keeps its footprint here small. Packs get
+        // a:angle/scale/tint/blend as sugar from the Lua prelude.
+        methods.add_method("gfx", |_, this, spec: Table| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            let angle = spec.get::<Option<f32>>("angle")?.unwrap_or(0.0);
+            let scale = spec.get::<Option<f32>>("scale")?.unwrap_or(1.0);
+            let rgb = spec.get::<Option<u32>>("tint")?.unwrap_or(0x00FF_FFFF) & 0x00FF_FFFF;
+            // Premultiplied alpha 0 IS additive under the renderer's blend
+            // state, so "add" needs no second pipeline and can share a batch
+            // with opaque sprites.
+            let additive = matches!(
+                spec.get::<Option<String>>("blend")?.as_deref(),
+                Some("add") | Some("additive")
+            );
+            let tint = if additive { rgb } else { 0xFF00_0000 | rgb };
+            if let Some(set) = native_set_gfx() {
+                set(this.0, angle, scale, tint);
+            }
+            Ok(())
+        });
         methods.add_method("frame", |_, this, frame: i32| {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
@@ -790,6 +816,10 @@ pub fn native_resolve_sprite() -> Option<fn(&str) -> Option<(i32, u32, i32, i32)
 
 pub fn native_land_solid() -> Option<fn(i32, i32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_solid)
+}
+
+pub fn native_set_gfx() -> Option<fn(u32, f32, f32, u32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.set_gfx)
 }
 
 pub fn native_set_frame() -> Option<fn(u32, i32)> {
