@@ -49,9 +49,19 @@ local BOUNCE = 0.55 -- speed kept across a bounce
 local MAX_STEPS = 6 -- collision sub-steps per frame, at most
 local TRAIL_EVERY = 2
 local TRAIL_LIFE = 24
-local BURST = 30 -- sparks in the detonation ring
-local BURST_LIFE = 40
-local BURST_SPEED = 2.6
+local TRAIL_SIZE = 0.9
+
+-- The burst is meant to be looked at, not to punctuate. Big, slow and long:
+-- the sparks drift rather than fly, swell as they go, and hold full
+-- brightness through the first half of their life before fading out.
+-- Few and large rather than many and small: at this size the blobs are wider
+-- than the gaps between them for most of the expansion, so a denser ring
+-- merges into one bloom instead of reading as separate pieces.
+local BURST = 12 -- sparks in the detonation ring
+local BURST_LIFE = 120
+local BURST_SPEED = 1.1
+local BURST_SIZE = 3.4
+local BURST_HOLD = 0.45 -- fraction of the life spent at full brightness
 
 local state = {}
 
@@ -177,17 +187,29 @@ local function fly(a)
   end
 end
 
-local function spark(owner, x, y, vx, vy, h, life, size, falls)
-  wa.actors.spawn({
+-- One additive spark. Takes a table because the trail and the burst want
+-- genuinely different motion: the trail is small, quick and shrinking; the
+-- burst is large, slow and swelling.
+--
+--   hold   fraction of the life held at full brightness before the fade
+--   grow   swell over the life instead of shrinking
+--   falls  subject to gravity
+local function spark(spec)
+  local life = spec.life
+  local hold = spec.hold or 0.0
+  local size = spec.size
+  local h = spec.hue
+  local grow, falls = spec.grow, spec.falls
+  local a = wa.actors.spawn({
     sprite = SPARK,
-    x = x,
-    y = y,
-    vx = vx,
-    vy = vy,
+    x = spec.x,
+    y = spec.y,
+    vx = spec.vx,
+    vy = spec.vy,
     gravity = false, -- ticked by hand below, like the sentry's casings
     collide = false,
     origin = "center",
-    owner = owner,
+    owner = spec.owner,
     kind = "colourtest_spark",
     on = (function()
       local t = 0
@@ -202,16 +224,32 @@ local function spark(owner, x, y, vx, vy, h, life, size, falls)
         end
         p:move({ terrain = false, worms = false })
         local k = 1 - t / life
+        -- Full brightness until the hold is used up, then a square fade.
+        local b = k
+        if hold > 0 then
+          b = math.min(1.0, k / (1.0 - hold))
+        end
         -- Additive has no alpha to lower -- premultiplied alpha 0 IS the
         -- blend mode -- so fading means walking the tint down to black.
         -- tint() keeps the blend mode that blend() set at spawn, and this is
         -- the whole reason those two are separate calls.
-        p:tint(hue(h, k * k))
-        p:scale(size * (0.35 + 0.65 * k))
+        p:tint(hue(h, b * b))
+        if grow then
+          -- Swells, but gently: growing as fast as the ring expands would
+          -- keep the pieces touching the whole way out.
+          p:scale(size * (0.60 + 0.50 * (1 - k)))
+        else
+          p:scale(size * (0.35 + 0.65 * k))
+        end
       end
     end)(),
   })
-  return true
+  -- Set once, here, and never touched again: an actor defaults to ordinary
+  -- alpha blending and to sitting BEHIND terrain, so without this the sparks
+  -- would cover what they are meant to brighten and then be buried by the
+  -- landscape. Every later frame calls only tint() and scale(), and neither
+  -- of those disturbs the blend mode or the depth.
+  a:gfx({ blend = "add", depth = IN_FRONT_OF_TERRAIN })
 end
 
 local function detonate(a, s)
@@ -222,17 +260,21 @@ local function detonate(a, s)
     for i = 0, BURST - 1 do
       local ang = math.rad(i * 360 / BURST)
       local speed = BURST_SPEED * (0.55 + 0.45 * ((i % 5) / 4))
-      spark(
-        s.owner,
-        x,
-        y,
-        math.floor(math.cos(ang) * speed * PX),
-        math.floor(math.sin(ang) * speed * PX),
-        i * 360 // BURST,
-        BURST_LIFE,
-        1.4,
-        true
-      )
+      spark({
+        owner = s.owner,
+        x = x,
+        y = y,
+        vx = math.floor(math.cos(ang) * speed * PX),
+        vy = math.floor(math.sin(ang) * speed * PX),
+        hue = i * 360 // BURST,
+        life = BURST_LIFE,
+        size = BURST_SIZE,
+        hold = BURST_HOLD,
+        grow = true,
+        -- No gravity: over two and a half seconds it would turn a slow bloom
+        -- into a fountain, and the drift is the part worth watching.
+        falls = false,
+      })
     end
   end
   if s.halo then
@@ -272,7 +314,16 @@ local function brain(a)
   end
 
   if s.t % TRAIL_EVERY == 0 and alive(s.owner) then
-    spark(s.owner, a.x, a.y, a.vx // 6, a.vy // 6, s.hue, TRAIL_LIFE, 0.9, false)
+    spark({
+      owner = s.owner,
+      x = a.x,
+      y = a.y,
+      vx = a.vx // 6,
+      vy = a.vy // 6,
+      hue = s.hue,
+      life = TRAIL_LIFE,
+      size = TRAIL_SIZE,
+    })
   end
 
   if a:in_water() then
