@@ -183,7 +183,7 @@ mod tests {
         assert_eq!(claim.slot, StockWeapon::Bazooka);
         assert_eq!(claim.params.copy_from, Some(StockWeapon::Mine));
         assert_ne!(claim.params.on_fire_id, 0);
-        assert_eq!(claim.params.extra_sheets.len(), 79);
+        assert_eq!(claim.params.extra_sheets.len(), 80);
         assert_eq!(
             claim.params.truecolor_prefix.as_deref(),
             Some("sprites/turret_")

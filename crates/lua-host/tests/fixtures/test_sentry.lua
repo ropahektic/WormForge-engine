@@ -22,6 +22,9 @@ return function(load_pack)
       end
     end },
     actors = { spawn = function(s)
+      if s.kind == "casing" then
+        return {}          -- cosmetic shell ejection, not a fired round
+      end
       if s.kind ~= "sentry" then
         assert(type(s.x) == "number" and type(s.y) == "number")
         assert(s.x < 300 * PX, "worm is hit before terrain behind it")

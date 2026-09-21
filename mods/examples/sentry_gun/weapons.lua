@@ -34,6 +34,21 @@ local MUZZLE_OUT  = 11     -- pixels from the pivot along the bore
 -- which is what the original rolled for at random.
 local SPREAD = { 0.0, 1.5, -1.0, 2.0, -2.0, 1.0, -1.5, 0.5 }
 
+-- PX ejects its shell casing (sprite 115, WA's stock "uzicase") on every shot:
+-- perpendicular to the barrel, kicked out to whichever side the turret is
+-- currently facing, with a small random angle and speed, gravity, no bounce,
+-- gone after 100 frames. tools/bake_sentry.py has no equivalent art, so
+-- sprites/casing is the native uzicase.spr frames (WA's own Gfx0), extracted
+-- and black-keyed exactly like the turret's own key_black() convention,
+-- driven the same way every other multi-frame sheet in this pack is.
+local CASING        = "sprites/casing"
+local CASING_FRAMES = 16
+local CASING_LIFE   = 100    -- PX SetLifeTime(100)
+-- Lockstep substitutes for PX's RandomFloat(-0.3, 0.3) rad (~+-17 deg) and
+-- RandomInt-free RandomFloat(2.0, 3.0) speed.
+local CASING_JITTER = { -15, 9, -6, 15, -9, 3, -12, 12 }
+local CASING_SPEED  = { 2.0, 2.6, 2.2, 3.0, 2.4, 2.8, 2.1, 2.9 }
+
 local state = {}
 local active_team = nil   -- team currently taking its turn; turrets hold fire
 
@@ -58,7 +73,7 @@ local IMPACT = "sprites/impact.png"
 
 -- Pack sprites are installed at gfx init from this list only. A sprite missing
 -- from it does not exist at runtime, whatever a:look() asks for later.
-local SPRITES = { IMPACT }
+local SPRITES = { IMPACT, CASING }
 for t = 1, 6 do
   for pose = 0, 2 do
     for chunk = 0, math.ceil(STEPS / PER_SHEET) - 1 do
@@ -178,6 +193,10 @@ local function start_firing(a, s)
   if s.firing then return end
   s.firing = true
   s.anim = 0
+  -- PX zeroes ShootTimer the instant firing (re)starts, guaranteeing the
+  -- first round of a burst fires this same tick rather than waiting out
+  -- whatever cooldown happened to be left over from before.
+  s.cooldown = 0
   s.fire_sound = 35
   a:sound("sounds/sentryfireloop.wav")
 end
@@ -220,6 +239,41 @@ local function fire(a, s)
   local reach = SENSOR_PX * PX
   local ex = mx + math.floor(dx * reach)
   local ey = my + math.floor(dy * reach)
+
+  -- Shell ejection: perpendicular to the barrel, kicked to whichever side
+  -- the turret currently faces (s.side, PX's TurretSide), a fixed pattern
+  -- standing in for PX's random jitter and speed. Cosmetic, so it fires even
+  -- on a shot the self-blast check below is about to cancel.
+  local jitter = CASING_JITTER[(s.shots % #CASING_JITTER) + 1]
+  local eject_rad = rad + math.rad(90 * s.side + jitter)
+  local edx, edy = math.sin(eject_rad), math.cos(eject_rad)
+  local speed = CASING_SPEED[(s.shots % #CASING_SPEED) + 1]
+  wa.actors.spawn({
+    sprite = CASING,
+    x = a.x,
+    y = a.y - MUZZLE_UP * PX,
+    vx = math.floor(edx * speed * PX),
+    vy = math.floor(edy * speed * PX),
+    gravity = false,
+    collide = false,
+    owner = s.owner,
+    kind = "casing",
+    on = (function()
+      local life = CASING_LIFE
+      local spin = 0
+      return function(c)
+        life = life - 1
+        if life <= 0 then
+          c:despawn()
+          return
+        end
+        c:gravity()
+        c:move({ terrain = false, worms = false })
+        spin = (spin + 1) % CASING_FRAMES
+        c:frame(spin)
+      end
+    end)(),
+  })
 
   -- Terrain stops the round; a worm standing in front of that stops it sooner.
   local hit = wa.land.trace(mx, my, ex, ey)
@@ -355,7 +409,13 @@ local function think(a, s)
   if s.fire_sound > 0 then s.fire_sound = s.fire_sound - 1 end
 
   local aligned = target and angle_gap(s.angle, want) <= AIM_TOLERANCE
-  update_servo(a, s, target ~= nil and not aligned)
+  -- PX only starts the "long rotation" sound once the remaining turn is at
+  -- least double the rotation speed (a 3 degree gap at ROT_ACTIVE): the
+  -- StartRotatingSound()/StopRotatingSound() gate is `speed >= 2*RotationSpeed`,
+  -- not "not yet aligned" -- aligned uses AIM_TOLERANCE for a different thing
+  -- (whether to fire), and reusing it here started the servo too eagerly.
+  local long_rotation = target ~= nil and angle_gap(s.angle, want) >= 2 * ROT_ACTIVE
+  update_servo(a, s, long_rotation)
 
   -- PX latches into a firing state once the target is in its sights and keeps
   -- firing until it loses the target, runs dry or is disabled. Re-testing the
