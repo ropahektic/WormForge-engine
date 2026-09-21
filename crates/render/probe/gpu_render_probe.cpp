@@ -36,7 +36,7 @@ const char* current = "";
     std::printf("  FAIL %s:%d  %s\n", current, __LINE__, #x); \
     failures++; return; } } while (0)
 
-const UINT W = 256, H = 128;
+const UINT W = 1280, H = 800;   // WA's largest real surface
 const UINT ATLAS = 64;
 
 struct Vertex {                 // must match crates/render/src/geom.rs

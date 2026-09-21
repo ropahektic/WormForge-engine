@@ -140,12 +140,13 @@ full-surface 256x128 mask upload every frame — the cost is fixed per-frame
 work (the state block and the upload), not sprite count, and the whole thing
 is ~1% of a 20 ms budget.
 
-So the dirty-rect optimisation is **deferred, not dropped**. It should be
-reconsidered only if a real 640x480 or 1280x800 surface changes the picture —
-this probe runs at 256x128, so the mask upload here is 32 KB against 1 MB at
-1280x800. Re-measure at full size before assuming either way. What this does
-establish is that per-sprite cost is not the constraint, so nothing about the
-draw path needs redesigning for throughput.
+**Re-measured at 1280x800**, WA's largest real surface and 31x the mask
+pixels, the cost moves from 0.22 ms to 0.30 ms — about 1.5% of a 20 ms frame.
+So the dirty-rect optimisation is **dropped, not deferred**: a full-surface
+upload every frame is already far below the noise floor, and the added
+complexity of tracking sprite bounds would buy nothing. Per-sprite cost is not
+the constraint either, so nothing in the draw path needs redesigning for
+throughput.
 
 ## What is proven, and what S1 still needs
 
@@ -164,3 +165,54 @@ Also still open and worth an hour before any M2 decision: a histogram of
 **kind-3 (callback) queue commands**, which `truecolor.rs` already bails the
 whole frame on. If they appear in most frames, a world renderer is impossible
 regardless of how well the sprite renderer works.
+
+---
+
+# Queue census — measured, in-game
+
+15,600 frames of real play, including chat opened and closed and a range of
+WormForge weapons:
+
+```
+frames containing a kind-3 callback: 0 (0.00%)
+frames containing an UNKNOWN command kind: 0
+peak 403/2048 commands (19.7% of arena)
+```
+
+Only seven command kinds occur at all:
+
+| kind | name | per frame |
+|-----:|------|----------:|
+| 5 | `sprite_local`   | 40.6 |
+| 2 | `textbox_local`  | 11.6 |
+| 1 | `bitmap_global`  | 10.7 |
+| 0 | `fill_rect`      |  2.0 |
+| 14 | `tiled_terrain` |  1.0 |
+| 6 | `sprite_offset`  |  1.0 |
+| 4 | `sprite_global`  |  0.9 |
+
+**S1 proceeds as designed.** Kind-3 is not rare, it is absent, so the split of
+WA's dispatch can be the source of the coverage mask and no terrain-texture
+redesign is needed. This was the fork's largest open design risk.
+
+**But the guard stays.** The earlier guess that the bail was "silently
+degrading truecolor" was wrong: it never fires, so it costs nothing today, and
+it is worth keeping precisely because it is free — a correct guard against a
+case this content does not produce.
+
+**The 2048 command limit is not a concern.** Peak 403 across the run, and the
+GPU renderer pushes the number *down* rather than up, because its sprites
+leave the queue entirely. Resolution barely affects it either: `tiled_terrain`
+costs exactly one command for the whole terrain however large it is, since
+commands are per-drawable rather than per-pixel.
+
+**Scope caveat:** the census sits inside `Queue::read` succeeding, so it
+measures in-game frames only. Frontend and map-editor frames are not
+represented. "0%" is a claim about gameplay, which is the renderer's scope,
+not about every frame WA draws.
+
+For M2, if it is ever revisited: a world renderer would need to handle seven
+command kinds rather than fifteen. That is a materially smaller job than
+assumed — though it does nothing about the other M2 objections (resolution
+independence breaking `world::pointer()`, screenshots reading the 8bpp
+framebuffer).
