@@ -169,7 +169,7 @@ mod tests {
     }
 
     #[test]
-    fn sentry_pack_loads_all_rotations_and_slot_scoped_worm_poses() {
+    fn sentry_pack_is_gpu_rendered_with_slot_scoped_worm_poses() {
         let _guard = lock_host();
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/sentry_gun");
         let pack = LoadedMod {
@@ -183,20 +183,31 @@ mod tests {
         assert_eq!(claim.slot, StockWeapon::Bazooka);
         assert_eq!(claim.params.copy_from, Some(StockWeapon::Mine));
         assert_ne!(claim.params.on_fire_id, 0);
-        assert_eq!(claim.params.extra_sheets.len(), 80);
-        assert_eq!(
-            claim.params.truecolor_prefix.as_deref(),
-            Some("sprites/turret_")
-        );
+        // The headline of the GPU renderer: the turret's 6 teams x 3 poses x
+        // 120 baked angles collapse to two sheets, rotated and tinted at draw
+        // time. 10 sheets total, none of them consuming a WA sprite slot.
+        assert_eq!(claim.params.extra_sheets.len(), 10);
+        assert_eq!(claim.params.gpu_prefix.as_deref(), Some("sprites/turret_"));
         assert_eq!(claim.params.depth, Some(0x190000));
         assert_eq!(
             claim.params.depth_prefix.as_deref(),
             Some("sprites/turret_")
         );
         assert_eq!(claim.params.worm_sprites.len(), 6);
+        let turret: Vec<&String> = claim
+            .params
+            .extra_sheets
+            .iter()
+            .map(|(p, _)| p)
+            .filter(|p| p.contains("turret_"))
+            .collect();
+        assert_eq!(turret.len(), 2, "one base sheet and one gun sheet: {turret:?}");
         for (path, sheet) in &claim.params.extra_sheets {
-            if path.contains("turret_t") {
-                assert_eq!(sheet.frames.len(), 30);
+            if path.contains("turret_base") {
+                assert_eq!(sheet.frames.len(), 1, "the tripod never animates");
+            } else if path.contains("turret_gun") {
+                // Idle plus the two firing frames; every angle is a rotation.
+                assert_eq!(sheet.frames.len(), 3);
             } else if path.contains("equip") {
                 assert_eq!(sheet.frames.len(), 10);
                 assert!(!sheet.looping);

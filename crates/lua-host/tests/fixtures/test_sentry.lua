@@ -2,6 +2,7 @@
 return function(load_pack)
   local PX = 0x10000
   local spec, turn, bodies, rounds = nil, nil, {}, 0
+  local guns = {}
   local owner = { id = 1, team = 1, x = 100 * PX, y = 100 * PX,
                   vx = 0, vy = 0, facing = 1 }
   -- Planted anchor sinks 8px; head is 25px above it.
@@ -25,6 +26,19 @@ return function(load_pack)
       if s.kind == "casing" then
         return {}          -- cosmetic shell ejection, not a fired round
       end
+      if s.kind == "sentry_gun" then
+        -- The rotating gun: display only, no physics. It records what the
+        -- brain asks of it so the test can assert on aim and team colour.
+        local g = s
+        function g:frame(i) self.selected_frame = i end
+        function g:gfx(spec)
+          self.angle = spec.angle
+          self.tint = spec.tint
+        end
+        function g:despawn() self.dead = true end
+        guns[#guns + 1] = g
+        return g
+      end
       if s.kind ~= "sentry" then
         assert(type(s.x) == "number" and type(s.y) == "number")
         assert(s.x < 300 * PX, "worm is hit before terrain behind it")
@@ -34,12 +48,8 @@ return function(load_pack)
       local a = s
       a.id = #bodies + 1
       function a:look(path) self.sprite = path end
-      function a:frame(i)
-        assert(i >= 0 and i < 30, "frame stays within its sheet chunk")
-        local pose, chunk = self.sprite:match("_p(%d+)_s(%d+)$")
-        assert(pose and chunk, "turret sheet names encode pose and chunk")
-        self.selected_frame = tonumber(pose) * 120 + tonumber(chunk) * 30 + i
-      end
+      function a:frame(i) self.selected_frame = i end
+      function a:gfx() end
       function a:gravity() end
       function a:move() return { land = not self.water } end
       function a:advance() end
@@ -59,7 +69,10 @@ return function(load_pack)
   local a = bodies[1]
   assert(a.x == owner.x and a.y == owner.y)
   assert(a.vx == 19661 and a.vy == -9830 and a.loop == false)
-  assert(a.selected_frame == 30, "initial right-facing frame")
+  local gun = guns[1]
+  assert(gun, "the turret spawns its rotating gun")
+  assert(a.sprite == nil or a.sprite:find("base"), "the turret actor is the tripod")
+  assert(gun.angle == 0, "facing right is 0 degrees of rotation")
   a.on(a) -- plants
   for _ = 1, 100 do a.on(a) end
   assert(rounds == 0, "PX acquisition gate ignores stationary worms")
@@ -68,17 +81,17 @@ return function(load_pack)
   for _ = 1, 59 do a.on(a) end
   assert(rounds == 0, "activation delay")
   a.on(a)
-  assert(rounds == 1 and a.selected_frame == 150, "first firing frame")
+  assert(rounds == 1 and gun.selected_frame == 1, "first firing frame")
   assert(terrain_hits == 1, "firing exercised the terrain-hit table")
   for _ = 1, 3 do a.on(a) end
-  assert(a.selected_frame == 270, "second firing frame")
+  assert(gun.selected_frame == 2, "second firing frame")
   blocked = true
   for _ = 1, 8 do a.on(a) end
-  assert(rounds == 1 and a.selected_frame < 120, "lost sight returns to idle art")
+  assert(rounds == 1 and gun.selected_frame == 0, "lost sight returns to idle art")
   blocked = false
   for _ = 1, 300 do a.on(a) end
   assert(rounds == 20, "exactly 20 rounds per turn")
-  assert(a.selected_frame < 120, "empty turret stops firing animation")
+  assert(gun.selected_frame == 0, "empty turret stops firing animation")
   assert(a.x == owner.x and a.y == owner.y + 8 * PX and a.vx == 0 and a.vy == 0)
   turn(enemy, wa.msg.START_TURN)
   for _ = 1, 100 do a.on(a) end
@@ -86,7 +99,8 @@ return function(load_pack)
   owner.facing = -1
   spec.on_fire({ worm = owner, vx = 80 * PX, vy = -80 * PX })
   local left = bodies[2]
-  assert(left.vx == -19661 and left.selected_frame == 90, "left placement")
+  assert(left.vx == -19661, "left placement")
+  assert(guns[2].angle == 180, "facing left is a half turn")
   left.water = true
   left.on(left)
   assert(left.dead, "unplanted sentry drowns")

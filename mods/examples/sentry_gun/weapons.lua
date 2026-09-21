@@ -19,8 +19,6 @@ local HIT_PX        = 10    -- how near a ray passes a worm to count as a hit
 local SELF_BLAST_PX = 24    -- never detonate a round closer than this
 local REQUIRE_MOTION = true -- PX only acquires walking/jumping/moving worms
 
-local STEPS = 120          -- rotation frames per team folder (3.00 deg)
-
 -- Rounds leave the muzzle, not the tripod. The anchor sits at the feet (the
 -- sprite's bottom opaque row), so a near-horizontal ray traced from there hits
 -- the ground the turret is standing on and every shot is cancelled as a
@@ -56,31 +54,44 @@ local function pad2(i)
   return string.format("%02d", i)
 end
 
-local function step_index(angle, steps)
-  return math.floor((angle % 360) / (360 / steps) + 0.5) % steps
-end
+-- Two sheets, drawn by the GPU renderer.
+--
+-- The palette bake needed 6 teams x 3 poses x 120 angles = 72 of the 223 WA
+-- sprite slots every pack shares, purely because WA's blitter can neither
+-- rotate nor tint. Both happen at draw time now, so the turret is:
+--
+--   turret_base   the tripod, upright, never rotates
+--   turret_gun    housing + barrel, greyscale, 3 poses
+--
+-- Greyscale is deliberate: the team colour is a vertex tint, and keeping the
+-- source art's own shading is what makes it read as tinted metal rather than
+-- a flat colour.
+local BASE = "sprites/turret_base"
+local GUN  = "sprites/turret_gun"
 
--- One folder per team. A frame folder is a single sprite slot holding every
--- rotation as a frame, and a:frame() holds the actor on one of them, so the
--- turret rotates without spending a slot per angle.
-local PER_SHEET = 30       -- frames per baked sheet; see tools/bake_sentry.py
-
-local function turret_sheet(team, pose, chunk)
-  return "sprites/turret_t" .. team .. "_p" .. pose .. "_s" .. chunk
+-- Tints for a greyscale housing, from PX's own render rather than its script.
+-- Sampling its red housing gives G/R about 0.39 and B/R about 0.28; the
+-- script's flat 0.15/0.65 reads far more saturated than PX actually looks.
+-- PX multiplied through a doubling colour mod, which a vertex tint cannot
+-- reproduce (it only ever scales down), so the dominant channel is pinned at
+-- 255 and the minors carry those ratios.
+local function tint(r, g, b)
+  return r * 0x10000 + g * 0x100 + b
 end
+local TEAM_TINT = {
+  tint(255, 100,  71),   -- 1 red
+  tint( 71, 100, 255),   -- 2 blue
+  tint( 71, 255, 100),   -- 3 green
+  tint(230, 230,  71),   -- 4 yellow
+  tint(230,  71, 230),   -- 5 magenta
+  tint( 71, 230, 230),   -- 6 cyan
+}
 
 local IMPACT = "sprites/impact.png"
 
 -- Pack sprites are installed at gfx init from this list only. A sprite missing
 -- from it does not exist at runtime, whatever a:look() asks for later.
-local SPRITES = { IMPACT, CASING }
-for t = 1, 6 do
-  for pose = 0, 2 do
-    for chunk = 0, math.ceil(STEPS / PER_SHEET) - 1 do
-      SPRITES[#SPRITES + 1] = turret_sheet(t, pose, chunk)
-    end
-  end
-end
+local SPRITES = { IMPACT, CASING, BASE, GUN }
 
 -- 0 = down, 90 = right: the source art faces right, and screen y grows down.
 local function angle_to(ax, ay, tx, ty)
@@ -438,24 +449,36 @@ local function think(a, s)
   end
 end
 
--- Selecting a frame does not touch the sprite or its collision platform, so
--- unlike a:look() this is safe to call while the turret is still falling.
+-- The tripod is the actor itself; the gun is a child actor drawn above it.
+--
+-- Keeping the tripod as the main actor means every bit of the planting,
+-- feet-platform and collision logic below is untouched by the renderer
+-- change: it still lands, sinks and sits on exactly the footprint it always
+-- did. The gun carries no physics at all -- it is positioned, rotated and
+-- tinted purely for display.
 local function sync(a, s)
+  local gun = s.gun
+  if not gun or gun.dead then
+    return
+  end
+  -- The gun's pivot is the housing centre, which the bake put at the frame
+  -- centre, so rotating the quad about its centre matches PX's AddSpriteEx.
+  gun.x, gun.y = a.x, a.y - MUZZLE_UP * PX
+  gun.vx, gun.vy = 0, 0
+
   local pose = s.firing and (1 + ((s.anim // 3) % 2)) or 0
-  local step = step_index(s.angle, STEPS)
-  local chunk = step // PER_SHEET
-  -- One sheet per (pose, chunk): a single sheet holding every pose and angle
-  -- was ~1.5MB and crashed WA's ProcessSprite on load.
-  if pose ~= s.pose or chunk ~= s.chunk then
-    a:look(turret_sheet(s.team, pose, chunk))
-    s.pose, s.chunk = pose, chunk
-    s.at = nil
+  if pose ~= s.pose then
+    gun:frame(pose)
+    s.pose = pose
   end
-  local i = step % PER_SHEET
-  if i ~= s.at then
-    a:frame(i)
-    s.at = i
-  end
+  -- s.angle is 0 down / 90 right; the art faces right and the renderer takes
+  -- clockwise screen degrees, so right (90) must map to 0.
+  -- Normalised to 0..360 so a logged angle is always comparable; -180 and
+  -- 180 are the same rotation but only one of them reads clearly.
+  gun:gfx({
+    angle = (90 - s.angle) % 360,
+    tint = TEAM_TINT[s.team] or TEAM_TINT[1],
+  })
 end
 
 local function brain(a, ev)
@@ -470,6 +493,9 @@ local function brain(a, ev)
     stop_firing(a, s)
     update_servo(a, s, false)
     if s.health <= 0 then
+      if s.gun and not s.gun.dead then
+        s.gun:despawn()
+      end
       state[a.id] = nil
       -- PX explodes at PosY-20 -- the turret's body, not its feet. explode()
       -- defaults to `below` the actor, which for a bottom-anchored sprite
@@ -497,6 +523,9 @@ local function brain(a, ev)
     a:advance()
 
     if a:in_water() then
+      if s.gun and not s.gun.dead then
+        s.gun:despawn()
+      end
       state[a.id] = nil
       a:despawn()
       return
@@ -535,7 +564,10 @@ wa.weapons.replace({
     sprite_columns = 1,
     depth = 0x190000,
     depth_prefix = "sprites/turret_",
-    truecolor_prefix = "sprites/turret_",
+    -- The GPU renderer takes these sheets: packed into a texture atlas,
+    -- drawn as rotated and tinted quads, occupying none of the 223 shared WA
+    -- sprite slots and never touching the map palette.
+    gpu_prefix = "sprites/turret_",
     -- NOT reserving palette slots. Twice now that has repainted the scene:
     -- PaletteContext's in_use flag does not mean "no pixels on screen carry
     -- this index", so writing a slot's RGB changes the colour of whatever
@@ -563,7 +595,7 @@ wa.weapons.replace({
     local idle = facing < 0 and 270 or 90
 
     local body = wa.actors.spawn({
-      sprite = turret_sheet(team, 0, 0),
+      sprite = BASE,
       x = worm.x,
       y = worm.y,
       -- Small placement nudge, independent of aim or charged power.
@@ -600,8 +632,25 @@ wa.weapons.replace({
       had_target = false,
       lost = false,
       seen = {},
-      at = nil,
+      pose = nil,
+      gun = nil,
     }
+    -- The gun rides along with no physics of its own: sync() places it every
+    -- frame from the tripod's position.
+    state[body.id].gun = wa.actors.spawn({
+      sprite = GUN,
+      x = worm.x,
+      y = worm.y - MUZZLE_UP * PX,
+      vx = 0, vy = 0,
+      gravity = false,
+      collide = false,
+      loop = false,
+      origin = "center",
+      owner = worm,
+      kind = "sentry_gun",
+      persist = true,
+      on = function() end,
+    })
     sync(body, state[body.id])
   end,
 })
