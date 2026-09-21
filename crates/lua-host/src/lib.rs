@@ -156,7 +156,7 @@ mod tests {
     fn sentry_placement_firing_and_reload_are_deterministic() {
         let lua = Lua::new();
         let test: mlua::Function = lua
-            .load(include_str!("../../../tools/test_sentry.lua"))
+            .load(include_str!("../tests/fixtures/test_sentry.lua"))
             .eval()
             .unwrap();
         let pack = lua
@@ -184,9 +184,15 @@ mod tests {
         assert_eq!(claim.params.copy_from, Some(StockWeapon::Mine));
         assert_ne!(claim.params.on_fire_id, 0);
         assert_eq!(claim.params.extra_sheets.len(), 79);
-        assert_eq!(claim.params.truecolor_prefix.as_deref(), Some("sprites/turret_"));
+        assert_eq!(
+            claim.params.truecolor_prefix.as_deref(),
+            Some("sprites/turret_")
+        );
         assert_eq!(claim.params.depth, Some(0x190000));
-        assert_eq!(claim.params.depth_prefix.as_deref(), Some("sprites/turret_"));
+        assert_eq!(
+            claim.params.depth_prefix.as_deref(),
+            Some("sprites/turret_")
+        );
         assert_eq!(claim.params.worm_sprites.len(), 6);
         for (path, sheet) in &claim.params.extra_sheets {
             if path.contains("turret_t") {

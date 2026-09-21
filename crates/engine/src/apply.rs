@@ -1,17 +1,17 @@
 use crate::actor;
-use crate::log_line;
 use crate::log::{log_error, panic_text, wa_directory};
+use crate::log_line;
 use crate::sprite::{self, SpriteRef};
 use crate::world;
-use game::offsets::{
-    GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY, GAME_WORLD_WEAPON_TABLE,
-};
+use game::offsets::{GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY, GAME_WORLD_WEAPON_TABLE};
 use game::weapon::{snapshot_table, write_entry, WeaponEntry};
 use lua_host::{mods_root_from, run_mods};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
-use weapons::{apply_params, discover_mods, filter_requirements, modset_fingerprint, ResolveResult};
+use weapons::{
+    apply_params, discover_mods, filter_requirements, modset_fingerprint, ResolveResult,
+};
 
 static NAMES: Mutex<Vec<CString>> = Mutex::new(Vec::new());
 
@@ -40,6 +40,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     }
 
     log_line("InitGraphic: installing custom sprites after LoadSprites");
+    #[cfg(debug_assertions)]
     sprite::report_layers(display);
     sprite::clear();
     world::clear_sounds();
@@ -100,8 +101,13 @@ pub fn on_gfx_ready(display: *mut u8) {
                 sprite::install_sheet(display, sheet)
             })) {
                 Ok(Ok(id)) => {
-                    if path.as_ref().is_some_and(|p| claim.params.truecolor_prefix
-                        .as_ref().is_some_and(|prefix| p.starts_with(prefix))) {
+                    if path.as_ref().is_some_and(|p| {
+                        claim
+                            .params
+                            .truecolor_prefix
+                            .as_ref()
+                            .is_some_and(|prefix| p.starts_with(prefix))
+                    }) {
                         crate::truecolor::register(id as u32, sheet.clone());
                     }
                     log_line(&format!("{} sprite slot {id}", claim.mod_id));
@@ -191,7 +197,9 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             .and_then(|g| g.as_ref().map(|p| p.display == display as usize))
             .unwrap_or(false);
         if !installed {
-            log_error("InitGraphic miss: sprites installed after palette commit (colours may be wrong)");
+            log_error(
+                "InitGraphic miss: sprites installed after palette commit (colours may be wrong)",
+            );
         }
     }
 
@@ -199,7 +207,9 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
     // back any slots the round change cleared rather than rebuilding them.
     let restored = sprite::reassert();
     if restored > 0 {
-        log_line(&format!("re-registered {restored} custom sprite slots for this round"));
+        log_line(&format!(
+            "re-registered {restored} custom sprite slots for this round"
+        ));
     }
 
     let snapshot = unsafe { snapshot_table(table) };
@@ -317,16 +327,8 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 .spawn
                 .as_ref()
                 .map(|_| " spawn".to_string())
-                .or_else(|| {
-                    (claim.params.on_click_id != 0).then(|| " on_click".to_string())
-                })
-                .or_else(|| {
-                    claim
-                        .params
-                        .actor
-                        .as_ref()
-                        .map(|a| format!(" actor {a}"))
-                })
+                .or_else(|| { (claim.params.on_click_id != 0).then(|| " on_click".to_string()) })
+                .or_else(|| { claim.params.actor.as_ref().map(|a| format!(" actor {a}")) })
                 .or_else(|| {
                     claim
                         .params

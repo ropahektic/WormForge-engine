@@ -62,8 +62,9 @@ Draw primitives belong in the DLL. Named FX (lightning, fire) belong in Lua. No 
 ## Lua surface
 
 - `wa.log`, `wa.weapons.replace` / `register`, `wa.actors.spawn` / `all` / `kind`
-- Actor: `x y vx vy facing owner kind`, `a:gravity` `a:move` `a:advance` `a:look` `a:explode` `a:despawn` `a:spawn` `a:sound` `a:in_water` `a:on_feet`
-- Worm: `id team alliance slot weapon kind visible turn hp x y vx vy`, `worm:carry` `worm:drop` `worm:equip` `worm:ammo` `worm:hurt`
+- Actor: `x y vx vy facing owner kind`, `a:gravity` `a:move` `a:advance` `a:look` `a:frame(i)` (hold one frame of the current sheet; zero-based, wraps) `a:explode` `a:despawn` `a:spawn` `a:sound` `a:in_water` `a:on_feet`
+- Worm: `id team alliance slot weapon kind facing visible turn hp x y vx vy`, `worm:carry` `worm:drop` `worm:equip` `worm:ammo` `worm:hurt`
+- Overlay params: `copy_from` (stock placement/ammo, Lua body via `on_fire`), `worm_sprites = { weaponlnk = …, wthrow = … }` slot-scoped equip/place poses (stock keeps anim/slope/flip), `depth` / `depth_prefix` draw order, `layer`, `reserve_prefix`, `truecolor_prefix` (RGBA on the D3D9 shader path). `ev.damage` on frame/missile events is the tick's falloff-adjusted blast damage.
 - `wa.worms.all` / `nearest`, `wa.crates` / `mines` / `missiles` / `oil` `.all()` (pos + `kind`)
 - `wa.land.solid` `trace`, `wa.world.sky` `water` `size` `view` `pointer` `keys`
 - `wa.sound.play`, `wa.on.gravity_before` / `gravity_after` / `missile_frame` / `worm_message` / `hurt` / `hud`, `wa.hud.line`

@@ -11,8 +11,8 @@ use re_catalog::Catalog;
 use std::{
     ffi::c_void,
     sync::{
-        Mutex,
         atomic::{AtomicPtr, Ordering},
+        Mutex,
     },
 };
 
@@ -110,14 +110,17 @@ unsafe extern "C" fn after_calc(
         // Phase is part of the key: without it only the first phase per state
         // was ever logged, which cannot show whether WA sweeps the animation
         // across its range or pins it at one frame.
-        let key = (worm as usize, slot, state, original, unsafe { *phase_out });
-        if let Ok(mut observed) = OBSERVED.lock() {
-            if observed.len() < 400 && !observed.contains(&key) {
-                observed.push(key);
-                log_line(&format!(
-                    "worm sprite draw worm={worm:p} slot={slot} state={state:#x} stock={original:#x} output={:#x} x={} y={} phase={:#x}",
-                    *sprite_out, *x_out, *y_out, *phase_out,
-                ));
+        #[cfg(debug_assertions)]
+        {
+            let key = (worm as usize, slot, state, original, unsafe { *phase_out });
+            if let Ok(mut observed) = OBSERVED.lock() {
+                if observed.len() < 400 && !observed.contains(&key) {
+                    observed.push(key);
+                    log_line(&format!(
+                        "worm sprite draw worm={worm:p} slot={slot} state={state:#x} stock={original:#x} output={:#x} x={} y={} phase={:#x}",
+                        *sprite_out, *x_out, *y_out, *phase_out,
+                    ));
+                }
             }
         }
     }

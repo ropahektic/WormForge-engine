@@ -20,10 +20,13 @@ an intact disabled sentry.
 The housing uses the owner's team colour. Rendering keeps base → barrel → housing
 order, including both frames from `sentry_gun_firing.png` and the separate muzzle
 flash on the first firing frame. Housing reflection happens before rotation, so
-diagonal aim stays aligned. Each team uses one 360-frame folder:
-120 idle angles, then 120 for each firing pose. The actor keeps the same feet when
-its pose changes. The ten-frame `wsgnlnk*` strips equip the gun and `wsgnbak*`
-play on placement. Stock animation still controls slopes, direction and timing.
+diagonal aim stays aligned. Each team gets 120 idle angles plus two firing poses,
+chunked into 30-frame sheets (4 per pose, 12 per team) — a single sheet holding
+every pose and angle is too large for WA's ProcessSprite. `a:frame(index)` holds
+the strip; `index % 30` is the angle inside the current sheet. The actor keeps the
+same feet when its pose changes. The ten-frame `wsgnlnk*` strips equip the gun and
+`wsgnbak*` play on placement. Stock animation still controls slopes, direction and
+timing.
 
 ## Engine additions
 
@@ -42,12 +45,8 @@ These additions retain `api_version = 1`; existing names and behavior remain.
 
 ## Rebuild and verify
 
-The included assets are ready to use. To regenerate them (requires Pillow):
-
-```sh
-python3 tools/bake_sentry.py /path/to/pxl_extracted/weapon_sentry_gun mods/examples/sentry_gun
-bash tools/build-win32.sh
-```
+The included assets are ready to use. The bake and DLL build helpers live on the
+author's machine and are not part of this repository.
 
 On Windows, run `cargo test --workspace`. Portable tests and the mocked Lua 5.4
 sentry scenario can also run on macOS; existing tests that dereference 32-bit game

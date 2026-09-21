@@ -235,10 +235,14 @@ unsafe fn raster(
         *(addr as *mut Grid) = g;
     }
     if !LAYERS_LOGGED.swap(true, Ordering::SeqCst) {
-        let bound: Vec<String> = (0..4)
-            .map(|i| format!("{:#x}", *((display + SURFACE + i * 4) as *const u32)))
-            .collect();
-        log_line(&format!("truecolor layers: {}", bound.join(" ")));
+        #[cfg(debug_assertions)]
+        log_line(&format!(
+            "truecolor layers: {:#x} {:#x} {:#x} {:#x}",
+            *((display + SURFACE) as *const u32),
+            *((display + SURFACE + 4) as *const u32),
+            *((display + SURFACE + 8) as *const u32),
+            *((display + SURFACE + 12) as *const u32),
+        ));
     }
     // Held at 1 so DisplayGfx cannot rebind layer_0 while the temporary target
     // is installed -- the dispatcher draws through display->vtable[19]
@@ -253,17 +257,16 @@ unsafe fn raster(
         }
     }
     if !GRID_LOGGED.swap(true, Ordering::SeqCst) {
-        let bound = *((display + SURFACE) as *const u32) as usize;
-        let after = *(surface as *const Grid);
+        #[cfg(debug_assertions)]
         log_line(&format!(
             "truecolor raster: bound {:#x} (expected {:#x}), data {:#x} (scratch {:#x}), stride {} w {} h {}",
-            bound,
+            *((display + SURFACE) as *const u32) as usize,
             surface,
-            after.data,
+            *(surface as *const u32).byte_add(8),
             pixels.as_ptr() as u32,
-            after.stride,
-            after.w,
-            after.h
+            (*(surface as *const Grid)).stride,
+            (*(surface as *const Grid)).w,
+            (*(surface as *const Grid)).h
         ));
     }
 }
@@ -330,7 +333,10 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) {
 
     // Composite our sprites' RGBA. They share one depth, so they sit together
     // in the ordered queue and the split below is a clean three-way cut.
-    for c in ordered[first..=last].iter().filter(|c| supported(**c, &sheets)) {
+    for c in ordered[first..=last]
+        .iter()
+        .filter(|c| supported(**c, &sheets))
+    {
         let op = c.word(4);
         let sheet = &sheets[&(op & 0xffff)];
         let Some(index) = composite::frame_index(c.word(5), sheet.frames.len(), sheet.looping)
@@ -369,11 +375,11 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) {
     // screen. Every command kind is handled, including the kind 1 bitmaps that
     // draw the weapon panel.
     q.draw(&ordered[..first], display, clip);
-    grid.copy_pixels(&mut f.underlay);          // scene without our sprites
+    grid.copy_pixels(&mut f.underlay); // scene without our sprites
     q.draw(&ordered[first..=last], display, clip);
-    grid.copy_pixels(&mut f.a);                 // ... with them
+    grid.copy_pixels(&mut f.a); // ... with them
     q.draw(&ordered[last + 1..], display, clip);
-    grid.copy_pixels(&mut f.b);                 // ... and everything nearer
+    grid.copy_pixels(&mut f.b); // ... and everything nearer
 
     // Anything a nearer draw changed is in front of us: drop our colour there.
     for i in 0..f.a.len() {

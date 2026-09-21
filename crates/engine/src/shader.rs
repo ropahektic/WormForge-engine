@@ -2,7 +2,9 @@
 //! The queue captures color/coverage independently of the shared palette. The
 //! final draw uses it only when upload succeeds; all failures retain stock art.
 
-use crate::{log_error, log_line, rebase::rb};
+#[cfg(debug_assertions)]
+use crate::log_line;
+use crate::{log_error, rebase::rb};
 use minhook::MinHook;
 use re_catalog::Catalog;
 use std::{
@@ -76,15 +78,18 @@ fn probe(renderer: usize) {
     }
     RENDERER.store(renderer, Ordering::SeqCst);
     PROBE.store(PROBE_READY, Ordering::SeqCst);
-    log_line(&format!(
-        "shader renderer {renderer:#x}: device {device:#x} surface {width}x{height}"
-    ));
-    // The palette texture is the whole reason this path is interesting: it is
-    // where an index becomes a colour, and it is per-frame GPU state rather
-    // than the shared CPU palette.
-    log_line(&format!(
-        "shader renderer textures: frame {frame:#x} palette {palette:#x} pixel_shader {shader:#x}"
-    ));
+    #[cfg(debug_assertions)]
+    {
+        log_line(&format!(
+            "shader renderer {renderer:#x}: device {device:#x} surface {width}x{height}"
+        ));
+        // The palette texture is the whole reason this path is interesting: it is
+        // where an index becomes a colour, and it is per-frame GPU state rather
+        // than the shared CPU palette.
+        log_line(&format!(
+            "shader renderer textures: frame {frame:#x} palette {palette:#x} pixel_shader {shader:#x}"
+        ));
+    }
 }
 
 unsafe extern "C" fn on_shader_present(renderer: usize) {
@@ -102,6 +107,7 @@ unsafe extern "C" fn on_shader_cleanup(renderer: usize) {
         crate::truecolor::release();
         RENDERER.store(0, Ordering::SeqCst);
         PROBE.store(PROBE_WAITING, Ordering::SeqCst);
+        #[cfg(debug_assertions)]
         log_line("shader renderer released its resources; re-probing on next present");
     }
 }
@@ -222,6 +228,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
             return Ok(());
         }
     }
+    #[cfg(debug_assertions)]
     log_line("shader renderer truecolor/lifecycle hooks installed");
     Ok(())
 }

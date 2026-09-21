@@ -84,19 +84,23 @@ mirroring/clipping, animation, overlapping sprites and foreground coverage whose
 color matches a sentinel. The sentry tests cover its current chunked sheets and
 placement/activation behavior.
 
-`bash tools/test-truecolor-win32.sh` builds a standalone D3D9 test executable.
-Run `target/truecolor-test/test.exe` on Windows or in a separate Wine test prefix.
+The local (not in this repository) `tools/test-truecolor-win32.sh` builds a
+standalone D3D9 test executable. Run `target/truecolor-test/test.exe` on Windows
+or in a separate Wine test prefix.
 It checks actual GPU readback for saturated color, partial alpha over the correct
 underlay, opaque black, unaffected stock pixels, restored device state and resource
 release/recreation across a device reset. It does not launch WA.
 
-`bash tools/build-win32.sh --offline` builds the DLL. After installation, restart
+`cargo build --release -p wk-lua --target i686-pc-windows-msvc` builds the DLL
+(local cross-compile helpers are not part of the repository). After installation,
+restart
 WA, select its Direct3D 9 shader renderer, then test a sentry on a soil-backed edge:
 terrain must hide the sunk feet while the exposed turret covers soil. Check blue
 and cyan teams, firing muzzle alpha, walking worms, ESC/chat, resolution changes,
-and a second match. `wkLua.log` should contain `render depth: sprite ... -> 0x190000`
-and `truecolor active: RGBA sprites with stock queue occlusion; palette unchanged`.
-A fallback logs a reason. Live game integration still requires this play test.
+and a second match. `wkLua.log` should contain `truecolor active: RGBA sprites
+with stock queue occlusion; palette unchanged` (debug builds additionally log
+depth and raster detail). A fallback logs a reason. Live game integration still
+requires this play test.
 
 The HLSL source and compiled header are both checked in. Regenerate the header with:
 

@@ -2,7 +2,9 @@
 //! This is the complete queue, unlike WorldRoot's RenderScene callback which
 //! can run before other producers. Layout/ABI checked against local WA.exe.
 
-use crate::{log_error, log_line, rebase::rb};
+#[cfg(debug_assertions)]
+use crate::log_line;
+use crate::{log_error, rebase::rb};
 use minhook::MinHook;
 use std::{
     ffi::c_void,
@@ -120,14 +122,6 @@ impl Queue {
             if let Some((_, depth)) = depths.iter().find(|(s, _)| *s == id) {
                 *((c.address + 4) as *mut u32) = *depth;
                 c.depth = *depth;
-                if let Ok(mut seen) = SEEN.lock() {
-                    if seen.len() < 100 && !seen.contains(&(id, *depth)) {
-                        seen.push((id, *depth));
-                        log_line(&format!(
-                            "render depth: sprite {id} -> {depth:#x} at dispatcher"
-                        ));
-                    }
-                }
             }
         }
     }
@@ -214,6 +208,7 @@ pub fn install() -> Result<(), String> {
     let trampoline = unsafe { MinHook::create_hook(addr, hook as *mut c_void) }
         .map_err(|e| format!("render queue hook: {e:?}"))?;
     ORIGINAL.store(trampoline, Ordering::SeqCst);
+    #[cfg(debug_assertions)]
     log_line("render queue depth/truecolor hook installed");
     Ok(())
 }

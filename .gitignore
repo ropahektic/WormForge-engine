@@ -33,6 +33,17 @@ user/
 logs/
 *.log
 
+# Personal agent/machine files and bytecode
+AGENTS.md
+__pycache__/
+*.pyc
+target/local-install-backups/
+
+# Local-only tooling: pack bake/extract scripts and the personal install
+# helper. Packs ship baked assets, and these reference machine-local paths
+# (PX extraction, GOG install dir), so they stay out of the repo.
+tools/
+
 # Game leftovers
 WA.exe
 gfx.dir

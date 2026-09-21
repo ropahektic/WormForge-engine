@@ -13,7 +13,9 @@
 //! FindNearestCached 0x541340) and put that slot in the cache so MapColor
 //! hits instead of returning 0xFFFFFFFF (white).
 
-use crate::{log_error, log_line};
+use crate::log_error;
+#[cfg(debug_assertions)]
+use crate::log_line;
 use crate::rebase::rb;
 use game::offsets::{
     CONSTRUCT_SPRITE, CUSTOM_SPRITE_SLOT_MAX, CUSTOM_SPRITE_SLOT_MIN, DISPLAY_GAME_LAYER,
@@ -70,6 +72,7 @@ const PAL_CACHE_COUNT: usize = 0x606;
 const PAL_CACHE: usize = 0x608;
 
 pub fn clear() {
+    #[cfg(debug_assertions)]
     PALETTE_DUMPED.store(false, std::sync::atomic::Ordering::SeqCst);
     if let Ok(mut g) = LOADED.lock() {
         for s in g.drain(..) {
@@ -198,6 +201,7 @@ pub fn set_reserve_colours(on: bool) {
         *g = on;
     }
 }
+#[cfg(debug_assertions)]
 static PALETTE_DUMPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Palette slots this pack owns: (rgb, index).
@@ -309,7 +313,6 @@ unsafe fn reserve_slot(ctx: *mut u8, rgb: u32) -> Option<u32> {
     None
 }
 
-
 // A map palette holds only what the map needed -- one measured live had 106
 // colours in use and exactly two blues, both desaturated slate -- so a
 // saturated tint has no neighbour and snaps to whatever the weighted metric
@@ -324,6 +327,7 @@ unsafe fn reserve_slot(ctx: *mut u8, rgb: u32) -> Option<u32> {
 // uploads the frame as indices plus a palette texture. See crates/engine/src/
 // shader.rs and the plan in .claude/plans/.
 
+#[cfg(debug_assertions)]
 unsafe fn dump_palette_once(ctx: *mut u8) {
     if PALETTE_DUMPED.swap(true, std::sync::atomic::Ordering::SeqCst) {
         return;
@@ -353,7 +357,9 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
             if ctx != 0 {
                 (ctx as *mut u8, want)
             } else {
-                log_error(&format!("layer {want} has no PaletteContext; using default"));
+                log_error(&format!(
+                    "layer {want} has no PaletteContext; using default"
+                ));
                 unsafe { palette_ctx(display) }
             }
         }
@@ -369,23 +375,34 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
 
     let free_before = unsafe { *(pal_ctx.add(PAL_FREE_COUNT) as *const i16) };
     let cache_n = unsafe { *(pal_ctx.add(PAL_CACHE_COUNT) as *const i16) };
+    #[cfg(not(debug_assertions))]
+    let _ = (free_before, cache_n);
 
     let mut sprite = Box::new(SpriteObj([0u8; 0x70]));
     let mut spr = spr.into_boxed_slice();
     unsafe {
+        #[cfg(debug_assertions)]
         dump_palette_once(pal_ctx);
         let reserve = FORCE_RESERVE.lock().map(|g| *g).unwrap_or(false);
         if reserve {
             let (exact, snapped) = reserve_palette_for(pal_ctx, &mut spr)?;
-            let held = RESERVED.lock().map(|g| g.len()).unwrap_or(0);
-            log_line(&format!(
-                "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} exact={exact} snapped={snapped} reserved_total={held}"
-            ));
+            #[cfg(debug_assertions)]
+            {
+                let held = RESERVED.lock().map(|g| g.len()).unwrap_or(0);
+                log_line(&format!(
+                    "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} exact={exact} snapped={snapped} reserved_total={held}"
+                ));
+            }
+            #[cfg(not(debug_assertions))]
+            let _ = (exact, snapped);
         } else {
             let snapped = quantize_to_map_palette(pal_ctx, &mut spr)?;
+            #[cfg(debug_assertions)]
             log_line(&format!(
                 "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} quantized={snapped}"
             ));
+            #[cfg(not(debug_assertions))]
+            let _ = snapped;
         }
         construct_sprite(sprite.0.as_mut_ptr(), cache);
         let ok = process_sprite(sprite.0.as_mut_ptr(), pal_ctx, spr.as_mut_ptr());
@@ -398,14 +415,17 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
         *ptrs.add(id as usize) = sprite.0.as_mut_ptr();
         *layers.add(id as usize) = layer;
         *vis.add(layer as usize) = (*vis.add(layer as usize)).wrapping_add(1);
-        let free_after = *(pal_ctx.add(PAL_FREE_COUNT) as *const i16);
-        log_line(&format!(
-            "installed .spr at sprite id {id} layer {layer} ({} frames loop={} delta={} free={})",
-            strip.frames.len(),
-            strip.looping,
-            strip.phase_delta(),
-            free_after
-        ));
+        #[cfg(debug_assertions)]
+        {
+            let free_after = *(pal_ctx.add(PAL_FREE_COUNT) as *const i16);
+            log_line(&format!(
+                "installed .spr at sprite id {id} layer {layer} ({} frames loop={} delta={} free={})",
+                strip.frames.len(),
+                strip.looping,
+                strip.phase_delta(),
+                free_after
+            ));
+        }
     }
 
     if let Ok(mut g) = LOADED.lock() {
@@ -423,6 +443,7 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
             d.retain(|(existing, _)| *existing != id);
             d.push((id, delta));
         }
+        #[cfg(debug_assertions)]
         log_line(&format!("sprite {id} GIF loop delta {delta}"));
     }
     if let Some(feet) = strip.feet_platform() {
@@ -430,6 +451,7 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
             g.retain(|(sid, _)| *sid != id);
             g.push((id, feet));
         }
+        #[cfg(debug_assertions)]
         log_line(&format!(
             "sprite {id} platform x0={} x1={} y={} (sheet {}x{})",
             feet.x0, feet.x1, feet.y, feet.width, feet.height
@@ -592,6 +614,7 @@ unsafe fn free_slot(display: *mut u8) -> Option<i32> {
 /// Sprites install on the first one found, which is always the game layer (3).
 /// Drawing behind terrain would mean installing on a lower layer instead, so
 /// this records which are even present before that can be attempted.
+#[cfg(debug_assertions)]
 pub fn report_layers(display: *mut u8) {
     if display.is_null() {
         return;
@@ -722,6 +745,12 @@ unsafe fn rgb_at(ctx: *mut u8, slot: u32) -> [u8; 3] {
 /// survive: a saturated blue in an earth-toned palette lands on whatever is
 /// closest, which was black. Knowing what the palette actually holds is the
 /// difference between choosing team colours and guessing them.
+/// What the live map palette actually holds, one line per match.
+///
+/// Colour-team choices need to know whether blues exist before picking team
+/// colours, and which families saturate the table. Gated like its only caller:
+/// a Release build neither runs nor compiles it.
+#[cfg(debug_assertions)]
 pub unsafe fn dump_palette(ctx: *mut u8) {
     if ctx.is_null() {
         return;
@@ -743,9 +772,17 @@ pub unsafe fn dump_palette(ctx: *mut u8) {
             let idx = if mx - mn < 24 {
                 0 // grey
             } else if r >= g && r >= b {
-                if g > b { 1 } else { 2 } // red/orange, red/magenta
+                if g > b {
+                    1
+                } else {
+                    2
+                } // red/orange, red/magenta
             } else if g >= r && g >= b {
-                if r > b { 3 } else { 4 } // yellow/green, green/cyan
+                if r > b {
+                    3
+                } else {
+                    4
+                } // yellow/green, green/cyan
             } else if r > g {
                 5 // magenta/violet
             } else {
