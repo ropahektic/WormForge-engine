@@ -42,14 +42,17 @@ local FUSE = 150 -- frames; 3 seconds at WA's 50 fps
 local DAMAGE = 45
 local BOOM_ID = 100
 
+local SIZE = 5.0 -- everything drawn at five times the original test scale
 local SPIN = 6.5 -- degrees per frame -- deliberately not a whole number
 local HUE_STEP = 5 -- degrees of hue per frame
 local RADIUS = 5 -- collision radius, pixels
 local BOUNCE = 0.55 -- speed kept across a bounce
 local MAX_STEPS = 6 -- collision sub-steps per frame, at most
-local TRAIL_EVERY = 2
-local TRAIL_LIFE = 24
-local TRAIL_SIZE = 0.9
+local TRAIL_EVERY = 8
+local TRAIL_LIFE = 40
+local TRAIL_SIZE = 0.9 * SIZE
+local TRAIL_HOLD = 0.30 -- fraction of the life spent at full brightness
+local HALO_SIZE = 1.5 -- base halo scale, before SIZE and the breathing term
 
 -- The burst is meant to be looked at, not to punctuate. Big, slow and long:
 -- the sparks drift rather than fly, swell as they go, and hold full
@@ -59,8 +62,8 @@ local TRAIL_SIZE = 0.9
 -- merges into one bloom instead of reading as separate pieces.
 local BURST = 12 -- sparks in the detonation ring
 local BURST_LIFE = 120
-local BURST_SPEED = 1.1
-local BURST_SIZE = 3.4
+local BURST_SPEED = 3.3 -- not scaled by SIZE: the ring must stay on screen
+local BURST_SIZE = 3.4 * SIZE
 local BURST_HOLD = 0.45 -- fraction of the life spent at full brightness
 
 local state = {}
@@ -310,7 +313,7 @@ local function brain(a)
   if s.halo then
     s.halo.x, s.halo.y = a.x, a.y
     s.halo:tint(hue(s.hue + 180, 1.0))
-    s.halo:scale(0.85 + 0.22 * math.sin(s.t * 0.19))
+    s.halo:scale(SIZE * (HALO_SIZE + 0.35 * math.sin(s.t * 0.19)))
   end
 
   if s.t % TRAIL_EVERY == 0 and alive(s.owner) then
@@ -323,6 +326,7 @@ local function brain(a)
       hue = s.hue,
       life = TRAIL_LIFE,
       size = TRAIL_SIZE,
+      hold = TRAIL_HOLD,
     })
   end
 
@@ -386,6 +390,7 @@ wa.weapons.replace({
     -- Drawn in front of terrain and left untinted: the prism sheet's own
     -- colours are the point, and a tint would multiply them away.
     orb:gfx({ depth = IN_FRONT_OF_TERRAIN })
+    orb:scale(SIZE)
 
     local halo = wa.actors.spawn({
       sprite = HALO,
