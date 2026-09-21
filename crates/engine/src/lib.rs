@@ -11,6 +11,7 @@ mod hurt;
 mod log;
 mod overlay;
 mod physics;
+mod queue_census;
 mod rebase;
 pub mod render_queue;
 pub mod shader;

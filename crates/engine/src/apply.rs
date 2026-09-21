@@ -47,6 +47,8 @@ pub fn on_gfx_ready(display: *mut u8) {
     actor::clear_claims();
     crate::worm_sprite::clear();
     crate::render_queue::clear_depths();
+    // Flush the previous match's queue census before its counters are reused.
+    crate::queue_census::finish();
     crate::truecolor::clear();
 
     let mods_dir = mods_root_from(&wa_directory());

@@ -163,6 +163,8 @@ unsafe extern "C" fn dispatch(base: usize, display: usize, clip: usize) {
     let capture = std::panic::catch_unwind(|| {
         if let Some(mut q) = Queue::read(base) {
             q.apply_depths();
+            // Measurement only, behind a marker file: see queue_census.rs.
+            crate::queue_census::observe(&q);
             crate::truecolor::capture(&q, display, clip);
         }
     });
