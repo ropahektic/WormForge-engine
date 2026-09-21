@@ -58,6 +58,8 @@ static ANNOUNCED: AtomicBool = AtomicBool::new(false);
 static RESOLVED_IDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static CAPTURE_LOGGED: AtomicBool = AtomicBool::new(false);
 static NO_SHADER_LOGGED: AtomicBool = AtomicBool::new(false);
+static MASK_LOGGED: AtomicBool = AtomicBool::new(false);
+static HIDDEN_LOGGED: Mutex<Vec<(i32, i32)>> = Mutex::new(Vec::new());
 static WARNED: AtomicBool = AtomicBool::new(false);
 
 static FRAME: Mutex<Option<Frame>> = Mutex::new(None);
@@ -147,6 +149,10 @@ pub fn clear() {
     }
     CAPTURE_LOGGED.store(false, Ordering::SeqCst);
     NO_SHADER_LOGGED.store(false, Ordering::SeqCst);
+    MASK_LOGGED.store(false, Ordering::SeqCst);
+    if let Ok(mut seen) = HIDDEN_LOGGED.lock() {
+        seen.clear();
+    }
     if let Ok(mut pending) = PENDING.lock() {
         pending.clear();
     }
@@ -252,12 +258,96 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize, cut_depth: u32) ->
     read(&mut frame.front);
 
     // Any pixel a nearer draw changed belongs to it, not to us.
+    let mut covered = 0usize;
     for i in 0..frame.mask.len() {
-        frame.mask[i] = if frame.behind[i] == frame.front[i] { 255 } else { 0 };
+        if frame.behind[i] == frame.front[i] {
+            frame.mask[i] = 255;
+        } else {
+            frame.mask[i] = 0;
+            covered += 1;
+        }
     }
+
+    // A sprite can be fully present, correctly transformed, and still
+    // invisible because the coverage mask zeroed every pixel it touches.
+    // That failure is indistinguishable from "not drawn at all" on screen,
+    // so report it rather than leaving it to be guessed at: an occlusion
+    // problem and a pipeline problem need completely different fixes.
+    if !MASK_LOGGED.swap(true, Ordering::SeqCst) {
+        let total = frame.mask.len().max(1);
+        crate::log_line(&format!(
+            "gpu mask: {covered}/{total} pixels claimed by nearer draws \
+             ({:.1}% of the surface)",
+            100.0 * covered as f64 / total as f64
+        ));
+    }
+    report_hidden_sprites(frame);
     frame.valid = true;
     DREW.store(true, Ordering::SeqCst);
     true
+}
+
+/// Say so when a sprite is drawn but almost entirely masked away.
+///
+/// Once per sprite id per match. The threshold is deliberately high: partial
+/// occlusion is normal and expected -- the turret is meant to sit behind
+/// terrain -- but a sprite losing essentially all of itself is the signature
+/// of an occlusion bug rather than of scenery.
+fn report_hidden_sprites(frame: &Frame) {
+    const HIDDEN: f64 = 0.98;
+    let w = frame.width as i64;
+    let h = frame.height as i64;
+    for chunk in frame.vertices.chunks(render::VERTICES_PER_QUAD) {
+        let (mut x0, mut y0) = (i64::MAX, i64::MAX);
+        let (mut x1, mut y1) = (i64::MIN, i64::MIN);
+        for v in chunk {
+            x0 = x0.min(v.x as i64);
+            y0 = y0.min(v.y as i64);
+            x1 = x1.max(v.x as i64);
+            y1 = y1.max(v.y as i64);
+        }
+        let (cx0, cy0) = (x0.max(0), y0.max(0));
+        let (cx1, cy1) = (x1.min(w - 1), y1.min(h - 1));
+        if cx1 < cx0 || cy1 < cy0 {
+            continue;
+        }
+        let mut seen = 0usize;
+        let mut blocked = 0usize;
+        for y in cy0..=cy1 {
+            for x in cx0..=cx1 {
+                seen += 1;
+                if frame.mask[(y * w + x) as usize] == 0 {
+                    blocked += 1;
+                }
+            }
+        }
+        if seen == 0 {
+            continue;
+        }
+        let ratio = blocked as f64 / seen as f64;
+        if ratio < HIDDEN {
+            continue;
+        }
+        let key = (x0 as i32, y0 as i32);
+        let first = HIDDEN_LOGGED
+            .lock()
+            .map(|mut seen| {
+                if seen.contains(&key) {
+                    false
+                } else {
+                    seen.push(key);
+                    true
+                }
+            })
+            .unwrap_or(false);
+        if first {
+            crate::log_line(&format!(
+                "gpu mask: a sprite at ({x0},{y0})..({x1},{y1}) is {:.0}% \
+                 occluded by nearer stock draws -- it will look absent",
+                ratio * 100.0
+            ));
+        }
+    }
 }
 
 /// Draw the frame's sprites. Called after WA's fullscreen composite and
