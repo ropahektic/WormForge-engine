@@ -50,10 +50,16 @@ local function spawn_fx(sprite, x, y, owner)
   })
 end
 
-local function surround(origin, left, y, n)
+-- Takes the two values it needs, not the actor they came from.
+--
+-- This runs about twenty frames after the projectile that started the cut-in
+-- has already exploded, so reading `origin.x` / `origin.owner` here read a
+-- despawned actor: the owner came back nil and every spawn below was refused.
+-- Worse, when the freed handle happened to be non-null instead, WA linked the
+-- new entities to a parent that no longer existed and died frames later with
+-- an integer divide by zero deep inside its own animation tick.
+local function surround(mid, owner, left, y, n)
   local right = left + (n - 1) * STEP
-  local mid = origin.x
-  local owner = origin.owner
   local side = LETTER_W // 2 + GAP
   local up = LETTER_H // 2 + GAP
   spawn_fx("sprites/death", left - side, y, owner)
@@ -65,7 +71,7 @@ local function surround(origin, left, y, n)
   spawn_fx("sprites/burst", right + side, y - up, owner)
 end
 
-local function letter_brain(delay, last, origin, left, y, n, dest_x, dest_y, i)
+local function letter_brain(delay, last, mid, owner, left, y, n, dest_x, dest_y, i)
   local t = 0
   local shown = false
   local falling = false
@@ -92,7 +98,7 @@ local function letter_brain(delay, last, origin, left, y, n, dest_x, dest_y, i)
     end
     if last and not shown and age == 20 then
       shown = true
-      surround(origin, left, y, n)
+      surround(mid, owner, left, y, n)
     end
     if not falling then
       a.vx = 0
@@ -126,7 +132,11 @@ end
 
 local function write_word(origin)
   local n = #WORD
-  local left = origin.x - (n - 1) * STEP // 2
+  -- Read everything off the projectile NOW: the letters outlive it by a long
+  -- way, and an actor handle is only valid while its actor is.
+  local mid = origin.x
+  local owner = origin.owner
+  local left = mid - (n - 1) * STEP // 2
   local y = origin.y - 36 * PX
   local feet_y = y + LETTER_H // 2
   for i, ch in ipairs(WORD) do
@@ -141,8 +151,8 @@ local function write_word(origin)
       loop = false,
       collide = false,
       origin = "bottom",
-      owner = origin.owner,
-      on = letter_brain(10 + (i - 1) * LETTER_WAIT, i == n, origin, left, y, n, dest_x, feet_y, i),
+      owner = owner,
+      on = letter_brain(10 + (i - 1) * LETTER_WAIT, i == n, mid, owner, left, y, n, dest_x, feet_y, i),
     })
   end
 end
