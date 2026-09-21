@@ -42,6 +42,7 @@ pub fn install() -> Result<(), String> {
     actor::install(&catalog)?;
     crate::worm_sprite::install(&catalog)?;
     crate::shader::install(&catalog)?;
+    crate::render_queue::install()?;
     unsafe {
         MinHook::enable_all_hooks().map_err(|e| format!("MinHook enable: {e:?}"))?;
     }

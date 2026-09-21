@@ -329,10 +329,7 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     // Before the holding() gate: that is the worm-carry state, which is false
     // in ordinary play, so anything behind it never runs during a normal turn.
     if msg == MSG_RENDER_SCENE {
-        if let Some(world) = crate::hud::resolve_world_pub() {
-            crate::render_queue::dump_once(world);
-            crate::render_queue::apply_depths(world);
-        }
+        crate::truecolor::begin_frame();
     }
     if !holding() {
         return;

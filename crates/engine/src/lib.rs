@@ -13,6 +13,7 @@ mod log;
 mod physics;
 pub mod render_queue;
 pub mod shader;
+mod truecolor;
 mod rebase;
 mod sprite;
 mod version;

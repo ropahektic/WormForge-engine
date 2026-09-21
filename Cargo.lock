@@ -82,6 +82,7 @@ name = "engine"
 version = "0.1.0"
 dependencies = [
  "actors",
+ "cc",
  "game",
  "gfx",
  "lua-host",

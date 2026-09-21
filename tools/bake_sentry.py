@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Bake the standalone sentry pack from an extracted weapon_sentry_gun library.
 
-Each team has one sheet: 120 idle rotations followed by 120 rotations for
-each of the two firing frames. Layer order is base, barrel/muzzle, housing.
+Each team has 30-frame chunks: 120 idle rotations followed by 120 rotations for
+each of the two firing frames. Truecolor art is the default; --palette-art
+reproduces the older posterized ramp. Layer order is base, barrel/muzzle, housing.
 Worm equip and put-away sheets use the source wsgnlnk/wsgnbak sequences.
 Rotations use nearest-neighbour pixel sampling.
 
@@ -19,7 +20,6 @@ from PIL import Image
 # team index -> RGB multiplier, in WA's colour order. The original multiplied
 # by muted factors (0.65/0.15) which render dark; these are the pure channels,
 # so a greyscale housing recolours to full-brightness team colour.
-HIGHLIGHT_KNEE = 0.72   # luminance above which shading rolls toward white
 
 # Sprites are snapped to the map's palette, which holds only ~106 colours in a
 # live match and is mostly earth tones. A smooth ramp produced ~254 colours per
@@ -33,14 +33,56 @@ HIGHLIGHT_KNEE = 0.72   # luminance above which shading rolls toward white
 SHADES = 8
 FLOOR = 0.34
 
+TINT_GAIN = 2.0
+# Secondary channels, measured off PX's own render rather than taken from the
+# script. Sampling its red housing gives G/R 0.39 -> 0.47 and B/R 0.28 -> 0.39
+# from shadow to highlight; the script's 0.15 against 0.65 would give a flat
+# 0.23, which reads far more saturated than PX looks. The ratio RISING with
+# brightness is a roll toward white, so the highlight knee stays.
+# Secondary channels carry a warm bias -- PX's red holds more green than blue
+# at every brightness (112 vs 91 at the top, 60 vs 43 at the bottom), which is
+# what stops the housing reading as a flat primary. Values solved from those
+# samples: G/R 0.26 and B/R 0.18 before the highlight roll.
+MINOR = (0.22, 0.26, 0.18)
+# Two-dominant teams (yellow/magenta/cyan) sit lower so the pair still reads.
+MINOR_DUAL = 0.18
+HIGHLIGHT_KNEE = 0.55
+# Gentle. Solving PX's brightest sample (236,112,91) backwards gives a roll of
+# about 0.08; at 0.45 the highlights washed out to G/R 0.75, nowhere near it.
+HIGHLIGHT_STRENGTH = 0.08
+
+
+def _tint(dominant):
+    """Team factor from which channels are dominant, per PX's colour order."""
+    solo = len(dominant) == 1
+    return tuple(
+        (0.65 if solo else 0.55) if i in dominant
+        else (MINOR[i] if solo else MINOR_DUAL)
+        for i in range(3)
+    )
+
+
 TEAM_TINTS = {
-    1: (1.0, 0.0, 0.0),   # red
-    2: (0.0, 0.0, 1.0),   # blue
-    3: (0.0, 1.0, 0.0),   # green
-    4: (1.0, 1.0, 0.0),   # yellow
-    5: (1.0, 0.0, 1.0),   # magenta
-    6: (0.0, 1.0, 1.0),   # cyan
+    1: _tint({0}),        # red
+    2: _tint({2}),        # blue
+    3: _tint({1}),        # green
+    4: _tint({0, 1}),     # yellow
+    5: _tint({0, 2}),     # magenta
+    6: _tint({1, 2}),     # cyan
 }
+
+# PX applies these through a doubling colour mod -- SetColorMod(rgb, 6), which
+# multiplies the texture by the tint and then by two. That is why its factors
+# look dark on paper and bright on screen: red is 2*0.65 = 1.3x in R, clipping
+# to white in the highlights, while G and B keep 2*0.15 = 0.3x of the source
+# grey. Those surviving channels are the shading -- they are what makes PX's
+# housing read as tinted metal rather than a flat red shape.
+#
+# The pure-channel tints this replaced were a palette-era workaround: they
+# zeroed G and B so the ramp lived on one axis and stood the best chance of
+# surviving quantisation. With truecolor there is nothing to survive, and
+# zeroing those channels just throws the shading away.
+
 
 
 def glow_alpha(im):
@@ -146,14 +188,15 @@ def team_ramp(factor):
         t = k / (SHADES - 1)
         lum = FLOOR + t * (1.0 - FLOOR)
         hi = max(0.0, (t - HIGHLIGHT_KNEE) / (1.0 - HIGHLIGHT_KNEE))
+        _ = hi
         ramp.append(tuple(
-            min(255, int(round(255.0 * lum * (f + (1.0 - f) * hi))))
+            min(255, int(round(255.0 * TINT_GAIN * lum * f)))
             for f in (fr, fg, fb)
         ))
     return ramp
 
 
-def tint(im, factor):
+def tint(im, factor, palette_limited=False):
     """Recolour a greyscale part to a team colour, keeping its shading.
 
     A flat multiply (grey * pure channel) produces a ramp that lives on one
@@ -174,7 +217,17 @@ def tint(im, factor):
             if not a:
                 continue
             lum = (r + g + b) / 765.0
-            px[x, y] = ramp[min(SHADES - 1, int(round(lum * (SHADES - 1))))] + (a,)
+            if palette_limited:
+                rgb = ramp[min(SHADES - 1, int(round(lum * (SHADES - 1))))]
+            else:
+                # PX's doubling colour mod, 2 * texture * tint, with the
+                # highlights rolling toward white so the ratio climbs the way
+                # the measurement does instead of staying flat.
+                hi = HIGHLIGHT_STRENGTH * max(
+                    0.0, (lum - HIGHLIGHT_KNEE) / (1.0 - HIGHLIGHT_KNEE))
+                rgb = tuple(min(255, round(255 * TINT_GAIN * lum * (f + (1 - f) * hi)))
+                            for f in factor)
+            px[x, y] = rgb + (a,)
     return im
 
 
@@ -224,6 +277,8 @@ def main(argv):
     # 14 x 96x84). Slots are cheap now that angles are frames, so sheets are
     # split to stay in that range.
     parser.add_argument('--per-sheet', type=int, default=30)
+    parser.add_argument('--palette-art', action='store_true',
+                        help='reproduce the earlier posterized palette artwork')
     args = parser.parse_args(argv[1:])
     src, dst, steps = args.source, args.output, args.steps
     per_sheet = args.per_sheet
@@ -234,11 +289,12 @@ def main(argv):
     def load(n):
         return Image.open(os.path.join(files, n)).convert('RGBA')
 
-    base = posterize(load('sentry_base.png'))
+    prepare = posterize if args.palette_art else lambda im: im
+    base = prepare(load('sentry_base.png'))
     body = load('sentry_body.png')
-    barrel = posterize(load('sentry_gun.png'))
+    barrel = prepare(load('sentry_gun.png'))
     muzzle = glow_alpha(load('sentry_muzzle.png'))
-    firing = posterize(load('sentry_gun_firing.png'))
+    firing = prepare(load('sentry_gun_firing.png'))
     barrels = [barrel] + [firing.crop((0, y, 64, y + 64)) for y in (0, 64)]
 
     # The anchor is the lowest opaque row (origin="bottom"). The muzzle glow
@@ -287,7 +343,7 @@ def main(argv):
     # of them. Baked rotations used to cost a slot each, which capped the
     # turret at 28 angles; as frames they are practically free.
     for team in range(1, 7):
-        tinted = tint(body, TEAM_TINTS[team])
+        tinted = tint(body, TEAM_TINTS[team], args.palette_art)
         for pose, barrel_frame in enumerate(barrels):
             for i in range(steps):
                 chunk = i // per_sheet
@@ -315,7 +371,8 @@ def main(argv):
                 else:
                     housing = rot(housing, angle)
                 frame = over(frame, housing, *PIVOT)
-                snap_to(frame, team_ramp(TEAM_TINTS[team]) + grey_ramp())
+                if args.palette_art:
+                    snap_to(frame, team_ramp(TEAM_TINTS[team]) + grey_ramp())
                 clip_below_feet(frame)
                 frame.save(os.path.join(folder, 'frame%03d.png' % (i % per_sheet)))
     made += 6 * len(barrels) * ((steps + per_sheet - 1) // per_sheet)
@@ -354,7 +411,7 @@ def main(argv):
             with open(src_wav, 'rb') as f_in, open(os.path.join(snd_out, wav), 'wb') as f_out:
                 f_out.write(f_in.read())
     print('baked into %s' % sprites)
-    print('  turret 6 folders x %d frames = 6 slots (%.2f deg step)'
+    print('  turret 6 teams x %d frames (%.2f deg step)'
           % (steps * 3, 360.0 / steps))
     chunks = (steps + per_sheet - 1) // per_sheet
     print('  split into 6 teams x 3 poses x %d sheets of <=%d frames = %d slots'

@@ -6,6 +6,7 @@
 //! (`grenade`, `bazooka`, …) remain a fallback that borrows a WA sprite.
 
 mod gif_decode;
+pub mod composite;
 
 use std::io::Cursor;
 use std::path::Path;

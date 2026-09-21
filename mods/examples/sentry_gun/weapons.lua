@@ -459,6 +459,7 @@ wa.weapons.replace({
     sprite_columns = 1,
     depth = 0x190000,
     depth_prefix = "sprites/turret_",
+    truecolor_prefix = "sprites/turret_",
     -- NOT reserving palette slots. Twice now that has repainted the scene:
     -- PaletteContext's in_use flag does not mean "no pixels on screen carry
     -- this index", so writing a slot's RGB changes the colour of whatever

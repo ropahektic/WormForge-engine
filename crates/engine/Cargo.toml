@@ -13,3 +13,6 @@ minhook = { workspace = true }
 weapons = { path = "../weapons" }
 actors = { path = "../actors" }
 windows-sys = { workspace = true }
+
+[build-dependencies]
+cc = "1"

@@ -1,44 +1,23 @@
-//! WA's render queue: the depth every world draw is ordered by.
-//!
-//! Layout from wkFOW's RenderQueue.h, itself taken from openwa's
-//! render/queue.rs. The queue lives at GameWorld+0x524. Each entry is a dword
-//! array: cmd[0] is the command type, cmd[1] is its LAYER. The dispatcher
-//! sorts ascending by layer and walks from the highest index down, so
-//!
-//!     HIGH layer == drawn FIRST == furthest back
-//!     LOW  layer == drawn LAST  == on top
-//!
-//! Putting the sentry behind terrain but in front of the soil therefore means
-//! giving its sprite command a layer between the two:
-//!
-//!     terrain layer  <  sentry layer  <  soil layer
-//!
-//! This module only reads, to establish what those values actually are.
+//! WA 3.8.1 queue dispatcher. High depth draws first (soil > sentry > terrain).
+//! This is the complete queue, unlike WorldRoot's RenderScene callback which
+//! can run before other producers. Layout/ABI checked against local WA.exe.
 
-use crate::log_line;
-use game::offsets::GAME_WORLD_RENDER_QUEUE;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use crate::{log_error, log_line, rebase::rb};
+use minhook::MinHook;
+use std::{
+    ffi::c_void,
+    sync::{
+        atomic::{AtomicPtr, Ordering},
+        Mutex,
+    },
+};
 
-const OFF_ENTRY_COUNT: usize = 0x10004;
-const OFF_ENTRY_PTRS: usize = 0x10008;
-const MAX_ENTRIES: usize = 0x800;
-
-pub const CMD_SPRITE_GLOBAL: u32 = 0x4;
-pub const CMD_TILED_BITMAP: u32 = 0xD;
-pub const CMD_TILED_TERRAIN: u32 = 0xE;
-
-static DUMPED: AtomicBool = AtomicBool::new(false);
-/// Every (type, layer, sprite) combination reported so far.
-///
-/// A one-shot dump kept catching the scene before the turret was on screen --
-/// first before it was placed, then while the worm was still equipping. This
-/// keeps watching and reports each new combination as it appears, so whatever
-/// frame the turret finally draws in is the frame it gets logged.
-static SEEN: Mutex<Vec<(u32, u32, u32)>> = Mutex::new(Vec::new());
-const REPORT_CAP: usize = 120;
-/// sprite id -> render-queue depth requested by its pack.
+pub const COUNT: usize = 0x10004;
+const PTRS: usize = 0x10008;
+const MAX: usize = 0x800;
+static ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static DEPTHS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+static SEEN: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
 
 pub fn set_depth(sprite: u32, depth: u32) {
     if let Ok(mut g) = DEPTHS.lock() {
@@ -46,185 +25,202 @@ pub fn set_depth(sprite: u32, depth: u32) {
         g.push((sprite, depth));
     }
 }
-
 pub fn clear_depths() {
     if let Ok(mut g) = DEPTHS.lock() {
         g.clear();
     }
+    reset();
+}
+pub fn reset() {
     if let Ok(mut g) = SEEN.lock() {
         g.clear();
     }
 }
 
-/// Re-depth our sprites in the queue before it is dispatched.
-///
-/// The dispatcher sorts by cmd[1], so rewriting it moves the draw without
-/// touching the sprite, its palette or its position. Depths are registered per
-/// sprite id, so only the sheets a pack asked for move: the turret goes behind
-/// the landscape while the worm holding it stays in front.
-pub fn apply_depths(world: usize) {
-    if world == 0 {
-        return;
+/// Validated command in the 64 KiB queue arena. No speculative pointer walks.
+#[derive(Clone, Copy)]
+pub struct Command {
+    pub address: usize,
+    pub kind: u32,
+    pub depth: u32,
+}
+impl Command {
+    pub unsafe fn word(self, index: usize) -> u32 {
+        *((self.address + index * 4) as *const u32)
     }
-    let Ok(depths) = DEPTHS.lock() else {
-        return;
-    };
-    if depths.is_empty() {
-        return;
+    pub fn sprite_word(self) -> Option<usize> {
+        match self.kind {
+            4 | 5 => Some(4),
+            6 => Some(7),
+            _ => None,
+        }
     }
-    let Some((base, count)) = queue_base(world) else {
-        return;
-    };
-    let ptrs = (base + OFF_ENTRY_PTRS) as *const usize;
-    for i in 0..count {
-        let entry = unsafe { *ptrs.add(i) };
-        if entry == 0 {
-            continue;
+}
+
+pub struct Queue {
+    pub base: usize,
+    pub commands: Vec<Command>,
+}
+impl Queue {
+    /// Use WA's own sorter/comparator so equal-depth sprites retain exactly
+    /// the order that its real dispatcher will use (qsort is not stable).
+    pub unsafe fn ordered(&self) -> Vec<Command> {
+        type Compare = unsafe extern "C" fn(*const c_void, *const c_void) -> i32;
+        type Sort = unsafe extern "C" fn(*mut c_void, usize, usize, Compare);
+        let sort: Sort = std::mem::transmute(rb(0x005d_7890));
+        let cmp: Compare = std::mem::transmute(rb(0x0054_2330));
+        let mut pointers: Vec<u32> = self.commands.iter().map(|c| c.address as u32).collect();
+        sort(pointers.as_mut_ptr() as _, pointers.len(), 4, cmp);
+        pointers
+            .iter()
+            .rev()
+            .map(|&p| {
+                *self
+                    .commands
+                    .iter()
+                    .find(|c| c.address == p as usize)
+                    .unwrap()
+            })
+            .collect()
+    }
+    pub unsafe fn read(base: usize) -> Option<Self> {
+        if base == 0 {
+            return None;
         }
-        let kind = unsafe { *(entry as *const u32) };
-        if kind != CMD_SPRITE_GLOBAL && kind != 0x5 && kind != 0x6 {
-            continue;
+        let count = *((base + COUNT) as *const u32) as usize;
+        if count == 0 || count > MAX {
+            return None;
         }
-        let sprite = (unsafe { *((entry + 16) as *const u32) }) & 0xffff;
-        if let Some((_, depth)) = depths.iter().find(|(id, _)| *id == sprite) {
-            unsafe {
-                *((entry + 4) as *mut u32) = *depth;
+        let mut commands = Vec::with_capacity(count);
+        for &address in std::slice::from_raw_parts((base + PTRS) as *const u32, count) {
+            let address = address as usize;
+            let offset = address.checked_sub(base)?;
+            if offset < 4 || offset > COUNT - 8 || address & 3 != 0 {
+                return None;
             }
-        }
-    }
-}
-
-fn describe(kind: u32) -> &'static str {
-    match kind {
-        0x0 => "fill_rect",
-        0x1 => "bitmap_global",
-        0x2 => "textbox_local",
-        0x3 => "via_callback",
-        0x4 => "sprite_global",
-        0x5 => "sprite_local",
-        0x6 => "sprite_offset",
-        0x7 => "polyline",
-        0x8 => "line_strip",
-        0x9 => "polygon",
-        0xA => "pixel_strip",
-        0xB => "crosshair",
-        0xC => "outlined_pixel",
-        0xD => "tiled_bitmap",
-        0xE => "tiled_terrain",
-        _ => "?",
-    }
-}
-
-/// Resolve the queue's base and entry count.
-///
-/// wkFOW documents the queue at GameWorld+0x524 without saying whether that is
-/// the structure or a pointer to it; in practice it is a pointer. Inline is
-/// tried first and a bad count rejects the walk rather than following the
-/// queue off its arena, which can be torn mid-rebuild.
-fn queue_base(world: usize) -> Option<(usize, usize)> {
-    let inline = world + GAME_WORLD_RENDER_QUEUE;
-    let count = unsafe { *((inline + OFF_ENTRY_COUNT) as *const u32) } as usize;
-    if count > 0 && count <= MAX_ENTRIES {
-        return Some((inline, count));
-    }
-    let indirect = unsafe { *(inline as *const usize) };
-    if indirect == 0 {
-        return None;
-    }
-    let count = unsafe { *((indirect + OFF_ENTRY_COUNT) as *const u32) } as usize;
-    (count > 0 && count <= MAX_ENTRIES).then_some((indirect, count))
-}
-
-/// Custom sprite slots start here; anything at or above is one of ours.
-const CUSTOM_SPRITE_MIN: u32 = 800;
-
-/// Log every distinct (command type, layer) in the queue, once per match.
-///
-/// Held back until one of our own sprites is actually in the queue: dumping on
-/// the first rendered frame caught the scene before the turret existed, which
-/// showed the terrain and soil depths but not the one we need to change.
-///
-/// Read-only and bounded: a bad count or a null entry stops the walk rather
-/// than following the queue off its arena, which can be torn mid-rebuild
-/// during the frontend transition.
-pub fn dump_once(world: usize) {
-    if world == 0 {
-        return;
-    }
-    // wkFOW documents the queue as living at GameWorld+0x524. Whether that is
-    // the structure itself or a pointer to it is not stated, so try inline
-    // first and fall back to dereferencing, reporting which one read sanely.
-    let inline = world + GAME_WORLD_RENDER_QUEUE;
-    let mut base = inline;
-    let mut count = unsafe { *((base + OFF_ENTRY_COUNT) as *const u32) } as usize;
-    let mut how = "inline";
-    if count == 0 || count > MAX_ENTRIES {
-        let indirect = unsafe { *(inline as *const usize) };
-        if indirect != 0 {
-            let c = unsafe { *((indirect + OFF_ENTRY_COUNT) as *const u32) } as usize;
-            if c > 0 && c <= MAX_ENTRIES {
-                base = indirect;
-                count = c;
-                how = "pointer";
+            let kind = *(address as *const u32);
+            let words = match kind {
+                4 | 5 => 6,
+                6 => 9,
+                _ => 2,
+            };
+            if offset > COUNT - words * 4 {
+                return None;
             }
+            commands.push(Command {
+                address,
+                kind,
+                depth: *((address + 4) as *const u32),
+            });
         }
+        Some(Self { base, commands })
     }
-    if count == 0 || count > MAX_ENTRIES {
-            DUMPED.store(true, Ordering::SeqCst);
-        log_line(&format!(
-            "render queue: no sane entry count (inline {count}); base {inline:#x}"
-        ));
-        return;
-    }
-    let _ = how;
-    let ptrs = (base + OFF_ENTRY_PTRS) as *const usize;
-    let mut seen: Vec<(u32, u32, u32)> = Vec::new();
-    for i in 0..count {
-        let entry = unsafe { *ptrs.add(i) };
-        if entry == 0 {
-            continue;
-        }
-        let kind = unsafe { *(entry as *const u32) };
-        let layer = unsafe { *((entry + 4) as *const u32) };
-        // Sprite index sits in the low 16 bits of the op word.
-        let sprite = if kind == CMD_SPRITE_GLOBAL || kind == 0x5 || kind == 0x6 {
-            (unsafe { *((entry + 16) as *const u32) }) & 0xffff
-        } else {
-            0
+    unsafe fn apply_depths(&mut self) {
+        let Ok(depths) = DEPTHS.lock() else {
+            return;
         };
-        if !seen.iter().any(|(k, l, s)| *k == kind && *l == layer && *s == sprite) {
-            seen.push((kind, layer, sprite));
+        for c in &mut self.commands {
+            let Some(word) = c.sprite_word() else {
+                continue;
+            };
+            let id = c.word(word) & 0xffff;
+            if let Some((_, depth)) = depths.iter().find(|(s, _)| *s == id) {
+                *((c.address + 4) as *mut u32) = *depth;
+                c.depth = *depth;
+                if let Ok(mut seen) = SEEN.lock() {
+                    if seen.len() < 100 && !seen.contains(&(id, *depth)) {
+                        seen.push((id, *depth));
+                        log_line(&format!(
+                            "render depth: sprite {id} -> {depth:#x} at dispatcher"
+                        ));
+                    }
+                }
+            }
         }
     }
-    let Ok(mut known) = SEEN.lock() else {
-        return;
-    };
-    if known.len() >= REPORT_CAP {
-        return;
+    /// Temporarily substitute entry pointers; always restore on unwind.
+    pub unsafe fn draw(&self, commands: &[Command], display: usize, clip: usize) {
+        if commands.is_empty() {
+            return;
+        }
+        struct Restore<'a>(&'a Queue);
+        impl Drop for Restore<'_> {
+            fn drop(&mut self) {
+                unsafe {
+                    self.0.restore();
+                }
+            }
+        }
+        let _restore = Restore(self);
+        let ptrs = (self.base + PTRS) as *mut u32;
+        for (i, c) in commands.iter().enumerate() {
+            *ptrs.add(i) = c.address as u32;
+            // Force this subset's already-resolved ordering. Otherwise sorting
+            // it again could change equal-depth draws relative to the full queue.
+            *((c.address + 4) as *mut u32) = (commands.len() - i) as u32;
+        }
+        *((self.base + COUNT) as *mut u32) = commands.len() as u32;
+        call_original(self.base, display, clip);
     }
-    seen.sort_by_key(|(_, l, _)| std::cmp::Reverse(*l));
-    for (kind, layer, sprite) in seen {
-        if known.iter().any(|e| *e == (kind, layer, sprite)) {
-            continue;
+    unsafe fn restore(&self) {
+        let ptrs = (self.base + PTRS) as *mut u32;
+        for (i, c) in self.commands.iter().enumerate() {
+            *ptrs.add(i) = c.address as u32;
+            *((c.address + 4) as *mut u32) = c.depth;
         }
-        known.push((kind, layer, sprite));
-        if sprite >= CUSTOM_SPRITE_MIN {
-            log_line(&format!(
-                "queue OURS layer {layer:#x} {} sprite {sprite} ({count} entries)",
-                describe(kind)
-            ));
-        } else if sprite != 0 {
-            log_line(&format!("queue layer {layer:#x} {} sprite {sprite}", describe(kind)));
-        } else {
-            log_line(&format!("queue layer {layer:#x} {}", describe(kind)));
-        }
-        if known.len() >= REPORT_CAP {
-            log_line("queue: report cap reached");
-            break;
-        }
+        *((self.base + COUNT) as *mut u32) = self.commands.len() as u32;
     }
 }
 
-pub fn reset() {
-    DUMPED.store(false, Ordering::SeqCst);
+unsafe extern "C" fn dispatch(base: usize, display: usize, clip: usize) {
+    let capture = std::panic::catch_unwind(|| {
+        if let Some(mut q) = Queue::read(base) {
+            q.apply_depths();
+            crate::truecolor::capture(&q, display, clip);
+        }
+    });
+    if capture.is_err() {
+        crate::truecolor::begin_frame();
+        log_error("truecolor queue capture panicked; using stock draw");
+    }
+    // The real frame ALWAYS contains every stock draw, including our palette
+    // approximations. A shader/upload failure therefore never hides sprites.
+    // capture() may have drawn the frame itself, splitting the dispatch to take
+    // coverage from what actually changed; only draw again if it did not.
+    if !crate::truecolor::DREW.swap(false, Ordering::SeqCst) {
+        call_original(base, display, clip);
+    }
+    crate::truecolor::after_stock(display);
+}
+
+/// EAX=queue; [ESP+4]=display, [ESP+8]=clip, callee pops 8.
+#[unsafe(naked)]
+unsafe extern "C" fn hook() {
+    core::arch::naked_asm!(
+        "push ebp", "mov ebp, esp", "pushfd", "pushad",
+        "push dword ptr [ebp+12]", "push dword ptr [ebp+8]", "push eax",
+        "call {dispatch}", "add esp, 12", "popad", "popfd", "pop ebp", "ret 8",
+        dispatch = sym dispatch,
+    );
+}
+#[unsafe(naked)]
+unsafe extern "C" fn call_original(_queue: usize, _display: usize, _clip: usize) {
+    core::arch::naked_asm!(
+        "mov eax, [esp+4]", "push dword ptr [esp+12]", "push dword ptr [esp+12]",
+        "call dword ptr [{original}]", "ret", original = sym ORIGINAL,
+    );
+}
+
+pub fn install() -> Result<(), String> {
+    let addr = rb(0x0054_2350) as *mut c_void;
+    let expected = [0x83, 0xec, 0x1c, 0x53, 0x55, 0x8b, 0x6c, 0x24, 0x28];
+    if unsafe { std::slice::from_raw_parts(addr as *const u8, expected.len()) } != expected {
+        log_error("queue dispatcher bytes differ; depth/truecolor hook disabled");
+        return Ok(());
+    }
+    let trampoline = unsafe { MinHook::create_hook(addr, hook as *mut c_void) }
+        .map_err(|e| format!("render queue hook: {e:?}"))?;
+    ORIGINAL.store(trampoline, Ordering::SeqCst);
+    log_line("render queue depth/truecolor hook installed");
+    Ok(())
 }

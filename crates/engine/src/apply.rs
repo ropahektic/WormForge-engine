@@ -46,6 +46,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     actor::clear_claims();
     crate::worm_sprite::clear();
     crate::render_queue::clear_depths();
+    crate::truecolor::clear();
 
     let mods_dir = mods_root_from(&wa_directory());
     log_line(&format!("loading mods from {}", mods_dir.display()));
@@ -99,6 +100,10 @@ pub fn on_gfx_ready(display: *mut u8) {
                 sprite::install_sheet(display, sheet)
             })) {
                 Ok(Ok(id)) => {
+                    if path.as_ref().is_some_and(|p| claim.params.truecolor_prefix
+                        .as_ref().is_some_and(|prefix| p.starts_with(prefix))) {
+                        crate::truecolor::register(id as u32, sheet.clone());
+                    }
                     log_line(&format!("{} sprite slot {id}", claim.mod_id));
                     if as_weapon {
                         sprite_ids.insert(claim.slot.index(), id);

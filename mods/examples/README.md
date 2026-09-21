@@ -12,5 +12,7 @@ Example packs. Copy a folder to `Mods/` next to `WA.exe`.
   Uses the sentry worm equip poses, then plants, sweeps, tracks visible enemies within
   360px, beeps and fires up to 20 rounds per turn after a 60-frame activation delay.
   Team-coloured housing covers the barrel, including its two firing frames. Uses
-  13 sprite slots with 120 angles per pose; `tools/bake_sentry.py` regenerates the art.
+  79 sprite slots with 120 angles per pose; `tools/bake_sentry.py` regenerates the art.
+  Turrets opt into RGBA rendering on D3D9 shader mode, behind terrain and in front
+  of soil. See [truecolor rendering](../../docs/truecolor.md) for backend details.
   Needs no other bazooka overlay. See the pack README for engine verbs and testing.

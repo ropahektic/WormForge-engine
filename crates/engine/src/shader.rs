@@ -1,22 +1,6 @@
-//! WA's D3D9 shader renderer: detection and lifecycle.
-//!
-//! The map palette is shared by every pack, holds only what the map needed, and
-//! cannot express a saturated tint: one measured live had 106 colours in use and
-//! exactly two blues, both desaturated slate, so a blue sprite snapped to black.
-//! Writing colours into it to fix that corrupts every other pack's art, because
-//! an index means one colour for the whole frame.
-//!
-//! This renderer is the way out. It uploads the frame as palette INDICES plus a
-//! palette texture and resolves colour on the GPU, so a pack can own the
-//! index -> colour step for the indices it reserved while WA keeps doing
-//! geometry, ordering and occlusion. No second renderer, and nothing the render
-//! queue's depth work has to give back.
-//!
-//! This stage is deliberately visual-neutral: it detects the renderer, proves
-//! the object is readable, and reports. Anything that changes on screen is a
-//! bug. It is also entirely optional -- WA's software renderer has no such
-//! object, so every failure here logs and leaves sprites rendering exactly as
-//! they do today.
+//! WA 3.8.1 D3D9 shader lifecycle and optional RGBA composite.
+//! The queue captures color/coverage independently of the shared palette. The
+//! final draw uses it only when upload succeeds; all failures retain stock art.
 
 use crate::{log_error, log_line, rebase::rb};
 use minhook::MinHook;
@@ -39,6 +23,7 @@ const PROBE_READY: u32 = 1;
 const PROBE_FAILED: u32 = 2;
 
 static ORIG_PRESENT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_DRAW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_CLEANUP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static PROBE: AtomicU32 = AtomicU32::new(PROBE_WAITING);
 /// Last renderer seen by the present hook. Later stages read their device and
@@ -103,14 +88,18 @@ fn probe(renderer: usize) {
 }
 
 unsafe extern "C" fn on_shader_present(renderer: usize) {
-    let _ = std::panic::catch_unwind(|| probe(renderer));
+    let _ = std::panic::catch_unwind(|| {
+        probe(renderer);
+        if is_ready() {
+            crate::truecolor::present(*((renderer + OFF_DEVICE) as *const *mut c_void));
+        }
+    });
 }
 
 unsafe extern "C" fn on_shader_cleanup(renderer: usize) {
-    // WA is releasing its D3DPOOL_DEFAULT textures, so anything we create on
-    // this device has to go with them. Nothing owns resources yet; forgetting
-    // the renderer keeps a stale pointer from outliving the device.
+    // Release our default-pool textures before WA resets the shared device.
     if RENDERER.load(Ordering::SeqCst) == renderer {
+        crate::truecolor::release();
         RENDERER.store(0, Ordering::SeqCst);
         PROBE.store(PROBE_WAITING, Ordering::SeqCst);
         log_line("shader renderer released its resources; re-probing on next present");
@@ -118,8 +107,8 @@ unsafe extern "C" fn on_shader_cleanup(renderer: usize) {
 }
 
 /// __fastcall(renderer in ECX, result buffer in EDX, framebuffer on stack),
-/// with a third argument riding EAX. Preserve every register and flag, then
-/// tail-jump to the trampoline so WA sees exactly the call it expected.
+/// with a third argument riding EAX. Forward its stack argument and preserve
+/// registers/flags around callbacks. Restore our D3D state after the draw.
 #[unsafe(naked)]
 unsafe extern "C" fn shader_present_hook() {
     core::arch::naked_asm!(
@@ -130,7 +119,12 @@ unsafe extern "C" fn shader_present_hook() {
         "add esp, 4",
         "popad",
         "popfd",
-        "jmp dword ptr [{original}]",
+        "push dword ptr [esp+4]",
+        "call dword ptr [{original}]",
+        "pushfd", "pushad",
+        "call {after_present}",
+        "popad", "popfd", "ret 4",
+        after_present = sym after_shader_present,
         on_present = sym on_shader_present,
         original = sym ORIG_PRESENT,
     );
@@ -153,40 +147,81 @@ unsafe extern "C" fn shader_cleanup_hook() {
     );
 }
 
-/// Install the detection wraps.
+unsafe extern "C" fn after_shader_present() {
+    crate::truecolor::restore();
+}
+
+unsafe extern "C" fn on_shader_draw(renderer: usize) {
+    let _ = std::panic::catch_unwind(|| {
+        if renderer == RENDERER.load(Ordering::SeqCst) && is_ready() {
+            crate::truecolor::bind(*((renderer + OFF_DEVICE) as *const *mut c_void));
+        }
+    });
+}
+
+#[unsafe(naked)]
+unsafe extern "C" fn shader_draw_hook() {
+    core::arch::naked_asm!(
+        "pushfd", "pushad", "push edi", "call {before}", "add esp, 4",
+        "popad", "popfd", "jmp dword ptr [{original}]",
+        before = sym on_shader_draw, original = sym ORIG_DRAW,
+    );
+}
+
+/// Install all three wraps as one optional capability.
 ///
 /// Never fails the caller: a build without these sites, or a MinHook refusal,
 /// means the shader path is unavailable and everything that depends on it stays
 /// switched off. That is a supported configuration, not an error.
 pub fn install(catalog: &Catalog) -> Result<(), String> {
-    let Some(present_va) = catalog.function_va("Display__D3D9ShaderPresent") else {
-        log_line("no Display__D3D9ShaderPresent in the catalogue; shader path disabled");
-        return Ok(());
-    };
-    match unsafe {
-        MinHook::create_hook(
-            rb(present_va) as *mut c_void,
-            shader_present_hook as *mut c_void,
-        )
-    } {
-        Ok(trampoline) => ORIG_PRESENT.store(trampoline, Ordering::SeqCst),
-        Err(e) => {
-            log_error(&format!("shader present hook: {e:?}; shader path disabled"));
+    let sites: [(&str, &[u8], *mut c_void, &AtomicPtr<c_void>); 3] = [
+        (
+            "Display__D3D9ShaderPresent",
+            &[0x83, 0xec, 0x0c, 0x53, 0x57, 0x8d, 0x44, 0x24, 0x08],
+            shader_present_hook as _,
+            &ORIG_PRESENT,
+        ),
+        (
+            "Display__D3D9ShaderResourcesCleanup",
+            &[0x56, 0x8b, 0xf1, 0x8b, 0x86, 0x88, 0, 0, 0],
+            shader_cleanup_hook as _,
+            &ORIG_CLEANUP,
+        ),
+        (
+            "Display__D3D9ShaderFogDraw",
+            &[0x8b, 0xf3, 0x8b, 0xc7, 0xe8],
+            shader_draw_hook as _,
+            &ORIG_DRAW,
+        ),
+    ];
+    let mut installed = Vec::new();
+    for (name, bytes, detour, original) in sites {
+        let result = (|| {
+            let va = catalog
+                .function_va(name)
+                .ok_or_else(|| format!("missing {name}"))?;
+            let target = rb(va) as *mut c_void;
+            if unsafe { std::slice::from_raw_parts(target as *const u8, bytes.len()) } != bytes {
+                return Err(format!(
+                    "{name} bytes differ or another module owns the hook"
+                ));
+            }
+            let trampoline = unsafe { MinHook::create_hook(target, detour) }
+                .map_err(|e| format!("{name}: {e:?}"))?;
+            original.store(trampoline, Ordering::SeqCst);
+            installed.push(target);
+            Ok::<(), String>(())
+        })();
+        if let Err(e) = result {
+            for target in installed {
+                let _ = unsafe { MinHook::remove_hook(target) };
+            }
+            log_error(&format!(
+                "truecolor disabled: {e}; stock palette rendering retained"
+            ));
             return Ok(());
         }
     }
-
-    if let Some(cleanup_va) = catalog.function_va("Display__D3D9ShaderResourcesCleanup") {
-        match unsafe {
-            MinHook::create_hook(
-                rb(cleanup_va) as *mut c_void,
-                shader_cleanup_hook as *mut c_void,
-            )
-        } {
-            Ok(trampoline) => ORIG_CLEANUP.store(trampoline, Ordering::SeqCst),
-            Err(e) => log_error(&format!("shader cleanup hook: {e:?}; device resets unhandled")),
-        }
-    }
-    log_line("shader renderer detection installed");
+    log_line("shader renderer truecolor/lifecycle hooks installed");
     Ok(())
 }

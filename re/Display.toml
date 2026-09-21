@@ -1,10 +1,9 @@
-# D3D9 shader renderer — detection only, no wraps installed beyond logging.
+# D3D9 shader renderer — lifecycle and optional RGBA composition.
 #
 # WA 3.8.1 ships two renderers. The shader one uploads the frame as palette
 # INDICES plus a palette texture and resolves colour on the GPU; its software
 # sibling dispatches to 0x59CB30 instead and has none of this. That index +
-# palette split is what lets a pack own colour for its own sprites without
-# touching the map palette, which is shared with every other pack.
+# palette split accepts an RGBA companion without changing the map palette.
 #
 # Addresses and layout confirmed against wkFOW's ShaderRenderer, which hooks the
 # same three sites for its fog composite.
@@ -25,7 +24,7 @@ plate_comment = "Releases the renderer's D3DPOOL_DEFAULT textures. ECX=renderer,
 va = 0x0059CF9D
 name = "Display__D3D9ShaderFogDraw"
 calling_convention = "__usercall"
-plate_comment = "Inside D3D9ShaderPresent, after WA binds its palette texture and built-in shader and immediately before the fullscreen draw. EDI=renderer. The injection point for resolving our own palette indices."
+plate_comment = "Inside D3D9ShaderPresent, after WA binds its palette texture and built-in shader and immediately before the fullscreen draw. EDI=renderer. Optional RGBA/underlay textures on stages 2/3; restore stock device state after present."
 
 [[global]]
 va = 0x0000001C

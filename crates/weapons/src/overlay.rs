@@ -138,6 +138,9 @@ pub struct OverlayParams {
     /// behind the landscape. Unlike `layer` it never touches palettes.
     pub depth: Option<u32>,
     pub depth_prefix: Option<String>,
+    /// Opt these sheets into RGBA rendering on the D3D9 shader backend.
+    /// Other renderers retain the stock palette approximation.
+    pub truecolor_prefix: Option<String>,
     /// Sheets whose paths start with this take exact palette slots instead of
     /// being snapped to the map's colours. For art the map palette cannot
     /// express -- a saturated team colour on an earth-toned map, where the
@@ -169,6 +172,7 @@ impl Default for OverlayParams {
             layer: None,
             depth: None,
             depth_prefix: None,
+            truecolor_prefix: None,
             reserve_prefix: None,
             sprite_path: None,
             extra_sheets: Vec::new(),

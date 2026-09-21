@@ -4,7 +4,8 @@ return function(load_pack)
   local spec, turn, bodies, rounds = nil, nil, {}, 0
   local owner = { id = 1, team = 1, x = 100 * PX, y = 100 * PX,
                   vx = 0, vy = 0, facing = 1 }
-  local enemy = { id = 2, team = 2, x = 200 * PX, y = 75 * PX,
+  -- Planted anchor sinks 8px; head is 25px above it.
+  local enemy = { id = 2, team = 2, x = 200 * PX, y = 83 * PX,
                   vx = 0, vy = 0, visible = true }
   local blocked, terrain_hits = false, 0
   wa = {
@@ -29,7 +30,13 @@ return function(load_pack)
       end
       local a = s
       a.id = #bodies + 1
-      function a:frame(i) self.selected_frame = i end
+      function a:look(path) self.sprite = path end
+      function a:frame(i)
+        assert(i >= 0 and i < 30, "frame stays within its sheet chunk")
+        local pose, chunk = self.sprite:match("_p(%d+)_s(%d+)$")
+        assert(pose and chunk, "turret sheet names encode pose and chunk")
+        self.selected_frame = tonumber(pose) * 120 + tonumber(chunk) * 30 + i
+      end
       function a:gravity() end
       function a:move() return { land = not self.water } end
       function a:advance() end
@@ -69,7 +76,7 @@ return function(load_pack)
   for _ = 1, 300 do a.on(a) end
   assert(rounds == 20, "exactly 20 rounds per turn")
   assert(a.selected_frame < 120, "empty turret stops firing animation")
-  assert(a.x == owner.x and a.y == owner.y and a.vx == 0 and a.vy == 0)
+  assert(a.x == owner.x and a.y == owner.y + 8 * PX and a.vx == 0 and a.vy == 0)
   turn(enemy, wa.msg.START_TURN)
   for _ = 1, 100 do a.on(a) end
   assert(rounds > 20, "reload next turn")
