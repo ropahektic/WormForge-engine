@@ -103,9 +103,6 @@ unsafe extern "C" fn after_load_sprites(runtime: *mut u8) {
         on_gfx_ready(display);
     }));
     if let Err(p) = result {
-        log_error(&format!(
-            "panic after LoadSprites: {}",
-            panic_text(p)
-        ));
+        log_error(&format!("panic after LoadSprites: {}", panic_text(p)));
     }
 }

@@ -59,7 +59,13 @@ pub fn install(_catalog: &re_catalog::Catalog) -> Result<(), String> {
         patch[0] = 0xE8;
         patch[1..5].copy_from_slice(&rel.to_le_bytes());
         let mut old = 0u32;
-        if VirtualProtect(site as *const _, PATCH_LEN, PAGE_EXECUTE_READWRITE, &mut old) == 0 {
+        if VirtualProtect(
+            site as *const _,
+            PATCH_LEN,
+            PAGE_EXECUTE_READWRITE,
+            &mut old,
+        ) == 0
+        {
             return Err("HUD VirtualProtect failed".into());
         }
         std::ptr::copy_nonoverlapping(patch.as_ptr(), site as *mut u8, PATCH_LEN);

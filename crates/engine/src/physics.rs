@@ -12,21 +12,22 @@
 
 use crate::log_line;
 use crate::rebase::rb;
-use game::entity::{is_missile, read_cm_forces, read_i32, read_motion, write_i32, write_motion, write_scales};
+use game::entity::{
+    is_missile, read_cm_forces, read_i32, read_motion, write_i32, write_motion, write_scales,
+};
 use game::offsets::{
     APPLY_PROJECTILE_GRAVITY, ENT_MOVED, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y,
     ENT_WORM_TEAM, HIT_AMOUNT, HIT_TEAM, MISSILE_HANDLE_MESSAGE, MISSILE_VTABLE, MSG_COMMIT_HEALTH,
-    MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE, WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW,
-    WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR, WORM_DRAW_HEALTH, WORM_DRAW_HUD, WORM_DRAW_NAME,
-    WORM_DRAW_OFFMAP, WORM_DRAW_SPRITE, WORM_DRAW_TURN, WORM_SHOW_CURSOR, WORM_FACING,
-    WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_STATE, WORM_STATE_AIRBORNE, WORLD_ROOT_HANDLE_MESSAGE,
-    WORLD_ROOT_TURN_ENDED,
+    MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE, WORLD_ROOT_HANDLE_MESSAGE, WORLD_ROOT_TURN_ENDED,
+    WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW, WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR, WORM_DRAW_HEALTH,
+    WORM_DRAW_HUD, WORM_DRAW_NAME, WORM_DRAW_OFFMAP, WORM_DRAW_SPRITE, WORM_DRAW_TURN, WORM_FACING,
+    WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_SHOW_CURSOR, WORM_STATE, WORM_STATE_AIRBORNE,
 };
 use minhook::MinHook;
 use re_catalog::Catalog;
 use std::ffi::c_void;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::Mutex;
 
 type ApplyGravityFn = unsafe extern "thiscall" fn(*mut u8, *mut u8);
 type HandleMessageFn = unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut u8);
@@ -57,11 +58,7 @@ static CARRY: Mutex<Vec<Carry>> = Mutex::new(Vec::new());
 static HIDDEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 fn holding() -> bool {
-    CARRY
-        .lock()
-        .ok()
-        .map(|g| !g.is_empty())
-        .unwrap_or(false)
+    CARRY.lock().ok().map(|g| !g.is_empty()).unwrap_or(false)
 }
 
 pub fn drop_all() {
@@ -291,13 +288,7 @@ unsafe extern "thiscall" fn gravity_hook(cm: *mut u8, entity: *mut u8) {
     }
 }
 
-unsafe extern "thiscall" fn missile_hook(
-    this: *mut u8,
-    a: u32,
-    msg: u32,
-    b: u32,
-    c: *mut u8,
-) {
+unsafe extern "thiscall" fn missile_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
     if msg == MSG_FRAME_FINISH {
         if let Some(m) = unsafe { read_motion(this) } {
             if let Ok(after) = lua_host::missile_frame(m, msg, "pre") {

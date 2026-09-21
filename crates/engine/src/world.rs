@@ -91,7 +91,11 @@ pub fn resolve_sound(key: &str) -> i32 {
         let Ok(mut g) = WAVS.lock() else {
             return 0;
         };
-        let Some(wav) = g.iter_mut().find(|(k, _)| k == key || k.ends_with(key)).map(|(_, w)| w) else {
+        let Some(wav) = g
+            .iter_mut()
+            .find(|(k, _)| k == key || k.ends_with(key))
+            .map(|(_, w)| w)
+        else {
             return 0;
         };
         if wav.loaded {
@@ -122,13 +126,9 @@ pub fn solid_fixed(x: i32, y: i32) -> bool {
 
 pub fn trace_fixed(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)> {
     let grid = live_grid()?;
-    let hit = trace_pixels(
-        x0 >> 16,
-        y0 >> 16,
-        x1 >> 16,
-        y1 >> 16,
-        |x, y| grid.solid_px(x, y),
-    )?;
+    let hit = trace_pixels(x0 >> 16, y0 >> 16, x1 >> 16, y1 >> 16, |x, y| {
+        grid.solid_px(x, y)
+    })?;
     Some((hit.0 << 16, hit.1 << 16))
 }
 
@@ -246,9 +246,11 @@ pub fn hold_turn_timer() {
     if root.is_null() {
         return;
     }
-    let Some((timer, display)) = FROZEN_TURN.lock().ok().and_then(|g| {
-        g.as_ref().map(|f| (f.timer, f.display))
-    }) else {
+    let Some((timer, display)) = FROZEN_TURN
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|f| (f.timer, f.display)))
+    else {
         return;
     };
     unsafe {
@@ -264,8 +266,7 @@ fn mouse_down() -> bool {
 
 fn key_down(vk: i32) -> bool {
     unsafe {
-        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000
-            != 0
+        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000 != 0
     }
 }
 

@@ -149,10 +149,7 @@ mod tests {
         let mut axe = [0i32; 8];
         axe[0] = HIT_PERCENT;
         axe[5] = 50;
-        assert_eq!(
-            kind(MSG_HIT, axe.as_mut_ptr() as *mut u8),
-            Some("percent")
-        );
+        assert_eq!(kind(MSG_HIT, axe.as_mut_ptr() as *mut u8), Some("percent"));
         assert_eq!(kind(MSG_NONLETHAL, std::ptr::null_mut()), Some("nonlethal"));
         assert_eq!(kind(MSG_POISON, std::ptr::null_mut()), Some("poison"));
         assert_eq!(kind(0x24, std::ptr::null_mut()), None);

@@ -17,10 +17,8 @@ use std::{
 };
 
 static ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
 static CLAIMS: Mutex<Vec<(usize, i32, i32)>> = Mutex::new(Vec::new());
-// Once per distinct pose/state, capped per match: enough to diagnose an equip
-// failure without writing a line for every worm on every rendered frame.
-static OBSERVED: Mutex<Vec<(usize, usize, i32, u32, u32)>> = Mutex::new(Vec::new());
 /// Per worm: which claimed pose is playing, and how far through it.
 ///
 /// WA animates the poses it owns by changing state and swapping sprite id, not
@@ -43,9 +41,6 @@ fn pose_key(original: u32, state: i32, slope: i32) -> i32 {
 }
 
 pub fn clear() {
-    if let Ok(mut observed) = OBSERVED.lock() {
-        observed.clear();
-    }
     if let Ok(mut anim) = ANIM.lock() {
         anim.clear();
     }
@@ -84,8 +79,8 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
 unsafe extern "C" fn after_calc(
     worm: *mut u8,
     sprite_out: *mut u32,
-    x_out: *const i32,
-    y_out: *const i32,
+    _x_out: *const i32,
+    _y_out: *const i32,
     phase_out: *mut u32,
 ) {
     if worm.is_null() || sprite_out.is_null() {
@@ -94,11 +89,12 @@ unsafe extern "C" fn after_calc(
     let slot = read_i32(worm, WORM_SELECTED_WEAPON) as usize;
     let original = *sprite_out;
     let state = read_i32(worm, WORM_STATE);
+    let slope = read_i32(worm, WORM_SLOPE_DIR);
     if let Ok(claims) = CLAIMS.lock() {
         if !claims.iter().any(|(s, _, _)| *s == slot) {
             return;
         }
-        let stock = pose_key(original, state, read_i32(worm, WORM_SLOPE_DIR));
+        let stock = pose_key(original, state, slope);
         if let Some((_, _, id)) = claims
             .iter()
             .find(|(s, claimed, _)| *s == slot && *claimed == stock)
@@ -106,22 +102,20 @@ unsafe extern "C" fn after_calc(
             // Retain mirror and other stock sprite flags.
             *sprite_out = (original & !0xffff) | *id as u32;
             drive_phase(worm as usize, stock, *id, phase_out);
-        }
-        // Phase is part of the key: without it only the first phase per state
-        // was ever logged, which cannot show whether WA sweeps the animation
-        // across its range or pins it at one frame.
-        #[cfg(debug_assertions)]
-        {
-            let key = (worm as usize, slot, state, original, unsafe { *phase_out });
-            if let Ok(mut observed) = OBSERVED.lock() {
-                if observed.len() < 400 && !observed.contains(&key) {
-                    observed.push(key);
-                    log_line(&format!(
-                        "worm sprite draw worm={worm:p} slot={slot} state={state:#x} stock={original:#x} output={:#x} x={} y={} phase={:#x}",
-                        *sprite_out, *x_out, *y_out, *phase_out,
-                    ));
-                }
-            }
+        } else if let Ok(mut anim) = ANIM.lock() {
+            // This worm is on a claimed slot but not currently in one of its
+            // claimed poses (e.g. walking between equips). drive_phase only
+            // resets a worm's stored phase when the pose or sheet id differs
+            // from last time, so if the next equip lands on the SAME pose
+            // key as whatever this worm last held (same slope sign is common
+            // -- the worm rarely moves between shots), the stale entry is
+            // still sitting at its old phase, which is the final held frame.
+            // The next drive_phase call then sees no change and never
+            // resets, so the equip animation appears to jump straight to
+            // its last frame instead of playing. Dropping the entry here,
+            // the moment the worm leaves a claimed pose, guarantees the next
+            // equip always starts from a fresh (missing) entry.
+            anim.retain(|(w, _, _, _)| *w != worm as usize);
         }
     }
 }

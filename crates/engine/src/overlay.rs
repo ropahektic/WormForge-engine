@@ -7,9 +7,9 @@ use game::offsets::{DISPLAY_HEIGHT, DISPLAY_HWND, DISPLAY_WIDTH};
 use std::sync::Mutex;
 use windows_sys::Win32::Foundation::{HWND, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, GdiAlphaBlend,
-    ReleaseDC, SelectObject, StretchBlt, AC_SRC_ALPHA, AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER,
-    BI_RGB, BLENDFUNCTION, COLORONCOLOR, DIB_RGB_COLORS, HDC, SRCCOPY, SetStretchBltMode,
+    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GdiAlphaBlend, GetDC, ReleaseDC,
+    SelectObject, SetStretchBltMode, StretchBlt, AC_SRC_ALPHA, AC_SRC_OVER, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, COLORONCOLOR, DIB_RGB_COLORS, HDC, SRCCOPY,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::GetClientRect;
 
@@ -193,7 +193,9 @@ unsafe fn blit_one(hdc: HDC, dw: i32, dh: i32, item: &Live) {
     }
     let old = SelectObject(mem, dib as _);
     if item.fill {
-        let _ = StretchBlt(hdc, dx, dy, ddw, ddh, mem, 0, 0, sw as i32, sh as i32, SRCCOPY);
+        let _ = StretchBlt(
+            hdc, dx, dy, ddw, ddh, mem, 0, 0, sw as i32, sh as i32, SRCCOPY,
+        );
     } else {
         let blend = BLENDFUNCTION {
             BlendOp: AC_SRC_OVER as u8,
@@ -202,17 +204,7 @@ unsafe fn blit_one(hdc: HDC, dw: i32, dh: i32, item: &Live) {
             AlphaFormat: AC_SRC_ALPHA as u8,
         };
         let _ = GdiAlphaBlend(
-            hdc,
-            dx,
-            dy,
-            ddw,
-            ddh,
-            mem,
-            0,
-            0,
-            sw as i32,
-            sh as i32,
-            blend,
+            hdc, dx, dy, ddw, ddh, mem, 0, 0, sw as i32, sh as i32, blend,
         );
     }
     SelectObject(mem, old);
