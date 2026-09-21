@@ -431,6 +431,25 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     if owner.is_null() {
         return Err("spawn needs an owner worm or actor".into());
     }
+    // A pack can hold an actor reference across that actor's despawn and then
+    // spawn a child from it. The null check above only catches the lucky case
+    // where the handle cleared; a freed-but-non-null pointer sails through,
+    // and WA's entity constructor then links the new entity into a parent
+    // that no longer exists. The corrupted entity graph does not fault here
+    // -- it faults frames later, inside WA, as an integer divide by zero in
+    // the animation tick at 0x5519a0, with nothing in the log to connect it
+    // to the pack that caused it.
+    //
+    // Our own actors carry a magic word, so a dead one is detectable: refuse
+    // it by name rather than corrupting the graph. Worms are owned by WA and
+    // are stable for the match, so they need no equivalent check.
+    if is_actor(owner) && read_i32(owner, ACTOR_DEAD) != 0 {
+        return Err(
+            "spawn owner is an actor that has already despawned; the pack is \
+             holding a reference across its lifetime"
+                .into(),
+        );
+    }
     log_line(&format!(
         "LuaActor spawn sprite {} x={:#x} y={:#x} vx={:#x} vy={:#x} origin={:?} explode={:?}",
         body.sprite, body.x, body.y, body.vx, body.vy, spawn.origin, spawn.explode
