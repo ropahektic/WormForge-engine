@@ -5,6 +5,7 @@
 
 mod actor;
 mod apply;
+mod gpu;
 mod hook;
 mod hud;
 mod hurt;

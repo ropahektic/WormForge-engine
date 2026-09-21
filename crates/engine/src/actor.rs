@@ -1190,6 +1190,15 @@ unsafe fn try_move(this: *mut u8, x: i32, y: i32) -> u32 {
 }
 
 unsafe fn draw_sprite_local(queue: *mut u8, layer: u32, x: i32, y: i32, sprite: u32, anim: u32) {
+    // The GPU renderer draws its own sprites as quads after WA's composite, so
+    // they must not also be queued: a queued copy would be drawn by WA in
+    // palette colour underneath ours, and would keep occupying one of the 223
+    // shared sprite slots the GPU path exists to escape. Intercepting here
+    // rather than in `blit` catches every producer -- blit, enqueue_sprite,
+    // and anything added later -- in one place.
+    if crate::gpu::intercept(layer, x, y, sprite, anim) {
+        return;
+    }
     let f = rb(RQ_DRAW_SPRITE_LOCAL) as u32;
     let args = [queue as u32, layer, x as u32, y as u32, sprite, anim, f];
     core::arch::asm!(

@@ -138,6 +138,11 @@ pub struct OverlayParams {
     /// behind the landscape. Unlike `layer` it never touches palettes.
     pub depth: Option<u32>,
     pub depth_prefix: Option<String>,
+    /// Opt these sheets into the GPU renderer: packed into a texture atlas
+    /// and drawn as quads, never occupying one of the 223 shared WA sprite
+    /// slots and never touching the map palette. Supersedes `truecolor_prefix`
+    /// for sheets it matches.
+    pub gpu_prefix: Option<String>,
     /// Opt these sheets into RGBA rendering on the D3D9 shader backend.
     /// Other renderers retain the stock palette approximation.
     pub truecolor_prefix: Option<String>,
@@ -172,6 +177,7 @@ impl Default for OverlayParams {
             layer: None,
             depth: None,
             depth_prefix: None,
+            gpu_prefix: None,
             truecolor_prefix: None,
             reserve_prefix: None,
             sprite_path: None,

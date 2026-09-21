@@ -245,6 +245,7 @@ fn table_to_claim(
     let mut layer: Option<u32> = None;
     let mut depth: Option<u32> = None;
     let mut depth_prefix: Option<String> = None;
+    let mut gpu_prefix: Option<String> = None;
     let mut truecolor_prefix: Option<String> = None;
     let mut reserve_prefix: Option<String> = None;
 
@@ -257,6 +258,7 @@ fn table_to_claim(
         layer = get_i32(&p, "layer")?.map(|v| v.clamp(1, 3) as u32);
         depth = get_i32(&p, "depth")?.map(|v| v as u32);
         depth_prefix = get_string(&p, "depth_prefix")?;
+        gpu_prefix = get_string(&p, "gpu_prefix")?;
         truecolor_prefix = get_string(&p, "truecolor_prefix")?;
         reserve_prefix = get_string(&p, "reserve_prefix")?;
         load_sprite_field(
@@ -398,6 +400,7 @@ fn table_to_claim(
             layer,
             depth,
             depth_prefix,
+            gpu_prefix,
             truecolor_prefix,
             reserve_prefix,
             extra_sounds,

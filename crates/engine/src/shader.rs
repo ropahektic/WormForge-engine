@@ -104,6 +104,7 @@ unsafe extern "C" fn on_shader_present(renderer: usize) {
 unsafe extern "C" fn on_shader_cleanup(renderer: usize) {
     // Release our default-pool textures before WA resets the shared device.
     if RENDERER.load(Ordering::SeqCst) == renderer {
+        crate::gpu::release();
         crate::truecolor::release();
         RENDERER.store(0, Ordering::SeqCst);
         PROBE.store(PROBE_WAITING, Ordering::SeqCst);
@@ -153,9 +154,21 @@ unsafe extern "C" fn shader_cleanup_hook() {
     );
 }
 
+/// Runs after `D3D9ShaderPresent` returns — that is, after WA has ended its
+/// own scene at 0x59C7A0 and before it Presents separately at 0x59C8A0. The
+/// S0 probe confirmed a second balanced scene here survives to the front
+/// buffer, which is what makes drawing GPU sprites at this point viable.
 unsafe extern "C" fn after_shader_present() {
     crate::truecolor::restore();
+    let renderer = RENDERER.load(Ordering::SeqCst);
+    if renderer != 0 && is_ready() {
+        let _ = std::panic::catch_unwind(|| {
+            crate::gpu::present(*((renderer + OFF_DEVICE) as *const *mut c_void));
+        });
+    }
 }
+
+
 
 unsafe extern "C" fn on_shader_draw(renderer: usize) {
     let _ = std::panic::catch_unwind(|| {

@@ -105,6 +105,7 @@ pub fn clear() {
     if let Ok(mut r) = RESERVED.lock() {
         r.clear();
     }
+    clear_gpu_sheets();
 }
 
 /// Put installed sprites back into the display's sprite table.
@@ -865,4 +866,118 @@ unsafe fn process_sprite(sprite: *mut u8, pal_ctx: *mut u8, raw: *mut u8) -> u32
         );
     }
     ret
+}
+
+// ---------------------------------------------------------------------------
+// GPU sheets
+//
+// A sheet installed for the GPU renderer gets an id but no WA sprite slot: no
+// `.spr` is encoded, no palette is quantised or reserved, no entry is written
+// into `DISPLAY_SPRITE_PTRS`. That is the entire point. Those 223 slots
+// (CUSTOM_SPRITE_SLOT_MIN..=MAX) are shared by every loaded pack, and the
+// sentry gun alone spends 72 of them on baked rotations that the GPU path
+// does with one float.
+//
+// Skipping the palette also removes the two historical corruption regressions
+// at their source: `quantize_to_map_palette` and `reserve_palette_for` simply
+// never run for these sheets, so nothing they do can repaint the scene. They
+// keep more than 254 colours and real partial alpha as a side effect.
+
+/// Ids are `0x0100_0000 | n`, chosen so `id & 0xffff` can never collide with
+/// a real stock sprite index. Anything that treats an id as an index into
+/// WA's 1023-entry sprite table must reject these -- see `is_virtual`.
+pub const VIRTUAL_SPRITE_BASE: i32 = 0x0100_0000;
+
+/// A GPU sheet: where each frame lives in the atlas, plus the animation
+/// properties `a:frame` and `a:advance` need.
+pub struct GpuSheet {
+    pub id: i32,
+    pub frames: Vec<render::SheetRect>,
+    pub looping: bool,
+}
+
+static GPU_SHEETS: Mutex<Vec<GpuSheet>> = Mutex::new(Vec::new());
+static NEXT_VIRTUAL: Mutex<i32> = Mutex::new(VIRTUAL_SPRITE_BASE);
+
+pub fn is_virtual(id: i32) -> bool {
+    id >= VIRTUAL_SPRITE_BASE
+}
+
+/// True when this id was installed for the GPU renderer.
+pub fn is_gpu_sheet(id: u32) -> bool {
+    GPU_SHEETS
+        .lock()
+        .map(|g| g.iter().any(|s| (s.id as u32) == id))
+        .unwrap_or(false)
+}
+
+/// Atlas rectangles and animation properties for a GPU sheet.
+#[allow(clippy::type_complexity)]
+pub fn gpu_frame(
+    id: u32,
+) -> Option<(impl Fn(usize) -> Option<render::SheetRect>, usize, bool)> {
+    let sheets = GPU_SHEETS.lock().ok()?;
+    let sheet = sheets.iter().find(|s| (s.id as u32) == id)?;
+    let frames = sheet.frames.clone();
+    let count = frames.len();
+    let looping = sheet.looping;
+    Some((move |i: usize| frames.get(i).copied(), count, looping))
+}
+
+/// Install a sheet for the GPU renderer.
+///
+/// Populates exactly the WormForge-side tables the rest of the engine reads --
+/// feet/collision, frame count, loop delta, name lookup -- and nothing that
+/// touches WA's sprite table or the map palette. `a:move`, `a:on_feet`,
+/// `a:frame`, `a:look` and explosion placement all keep working because none
+/// of them ever consulted WA's table in the first place.
+pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) -> i32 {
+    let id = {
+        let Ok(mut next) = NEXT_VIRTUAL.lock() else {
+            return 0;
+        };
+        let id = *next;
+        *next += 1;
+        id
+    };
+
+    if let Ok(mut g) = GPU_SHEETS.lock() {
+        g.retain(|s| s.id != id);
+        g.push(GpuSheet { id, frames: rects, looping: strip.looping });
+    }
+    if let Some(feet) = strip.feet_platform() {
+        if let Ok(mut g) = SPRITE_FEET.lock() {
+            g.retain(|(s, _)| *s != id);
+            g.push((id, feet));
+        }
+    }
+    let delta = strip.phase_delta();
+    if delta > 0 {
+        if let Ok(mut g) = LOOP_DELTA.lock() {
+            g.retain(|(s, _)| *s != id);
+            g.push((id, delta));
+        }
+    }
+    // frame_count() reads RGBA_SHEETS, which a:frame needs to invert its phase.
+    if let Ok(mut g) = RGBA_SHEETS.lock() {
+        g.retain(|s| s.id != id);
+        g.push(RgbaSheet {
+            id,
+            w: strip.frames.first().map(|f| f.width).unwrap_or(0),
+            h: strip.frames.first().map(|f| f.height).unwrap_or(0),
+            looping: strip.looping,
+            frames: Vec::new(), // the atlas holds the pixels now
+        });
+    }
+    id
+}
+
+/// Drop every GPU sheet. Called with the rest of the per-match sprite state.
+pub fn clear_gpu_sheets() {
+    if let Ok(mut g) = GPU_SHEETS.lock() {
+        g.clear();
+    }
+    if let Ok(mut next) = NEXT_VIRTUAL.lock() {
+        *next = VIRTUAL_SPRITE_BASE;
+    }
 }

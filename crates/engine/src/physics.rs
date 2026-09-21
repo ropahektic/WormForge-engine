@@ -321,6 +321,7 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     // in ordinary play, so anything behind it never runs during a normal turn.
     if msg == MSG_RENDER_SCENE {
         crate::truecolor::begin_frame();
+        crate::gpu::begin_frame();
     }
     if !holding() {
         return;
