@@ -50,6 +50,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     // Flush the previous match's queue census before its counters are reused.
     crate::queue_census::finish();
     crate::truecolor::clear();
+    crate::gpu::clear();
 
     let mods_dir = mods_root_from(&wa_directory());
     log_line(&format!("loading mods from {}", mods_dir.display()));

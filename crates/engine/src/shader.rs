@@ -16,8 +16,14 @@ use std::{
 const OFF_WIDTH: usize = 0x1C;
 const OFF_HEIGHT: usize = 0x20;
 const OFF_DEVICE: usize = 0x40;
+// Read only by the debug probe log, but kept unconditionally: they are the
+// map of this struct, and a future reader looking for the palette texture
+// should find it here rather than in a disassembler.
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
 const OFF_FRAME_TEXTURE: usize = 0x7C;
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
 const OFF_PIXEL_SHADER: usize = 0x84;
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
 const OFF_PALETTE_TEXTURE: usize = 0x88;
 
 const PROBE_WAITING: u32 = 0;
@@ -58,14 +64,11 @@ fn probe(renderer: usize) {
     if renderer == 0 {
         return;
     }
-    let (width, height, device, frame, shader, palette) = unsafe {
+    let (width, height, device) = unsafe {
         (
             *((renderer + OFF_WIDTH) as *const u32),
             *((renderer + OFF_HEIGHT) as *const u32),
             *((renderer + OFF_DEVICE) as *const usize),
-            *((renderer + OFF_FRAME_TEXTURE) as *const usize),
-            *((renderer + OFF_PIXEL_SHADER) as *const usize),
-            *((renderer + OFF_PALETTE_TEXTURE) as *const usize),
         )
     };
     if device == 0 || width == 0 || height == 0 || width > 16384 || height > 16384 {
@@ -86,6 +89,13 @@ fn probe(renderer: usize) {
         // The palette texture is the whole reason this path is interesting: it is
         // where an index becomes a colour, and it is per-frame GPU state rather
         // than the shared CPU palette.
+        let (frame, shader, palette) = unsafe {
+            (
+                *((renderer + OFF_FRAME_TEXTURE) as *const usize),
+                *((renderer + OFF_PIXEL_SHADER) as *const usize),
+                *((renderer + OFF_PALETTE_TEXTURE) as *const usize),
+            )
+        };
         log_line(&format!(
             "shader renderer textures: frame {frame:#x} palette {palette:#x} pixel_shader {shader:#x}"
         ));
@@ -167,8 +177,6 @@ unsafe extern "C" fn after_shader_present() {
         });
     }
 }
-
-
 
 unsafe extern "C" fn on_shader_draw(renderer: usize) {
     let _ = std::panic::catch_unwind(|| {

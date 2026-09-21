@@ -29,6 +29,32 @@ a:gfx({
 })
 ```
 
+Each field has a single-purpose setter too, for when only one is changing:
+
+```lua
+a:angle(37)          -- degrees clockwise
+a:scale(1.5)
+a:tint(0xFF8000)     -- keeps the current blend mode
+a:blend("add")       -- keeps the current colour; "normal" is the other mode
+```
+
+**Only the fields you name are written.** `a:gfx{angle = 37}` leaves scale,
+tint and depth exactly as they were, and the setters above are independent of
+one another — `a:blend("add")` does not discard the team colour. Without that
+rule the setters could not exist at all: each would be a full overwrite of the
+other three.
+
+A blend mode that is not `"normal"`/`"alpha"` or `"add"`/`"additive"` is an
+error rather than a silent fallback, because a typo would otherwise surface
+only as a missing glow in a screenshot.
+
+These are Rust methods, not Lua sugar over `a:gfx`. A fork-side Lua prelude
+was the original plan — it would have kept the footprint in
+`crates/lua-host/src/actor.rs` smaller, which matters for merging upstream —
+but mlua protects userdata metatables with `__metatable = false`, so a script
+cannot reach the method table to extend it. `Lua::register_userdata_type` does
+not help either: the `impl UserData` registration wins over it.
+
 `a:gfx` is presentation only. It is stored in the actor struct, read solely by
 the renderer, and can never reach the simulation — lockstep safety is
 structural rather than a rule to remember.

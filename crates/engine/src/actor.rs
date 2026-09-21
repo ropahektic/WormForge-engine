@@ -928,18 +928,34 @@ fn native_look(handle: u32, id: i32, delta: u32, w: i32, h: i32) {
 /// Writes only into our own actor struct and is read only by the renderer, so
 /// it cannot reach the simulation and cannot desync a lockstep game. An actor
 /// on the palette path ignores all of it.
-fn native_set_gfx(handle: u32, angle: f32, scale: f32, tint: u32, depth: u32) {
+fn native_set_gfx(handle: u32, mask: u32, angle: f32, scale: f32, tint: u32, depth: u32) {
+    use lua_host::gfx_field as f;
     let this = handle as *mut u8;
     unsafe {
         if !is_actor(this) || read_i32(this, ACTOR_DEAD) != 0 {
             return;
         }
         let fixed = |v: f32| (v * 65536.0) as i32;
-        write_i32(this, ACTOR_ANGLE, fixed(angle));
-        // Guard against a pack asking for an invisible or absurd sprite.
-        write_i32(this, ACTOR_SCALE, fixed(scale.clamp(0.01, 64.0)));
-        write_i32(this, ACTOR_TINT, tint as i32);
-        if depth != 0 {
+        if mask & f::ANGLE != 0 {
+            write_i32(this, ACTOR_ANGLE, fixed(angle));
+        }
+        if mask & f::SCALE != 0 {
+            // Guard against a pack asking for an invisible or absurd sprite.
+            write_i32(this, ACTOR_SCALE, fixed(scale.clamp(0.01, 64.0)));
+        }
+        // Colour and blend share one word, so a partial write has to merge
+        // rather than overwrite: `a:blend("add")` must keep the team colour.
+        if mask & (f::TINT | f::BLEND) != 0 {
+            let mut word = read_i32(this, ACTOR_TINT) as u32;
+            if mask & f::TINT != 0 {
+                word = (word & 0xFF00_0000) | (tint & 0x00FF_FFFF);
+            }
+            if mask & f::BLEND != 0 {
+                word = (word & 0x00FF_FFFF) | (tint & 0xFF00_0000);
+            }
+            write_i32(this, ACTOR_TINT, word as i32);
+        }
+        if mask & f::DEPTH != 0 {
             write_i32(this, ACTOR_DEPTH, depth as i32);
         }
     }

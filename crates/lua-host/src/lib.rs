@@ -11,8 +11,8 @@ mod sandbox;
 mod spawn;
 
 pub use actor::{
-    actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_fire,
-    weapon_select, ActorEvent, ActorNative, SpawnArgs,
+    actor_frame, actor_freed, actor_spawned, bind_actor_native, gfx_field, weapon_click,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, SpawnArgs,
 };
 pub use dispatch::{
     gravity_after, gravity_before, hurt, missile_frame, run_hud, worm_message, Hurt,

@@ -1,6 +1,7 @@
 //! RGBA companion to WA's indexed renderer. The real framebuffer is never
-//! replaced: it remains a complete palette fallback. Scratch stock draws give
-//! us an underlay and exact occlusion at each custom sprite's queue depth.
+//! replaced: it remains a complete palette fallback. Cutting the stock
+//! dispatch into three parts gives us an underlay and exact occlusion at each
+//! custom sprite's queue depth.
 use crate::{
     log_error, log_line,
     render_queue::{Command, Queue},
@@ -16,16 +17,11 @@ use std::{
 };
 
 const SURFACE: usize = 0x3d9c;
-const RENDER_LOCK: usize = 0x3d98;
 static SHEETS: LazyLock<Mutex<HashMap<u32, SpriteStrip>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static FRAME: Mutex<Option<Frame>> = Mutex::new(None);
 static ANNOUNCED: AtomicBool = AtomicBool::new(false);
 static WARNED: AtomicBool = AtomicBool::new(false);
-static NEARER_LOGGED: AtomicBool = AtomicBool::new(false);
-static REPLAY_LOGGED: AtomicBool = AtomicBool::new(false);
-static GRID_LOGGED: AtomicBool = AtomicBool::new(false);
-static LAYERS_LOGGED: AtomicBool = AtomicBool::new(false);
 /// Set when capture performed the frame's stock drawing itself.
 pub static DREW: AtomicBool = AtomicBool::new(false);
 static PENDING: AtomicBool = AtomicBool::new(false);
@@ -178,99 +174,6 @@ fn warn(reason: &str) {
     }
 }
 
-/// Restore all target fields even if capture unwinds. The render lock stops WA
-/// from reacquiring its real surface on the first scratch draw.
-unsafe fn raster(
-    q: &Queue,
-    commands: &[Command],
-    display: usize,
-    clip: usize,
-    surface: usize,
-    mut grid: Grid,
-    pixels: &mut [u8],
-) {
-    struct Restore {
-        display: usize,
-        surface: usize,
-        grid: Grid,
-        lock: u32,
-    }
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            unsafe {
-                *(self.surface as *mut Grid) = self.grid;
-                *((self.display + SURFACE) as *mut u32) = self.surface as u32;
-                *((self.display + RENDER_LOCK) as *mut u32) = self.lock;
-            }
-        }
-    }
-    let _restore = Restore {
-        display,
-        surface,
-        grid,
-        lock: *((display + RENDER_LOCK) as *const u32),
-    };
-    grid.data = pixels.as_mut_ptr() as u32;
-    grid.stride = grid.w;
-    *(surface as *mut Grid) = grid;
-    // The queue draws through display->vtable[19], which resolves its target
-    // from a layer binding -- but not necessarily layer 0. wkFOW's precedent
-    // redirects 0x3d9c for a direct blit of a HUD sprite; world draws may use
-    // another layer, which would explain a replay that holds its binding and
-    // still writes nothing. Redirect every bound layer at once: they all feed
-    // the same scratch, and coverage does not care which one drew.
-    let mut others: [(usize, Grid); 3] = [(0, grid); 3];
-    for (n, slot) in (1..4).enumerate() {
-        let addr = *((display + SURFACE + slot * 4) as *const u32) as usize;
-        if addr == 0 || addr == surface {
-            continue;
-        }
-        let mut g = *(addr as *const Grid);
-        if g.data == 0 || g.w != grid.w || g.h != grid.h {
-            continue;
-        }
-        others[n] = (addr, g);
-        g.data = pixels.as_mut_ptr() as u32;
-        g.stride = g.w;
-        *(addr as *mut Grid) = g;
-    }
-    if !LAYERS_LOGGED.swap(true, Ordering::SeqCst) {
-        #[cfg(debug_assertions)]
-        log_line(&format!(
-            "truecolor layers: {:#x} {:#x} {:#x} {:#x}",
-            *((display + SURFACE) as *const u32),
-            *((display + SURFACE + 4) as *const u32),
-            *((display + SURFACE + 8) as *const u32),
-            *((display + SURFACE + 12) as *const u32),
-        ));
-    }
-    // Held at 1 so DisplayGfx cannot rebind layer_0 while the temporary target
-    // is installed -- the dispatcher draws through display->vtable[19]
-    // (blit_sprite), which resolves its target from that binding.
-    *((display + RENDER_LOCK) as *mut u32) = 1;
-    q.draw(commands, display, clip);
-    // Did the binding survive the replay, and did the target stay ours? This
-    // separates "the draws were skipped" from "the draws went somewhere else".
-    for (addr, g) in others.iter() {
-        if *addr != 0 {
-            *(*addr as *mut Grid) = *g;
-        }
-    }
-    if !GRID_LOGGED.swap(true, Ordering::SeqCst) {
-        #[cfg(debug_assertions)]
-        log_line(&format!(
-            "truecolor raster: bound {:#x} (expected {:#x}), data {:#x} (scratch {:#x}), stride {} w {} h {}",
-            *((display + SURFACE) as *const u32) as usize,
-            surface,
-            *(surface as *const u32).byte_add(8),
-            pixels.as_ptr() as u32,
-            (*(surface as *const Grid)).stride,
-            (*(surface as *const Grid)).w,
-            (*(surface as *const Grid)).h
-        ));
-    }
-}
-
 fn supported(c: Command, sheets: &HashMap<u32, SpriteStrip>) -> bool {
     if c.kind != 4 && c.kind != 5 {
         return false;
@@ -367,13 +270,13 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) {
         );
     }
 
-    // Coverage comes from the REAL dispatch, in three parts, rather than from
-    // replaying commands into a redirected scratch surface. That replay held
-    // its binding perfectly -- right pointer, right data, right stride -- and
-    // still wrote 0 of 1,024,000 pixels, through five different hypotheses.
-    // These draws demonstrably work: they are the ones that put the frame on
-    // screen. Every command kind is handled, including the kind 1 bitmaps that
-    // draw the weapon panel.
+    // Coverage comes from the REAL dispatch, cut into three parts. The
+    // alternative -- replaying commands into a redirected scratch surface --
+    // was built and abandoned: it held its binding perfectly (right pointer,
+    // right data, right stride) and still wrote 0 of 1,024,000 pixels, through
+    // five different hypotheses. These draws demonstrably work, because they
+    // are the ones that put the frame on screen, and every command kind is
+    // covered -- including the kind 1 bitmaps that draw the weapon panel.
     q.draw(&ordered[..first], display, clip);
     grid.copy_pixels(&mut f.underlay); // scene without our sprites
     q.draw(&ordered[first..=last], display, clip);

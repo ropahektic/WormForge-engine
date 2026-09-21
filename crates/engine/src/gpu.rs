@@ -39,7 +39,9 @@ use std::{
 extern "C" {
     fn wf_gpu_init(device: *mut c_void) -> i32;
     fn wf_gpu_on_device_lost();
-    fn wf_gpu_release();
+    // wf_gpu_release() is deliberately not declared here: WA never unloads
+    // wkLua, so there is no point at which it could run. It exists in the
+    // C++ for the S1 probe, which does tear its device down.
     fn wf_gpu_atlas(w: u32, h: u32, bgra: *const u8) -> i32;
     fn wf_gpu_mask(w: u32, h: u32, coverage: *const u8) -> i32;
     fn wf_gpu_draw(verts: *const c_void, count: u32) -> i32;
@@ -58,7 +60,6 @@ static ANNOUNCED: AtomicBool = AtomicBool::new(false);
 static RESOLVED_IDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static NO_SHADER_LOGGED: AtomicBool = AtomicBool::new(false);
 static MASK_LOGGED: AtomicBool = AtomicBool::new(false);
-static DEPTHS_LOGGED: AtomicBool = AtomicBool::new(false);
 static HIDDEN_LOGGED: Mutex<Vec<(i32, i32)>> = Mutex::new(Vec::new());
 static WARNED: AtomicBool = AtomicBool::new(false);
 
@@ -85,7 +86,9 @@ pub fn is_active() -> bool {
 
 fn warn(message: &str) {
     if !WARNED.swap(true, Ordering::SeqCst) {
-        log_error(&format!("gpu renderer: {message}; stock rendering retained"));
+        log_error(&format!(
+            "gpu renderer: {message}; stock rendering retained"
+        ));
     }
 }
 
@@ -132,8 +135,7 @@ impl Frame {
     }
 
     fn matches(&self, display: usize, surface: usize, w: usize, h: usize) -> bool {
-        self.display == display && self.surface == surface
-            && self.width == w && self.height == h
+        self.display == display && self.surface == surface && self.width == w && self.height == h
     }
 }
 
@@ -159,7 +161,6 @@ pub fn clear() {
     }
     NO_SHADER_LOGGED.store(false, Ordering::SeqCst);
     MASK_LOGGED.store(false, Ordering::SeqCst);
-    DEPTHS_LOGGED.store(false, Ordering::SeqCst);
     if let Ok(mut seen) = HIDDEN_LOGGED.lock() {
         seen.clear();
     }
@@ -189,12 +190,6 @@ pub fn begin_frame() {
 pub fn release() {
     unsafe { wf_gpu_on_device_lost() };
     begin_frame();
-}
-
-/// Tear down completely.
-pub fn shutdown() {
-    unsafe { wf_gpu_release() };
-    clear();
 }
 
 /// Draw the stock frame ourselves, in parts, and derive the coverage mask.
@@ -262,7 +257,10 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
         // wrong side of a layer.
         let mut seen: Vec<(u32, u32, u32)> = Vec::new();
         for c in &q.commands {
-            match seen.iter_mut().find(|(d, k, _)| *d == c.depth && *k == c.kind) {
+            match seen
+                .iter_mut()
+                .find(|(d, k, _)| *d == c.depth && *k == c.kind)
+            {
                 Some((_, _, n)) => *n += 1,
                 None => seen.push((c.depth, c.kind, 1)),
             }
@@ -283,10 +281,7 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
             .iter()
             .map(|(d, k, n)| format!("{d:#x}:{}x{n}", name(*k)))
             .collect();
-        crate::log_line(&format!(
-            "gpu depths: back to front {}",
-            list.join(" ")
-        ));
+        crate::log_line(&format!("gpu depths: back to front {}", list.join(" ")));
     }
 
     let ordered = q.ordered();
@@ -521,9 +516,7 @@ fn ensure_atlas() -> bool {
     let Some(atlas) = held.as_ref() else {
         return false;
     };
-    let ok = unsafe {
-        wf_gpu_atlas(atlas.width, atlas.height, atlas.pixels.as_ptr()) != 0
-    };
+    let ok = unsafe { wf_gpu_atlas(atlas.width, atlas.height, atlas.pixels.as_ptr()) != 0 };
     if ok {
         ATLAS_UPLOADED.store(true, Ordering::SeqCst);
         log_line(&format!(
@@ -559,14 +552,7 @@ struct Pending {
 ///
 /// Returns true when this draw is ours, in which case the caller must NOT
 /// enqueue it: WA would otherwise draw a palette copy underneath our quad.
-pub fn intercept(
-    _layer: u32,
-    x: i32,
-    y: i32,
-    sprite: u32,
-    anim: u32,
-    actor: *mut u8,
-) -> bool {
+pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mut u8) -> bool {
     if !is_active() {
         return false;
     }
@@ -601,7 +587,16 @@ pub fn intercept(
     let Ok(mut pending) = PENDING.lock() else {
         return false;
     };
-    pending.push(Pending { x, y, sprite, anim, angle, scale, tint, depth });
+    pending.push(Pending {
+        x,
+        y,
+        sprite,
+        anim,
+        angle,
+        scale,
+        tint,
+        depth,
+    });
     true
 }
 
@@ -673,9 +668,17 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
                      tint={:#010x} raw=({},{}) clip=({clip_x},{clip_y}) \
                      cam=({cam_x},{cam_y}) -> screen=({x},{y}) \
                      bounds=({bx0},{by0})..({bx1},{by1}) surface={w}x{h}",
-                    rect.x, rect.y, rect.w, rect.h, rect.atlas_w, rect.atlas_h,
-                    sprite.angle, sprite.scale, sprite.tint.0,
-                    p.x >> 16, p.y >> 16,
+                    rect.x,
+                    rect.y,
+                    rect.w,
+                    rect.h,
+                    rect.atlas_w,
+                    rect.atlas_h,
+                    sprite.angle,
+                    sprite.scale,
+                    sprite.tint.0,
+                    p.x >> 16,
+                    p.y >> 16,
                 ));
             }
             if behind_terrain {
@@ -692,9 +695,7 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
 /// Mirrors `truecolor::Grid` rather than sharing it, because the two modules
 /// are meant to be separable — one of them is going away once the other
 /// proves itself.
-unsafe fn surface_reader(
-    display: usize,
-) -> Option<(usize, usize, usize, impl Fn(&mut [u8]))> {
+unsafe fn surface_reader(display: usize) -> Option<(usize, usize, usize, impl Fn(&mut [u8]))> {
     const SURFACE: usize = 0x3d9c;
     if display == 0 {
         return None;
@@ -708,8 +709,15 @@ unsafe fn surface_reader(
     let stride = *((address + 16) as *const u32) as usize;
     let w = *((address + 20) as *const u32) as usize;
     let h = *((address + 24) as *const u32) as usize;
-    if data == 0 || bpp != 8 || w == 0 || h == 0 || w > 4096 || h > 4096
-        || w % 4 != 0 || stride < w || stride > 16384
+    if data == 0
+        || bpp != 8
+        || w == 0
+        || h == 0
+        || w > 4096
+        || h > 4096
+        || w % 4 != 0
+        || stride < w
+        || stride > 16384
     {
         return None;
     }
