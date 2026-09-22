@@ -156,6 +156,10 @@ pub struct ActorNative {
     pub look: fn(handle: u32, sprite: i32, delta: u32, w: i32, h: i32),
     /// Keyboard bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint, 64 Q, 128 Space.
     pub keys: fn() -> u32,
+    /// True when peers exist. Packs reading local input need this to guard
+    /// themselves: `keys()` and `pointer()` are local-only, so acting on them
+    /// in a networked game desyncs the peers.
+    pub networked: fn() -> bool,
     pub hide_worm: fn(handle: u32, hide: bool),
     pub worm_hidden: fn(handle: u32) -> bool,
     /// Stock SelectWeapon (F1 path). Returns ammo after equip, 0 if not this worm's turn.
@@ -182,6 +186,7 @@ impl Default for ActorNative {
             explode: |_, _, _, _| {},
             despawn: |_| {},
             set_gfx: |_, _, _, _, _, _| {},
+            networked: || false,
             in_water: |_| false,
             on_feet: |_| false,
             gravity: |_| {},
@@ -915,6 +920,10 @@ pub fn native_land_solid() -> Option<fn(i32, i32) -> bool> {
 
 pub fn native_set_gfx() -> Option<fn(u32, u32, f32, f32, u32, u32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.set_gfx)
+}
+
+pub fn native_networked() -> Option<fn() -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.networked)
 }
 
 pub fn native_set_frame() -> Option<fn(u32, i32)> {

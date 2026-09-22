@@ -136,10 +136,12 @@ pub unsafe fn observe(world: *mut u8) {
     if ANNOUNCED.swap(1, Ordering::Relaxed) == 0 {
         // -1 here means WA is playing a replay back rather than recording one.
         let recorded = read_i32(world, GAME_WORLD_RECORDED_FRAME);
+        let net = read_i32(world, game::offsets::GAME_WORLD_NET_GAME);
         log_line(&format!(
             "sync probe: world {world:?} first frame {frame}, \
-             recorded_frame_counter {recorded} ({})",
-            if recorded < 0 { "REPLAY PLAYBACK" } else { "live or recording" }
+             recorded_frame_counter {recorded} ({}), net_game {net:#x} ({})",
+            if recorded < 0 { "REPLAY PLAYBACK" } else { "live or recording" },
+            if net != 0 { "NETWORKED" } else { "local" }
         ));
     }
 

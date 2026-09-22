@@ -304,6 +304,10 @@ pub const GAME_WORLD_LANDSCAPE: usize = 0x20;
 /// `GameWorld.frame_counter` — incremented at the end of each frame in
 /// GameFrameDispatcher. WA keeps its own sim clock, so nothing here needs to
 /// invent one; this is the number the replay stream is keyed to.
+/// `GameWorld.net_game` — the network game object, param_9 to the GameRuntime
+/// constructor. Non-null is the signal that peers exist, and therefore that
+/// anything driven by local input is a desync rather than a local quirk.
+pub const GAME_WORLD_NET_GAME: usize = 0x28;
 pub const GAME_WORLD_FRAME_COUNTER: usize = 0x5CC;
 /// `GameWorld.game_rng` — `rng = (frame_counter + rng) * 0x19660D + 0x3C6EF35F`.
 ///
@@ -485,6 +489,7 @@ mod tests {
         assert_eq!(CLASS_MINE, 8);
         assert_eq!(ENT_CHILDREN_DATA, 0x14);
         // Determinism probes, ported from OpenWA's 3.8.1 catalog.
+        assert_eq!(GAME_WORLD_NET_GAME, 0x28);
         assert_eq!(GAME_WORLD_FRAME_COUNTER, 0x5CC);
         assert_eq!(GAME_WORLD_GAME_RNG, 0x45EC);
         assert_eq!(GAME_WORLD_RNG_STATE_1, 0x72EC);

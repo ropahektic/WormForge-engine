@@ -160,6 +160,7 @@ pub fn view_cam() -> (i32, i32, i32, i32) {
 /// OS mouse (so a held drag tracks). Client pixels are scaled onto the
 /// display so windowed / DPI stretch still covers the whole map.
 pub fn pointer() -> (i32, i32, bool) {
+    warn_local_input_desync("a pack calling wa.world.pointer()");
     latched(&POINTER, poll_pointer)
 }
 
@@ -314,6 +315,57 @@ fn latched<T: Copy>(latch: &FrameLatch<T>, sample: impl FnOnce() -> T) -> T {
     }
 }
 
+/// True when peers exist, so that anything driven by local input is a desync
+/// rather than a local quirk.
+///
+/// `GameWorld+0x28` is the network game object. Verified null (`0x0`) in an
+/// offline replay; assumed non-null with peers, which is the half that cannot
+/// be checked from a single machine. The asymmetry is deliberate and safe: a
+/// wrong reading can only produce a missed warning, which is exactly today's
+/// behaviour, never a false one.
+pub fn is_networked() -> bool {
+    let world = session_world();
+    if world.is_null() {
+        return false;
+    }
+    unsafe { read_i32(world, GAME_WORLD_NET_GAME) != 0 }
+}
+
+/// Say once, loudly, that local input just changed shared game state in a
+/// networked game.
+///
+/// This is not a fix. `pump_space_fire` and `equip_weapon` act on *this*
+/// machine's keyboard and write real state -- posting MSG_RELEASE_WEAPON,
+/// spending ammo, enabling weapons -- without any of it going on the wire.
+/// The other peer never runs them, so the two simulations part company. The
+/// real answer is a synchronised input channel (Project X's keySync), which
+/// needs lockstep packets WormForge does not have.
+///
+/// Until then the least we can do is stop it being invisible: a desync that
+/// announces itself is a bug report, one that does not is a mystery.
+fn warn_local_input_desync(path: &'static str) {
+    if !is_networked() {
+        return;
+    }
+    if let Ok(mut seen) = LOCAL_INPUT_WARNED.lock() {
+        if seen.iter().any(|p| *p == path) {
+            return;
+        }
+        seen.push(path);
+    } else {
+        return;
+    }
+    log_error(&format!(
+        "{path} acted on LOCAL input during a networked game. This machine's \
+         keyboard just changed shared game state that never went on the wire, \
+         so the other peer did not do the same thing and the simulations have \
+         diverged. Not fixable without a synchronised input channel; see \
+         docs/replay-plan.md gap 1."
+    ));
+}
+
+static LOCAL_INPUT_WARNED: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+
 /// Drop both held samples. A new match restarts WA's frame counter, and the
 /// first frame must not inherit the last frame of the previous game.
 pub fn clear_input_latch() {
@@ -323,13 +375,22 @@ pub fn clear_input_latch() {
 
 /// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint (shift), 64 Q, 128 Space (shoot).
 pub fn keys() -> u32 {
+    // Bound as `wa.world.keys()` and called from nowhere else in the engine,
+    // so reaching here means a pack read local input.
+    warn_local_input_desync("a pack calling wa.world.keys()");
+    keys_latched()
+}
+
+fn keys_latched() -> u32 {
     latched(&KEYS, poll_keys)
 }
 
 /// True while Space is held, as sampled for this frame. `pump_space_fire` and
 /// a pack reading `keys().space` therefore always agree.
 fn space_held() -> bool {
-    keys() & 128 != 0
+    // The un-warned reader: pump_space_fire warns under its own name, and
+    // reporting it twice for one cause would just be noise.
+    keys_latched() & 128 != 0
 }
 
 fn poll_keys() -> u32 {
@@ -444,11 +505,13 @@ pub fn pump_space_fire(worm: *mut u8) {
         }
     }
     if down && !was {
+        warn_local_input_desync("pump_space_fire");
         unsafe {
             start_firing(worm);
         }
         log_line(&format!("space charge worm={handle:#x}"));
     } else if !down && was {
+        warn_local_input_desync("pump_space_fire");
         unsafe {
             release_shot(worm);
             spend_gift(worm, handle);

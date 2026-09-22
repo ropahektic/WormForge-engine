@@ -265,10 +265,28 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    **Verified behaviour-preserving in-game**: the W0 gate re-run produced hashes
    bit-identical to the pre-latch run, sample for sample. The probe proved a
    refactor safe, which is the instrument paying for itself outside replay.
-2. **Retire `pump_space_fire`'s local poll** (gap 1). It posts
-   `MSG_RELEASE_WEAPON` and spends ammo off a raw `GetAsyncKeyState`, bypassing
-   the path WA uses to put that message on the wire — a live multiplayer desync
-   today, in the engine rather than in a pack. The latch is its fix.
+2. ⚠️ **Make gap 1 visible — DONE. It is NOT fixed, and cannot be yet.**
+
+   The earlier claim here, that the latch was its fix, was wrong. Latching makes
+   a peer consistent *with itself* inside a frame; it does nothing about two
+   peers pressing different keys. `pump_space_fire` still calls `start_firing`,
+   `release_shot` and `spend_gift` off this machine's keyboard, and none of it
+   goes on the wire. The real answer is a synchronised input channel — Project
+   X's `keySync`, 1,123 uses across its scripts — which needs lockstep packets
+   WormForge does not have. That is a larger piece of work than all of W1.
+
+   What shipped instead is detection, because a desync that announces itself is
+   a bug report and one that does not is a mystery:
+
+   - `world::is_networked()` reads `GameWorld+0x28` (the network game object).
+     Verified `0x0` in an offline replay; the networked half is assumed. The
+     asymmetry is safe by design — a wrong reading can only produce a missed
+     warning, which is today's behaviour, never a false one.
+   - `pump_space_fire` and the Lua-facing `keys()` / `pointer()` each log once,
+     loudly, when they act during a networked game.
+   - **`wa.world.networked()`** is exposed so packs can guard themselves. The
+     three packs using local input today — `pooz`, `q_bazooka`, `worm_toss` —
+     now have a way to opt out of desyncing instead of no option at all.
 3. **`wa.random(n)`** reading `GameWorld+0x45EC` (gap 4). Design confirmed by PX.
    Decide deliberately and document: drawing *advances* WA's shared RNG, so a
    pack that draws shifts every subsequent stock draw. Both peers do the same

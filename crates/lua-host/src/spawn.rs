@@ -268,6 +268,17 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     world.set("keys", keys).map_err(|e| e.to_string())?;
+
+    // The guard that makes keys()/pointer() usable at all. They read THIS
+    // machine's input, which never goes on the wire, so acting on them in a
+    // networked game parts the two simulations. A pack that wants to stay
+    // lockstep-safe checks this first and does nothing when it is true.
+    let networked = lua
+        .create_function(|_, ()| {
+            Ok(crate::actor::native_networked().map(|f| f()).unwrap_or(false))
+        })
+        .map_err(|e| e.to_string())?;
+    world.set("networked", networked).map_err(|e| e.to_string())?;
     wa.set("world", world).map_err(|e| e.to_string())?;
     Ok(())
 }

@@ -109,6 +109,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         drop_carry: crate::physics::drop_carry,
         look: native_look,
         keys: crate::world::keys,
+        networked: crate::world::is_networked,
         hide_worm: crate::physics::hide_worm,
         worm_hidden: crate::physics::worm_hidden,
         equip: crate::world::equip_weapon,
