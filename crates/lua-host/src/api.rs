@@ -356,7 +356,23 @@ fn table_to_claim(
         }
     }
 
-    let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
+    
+    let mut layer = None;
+    let mut depth = None;
+    let mut depth_prefix = None;
+    let mut gpu_prefix = None;
+    let mut truecolor_prefix = None;
+    let mut reserve_prefix = None;
+    if let Some(p) = spec.get::<Option<Table>>("params")? {
+        layer = get_i32(&p, "layer")?.map(|v| v as u32);
+        depth = get_i32(&p, "depth")?.map(|v| v as u32);
+        depth_prefix = get_string(&p, "depth_prefix")?;
+        gpu_prefix = get_string(&p, "gpu_prefix")?;
+        truecolor_prefix = get_string(&p, "truecolor_prefix")?;
+        reserve_prefix = get_string(&p, "reserve_prefix")?;
+    }
+
+let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
     if let Value::Table(fire) = spec.get::<Value>("on_fire")? {
         if let Ok(s) = fire.get::<Table>("spawn") {
             load_sprite_field(
@@ -471,6 +487,12 @@ fn table_to_claim(
             sprite_path,
             extra_sheets,
             worm_sprites,
+            layer,
+            depth,
+            depth_prefix,
+            reserve_prefix,
+            gpu_prefix,
+            truecolor_prefix,
             extra_sounds,
             cluster_sprite_id,
             cluster_damage,

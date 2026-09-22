@@ -1,0 +1,12 @@
+[package]
+name = "render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Deliberately no dependency on `engine` -- engine depends on this. Inputs are
+# plain data (sheets, a draw list, a mask), so the geometry and packing are
+# testable on any host, not only on the Windows target.
+
+[build-dependencies]
+cc = "1"

@@ -7,9 +7,13 @@ license.workspace = true
 [dependencies]
 game = { path = "../game" }
 gfx = { path = "../gfx" }
+render = { path = "../render" }
 lua-host = { path = "../lua-host" }
 re-catalog = { path = "../re-catalog" }
 minhook = { workspace = true }
 weapons = { path = "../weapons" }
 actors = { path = "../actors" }
 windows-sys = { workspace = true }
+
+[build-dependencies]
+cc = "1"

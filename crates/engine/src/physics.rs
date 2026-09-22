@@ -439,8 +439,10 @@ fn is_stock_homing_body(id: i32) -> bool {
 }
 
 unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
+    // BEFORE stock entity blits fill the GPU pending list. Clearing after
+    // would wipe quads between enqueue and dispatch (ghost trails).
     if msg == MSG_RENDER_SCENE {
-        // Puff scratch for this render pass.
+        crate::gpu::begin_frame();
         crate::actor::begin_puff_frame();
     }
     let orig = ORIG_ROOT.load(Ordering::SeqCst);
@@ -453,6 +455,7 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         crate::actor::tick_puffs();
     }
     if msg == MSG_RENDER_SCENE {
+        crate::truecolor::begin_frame();
         crate::actor::draw_puffs(this);
     }
     if !holding() {

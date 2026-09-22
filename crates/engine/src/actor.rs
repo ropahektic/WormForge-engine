@@ -2133,6 +2133,9 @@ unsafe fn try_move(this: *mut u8, x: i32, y: i32) -> u32 {
 }
 
 unsafe fn draw_sprite_local(queue: *mut u8, layer: u32, x: i32, y: i32, sprite: u32, anim: u32) {
+    if crate::gpu::intercept(layer, x, y, sprite, anim, std::ptr::null_mut()) {
+        return;
+    }
     let f = rb(RQ_DRAW_SPRITE_LOCAL) as u32;
     let args = [queue as u32, layer, x as u32, y as u32, sprite, anim, f];
     core::arch::asm!(
