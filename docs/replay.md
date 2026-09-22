@@ -89,15 +89,22 @@ run, and with the DLL absent there is no probe to produce a stream. Comparing
 packs-on against packs-off keeps the probe in both runs and still isolates
 what we contribute.)
 
-**B — is our own layer reproducible?** Same replay twice with a scripted,
-input-free pack — one that spawns actors on a turn-start timer and never calls
-`keys()` or `pointer()` — diffing the **`actors`** column.
+**B — is our own layer reproducible?** Same replay twice with
+`mods/examples/synctest` installed, diffing the **`actors`** column.
 
-Note that a replay from the corpus only fires stock weapons, so `actors` stays
-at `811c9dc5` throughout — that is the FNV basis, i.e. the empty-list hash, and
-seeing it is confirmation the empty case is handled rather than a sign nothing
-ran. Test B needs a pack that acts without input, which is why it is a separate
-piece of work.
+That pack exists only for this. A corpus replay fires only stock weapons, so
+without it `actors` stays at `811c9dc5` — the FNV basis, i.e. the empty-list
+hash — for the whole run and test B measures nothing. `synctest` spawns six
+kinematic dots on every `START_TURN`, which is a trigger a recorded replay
+actually reaches.
+
+Its constraints are what make it a control rather than a variable: no input
+reads, no randomness, and nothing that can touch WA's shared RNG — no
+explosion, no damage, no collision, and gravity integrated in Lua rather than
+through `a:gravity()`, which would enter WA's collision manager. A test in
+`crates/lua-host` enforces each of those against the pack source, and that
+test was itself checked against deliberately broken copies to confirm it
+fails when it should.
 
 Neither test needs a recorder to exist, which is why they come first.
 

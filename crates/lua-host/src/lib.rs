@@ -301,6 +301,67 @@ mod tests {
         }
     }
 
+    /// The synctest pack is a measurement control for the determinism gate,
+    /// and it is only valid while it stays one. These assertions are the
+    /// rules from its README, enforced: a later edit that reaches for input
+    /// or for an explosion would silently turn the control into a variable
+    /// and the gate would start reporting nonsense.
+    #[test]
+    fn synctest_pack_stays_a_valid_determinism_control() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/synctest");
+        let raw = std::fs::read_to_string(root.join("weapons.lua")).unwrap();
+        // Scan code, not prose. The pack's header comment names every
+        // forbidden call in order to explain why it is forbidden, so a naive
+        // search matches the documentation and fails on a correct pack.
+        let src: String = raw
+            .lines()
+            .map(|line| line.split("--").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Rule 1: no input. These are per-call polls of live OS state, so a
+        // pack that reads them cannot be reproducible by construction.
+        for banned in ["wa.world.keys", "wa.world.pointer"] {
+            assert!(
+                !src.contains(banned),
+                "{banned} makes the control unreproducible"
+            );
+        }
+        // Rule 2: no randomness beyond the fixed table.
+        assert!(!src.contains("math.random"), "randomness breaks the control");
+        // Rule 3: nothing that can reach WA's single shared RNG. a:gravity()
+        // enters WA's collision manager, so it is excluded with the rest.
+        for banned in [":explode", "damage_terrain", "damage_worms", ":gravity("] {
+            assert!(
+                !src.contains(banned),
+                "{banned} can perturb WA's RNG, which is the control for test A"
+            );
+        }
+        // It must still actually spawn, or it measures nothing at all.
+        assert!(src.contains("wa.actors.spawn"), "the control must spawn actors");
+        assert!(
+            src.contains("wa.msg.START_TURN"),
+            "START_TURN is the only trigger a recorded replay will reach"
+        );
+
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        // An obscure utility slot no corpus replay fires: claiming it must not
+        // change anything a recorded game goes on to read.
+        assert_eq!(claim.slot, StockWeapon::ScalesOfJustice);
+        // One sheet, one frame, on the GPU atlas so it costs no WA slot.
+        assert_eq!(claim.params.extra_sheets.len(), 1);
+        assert_eq!(claim.params.extra_sheets[0].1.frames.len(), 1);
+        assert_eq!(claim.params.gpu_prefix.as_deref(), Some("sprites/"));
+    }
+
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
     }

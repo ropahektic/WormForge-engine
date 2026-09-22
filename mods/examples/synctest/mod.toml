@@ -1,0 +1,9 @@
+id = "example.synctest"
+version = "0.1.0"
+author = "wkLua"
+api_version = 1
+entry = "weapons.lua"
+
+[weapons]
+register = ["example.synctest"]
+replace = ["scales_of_justice"]
