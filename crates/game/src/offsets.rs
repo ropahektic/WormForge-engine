@@ -304,6 +304,23 @@ pub const GAME_WORLD_LANDSCAPE: usize = 0x20;
 /// `GameWorld.frame_counter` — incremented at the end of each frame in
 /// GameFrameDispatcher. WA keeps its own sim clock, so nothing here needs to
 /// invent one; this is the number the replay stream is keyed to.
+/// `GameWorld__AdvanceRNG` — `__fastcall`, `this` in ECX, new value in EAX.
+///
+/// Six instructions, verified byte-for-byte in 3.8.1's WA.exe:
+/// ```text
+///   mov  eax, [ecx + 0x5cc]      ; frame_counter
+///   add  eax, [ecx + 0x45ec]     ; + game_rng
+///   imul eax, eax, 0x19660d
+///   add  eax, 0x3c6ef35f
+///   mov  [ecx + 0x45ec], eax
+///   ret
+/// ```
+/// That disassembly is also what confirms `GAME_WORLD_FRAME_COUNTER` and
+/// `GAME_WORLD_GAME_RNG` below: both appear in it as literal displacements.
+pub const GAME_WORLD_ADVANCE_RNG: u32 = 0x0053_F320;
+/// First six bytes of the above, checked before we ever call it.
+pub const ADVANCE_RNG_PROLOGUE: [u8; 6] = [0x8b, 0x81, 0xcc, 0x05, 0x00, 0x00];
+
 /// `GameWorld.net_game` — the network game object, param_9 to the GameRuntime
 /// constructor. Non-null is the signal that peers exist, and therefore that
 /// anything driven by local input is a desync rather than a local quirk.
@@ -490,6 +507,16 @@ mod tests {
         assert_eq!(ENT_CHILDREN_DATA, 0x14);
         // Determinism probes, ported from OpenWA's 3.8.1 catalog.
         assert_eq!(GAME_WORLD_NET_GAME, 0x28);
+        assert_eq!(GAME_WORLD_ADVANCE_RNG, 0x0053_F320);
+        // The prologue must load frame_counter, or the offsets disagree with
+        // the code that uses them.
+        assert_eq!(
+            u32::from_le_bytes([
+                ADVANCE_RNG_PROLOGUE[2], ADVANCE_RNG_PROLOGUE[3],
+                ADVANCE_RNG_PROLOGUE[4], ADVANCE_RNG_PROLOGUE[5],
+            ]) as usize,
+            GAME_WORLD_FRAME_COUNTER
+        );
         assert_eq!(GAME_WORLD_FRAME_COUNTER, 0x5CC);
         assert_eq!(GAME_WORLD_GAME_RNG, 0x45EC);
         assert_eq!(GAME_WORLD_RNG_STATE_1, 0x72EC);

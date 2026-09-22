@@ -110,6 +110,8 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         look: native_look,
         keys: crate::world::keys,
         networked: crate::world::is_networked,
+        random: crate::world::draw_random,
+        log: |m| crate::log_line(m),
         hide_worm: crate::physics::hide_worm,
         worm_hidden: crate::physics::worm_hidden,
         equip: crate::world::equip_weapon,

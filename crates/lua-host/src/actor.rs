@@ -160,6 +160,12 @@ pub struct ActorNative {
     /// themselves: `keys()` and `pointer()` are local-only, so acting on them
     /// in a networked game desyncs the peers.
     pub networked: fn() -> bool,
+    /// One draw from WA's shared RNG, or None if it is unavailable.
+    pub random: fn() -> Option<u32>,
+    /// Write a line to wkLua.log now. `wa.log` collects into a Vec that is
+    /// snapshotted once after loading, so without this a pack logging from a
+    /// hook or a brain writes into a buffer nobody ever reads.
+    pub log: fn(&str),
     pub hide_worm: fn(handle: u32, hide: bool),
     pub worm_hidden: fn(handle: u32) -> bool,
     /// Stock SelectWeapon (F1 path). Returns ammo after equip, 0 if not this worm's turn.
@@ -187,6 +193,8 @@ impl Default for ActorNative {
             despawn: |_| {},
             set_gfx: |_, _, _, _, _, _| {},
             networked: || false,
+            random: || None,
+            log: |_| {},
             in_water: |_| false,
             on_feet: |_| false,
             gravity: |_| {},
@@ -920,6 +928,14 @@ pub fn native_land_solid() -> Option<fn(i32, i32) -> bool> {
 
 pub fn native_set_gfx() -> Option<fn(u32, u32, f32, f32, u32, u32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.set_gfx)
+}
+
+pub fn native_log() -> Option<fn(&str)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.log)
+}
+
+pub fn native_random() -> Option<fn() -> Option<u32>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.random)
 }
 
 pub fn native_networked() -> Option<fn() -> bool> {

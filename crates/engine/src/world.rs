@@ -9,7 +9,7 @@ use game::offsets::*;
 use std::collections::VecDeque;
 use std::ffi::CString;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::sync::Mutex;
 
 const MAX_WALK: usize = 8192;
@@ -314,6 +314,85 @@ fn latched<T: Copy>(latch: &FrameLatch<T>, sample: impl FnOnce() -> T) -> T {
         Some(frame) => latch.get(frame, sample),
     }
 }
+
+/// Draw from WA's own shared RNG.
+///
+/// **This is the only randomness a pack may have, and the reason is lockstep.**
+/// `math.random` is nil in the sandbox because a host RNG is seeded per
+/// process, so two peers would draw different numbers immediately. WA's RNG is
+/// part of the simulation: both peers advance it in step, and a replay
+/// reproduces it exactly. Project X reached the same conclusion — the LCG
+/// multiplier `0x19660D` appears zero times in `wkPX.dll`, so all ~227 of its
+/// `GS->GetRandom()` script calls defer to WA's.
+///
+/// We call WA's function rather than reimplementing the formula. It is six
+/// instructions and we know them, but calling cannot drift: if WA's arithmetic
+/// ever differed from our copy by one detail, every draw afterwards would
+/// diverge and the cause would be invisible.
+///
+/// **Drawing advances shared state.** The next stock draw — crate placement,
+/// barrel spread, damage jitter — gets the value after ours rather than the
+/// one it would have had. That is deliberate and safe for lockstep, because
+/// both peers and a replay all take the same draws in the same order. But a
+/// game played with a pack that draws is not the same game as one played
+/// without it, which is a thing to know rather than a bug.
+///
+/// Returns `None` before the world exists, or if the function's first
+/// instruction is not the one we verified.
+pub fn draw_random() -> Option<u32> {
+    let world = session_world();
+    if world.is_null() {
+        return None;
+    }
+    if !advance_rng_verified() {
+        return None;
+    }
+    let f = rb(GAME_WORLD_ADVANCE_RNG) as u32;
+    let args = [world as u32, f];
+    let out: u32;
+    unsafe {
+        core::arch::asm!(
+            "push esi",
+            "push edi",
+            "mov ecx, dword ptr [ebx]",
+            "call dword ptr [ebx + 4]",
+            "pop edi",
+            "pop esi",
+            in("ebx") args.as_ptr(),
+            lateout("eax") out,
+            out("ecx") _,
+            out("edx") _,
+        );
+    }
+    Some(out)
+}
+
+/// Check the prologue once, the way `render_queue` checks its dispatcher.
+/// Calling a hardcoded address on a build whose layout moved would corrupt
+/// the game; refusing to draw only costs the pack its randomness.
+fn advance_rng_verified() -> bool {
+    match RNG_OK.load(Ordering::Relaxed) {
+        0 => {
+            let addr = rb(GAME_WORLD_ADVANCE_RNG) as *const u8;
+            let found = unsafe {
+                std::slice::from_raw_parts(addr, ADVANCE_RNG_PROLOGUE.len())
+            };
+            let ok = found == ADVANCE_RNG_PROLOGUE;
+            RNG_OK.store(if ok { 2 } else { 1 }, Ordering::Relaxed);
+            if !ok {
+                log_error(&format!(
+                    "GameWorld__AdvanceRNG at {addr:?} does not start with the \
+                     verified prologue (found {found:02x?}); wa.random() is \
+                     disabled rather than calling into the wrong place"
+                ));
+            }
+            ok
+        }
+        v => v == 2,
+    }
+}
+
+static RNG_OK: AtomicU32 = AtomicU32::new(0);
 
 /// True when peers exist, so that anything driven by local input is a desync
 /// rather than a local quirk.

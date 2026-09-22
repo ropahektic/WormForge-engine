@@ -208,6 +208,49 @@ fn bind_land(lua: &Lua, wa: &Table) -> Result<(), String> {
     Ok(())
 }
 
+/// `wa.random()` — the only randomness a pack may use.
+///
+/// Mirrors `math.random`'s integer forms, which is what pack authors already
+/// know: `wa.random()` gives the raw 32-bit draw, `wa.random(n)` gives `1..n`,
+/// `wa.random(a, b)` gives `a..b`. There is deliberately no float form —
+/// `math.random()`'s 0..1 invites float arithmetic in simulation code, and
+/// nothing has needed it.
+///
+/// Errors rather than returns nil when the draw is unavailable. A pack that
+/// silently got `nil` here would fail somewhere later and further away.
+fn random_fn(lua: &Lua) -> Result<Function, String> {
+    lua.create_function(|_, (a, b): (Option<i64>, Option<i64>)| {
+        let draw = crate::actor::native_random()
+            .and_then(|f| f())
+            .ok_or_else(|| {
+                mlua::Error::external(
+                    "wa.random: WA's RNG is unavailable (no world yet, or the \
+                     engine refused to call it). It cannot be substituted -- a \
+                     host RNG would desync every peer.",
+                )
+            })?;
+        let (lo, hi) = match (a, b) {
+            (None, _) => return Ok(draw as i64),
+            (Some(n), None) => (1, n),
+            (Some(lo), Some(hi)) => (lo, hi),
+        };
+        if hi < lo {
+            return Err(mlua::Error::external(format!(
+                "wa.random: empty range {lo}..{hi}"
+            )));
+        }
+        // Span is computed in i128 so that a full-i64 range cannot overflow.
+        let span = (hi as i128 - lo as i128 + 1) as u128;
+        // Modulo, biased for spans that do not divide 2^32 -- the same thing
+        // WA itself does (`GS->GetRandom() % N` throughout Project X's
+        // scripts). Rejection sampling would be less biased but would consume
+        // a variable number of draws, and the count of draws is exactly what
+        // has to match between peers and replays. Determinism wins.
+        Ok(lo + (draw as u128 % span) as i64)
+    })
+    .map_err(|e| e.to_string())
+}
+
 fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
     let world = lua.create_table().map_err(|e| e.to_string())?;
     world
@@ -279,6 +322,7 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     world.set("networked", networked).map_err(|e| e.to_string())?;
+    wa.set("random", random_fn(lua)?).map_err(|e| e.to_string())?;
     wa.set("world", world).map_err(|e| e.to_string())?;
     Ok(())
 }

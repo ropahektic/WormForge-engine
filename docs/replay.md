@@ -172,6 +172,35 @@ throughout, because a corpus replay only fires stock weapons. So this is
 "WA plus wkLua with idle packs is reproducible", which is the right first
 gate but not the whole question. Tests A and B below close the rest.
 
+## What `wa.random()` costs, measured
+
+Drawing advances WA's shared RNG, so a run with a drawing pack has a different
+RNG stream from a run without one. Measured on `girder.WAgame`, a pack drawing
+three times per turn:
+
+```
+without draws: sync f=49 rng=6af22799 worms=a35e6047 actors=57bd1fde
+with draws:    sync f=49 rng=47bb6c6c worms=a35e6047 actors=57bd1fde
+```
+
+The `rng` column diverges from the first sample after the first draw and never
+re-converges. **That is the proof the call reaches WA's real RNG** rather than
+a private copy — a reimplementation would have left WA's own state untouched.
+
+But `worms` is identical in **all 93 samples**, and so is `actors`. The shift
+is real and latent: it changes the game only where WA actually consumes a
+draw — damage jitter, crate placement, barrel spread, debris — and a
+girder-only replay consumes none of them for worm state.
+
+So the honest statement is narrower than "a game with a drawing pack is a
+different game". It is: **the RNG sequence is different from the first draw
+onward, and that surfaces wherever WA next consumes it.** In a match with
+explosions or crates it would surface quickly; in this replay it never did.
+
+This is also a small vindication of splitting the hash by component. One
+number would have said "diverged" and left the interesting part — that the
+simulation did not — invisible.
+
 ## Cost
 
 Off unless a `sync.txt` marker sits beside `wkLua.log`

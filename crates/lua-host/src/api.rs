@@ -28,7 +28,15 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     let mod_id_log = ctx.mod_id.clone();
     let log_fn = lua
         .create_function(move |_, msg: String| {
-            logs.borrow_mut().push(format!("[{mod_id_log}] {msg}"));
+            let line = format!("[{mod_id_log}] {msg}");
+            // Straight to wkLua.log, so a pack logging from a hook or a brain
+            // is visible. The Vec below is only the load-time transcript, and
+            // it is snapshotted once after loading -- anything pushed to it
+            // later is never read by anyone.
+            if let Some(write) = crate::actor::native_log() {
+                write(&line);
+            }
+            logs.borrow_mut().push(line);
             Ok(())
         })
         .map_err(|e| e.to_string())?;

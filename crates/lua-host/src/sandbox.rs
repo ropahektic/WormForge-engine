@@ -21,7 +21,10 @@ fn strip_unsafe(lua: &Lua) -> LuaResult<()> {
     ] {
         globals.set(name, mlua::Value::Nil)?;
     }
-    // Lockstep: no host RNG. WA RNG is not wired yet; forbid math.random.
+    // Lockstep: no host RNG. Lua seeds its own per process, so two peers would
+    // draw different numbers from the first call. `wa.random()` replaces these
+    // by drawing from WA's shared RNG, which both peers advance in step and a
+    // replay reproduces exactly -- so these stay nil even now that one exists.
     let math: mlua::Table = globals.get("math")?;
     math.set("random", mlua::Value::Nil)?;
     math.set("randomseed", mlua::Value::Nil)?;

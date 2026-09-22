@@ -287,12 +287,31 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    - **`wa.world.networked()`** is exposed so packs can guard themselves. The
      three packs using local input today — `pooz`, `q_bazooka`, `worm_toss` —
      now have a way to opt out of desyncing instead of no option at all.
-3. **`wa.random(n)`** reading `GameWorld+0x45EC` (gap 4). Design confirmed by PX.
-   Decide deliberately and document: drawing *advances* WA's shared RNG, so a
-   pack that draws shifts every subsequent stock draw. Both peers do the same
-   thing so lockstep holds, but the stock game's sequence is no longer what it
-   would have been without the pack. Retires the fixed-pattern tables in
-   `sentry_gun`.
+3. ✅ **`wa.random()` — DONE.** Calls `GameWorld__AdvanceRNG` (0x53F320),
+   byte-verified before the first call the way `render_queue` verifies its
+   dispatcher. Calling rather than reimplementing: the six instructions are
+   known, but a copy that ever drifted from WA's by one detail would diverge
+   every draw afterwards with no visible cause.
+
+   Its disassembly independently confirmed `GAME_WORLD_FRAME_COUNTER` (0x5CC)
+   and `GAME_WORLD_GAME_RNG` (0x45EC), which until then were taken from
+   OpenWA's catalog on trust — both appear in it as literal displacements, and
+   a test asserts the prologue bytes still encode the frame-counter offset.
+
+   Forms mirror `math.random`'s integer ones; no float form, because 0..1
+   invites float arithmetic in simulation code. Modulo bias is accepted
+   deliberately: rejection sampling consumes a *variable* number of draws, and
+   the draw count is exactly what must match between peers. `math.random` stays
+   nil, with a test saying so.
+
+   Measured consequence: the `rng` stream diverges from the first draw and
+   never re-converges — which is the proof it reaches WA's real RNG — but in a
+   girder replay `worms` and `actors` stayed identical across all 93 samples.
+   The shift is latent, surfacing only where WA next consumes a draw. See
+   `docs/replay.md`.
+
+   Still open: retire the fixed-pattern tables in `sentry_gun`
+   (`SPREAD`, `CASING_JITTER`), which now have a real RNG to use.
 4. **Set `wa._mod` for non-weapon hooks** (gap 7, found in W0). Needs hook
    registration to record the owning pack. Fixes "sprite is not installed" for
    any pack spawning from `worm_message` / `hurt` / `gravity_*`.
