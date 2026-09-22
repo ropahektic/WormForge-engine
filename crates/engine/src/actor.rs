@@ -12,7 +12,7 @@ use lua_host::SpawnArgs;
 use minhook::MinHook;
 use re_catalog::Catalog;
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 use weapons::{ActorSpawn, ScreenBlit, SpawnFrom, SpriteOrigin};
 
@@ -58,6 +58,8 @@ static FIRES: Mutex<Vec<FireClaim>> = Mutex::new(Vec::new());
 static SELECTS: Mutex<Vec<SelectClaim>> = Mutex::new(Vec::new());
 static LAST_SLOT: Mutex<Vec<(u32, i32)>> = Mutex::new(Vec::new());
 static LIVE: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+/// Actor ids, handed out in spawn order. Starts at 1 so 0 can mean "none".
+static NEXT_SEQ: AtomicU32 = AtomicU32::new(1);
 
 pub fn install(catalog: &Catalog) -> Result<(), String> {
     build_vtable();
@@ -219,6 +221,7 @@ pub fn clear_claims() {
     if let Ok(mut g) = LIVE.lock() {
         g.clear();
     }
+    NEXT_SEQ.store(1, Ordering::SeqCst);
 }
 
 fn drop_for_slot(slot: usize) -> Option<DropClaim> {
@@ -515,6 +518,9 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         },
     );
     write_i32(this, ACTOR_DEAD, 0);
+    // Identity that survives being looked at from another machine. Assigned
+    // in spawn order, which is reproducible; the address is not.
+    write_i32(this, ACTOR_SEQ, NEXT_SEQ.fetch_add(1, Ordering::SeqCst) as i32);
     write_i32(this, ACTOR_OWNER, owner as i32);
     let (dmg, boom) = spawn.explode.map(|e| (e.damage, e.id)).unwrap_or((0, 0));
     write_i32(this, ACTOR_DAMAGE, dmg);

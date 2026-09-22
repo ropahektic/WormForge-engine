@@ -140,8 +140,10 @@ problem.
    `GameWorld+0x7EF0` is `-1` during playback — WA's own `IsReplay()`, confirmed
    live (the probe logged `REPLAY PLAYBACK` on its first run).
 
-4. **No RNG for packs.** `math.random` is nil and nothing replaces it, so packs fake
-   it with fixed tables (`SPREAD`, `CASING_JITTER` in `sentry_gun/weapons.lua:33,47`).
+4. ~~**No RNG for packs.**~~ **RESOLVED in W1 — `wa.random()`.** Calls
+   `GameWorld__AdvanceRNG` (0x53F320), byte-verified. `math.random` stays nil.
+   Follow-up still open: `sentry_gun`'s `SPREAD` and `CASING_JITTER` fixed
+   tables exist only because there was no RNG, and can now be retired.
 
 5. **Lua 5.4.7 randomises its string-hash seed per process.**
    `lua-src-547.0.0/lua-5.4.7/lstate.c:71` mixes `time(NULL)`, the `lua_State`
@@ -153,11 +155,17 @@ problem.
    feature — both upstream-hostile. Prefer: detect it with the hash, give packs
    `wa.sorted()`.
 
-6. **Actor ids are heap addresses** (`LIVE` holds raw handles; `a.id` returns the
-   entity pointer). Stable *order*, but not stable *values* across runs or peers —
-   and `state[a.id]` tables are therefore address-ordered under `pairs()` even with a
-   fixed hash seed. Synthetic sequential ids are needed for both replay identity and
-   determinism.
+6. ~~**Actor ids are heap addresses.**~~ **RESOLVED in W1.** Actors carry a
+   spawn-order sequence (`ACTOR_SEQ`); worms use WA's own `team * 16 + index`.
+   Tables keyed by `a.id` now iterate reproducibly, because Lua hashes integers
+   without a per-process seed — which removes the sharp edge of gap 5 too.
+
+7a. ~~**`wa.log` never worked from a runtime callback.**~~ **FIXED in W1.**
+   *(found while verifying `wa.random`)* It pushed into a Vec snapshotted once
+   after packs load, so anything logged from a hook, brain or fire callback
+   went into a buffer nobody read — `mods/examples/hello` logs from a
+   `wa.on.hurt` hook and had zero occurrences in the log. Not a determinism
+   bug, but it made every other bug harder to find, this one included.
 
 7. **Sprite paths do not resolve inside non-weapon hooks.** *(found during W0)*
    `resolve_sprite_name` (`lua-host/src/spawn.rs:348`) namespaces a relative path
@@ -315,10 +323,29 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
 4. **Set `wa._mod` for non-weapon hooks** (gap 7, found in W0). Needs hook
    registration to record the owning pack. Fixes "sprite is not installed" for
    any pack spawning from `worm_message` / `hurt` / `gravity_*`.
-5. **Synthetic sequential actor ids** (gap 6), so `a.id` is stable across runs
-   and peers. Keep the address internally.
-6. **`wa.sorted(t)`** and document the `pairs()` hazard (gap 5). The probe will
-   surface it if it ever bites.
+5. ✅ **Stable ids — DONE, for worms as well as actors.** Actors carry a
+   spawn-order sequence in a new struct field (`ACTOR_SEQ`, 0x150), reset each
+   match. Worms use `team * 16 + index`, which is not invented: it is the key
+   WA itself builds to find a worm in its shared-data table, and `WORM_INDEX`
+   already existed at 0x100.
+
+   **This also covers most of item 6.** Lua hashes integers without a
+   per-process seed, so a table keyed by `a.id` now iterates reproducibly —
+   and `state[a.id]` is the dominant pattern across `sentry_gun`,
+   `colourtest`, `pooz` and `circle_bazooka`. The addresses were what made
+   `pairs()` order vary; ids fix it without touching Lua's hash seed.
+
+   It also opened and closed a foot-gun: `parse_handle` accepted a bare number
+   as a raw entity pointer, survivable only while `.id` WAS that pointer. Now
+   refused with an explaining error. Checked first — no example pack ever
+   passed `.id` as a handle.
+
+   Verified: the gate passes and the hashes are bit-identical to the pre-change
+   baseline, as they must be, since handles were deliberately never hashed.
+6. **`wa.sorted(t)`** and document the `pairs()` hazard (gap 5) — **reduced by
+   item 5.** What remains is `pairs()` over *string*-keyed tables, which still
+   varies per process. Lower priority now that the common integer-keyed case
+   is fixed; the probe will surface it if it ever bites.
 7. **Strip `coroutine`**, or keep it deliberately and say why (gap 8).
 
 Record the latch into the `[wf]` stream as part of W2, not here — W1 is about

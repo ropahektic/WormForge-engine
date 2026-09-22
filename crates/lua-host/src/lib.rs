@@ -362,6 +362,27 @@ mod tests {
         assert_eq!(claim.params.gpu_prefix.as_deref(), Some("sprites/"));
     }
 
+    /// `.id` must be an identity, never a handle. Accepting a number where an
+    /// actor belongs used to be survivable only because ids WERE pointers;
+    /// now a number there would be dereferenced as an address.
+    #[test]
+    fn a_number_is_refused_where_an_actor_or_worm_belongs() {
+        let _guard = lock_host();
+        actor::bind_actor_native(actor::ActorNative::default());
+        let lua = sandbox::new_lua().unwrap();
+        let ctx = test_ctx();
+        api::install(&lua, &ctx).unwrap();
+        let err = lua
+            .load("return wa.actors.spawn({ sprite = 'grenade', owner = 12345 })")
+            .eval::<mlua::Value>()
+            .expect_err("a raw number must not be taken for an entity");
+        let text = err.to_string();
+        assert!(
+            text.contains("not a handle") || text.contains("not a number"),
+            "the error should explain that an id is not a handle: {text}"
+        );
+    }
+
     /// A minimal bind context: these tests exercise `wa.*` directly rather
     /// than loading a pack, so nothing here needs to be a real mod.
     fn test_ctx() -> BindContext {

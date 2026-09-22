@@ -493,8 +493,16 @@ fn optional_handle(v: &Option<Value>) -> mlua::Result<u32> {
 fn parse_handle(v: &Value) -> mlua::Result<u32> {
     match v {
         Value::Nil => Ok(0),
-        Value::Integer(i) => Ok(*i as u32),
-        Value::Number(n) => Ok(*n as u32),
+        // Deliberately refused. This used to accept a bare number as a raw
+        // entity pointer, which was survivable only while `a.id` WAS that
+        // pointer. Ids are now spawn-order sequence numbers, so a number
+        // arriving here would be dereferenced as an address and take the game
+        // down. No example pack ever did this -- every use of `.id` is as a
+        // table key or a comparison -- so refusing costs nothing and closes
+        // the hole.
+        Value::Integer(_) | Value::Number(_) => Err(mlua::Error::external(
+            "expected an actor or worm here, not a number. `a.id` is an              identity, not a handle -- pass the actor or worm itself.",
+        )),
         Value::UserData(ud) => {
             if let Ok(w) = ud.borrow::<WormHandle>() {
                 return Ok(w.0);

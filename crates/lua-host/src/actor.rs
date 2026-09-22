@@ -4,6 +4,7 @@
 
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
+    ACTOR_SEQ, WORM_INDEX,
     ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAGS, ACTOR_FLAG_MIRROR_X,
     ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPRITE, ACTOR_SPR_H, ACTOR_SPR_W, CLASS_CRATE, CLASS_MINE,
     CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
@@ -497,7 +498,11 @@ pub struct WormHandle(pub u32);
 
 impl UserData for ActorHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("id", |_, this| Ok(this.0));
+        // The spawn-order id, not the entity pointer. An address is not an
+        // identity: it differs between peers and between runs, so comparing
+        // ids or iterating a table keyed by them gave a different answer on
+        // every machine.
+        fields.add_field_method_get("id", |_, this| Ok(read_handle(this.0, ACTOR_SEQ)));
         fields.add_field_method_get("kind", |_, _| Ok("actor"));
         bind_pos_fields(fields, |h| h.0);
         fields.add_field_method_get("owner", |lua, this| {
@@ -675,7 +680,12 @@ impl UserData for ActorHandle {
 
 impl UserData for WormHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("id", |_, this| Ok(this.0));
+        // `team * 16 + index` -- not invented here: it is the key WA itself
+        // uses to find a worm in its shared-data table, so it is stable across
+        // peers and runs where the pointer is not.
+        fields.add_field_method_get("id", |_, this| {
+            Ok(stable_worm_id(this.0))
+        });
         fields.add_field_method_get("facing", |_, this| {
             Ok(if this.0 == 0 {
                 1
@@ -1101,6 +1111,18 @@ fn hit_table(lua: &Lua, bits: i32) -> mlua::Result<Table> {
 
 fn empty_hit(lua: &Lua) -> mlua::Result<Table> {
     hit_table(lua, 0)
+}
+
+/// A worm's identity as WA itself keys it: `team * 16 + index`.
+///
+/// Returns 0 for a null handle, which no live worm can be.
+fn stable_worm_id(handle: u32) -> i32 {
+    if handle == 0 {
+        return 0;
+    }
+    let team = read_handle(handle, ENT_WORM_TEAM);
+    let index = read_handle(handle, WORM_INDEX);
+    team.wrapping_mul(16).wrapping_add(index)
 }
 
 fn actor_dead(handle: u32) -> bool {

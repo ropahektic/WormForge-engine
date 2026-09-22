@@ -234,7 +234,7 @@ pub const LUA_ACTOR_MAGIC: u32 = 0x774B_4C41;
 /// Grown from 0x140 to make room for the GPU renderer's presentation state.
 /// The allocation is ours (`spawn_lua_actor` mallocs and zeroes it), so this
 /// is safe to extend; nothing in WA reads past ACTOR_MAGIC.
-pub const LUA_ACTOR_SIZE: usize = 0x150;
+pub const LUA_ACTOR_SIZE: usize = 0x154;
 pub const ACTOR_MAGIC: usize = 0xFC;
 pub const ACTOR_SPRITE: usize = 0x100;
 pub const ACTOR_PHASE: usize = 0x104;
@@ -291,6 +291,14 @@ pub const ACTOR_TINT: usize = 0x148;
 /// that combination is the whole point of the per-source mask, and is not
 /// expressible as a single painter-order depth.
 pub const ACTOR_DEPTH: usize = 0x14C;
+/// Sequential actor id, assigned at spawn and reset each match.
+///
+/// `a.id` used to be the entity pointer. A heap address is not an identity:
+/// it differs between peers and between runs, so a pack comparing ids, or
+/// iterating a table keyed by them, got a different answer on each machine.
+/// Lua hashes integers without a per-process seed, so a table keyed by this
+/// also iterates in a reproducible order, which an address-keyed one does not.
+pub const ACTOR_SEQ: usize = 0x150;
 pub const SHARED_WORLD_ROOT: u32 = 0x14;
 pub const GAME_WORLD_LANDSCAPE: usize = 0x20;
 /// Determinism probes. WA is a lockstep engine and these are the words that
@@ -506,6 +514,9 @@ mod tests {
         assert_eq!(CLASS_MINE, 8);
         assert_eq!(ENT_CHILDREN_DATA, 0x14);
         // Determinism probes, ported from OpenWA's 3.8.1 catalog.
+        assert_eq!(ACTOR_SEQ, 0x150);
+        // The sequence id must fit inside the allocation.
+        assert!(ACTOR_SEQ + 4 <= LUA_ACTOR_SIZE);
         assert_eq!(GAME_WORLD_NET_GAME, 0x28);
         assert_eq!(GAME_WORLD_ADVANCE_RNG, 0x0053_F320);
         // The prologue must load frame_counter, or the offsets disagree with
