@@ -91,7 +91,11 @@ pub fn resolve_sound(key: &str) -> i32 {
         let Ok(mut g) = WAVS.lock() else {
             return 0;
         };
-        let Some(wav) = g.iter_mut().find(|(k, _)| k == key || k.ends_with(key)).map(|(_, w)| w) else {
+        let Some(wav) = g
+            .iter_mut()
+            .find(|(k, _)| k == key || k.ends_with(key))
+            .map(|(_, w)| w)
+        else {
             return 0;
         };
         if wav.loaded {
@@ -122,13 +126,9 @@ pub fn solid_fixed(x: i32, y: i32) -> bool {
 
 pub fn trace_fixed(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)> {
     let grid = live_grid()?;
-    let hit = trace_pixels(
-        x0 >> 16,
-        y0 >> 16,
-        x1 >> 16,
-        y1 >> 16,
-        |x, y| grid.solid_px(x, y),
-    )?;
+    let hit = trace_pixels(x0 >> 16, y0 >> 16, x1 >> 16, y1 >> 16, |x, y| {
+        grid.solid_px(x, y)
+    })?;
     Some((hit.0 << 16, hit.1 << 16))
 }
 
@@ -246,9 +246,11 @@ pub fn hold_turn_timer() {
     if root.is_null() {
         return;
     }
-    let Some((timer, display)) = FROZEN_TURN.lock().ok().and_then(|g| {
-        g.as_ref().map(|f| (f.timer, f.display))
-    }) else {
+    let Some((timer, display)) = FROZEN_TURN
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|f| (f.timer, f.display)))
+    else {
         return;
     };
     unsafe {
@@ -264,8 +266,7 @@ fn mouse_down() -> bool {
 
 fn key_down(vk: i32) -> bool {
     unsafe {
-        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000
-            != 0
+        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000 != 0
     }
 }
 
@@ -1091,4 +1092,45 @@ mod tests {
         assert_eq!(hit, Some((3, 0)));
         assert_eq!(trace_pixels(0, 0, 2, 0, |_, _| false), None);
     }
+}
+
+/// Per-pixel solid test against the landscape's collision mask, in world
+/// pixels, with the grid resolved once for a whole batch of lookups.
+///
+/// The renderer needs this because terrain and soil reach the screen as ONE
+/// `tiled_terrain` draw, so no amount of splitting WA's render queue can tell
+/// them apart. The collision mask can: solid ground is solid, and a crater's
+/// exposed soil is not. wkFOW reached the same conclusion for its own sprite
+/// occlusion and documents the reasoning in `Vision::occludesSprites` --
+/// notably that matching soil's palette indices instead would need a table
+/// per level theme and would break on custom levels.
+pub fn solid_sampler() -> Option<impl Fn(i32, i32) -> bool> {
+    let grid = live_grid()?;
+    Some(move |x: i32, y: i32| grid.solid_px(x, y))
+}
+
+/// A `Sync` solidity sampler, for the fog crate's parallel shadowcast, which
+/// calls the closure from its worker threads.
+///
+/// `solid_sampler`'s return type is not `Sync` because `GridView` holds a raw
+/// `*const u8`. The grid is read-only for the whole cast (terrain writes are
+/// hooked and applied on the game thread between frames, never mid-dispatch),
+/// so sharing the pointer across the pool's threads is sound. `SyncGrid`
+/// asserts that invariant at the type level rather than by discipline.
+pub fn solid_sampler_sync() -> Option<impl Fn(i32, i32) -> bool + Sync> {
+    struct SyncGrid(GridView);
+    // SAFETY: the wrapped grid is only ever read through `solid_px`; no
+    // mutation escapes, and the underlying WA collision buffer outlives the
+    // cast that borrows it.
+    unsafe impl Sync for SyncGrid {}
+    impl SyncGrid {
+        fn solid_px(&self, x: i32, y: i32) -> bool {
+            self.0.solid_px(x, y)
+        }
+    }
+    let grid = SyncGrid(live_grid()?);
+    // Calling a method on `grid` (not a field) makes the closure capture the
+    // whole SyncGrid -- whose Sync impl is the point -- rather than disjointly
+    // capturing the non-Sync GridView field inside it.
+    Some(move |x: i32, y: i32| grid.solid_px(x, y))
 }

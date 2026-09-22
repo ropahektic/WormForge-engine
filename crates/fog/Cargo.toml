@@ -1,0 +1,9 @@
+[package]
+name = "fog"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Deliberately no dependency on `engine` or `game` -- engine depends on this.
+# Inputs are plain data (a solidity closure, vision sources, settings), so the
+# visibility model is testable on any host, not only on the Windows target.

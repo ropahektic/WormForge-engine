@@ -20,7 +20,8 @@ pub fn rb(ghidra_va: u32) -> u32 {
 /// # Safety
 /// Called once after attach; uses GetModuleHandle(NULL) = WA.exe.
 pub unsafe fn init_rebase() {
-    let handle = unsafe { windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null()) };
+    let handle =
+        unsafe { windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null()) };
     let base = handle as u32;
     BASE.store(base, Ordering::Relaxed);
     DELTA.store(base.wrapping_sub(IMAGE_BASE), Ordering::Relaxed);

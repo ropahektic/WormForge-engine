@@ -5,16 +5,23 @@
 
 mod actor;
 mod apply;
+mod fog;
+mod gpu;
 mod hook;
 mod hud;
 mod hurt;
-mod overlay;
 mod log;
+mod overlay;
 mod physics;
+mod queue_census;
 mod rebase;
+pub mod render_queue;
+pub mod shader;
 mod sprite;
+mod truecolor;
 mod version;
 mod world;
+mod worm_sprite;
 
 pub use log::{attach_console, error_log_path, log_error, log_line, log_path, panic_text};
 pub use rebase::{init_rebase, rb, wa_base};
@@ -32,7 +39,11 @@ pub fn start() {
     unsafe {
         rebase::init_rebase();
     }
-    log_line(&format!("WA base {:#010x} delta {}", wa_base(), rebase::delta()));
+    log_line(&format!(
+        "WA base {:#010x} delta {}",
+        wa_base(),
+        rebase::delta()
+    ));
     match version::check_381() {
         Ok(()) => log_line("WA version string is 3.8.1"),
         Err(e) => {

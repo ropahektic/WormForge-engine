@@ -4,11 +4,11 @@
 
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
-    ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAG_MIRROR_X, ACTOR_FLAGS,
-    ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE, CLASS_MINE,
+    ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAGS, ACTOR_FLAG_MIRROR_X,
+    ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPRITE, ACTOR_SPR_H, ACTOR_SPR_W, CLASS_CRATE, CLASS_MINE,
     CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE,
+    WORM_FACING, WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -24,6 +24,8 @@ pub struct ActorEvent {
     pub left_ground: bool,
     pub hit_worm: bool,
     pub in_water: bool,
+    /// Falloff-adjusted blast damage accumulated by stock WorldEntity logic.
+    pub damage: i32,
 }
 
 pub struct SpawnArgs {
@@ -37,8 +39,95 @@ pub struct SpawnArgs {
     pub spawn: ActorSpawn,
 }
 
+/// Which presentation fields a `set_gfx` call is setting. Anything not named
+/// keeps its current value, so the single-field setters do not clobber each
+/// other.
+pub mod gfx_field {
+    pub const ANGLE: u32 = 1 << 0;
+    pub const SCALE: u32 = 1 << 1;
+    /// The tint word's colour bits only. Its alpha byte is `BLEND`.
+    pub const TINT: u32 = 1 << 2;
+    /// The tint word's alpha byte only.
+    pub const BLEND: u32 = 1 << 3;
+    pub const DEPTH: u32 = 1 << 4;
+}
+
+/// Alpha byte meaning ordinary alpha blending.
+const OPAQUE: u32 = 0xFF00_0000;
+
+/// Blend mode as the tint word's alpha byte. Premultiplied alpha 0 IS additive
+/// under the renderer's blend state, so "add" needs no second pipeline and can
+/// share a batch with opaque sprites.
+fn blend_alpha(mode: &str) -> mlua::Result<u32> {
+    match mode {
+        "add" | "additive" => Ok(0),
+        "normal" | "alpha" => Ok(OPAQUE),
+        other => Err(mlua::Error::external(format!(
+            "blend: expected \"normal\" or \"add\", got {other:?}"
+        ))),
+    }
+}
+
+/// Decode an `a:gfx{...}` table into the native call's arguments. Split out
+/// from the method so the mask can be tested without a live actor.
+fn gfx_args(spec: &Table) -> mlua::Result<(u32, f32, f32, u32, u32)> {
+    let angle = spec.get::<Option<f32>>("angle")?;
+    let scale = spec.get::<Option<f32>>("scale")?;
+    let rgb = spec.get::<Option<u32>>("tint")?;
+    let blend = spec.get::<Option<String>>("blend")?;
+    let depth = spec.get::<Option<u32>>("depth")?;
+    let mut mask = 0;
+    for (present, bit) in [
+        (angle.is_some(), gfx_field::ANGLE),
+        (scale.is_some(), gfx_field::SCALE),
+        (rgb.is_some(), gfx_field::TINT),
+        (blend.is_some(), gfx_field::BLEND),
+        (depth.is_some(), gfx_field::DEPTH),
+    ] {
+        if present {
+            mask |= bit;
+        }
+    }
+    let alpha = match blend.as_deref() {
+        Some(mode) => blend_alpha(mode)?,
+        None => OPAQUE,
+    };
+    Ok((
+        mask,
+        angle.unwrap_or(0.0),
+        scale.unwrap_or(1.0),
+        alpha | (rgb.unwrap_or(0x00FF_FFFF) & 0x00FF_FFFF),
+        depth.unwrap_or(0),
+    ))
+}
+
+/// Shared by `a:gfx` and the single-field setters.
+fn apply_gfx(
+    handle: u32,
+    mask: u32,
+    angle: f32,
+    scale: f32,
+    tint: u32,
+    depth: u32,
+) -> mlua::Result<()> {
+    if handle == 0 || actor_dead(handle) {
+        return Ok(());
+    }
+    if let Some(set) = native_set_gfx() {
+        set(handle, mask, angle, scale, tint, depth);
+    }
+    Ok(())
+}
+
 pub struct ActorNative {
     pub explode: fn(handle: u32, damage: i32, explosion_id: i32, below: bool),
+    /// Hold the actor on one frame of its current sheet.
+    pub set_frame: fn(handle: u32, frame: i32),
+    /// GPU renderer presentation: angle in degrees, scale, premultiplied tint.
+    /// `mask` says which of the fields the caller actually supplied; the rest
+    /// keep whatever the actor already has. Without it every setter would be
+    /// a full overwrite, so `a:angle(30)` would silently reset scale and tint.
+    pub set_gfx: fn(handle: u32, mask: u32, angle: f32, scale: f32, tint: u32, depth: u32),
     pub despawn: fn(handle: u32),
     pub in_water: fn(handle: u32) -> bool,
     pub on_feet: fn(handle: u32) -> bool,
@@ -76,6 +165,15 @@ pub struct ActorNative {
     pub ammo: fn(handle: u32, slot: u32, delta: Option<i32>) -> i32,
     /// Stock SpecialImpact (msg 0x4B). No explosion. Pose restored so the worm does not move.
     pub hurt: fn(target: u32, from: u32, amount: i32),
+    /// Fog-of-war master switch for the match. Enabling creates the engine
+    /// instance from the current scheme; disabling drops it.
+    pub fog_enable: fn(enable: bool),
+    pub fog_enabled: fn() -> bool,
+    /// Replace the active scheme (already validated by `fog::settings`).
+    pub fog_set_scheme: fn(fog::Scheme),
+    pub fog_scheme: fn() -> fog::Scheme,
+    /// Light level (0..=255) at a world 16.16 position, for `wa.fog.visible`.
+    pub fog_visible: fn(x: i32, y: i32) -> u8,
 }
 
 impl Default for ActorNative {
@@ -83,11 +181,13 @@ impl Default for ActorNative {
         Self {
             explode: |_, _, _, _| {},
             despawn: |_| {},
+            set_gfx: |_, _, _, _, _, _| {},
             in_water: |_| false,
             on_feet: |_| false,
             gravity: |_| {},
             move_body: |_, _, _| 0,
             advance: |_| {},
+            set_frame: |_, _| {},
             spawn: |_| Err("spawn not bound".into()),
             list_actors: Vec::new,
             list_worms: |_| Vec::new(),
@@ -111,6 +211,11 @@ impl Default for ActorNative {
             hp: |_| 0,
             ammo: |_, _, _| 0,
             hurt: |_, _, _| {},
+            fog_enable: |_| {},
+            fog_enabled: || false,
+            fog_set_scheme: |_| {},
+            fog_scheme: fog::Scheme::default,
+            fog_visible: |_, _| 255,
         }
     }
 }
@@ -356,6 +461,7 @@ fn event_table(lua: &Lua, ev: &ActorEvent) -> Result<Table, String> {
         .map_err(|e| e.to_string())?;
     t.set("hit_worm", ev.hit_worm).map_err(|e| e.to_string())?;
     t.set("in_water", ev.in_water).map_err(|e| e.to_string())?;
+    t.set("damage", ev.damage).map_err(|e| e.to_string())?;
     t.set("msg", 2u32).map_err(|e| e.to_string())?;
     Ok(t)
 }
@@ -427,9 +533,8 @@ impl UserData for ActorHandle {
                     below = s.to_str()?.as_ref() == "below";
                 }
             }
-            let explode = native_explode().ok_or_else(|| {
-                mlua::Error::external("explode: CreateExplosion not bound")
-            })?;
+            let explode = native_explode()
+                .ok_or_else(|| mlua::Error::external("explode: CreateExplosion not bound"))?;
             explode(this.0, damage, id, below);
             Ok(())
         });
@@ -437,9 +542,8 @@ impl UserData for ActorHandle {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
             }
-            let despawn = native_despawn_fn().ok_or_else(|| {
-                mlua::Error::external("despawn: native free not bound")
-            })?;
+            let despawn = native_despawn_fn()
+                .ok_or_else(|| mlua::Error::external("despawn: native free not bound"))?;
             despawn(this.0);
             Ok(())
         });
@@ -459,9 +563,8 @@ impl UserData for ActorHandle {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
             }
-            let gravity = native_gravity().ok_or_else(|| {
-                mlua::Error::external("gravity: stock leaf not bound")
-            })?;
+            let gravity = native_gravity()
+                .ok_or_else(|| mlua::Error::external("gravity: stock leaf not bound"))?;
             gravity(this.0);
             Ok(())
         });
@@ -485,19 +588,47 @@ impl UserData for ActorHandle {
                     worms = v;
                 }
             }
-            let move_body = native_move().ok_or_else(|| {
-                mlua::Error::external("move: native step not bound")
-            })?;
+            let move_body = native_move()
+                .ok_or_else(|| mlua::Error::external("move: native step not bound"))?;
             hit_table(lua, move_body(this.0, terrain, worms))
         });
         methods.add_method("advance", |_, this, ()| {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
             }
-            let advance = native_advance().ok_or_else(|| {
-                mlua::Error::external("advance: sprite loop not bound")
-            })?;
+            let advance = native_advance()
+                .ok_or_else(|| mlua::Error::external("advance: sprite loop not bound"))?;
             advance(this.0);
+            Ok(())
+        });
+        // Set several presentation fields at once. Only the keys actually
+        // present are written -- `a:gfx{angle = 30}` leaves scale, tint and
+        // depth exactly as they were.
+        methods.add_method("gfx", |_, this, spec: Table| {
+            let (mask, angle, scale, tint, depth) = gfx_args(&spec)?;
+            apply_gfx(this.0, mask, angle, scale, tint, depth)
+        });
+        // Single-field setters. They forward to the same native call with a
+        // one-bit mask, so each is genuinely independent of the others.
+        methods.add_method("angle", |_, this, degrees: f32| {
+            apply_gfx(this.0, gfx_field::ANGLE, degrees, 1.0, 0, 0)
+        });
+        methods.add_method("scale", |_, this, factor: f32| {
+            apply_gfx(this.0, gfx_field::SCALE, 0.0, factor, 0, 0)
+        });
+        methods.add_method("tint", |_, this, rgb: u32| {
+            apply_gfx(this.0, gfx_field::TINT, 0.0, 1.0, rgb & 0x00FF_FFFF, 0)
+        });
+        methods.add_method("blend", |_, this, mode: String| {
+            apply_gfx(this.0, gfx_field::BLEND, 0.0, 1.0, blend_alpha(&mode)?, 0)
+        });
+        methods.add_method("frame", |_, this, frame: i32| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            if let Some(set) = native_set_frame() {
+                set(this.0, frame);
+            }
             Ok(())
         });
         methods.add_method("look", |lua, this, name: String| {
@@ -521,9 +652,8 @@ impl UserData for ActorHandle {
             if id == 0 {
                 return Ok(());
             }
-            let play = native_play_sound().ok_or_else(|| {
-                mlua::Error::external("sound: PlaySoundLocal not bound")
-            })?;
+            let play = native_play_sound()
+                .ok_or_else(|| mlua::Error::external("sound: PlaySoundLocal not bound"))?;
             play(this.0, id, flags.unwrap_or(8));
             Ok(())
         });
@@ -533,6 +663,18 @@ impl UserData for ActorHandle {
 impl UserData for WormHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, this| Ok(this.0));
+        fields.add_field_method_get("facing", |_, this| {
+            Ok(if this.0 == 0 {
+                1
+            } else {
+                let direction = unsafe { read_i32(this.0 as *mut u8, WORM_FACING) };
+                if direction < 0 {
+                    -1
+                } else {
+                    1
+                }
+            })
+        });
         fields.add_field_method_get("team", |_, this| {
             if this.0 == 0 {
                 return Ok(0i32);
@@ -554,9 +696,7 @@ impl UserData for WormHandle {
         });
         fields.add_field_method_get("kind", |_, _| Ok("worm"));
         fields.add_field_method_get("visible", |_, this| {
-            Ok(!native_worm_hidden()
-                .map(|f| f(this.0))
-                .unwrap_or(false))
+            Ok(!native_worm_hidden().map(|f| f(this.0)).unwrap_or(false))
         });
         fields.add_field_method_set("visible", |_, this, v: bool| {
             if this.0 == 0 {
@@ -623,9 +763,7 @@ impl UserData for WormHandle {
                 return Ok(0i32);
             }
             let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
-            let ammo = native_equip()
-                .map(|f| f(this.0, slot as u32))
-                .unwrap_or(0);
+            let ammo = native_equip().map(|f| f(this.0, slot as u32)).unwrap_or(0);
             Ok(ammo)
         });
         methods.add_method("ammo", |_, this, (name, delta): (String, Option<i32>)| {
@@ -775,6 +913,14 @@ pub fn native_land_solid() -> Option<fn(i32, i32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_solid)
 }
 
+pub fn native_set_gfx() -> Option<fn(u32, u32, f32, f32, u32, u32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.set_gfx)
+}
+
+pub fn native_set_frame() -> Option<fn(u32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.set_frame)
+}
+
 pub fn native_land_trace() -> Option<fn(i32, i32, i32, i32) -> Option<(i32, i32)>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_trace)
 }
@@ -849,6 +995,34 @@ pub fn native_ammo() -> Option<fn(u32, u32, Option<i32>) -> i32> {
 
 fn native_hurt() -> Option<fn(u32, u32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hurt)
+}
+
+pub fn native_fog_enable() -> Option<fn(bool)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.fog_enable)
+}
+
+pub fn native_fog_enabled() -> bool {
+    NATIVE
+        .lock()
+        .ok()
+        .and_then(|n| n.as_ref().map(|n| (n.fog_enabled)()))
+        .unwrap_or(false)
+}
+
+pub fn native_fog_set_scheme() -> Option<fn(fog::Scheme)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.fog_set_scheme)
+}
+
+pub fn native_fog_scheme() -> fog::Scheme {
+    NATIVE
+        .lock()
+        .ok()
+        .and_then(|n| n.as_ref().map(|n| (n.fog_scheme)()))
+        .unwrap_or_default()
+}
+
+pub fn native_fog_visible() -> Option<fn(i32, i32) -> u8> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.fog_visible)
 }
 
 pub(crate) fn sound_slot(slot: Value) -> mlua::Result<i32> {
@@ -952,4 +1126,64 @@ fn opt_bool(t: &Table, key: &str) -> mlua::Result<Option<bool>> {
 pub fn worm_userdata(lua: &Lua, handle: u32) -> Result<mlua::AnyUserData, String> {
     lua.create_userdata(WormHandle(handle))
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(src: &str) -> mlua::Result<(u32, f32, f32, u32, u32)> {
+        let lua = Lua::new();
+        gfx_args(&lua.load(src).eval::<Table>()?)
+    }
+
+    /// The reason the mask exists: before it, `a:gfx{angle = 30}` also wrote
+    /// scale 1.0 and tint white, so any single-field setter built on top of
+    /// `gfx` would silently undo the others.
+    #[test]
+    fn only_the_keys_present_are_marked_for_writing() {
+        let (mask, angle, ..) = args("return {angle = 30}").unwrap();
+        assert_eq!(mask, gfx_field::ANGLE);
+        assert_eq!(angle, 30.0);
+
+        let (mask, ..) = args("return {}").unwrap();
+        assert_eq!(mask, 0, "an empty table must write nothing at all");
+
+        let (mask, _, _, tint, depth) =
+            args("return {scale = 2, tint = 0x00FF00, blend = 'add', depth = 5}").unwrap();
+        assert_eq!(
+            mask,
+            gfx_field::SCALE | gfx_field::TINT | gfx_field::BLEND | gfx_field::DEPTH
+        );
+        assert_eq!(tint, 0x0000_FF00, "additive is alpha 0, colour preserved");
+        assert_eq!(depth, 5);
+    }
+
+    /// depth 0 used to be the "leave it alone" sentinel, which made layer 0
+    /// unreachable. The mask carries that meaning now, so 0 is a real value.
+    #[test]
+    fn depth_zero_is_a_value_not_a_sentinel() {
+        let (mask, _, _, _, depth) = args("return {depth = 0}").unwrap();
+        assert_eq!(mask, gfx_field::DEPTH);
+        assert_eq!(depth, 0);
+    }
+
+    #[test]
+    fn blend_modes_map_to_the_tint_alpha_byte_and_typos_are_refused() {
+        assert_eq!(blend_alpha("add").unwrap(), 0);
+        assert_eq!(blend_alpha("additive").unwrap(), 0);
+        assert_eq!(blend_alpha("normal").unwrap(), OPAQUE);
+        assert_eq!(blend_alpha("alpha").unwrap(), OPAQUE);
+        // Silently treating a typo as "normal" would show up as a missing
+        // glow, which is a slow thing to track down from a screenshot.
+        assert!(blend_alpha("addative").is_err());
+        assert!(args("return {blend = 'screen'}").is_err());
+    }
+
+    #[test]
+    fn a_tint_without_a_blend_is_opaque() {
+        let (mask, _, _, tint, _) = args("return {tint = 0xFF8000}").unwrap();
+        assert_eq!(mask, gfx_field::TINT);
+        assert_eq!(tint, 0xFFFF_8000);
+    }
 }

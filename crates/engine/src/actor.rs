@@ -61,7 +61,9 @@ static LIVE: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 pub fn install(catalog: &Catalog) -> Result<(), String> {
     build_vtable();
-    let va = catalog.function_va("FireWeapon__StrikeFire").unwrap_or(STRIKE_FIRE);
+    let va = catalog
+        .function_va("FireWeapon__StrikeFire")
+        .unwrap_or(STRIKE_FIRE);
     let trampoline = unsafe {
         MinHook::create_hook(rb(va) as *mut c_void, strike_fire_hook as *mut c_void)
             .map_err(|e| format!("StrikeFire hook: {e:?}"))?
@@ -88,6 +90,8 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         gravity: native_gravity,
         move_body: native_move,
         advance: native_advance,
+        set_frame: native_set_frame,
+        set_gfx: native_set_gfx,
         spawn: native_spawn,
         list_actors: native_list_actors,
         list_worms: native_list_worms,
@@ -111,18 +115,17 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         hp: crate::world::worm_hp,
         ammo: crate::world::ammo,
         hurt: crate::physics::hit_worm,
+        fog_enable: native_fog_enable,
+        fog_enabled: crate::fog::enabled,
+        fog_set_scheme: crate::fog::set_scheme,
+        fog_scheme: crate::fog::scheme,
+        fog_visible: crate::fog::visible,
     });
     log_line("LuaActor: StrikeFire + CreateWeaponProjectile wrap; land/objects/sound");
     Ok(())
 }
 
-pub fn claim_drop(
-    slot: usize,
-    sprite: i32,
-    delta: u32,
-    spawn: Option<ActorSpawn>,
-    click_id: u32,
-) {
+pub fn claim_drop(slot: usize, sprite: i32, delta: u32, spawn: Option<ActorSpawn>, click_id: u32) {
     if let Ok(mut g) = DROPS.lock() {
         g.retain(|c| c.slot != slot);
         g.push(DropClaim {
@@ -135,13 +138,7 @@ pub fn claim_drop(
     }
 }
 
-pub fn claim_fire(
-    slot: usize,
-    sprite: i32,
-    delta: u32,
-    spawn: Option<ActorSpawn>,
-    fire_id: u32,
-) {
+pub fn claim_fire(slot: usize, sprite: i32, delta: u32, spawn: Option<ActorSpawn>, fire_id: u32) {
     if let Ok(mut g) = FIRES.lock() {
         g.retain(|c| c.slot != slot);
         g.push(FireClaim {
@@ -276,11 +273,7 @@ unsafe extern "system" fn strike_fire_hook(worm: *mut u8, fire_params: *mut u8, 
     }
 }
 
-unsafe extern "thiscall" fn create_proj_hook(
-    worm: *mut u8,
-    fire_params: *mut u8,
-    ctx: *mut u8,
-) {
+unsafe extern "thiscall" fn create_proj_hook(worm: *mut u8, fire_params: *mut u8, ctx: *mut u8) {
     let spawned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         try_lua_projectile(worm, ctx)
     }));
@@ -420,10 +413,9 @@ fn cursor_xy(worm: *mut u8, ctx: *mut u8) -> (i32, i32) {
     if (wx != 0 || wy != 0) || ctx.is_null() {
         (wx, wy)
     } else {
-        (
-            unsafe { read_i32(ctx, CTX_CURSOR_X) },
-            unsafe { read_i32(ctx, CTX_CURSOR_Y) },
-        )
+        (unsafe { read_i32(ctx, CTX_CURSOR_X) }, unsafe {
+            read_i32(ctx, CTX_CURSOR_Y)
+        })
     }
 }
 
@@ -444,6 +436,25 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     if owner.is_null() {
         return Err("spawn needs an owner worm or actor".into());
     }
+    // A pack can hold an actor reference across that actor's despawn and then
+    // spawn a child from it. The null check above only catches the lucky case
+    // where the handle cleared; a freed-but-non-null pointer sails through,
+    // and WA's entity constructor then links the new entity into a parent
+    // that no longer exists. The corrupted entity graph does not fault here
+    // -- it faults frames later, inside WA, as an integer divide by zero in
+    // the animation tick at 0x5519a0, with nothing in the log to connect it
+    // to the pack that caused it.
+    //
+    // Our own actors carry a magic word, so a dead one is detectable: refuse
+    // it by name rather than corrupting the graph. Worms are owned by WA and
+    // are stable for the match, so they need no equivalent check.
+    if is_actor(owner) && read_i32(owner, ACTOR_DEAD) != 0 {
+        return Err(
+            "spawn owner is an actor that has already despawned; the pack is \
+             holding a reference across its lifetime"
+                .into(),
+        );
+    }
     log_line(&format!(
         "LuaActor spawn sprite {} x={:#x} y={:#x} vx={:#x} vy={:#x} origin={:?} explode={:?}",
         body.sprite, body.x, body.y, body.vx, body.vy, spawn.origin, spawn.explode
@@ -454,6 +465,12 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         return Err("malloc failed".into());
     }
     std::ptr::write_bytes(this, 0, LUA_ACTOR_SIZE);
+    // A zeroed allocation would otherwise mean "scale 0", i.e. invisible.
+    write_i32(this, ACTOR_SCALE, 0x1_0000);
+    write_i32(this, ACTOR_TINT, 0xFFFF_FFFFu32 as i32);
+    // Behind terrain by default: the conservative choice, matching how a
+    // stock sprite at this depth would behave.
+    write_i32(this, ACTOR_DEPTH, 0x0019_0000);
 
     let parent = physics_parent(owner).unwrap_or(owner);
     let ctor: WorldCtorFn = std::mem::transmute(rb(WORLD_ENTITY_CTOR) as usize);
@@ -496,10 +513,7 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     );
     write_i32(this, ACTOR_DEAD, 0);
     write_i32(this, ACTOR_OWNER, owner as i32);
-    let (dmg, boom) = spawn
-        .explode
-        .map(|e| (e.damage, e.id))
-        .unwrap_or((0, 0));
+    let (dmg, boom) = spawn.explode.map(|e| (e.damage, e.id)).unwrap_or((0, 0));
     write_i32(this, ACTOR_DAMAGE, dmg);
     write_i32(this, ACTOR_BOOM_ID, boom);
     write_i32(
@@ -671,9 +685,8 @@ unsafe fn tick(this: *mut u8) {
         return;
     }
     let flags = read_i32(this, ACTOR_FLAGS);
-    let auto_phys = (flags
-        & (ACTOR_FLAG_GRAVITY | ACTOR_FLAG_COLLIDE_TERRAIN | ACTOR_FLAG_COLLIDE_WORMS))
-        != 0;
+    let auto_phys =
+        (flags & (ACTOR_FLAG_GRAVITY | ACTOR_FLAG_COLLIDE_TERRAIN | ACTOR_FLAG_COLLIDE_WORMS)) != 0;
     if (flags & ACTOR_FLAG_GRAVITY) != 0 {
         apply_gravity(this);
     }
@@ -692,11 +705,14 @@ unsafe fn tick(this: *mut u8) {
     }
     let brain = read_i32(this, ACTOR_BRAIN) as u32;
     if brain != 0 {
+        let damage = read_i32(this, ENT_DAMAGE_ACCUM).max(0);
+        write_i32(this, ENT_DAMAGE_ACCUM, 0);
         let ev = lua_host::ActorEvent {
             land: land_now,
             left_ground,
             hit_worm: worm_hit,
             in_water: drowned(this, world),
+            damage,
         };
         if let Err(e) = lua_host::actor_frame(this as u32, brain, ev) {
             log_error(&format!("LuaActor brain: {e}"));
@@ -777,17 +793,11 @@ unsafe fn blit(this: *mut u8) {
             0
         };
     let anim = read_i32(this, ACTOR_PHASE) as u32;
-    draw_sprite_local(rq, 0x0005_0001, blit_x, blit_y, sprite, anim);
+    draw_sprite_local(rq, 0x0005_0001, blit_x, blit_y, sprite, anim, this);
 }
 
 #[allow(dead_code)]
-pub(crate) unsafe fn enqueue_sprite(
-    world: *mut u8,
-    x: i32,
-    y: i32,
-    sprite: u32,
-    anim: u32,
-) {
+pub(crate) unsafe fn enqueue_sprite(world: *mut u8, x: i32, y: i32, sprite: u32, anim: u32) {
     if world.is_null() {
         return;
     }
@@ -795,7 +805,8 @@ pub(crate) unsafe fn enqueue_sprite(
     if rq.is_null() {
         return;
     }
-    draw_sprite_local(rq, 0x0005_0001, x, y, sprite, anim);
+    // No actor: a bare enqueue carries no presentation state.
+    draw_sprite_local(rq, 0x0005_0001, x, y, sprite, anim, std::ptr::null_mut());
 }
 
 unsafe fn apply_gravity(this: *mut u8) {
@@ -872,6 +883,16 @@ fn native_gravity(handle: u32) {
     }
 }
 
+/// Lua `wa.fog.enable`: start the fog engine from the current scheme, or tear
+/// it down. Enabling reads the live map size, so it only succeeds in a match.
+fn native_fog_enable(enable: bool) {
+    if enable {
+        crate::fog::start_match(crate::fog::scheme());
+    } else {
+        crate::fog::clear();
+    }
+}
+
 fn native_move(handle: u32, terrain: bool, worms: bool) -> i32 {
     let this = handle as *mut u8;
     unsafe {
@@ -906,6 +927,69 @@ fn native_look(handle: u32, id: i32, delta: u32, w: i32, h: i32) {
             write_i32(this, ACTOR_FEET_X0, feet.x0);
             write_i32(this, ACTOR_FEET_X1, feet.x1);
             write_i32(this, ACTOR_FEET_Y, feet.y);
+        }
+    }
+}
+
+/// Hold an actor on one frame of its sheet.
+///
+/// Disable the actor's phase delta so even frame folders hold their pose.
+/// GetSpriteFrameForBlit reads anim_value as
+/// `(phase * frames) >> 16`, which is the mapping overlay_frame uses, so this
+/// inverts it. Lets one multi-frame sheet stand in for many sprites -- baked
+/// rotations cost a slot each, frames of one sheet cost nothing.
+/// Presentation state for the GPU renderer: rotation, scale and tint.
+///
+/// Writes only into our own actor struct and is read only by the renderer, so
+/// it cannot reach the simulation and cannot desync a lockstep game. An actor
+/// on the palette path ignores all of it.
+fn native_set_gfx(handle: u32, mask: u32, angle: f32, scale: f32, tint: u32, depth: u32) {
+    use lua_host::gfx_field as f;
+    let this = handle as *mut u8;
+    unsafe {
+        if !is_actor(this) || read_i32(this, ACTOR_DEAD) != 0 {
+            return;
+        }
+        let fixed = |v: f32| (v * 65536.0) as i32;
+        if mask & f::ANGLE != 0 {
+            write_i32(this, ACTOR_ANGLE, fixed(angle));
+        }
+        if mask & f::SCALE != 0 {
+            // Guard against a pack asking for an invisible or absurd sprite.
+            write_i32(this, ACTOR_SCALE, fixed(scale.clamp(0.01, 64.0)));
+        }
+        // Colour and blend share one word, so a partial write has to merge
+        // rather than overwrite: `a:blend("add")` must keep the team colour.
+        if mask & (f::TINT | f::BLEND) != 0 {
+            let mut word = read_i32(this, ACTOR_TINT) as u32;
+            if mask & f::TINT != 0 {
+                word = (word & 0xFF00_0000) | (tint & 0x00FF_FFFF);
+            }
+            if mask & f::BLEND != 0 {
+                word = (word & 0x00FF_FFFF) | (tint & 0xFF00_0000);
+            }
+            write_i32(this, ACTOR_TINT, word as i32);
+        }
+        if mask & f::DEPTH != 0 {
+            write_i32(this, ACTOR_DEPTH, depth as i32);
+        }
+    }
+}
+
+fn native_set_frame(handle: u32, frame: i32) {
+    let this = handle as *mut u8;
+    unsafe {
+        if !is_actor(this) || read_i32(this, ACTOR_DEAD) != 0 {
+            return;
+        }
+        let id = read_i32(this, ACTOR_SPRITE);
+        let Some(n) = sprite::frame_count(id) else {
+            return;
+        };
+        if let Some(phase) = gfx::frame_phase(frame, n) {
+            write_i32(this, ACTOR_PHASE, phase as i32);
+            // Explicit selection holds even when the loaded folder loops.
+            write_i32(this, ACTOR_DELTA, 0);
         }
     }
 }
@@ -1185,7 +1269,24 @@ unsafe fn try_move(this: *mut u8, x: i32, y: i32) -> u32 {
     ret
 }
 
-unsafe fn draw_sprite_local(queue: *mut u8, layer: u32, x: i32, y: i32, sprite: u32, anim: u32) {
+unsafe fn draw_sprite_local(
+    queue: *mut u8,
+    layer: u32,
+    x: i32,
+    y: i32,
+    sprite: u32,
+    anim: u32,
+    actor: *mut u8,
+) {
+    // The GPU renderer draws its own sprites as quads after WA's composite, so
+    // they must not also be queued: a queued copy would be drawn by WA in
+    // palette colour underneath ours, and would keep occupying one of the 223
+    // shared sprite slots the GPU path exists to escape. Intercepting here
+    // rather than in `blit` catches every producer -- blit, enqueue_sprite,
+    // and anything added later -- in one place.
+    if crate::gpu::intercept(layer, x, y, sprite, anim, actor) {
+        return;
+    }
     let f = rb(RQ_DRAW_SPRITE_LOCAL) as u32;
     let args = [queue as u32, layer, x as u32, y as u32, sprite, anim, f];
     core::arch::asm!(

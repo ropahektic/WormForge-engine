@@ -11,21 +11,23 @@ mod sandbox;
 mod spawn;
 
 pub use actor::{
-    actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_fire,
-    weapon_select, ActorEvent, ActorNative, SpawnArgs,
+    actor_frame, actor_freed, actor_spawned, bind_actor_native, gfx_field, weapon_click,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, SpawnArgs,
 };
-pub use dispatch::{gravity_after, gravity_before, hurt, missile_frame, run_hud, worm_message, Hurt};
+pub use dispatch::{
+    gravity_after, gravity_before, hurt, missile_frame, run_hud, worm_message, Hurt,
+};
 
 use crate::api::BindContext;
+use gfx::SpriteStrip;
 use mlua::Lua;
 use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 use weapons::{
-    LoadedMod, OverlayClaim, OverlayParams, ResolveResult, StockWeapon, parse_stock_weapon,
-    resolve_claims,
+    parse_stock_weapon, resolve_claims, LoadedMod, OverlayClaim, OverlayParams, ResolveResult,
+    StockWeapon,
 };
-use gfx::SpriteStrip;
 
 thread_local! {
     pub(crate) static PARKED_LUA: RefCell<Option<Lua>> = const { RefCell::new(None) };
@@ -53,13 +55,9 @@ pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
         let ctx = BindContext {
             mod_id: pack.manifest.id.clone(),
             root: pack.root.clone(),
-            allowed_slots: pack
-                .manifest
-                .weapons
-                .allowed_slots()?
-                .into_iter()
-                .collect(),
+            allowed_slots: pack.manifest.weapons.allowed_slots()?.into_iter().collect(),
             allowed_register: pack.manifest.weapons.register.iter().cloned().collect(),
+            fog_allowed: pack.manifest.fog.enable,
             claims: Rc::clone(&claims),
             logs: Rc::clone(&logs),
         };
@@ -125,9 +123,183 @@ pub fn mods_root_from(base: &Path) -> std::path::PathBuf {
 mod tests {
     use super::*;
     use std::sync::Mutex;
-    use weapons::{LoadedMod, parse_manifest};
+    use weapons::{parse_manifest, LoadedMod};
 
     static HOST: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn land_trace_returns_a_hit_table_or_nil() {
+        let _guard = lock_host();
+        crate::bind_actor_native(crate::ActorNative {
+            land_trace: |_, _, x, y| (x > 0).then_some((x, y)),
+            ..Default::default()
+        });
+        let lua = Lua::new();
+        let wa = lua.create_table().unwrap();
+        let actors = lua.create_table().unwrap();
+        spawn::bind_world(&lua, &actors, &wa).unwrap();
+        lua.globals().set("wa", wa).unwrap();
+        let result = lua
+            .load(
+                r#"
+            local hit = wa.land.trace(0, 0, 300 * 0x10000, 75 * 0x10000)
+            assert(type(hit) == "table" and hit.hit)
+            assert(hit.x == 300 * 0x10000 and hit.y == 75 * 0x10000)
+            assert(wa.land.trace(0, 0, 0, 0) == nil)
+        "#,
+            )
+            .exec();
+        crate::bind_actor_native(crate::ActorNative::default());
+        result.unwrap();
+    }
+
+    #[test]
+    fn sentry_placement_firing_and_reload_are_deterministic() {
+        let lua = Lua::new();
+        let test: mlua::Function = lua
+            .load(include_str!("../tests/fixtures/test_sentry.lua"))
+            .eval()
+            .unwrap();
+        let pack = lua
+            .load(include_str!(
+                "../../../mods/examples/sentry_gun/weapons.lua"
+            ))
+            .into_function()
+            .unwrap();
+        test.call::<()>(pack).unwrap();
+    }
+
+    #[test]
+    fn sentry_pack_is_gpu_rendered_with_slot_scoped_worm_poses() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/sentry_gun");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::Bazooka);
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::Mine));
+        assert_ne!(claim.params.on_fire_id, 0);
+        // The headline of the GPU renderer: the turret's 6 teams x 3 poses x
+        // 120 baked angles collapse to two sheets, rotated and tinted at draw
+        // time. 10 sheets total, none of them consuming a WA sprite slot.
+        assert_eq!(claim.params.extra_sheets.len(), 11);
+        assert_eq!(claim.params.gpu_prefix.as_deref(), Some("sprites/turret_"));
+        assert_eq!(claim.params.depth, Some(0x190000));
+        assert_eq!(
+            claim.params.depth_prefix.as_deref(),
+            Some("sprites/turret_")
+        );
+        assert_eq!(claim.params.worm_sprites.len(), 6);
+        let turret: Vec<&String> = claim
+            .params
+            .extra_sheets
+            .iter()
+            .map(|(p, _)| p)
+            .filter(|p| p.contains("turret_"))
+            .collect();
+        assert_eq!(
+            turret.len(),
+            3,
+            "base, gun and a separate additive flare: {turret:?}"
+        );
+        for (path, sheet) in &claim.params.extra_sheets {
+            if path.contains("turret_base") {
+                assert_eq!(sheet.frames.len(), 1, "the tripod never animates");
+            } else if path.contains("turret_flare") {
+                // Empty and lit: the flare is always present and selects
+                // nothing while idle.
+                assert_eq!(sheet.frames.len(), 2);
+            } else if path.contains("turret_gun") {
+                // Idle plus the two firing frames; every angle is a rotation.
+                assert_eq!(sheet.frames.len(), 3);
+            } else if path.contains("equip") {
+                assert_eq!(sheet.frames.len(), 10);
+                assert!(!sheet.looping);
+            }
+        }
+    }
+
+    /// The colourtest pack exists to make the renderer's new capabilities
+    /// visible, so the properties that carry that meaning are asserted here
+    /// rather than left to a screenshot. Each one is something the palette
+    /// path could not represent.
+    #[test]
+    fn colourtest_pack_is_truecolour_and_costs_no_sprite_slots() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/colourtest");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        // Sits in the mortar slot, throws like a grenade.
+        assert_eq!(claim.slot, StockWeapon::Mortar);
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::Grenade));
+        assert_ne!(claim.params.on_fire_id, 0);
+
+        // Every sheet goes to the GPU atlas, so the pack spends none of the
+        // 223 WA sprite slots that all packs share.
+        assert_eq!(claim.params.gpu_prefix.as_deref(), Some("sprites/"));
+        assert_eq!(claim.params.extra_sheets.len(), 3);
+        for (path, sheet) in &claim.params.extra_sheets {
+            assert!(
+                path.contains("sprites/"),
+                "{path} would miss gpu_prefix and take a real slot"
+            );
+            assert_eq!(sheet.frames.len(), 1, "{path}: motion is angle/scale/tint");
+        }
+
+        let sheet = |name: &str| {
+            &claim
+                .params
+                .extra_sheets
+                .iter()
+                .find(|(p, _)| p.contains(name))
+                .unwrap_or_else(|| panic!("{name} missing"))
+                .1
+                .frames[0]
+        };
+
+        // More colours in one 32x32 sprite than an indexed palette has
+        // entries. This is the claim the pack is named for.
+        let prism = sheet("prism");
+        let colours: std::collections::HashSet<[u8; 3]> = prism
+            .rgba
+            .chunks_exact(4)
+            .filter(|p| p[3] > 0)
+            .map(|p| [p[0], p[1], p[2]])
+            .collect();
+        assert!(
+            colours.len() > 256,
+            "prism has {} distinct colours; the point is that it exceeds a \
+             256-entry palette",
+            colours.len()
+        );
+
+        // Partial alpha survives. The palette path thresholded it away --
+        // below 16 dropped, everything else forced to 255 -- which turns
+        // every one of these ramps into a hard-edged disc.
+        for name in ["halo", "spark"] {
+            let partial = sheet(name)
+                .rgba
+                .chunks_exact(4)
+                .filter(|p| p[3] > 0 && p[3] < 255)
+                .count();
+            assert!(
+                partial > 64,
+                "{name} has only {partial} partially transparent pixels; its \
+                 additive falloff would read as a hard circle"
+            );
+        }
+    }
 
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
@@ -529,6 +701,7 @@ wa.weapons.replace({
                 left_ground: false,
                 hit_worm: false,
                 in_water: false,
+                damage: 0,
             },
         )
         .unwrap();
@@ -785,12 +958,7 @@ wa.weapons.replace({
             write_i32(body.as_mut_ptr(), ENT_POS_X, 3);
             write_i32(body.as_mut_ptr(), ENT_POS_Y, 4);
         }
-        crate::actor_frame(
-            handle,
-            spawn.brain_id,
-            crate::ActorEvent::default(),
-        )
-        .unwrap();
+        crate::actor_frame(handle, spawn.brain_id, crate::ActorEvent::default()).unwrap();
         assert_eq!(SPAWNED.with(|c| c.get()), 0x11);
     }
 }

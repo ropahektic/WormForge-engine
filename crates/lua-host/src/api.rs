@@ -7,20 +7,22 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
-use weapons::{OverlayClaim, OverlayParams, StockWeapon, parse_stock_weapon};
+use weapons::{parse_stock_weapon, OverlayClaim, OverlayParams, StockWeapon};
 
 pub struct BindContext {
     pub mod_id: String,
     pub root: PathBuf,
     pub allowed_slots: HashSet<StockWeapon>,
     pub allowed_register: HashSet<String>,
+    pub fog_allowed: bool,
     pub claims: Rc<RefCell<Vec<OverlayClaim>>>,
     pub logs: Rc<RefCell<Vec<String>>>,
 }
 
 pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     let wa = ensure_wa(lua)?;
-    wa.set("_mod", ctx.mod_id.clone()).map_err(|e| e.to_string())?;
+    wa.set("_mod", ctx.mod_id.clone())
+        .map_err(|e| e.to_string())?;
 
     let logs = Rc::clone(&ctx.logs);
     let mod_id_log = ctx.mod_id.clone();
@@ -83,6 +85,7 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     actors_tbl.set("kind", kind_fn).map_err(|e| e.to_string())?;
     spawn::bind_world(lua, &actors_tbl, &wa)?;
+    bind_fog(lua, &wa, ctx.fog_allowed, &ctx.mod_id, &ctx.logs)?;
     Ok(())
 }
 
@@ -179,9 +182,121 @@ fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
     on.set(name, f).map_err(|e| e.to_string())
 }
 
-fn make_push(
-    ctx: &BindContext,
-) -> Rc<dyn Fn(OverlayClaim, &str) -> mlua::Result<()>> {
+/// Convert a Lua value to the fog crate's dependency-free `Value` for
+/// validation against the settings registry.
+fn fog_value(v: &Value) -> mlua::Result<fog::Value> {
+    match v {
+        Value::Integer(n) => Ok(fog::Value::Int(*n as i32)),
+        Value::Number(n) => Ok(fog::Value::Int(*n as i32)),
+        Value::Boolean(b) => Ok(fog::Value::Bool(*b)),
+        Value::String(s) => Ok(fog::Value::Str(s.to_str()?.to_string())),
+        other => Err(mlua::Error::external(format!(
+            "fog setting values must be integers, booleans or strings, got {}",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Bind the `wa.fog` namespace: scheme configuration and fog-state queries for
+/// the fog-of-war engine. All gameplay settings are validated against
+/// `fog::settings::SETTINGS`, the Rust port of wkFOW's registry.
+///
+/// `enable` is gated on the pack declaring `[fog]` in mod.toml, mirroring how
+/// an undeclared weapon slot is skipped. Reads (`get`/`defaults`/`enabled`/
+/// `visible`) stay open: a mod may inspect fog state without owning it.
+fn bind_fog(
+    lua: &Lua,
+    wa: &Table,
+    fog_allowed: bool,
+    mod_id: &str,
+    logs: &Rc<RefCell<Vec<String>>>,
+) -> Result<(), String> {
+    let fogt = lua.create_table().map_err(|e| e.to_string())?;
+
+    // wa.fog.set{ circle_radius = 300, los = false, ... }
+    //
+    // Starts from the CURRENT scheme so a mod can change one setting without
+    // restating the rest, validates every key, and only then replaces the live
+    // scheme — a bad key leaves the running fog untouched.
+    let set = lua
+        .create_function(|_, spec: Table| {
+            let mut scheme = crate::actor::native_fog_scheme();
+            for pair in spec.pairs::<String, Value>() {
+                let (key, value) = pair?;
+                let fv = fog_value(&value)?;
+                scheme
+                    .set(&key, &fv)
+                    .map_err(mlua::Error::external)?;
+            }
+            if let Some(f) = crate::actor::native_fog_set_scheme() {
+                f(scheme);
+            }
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("set", set).map_err(|e| e.to_string())?;
+
+    // wa.fog.get("circle_radius") -> integer, or nil for an unknown name.
+    let get = lua
+        .create_function(|_, name: String| {
+            Ok(crate::actor::native_fog_scheme().get(&name))
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("get", get).map_err(|e| e.to_string())?;
+
+    // wa.fog.defaults() -> { name = default, ... } straight from the registry.
+    let defaults = lua
+        .create_function(|lua, ()| {
+            let t = lua.create_table()?;
+            for def in fog::SETTINGS {
+                t.set(def.name, def.default)?;
+            }
+            Ok(t)
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("defaults", defaults).map_err(|e| e.to_string())?;
+
+    // wa.fog.enable(true|false) — master switch for the match. Requires the
+    // pack to declare `[fog]` in mod.toml; otherwise it logs a skip, exactly
+    // like an undeclared weapon slot.
+    let enable_logs = Rc::clone(logs);
+    let enable_mod = mod_id.to_string();
+    let enable = lua
+        .create_function(move |_, on: bool| {
+            if !fog_allowed {
+                enable_logs.borrow_mut().push(format!(
+                    "[{enable_mod}] skipped fog.enable — no [fog] table in mod.toml"
+                ));
+                return Ok(());
+            }
+            if let Some(f) = crate::actor::native_fog_enable() {
+                f(on);
+            }
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("enable", enable).map_err(|e| e.to_string())?;
+
+    // wa.fog.enabled() -> boolean
+    let enabled = lua
+        .create_function(|_, ()| Ok(crate::actor::native_fog_enabled()))
+        .map_err(|e| e.to_string())?;
+    fogt.set("enabled", enabled).map_err(|e| e.to_string())?;
+
+    // wa.fog.visible(x, y) -> 0..255 at a world 16.16 position.
+    let visible = lua
+        .create_function(|_, (x, y): (i32, i32)| {
+            Ok(crate::actor::native_fog_visible()
+                .map(|f| f(x, y))
+                .unwrap_or(255))
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("visible", visible).map_err(|e| e.to_string())?;
+
+    wa.set("fog", fogt).map_err(|e| e.to_string())
+}
+
+fn make_push(ctx: &BindContext) -> Rc<dyn Fn(OverlayClaim, &str) -> mlua::Result<()>> {
     let allowed_slots = ctx.allowed_slots.clone();
     let allowed_register = ctx.allowed_register.clone();
     let claims = Rc::clone(&ctx.claims);
@@ -243,6 +358,12 @@ fn table_to_claim(
     let mut sprite_id = None;
     let mut sprite_sheet: Option<SpriteStrip> = None;
     let mut sprite_columns = 8i32;
+    let mut layer: Option<u32> = None;
+    let mut depth: Option<u32> = None;
+    let mut depth_prefix: Option<String> = None;
+    let mut gpu_prefix: Option<String> = None;
+    let mut truecolor_prefix: Option<String> = None;
+    let mut reserve_prefix: Option<String> = None;
 
     if let Some(p) = spec.get::<Option<Table>>("params")? {
         damage = get_i32(&p, "damage")?;
@@ -250,6 +371,12 @@ fn table_to_claim(
         gravity_pct = get_i32(&p, "gravity_pct")?;
         wind_pct = get_i32(&p, "wind_pct")?;
         sprite_columns = get_i32(&p, "sprite_columns")?.unwrap_or(8).max(1);
+        layer = get_i32(&p, "layer")?.map(|v| v.clamp(1, 3) as u32);
+        depth = get_i32(&p, "depth")?.map(|v| v as u32);
+        depth_prefix = get_string(&p, "depth_prefix")?;
+        gpu_prefix = get_string(&p, "gpu_prefix")?;
+        truecolor_prefix = get_string(&p, "truecolor_prefix")?;
+        reserve_prefix = get_string(&p, "reserve_prefix")?;
         load_sprite_field(
             root,
             &p,
@@ -281,7 +408,7 @@ fn table_to_claim(
         other => {
             return Err(mlua::Error::external(format!(
                 "on_click must be a function or table, got {other:?}"
-            )))
+            )));
         }
     }
 
@@ -308,7 +435,25 @@ fn table_to_claim(
         other => {
             return Err(mlua::Error::external(format!(
                 "sprites must be a list of pack paths, got {other:?}"
-            )))
+            )));
+        }
+    }
+
+    let mut worm_sprites = Vec::new();
+    if let Some(poses) = spec.get::<Option<Table>>("worm_sprites")? {
+        for pair in poses.pairs::<String, String>() {
+            let (name, path) = pair?;
+            let id = gfx::stock_worm_sprite_id(&name).ok_or_else(|| {
+                mlua::Error::external(format!("unknown stock worm sprite '{name}'"))
+            })?;
+            worm_sprites.push((id, path.replace('\\', "/")));
+        }
+        // Lua hash iteration must not change custom sprite slot allocation.
+        worm_sprites.sort_by_key(|(id, _)| *id);
+        for (_, path) in &worm_sprites {
+            let (path, mut sheet) = load_pack_sheet(root, path, 1)?;
+            sheet.looping = false; // stock worm animator owns the phase
+            extra_sheets.push((path, sheet));
         }
     }
 
@@ -325,7 +470,7 @@ fn table_to_claim(
         other => {
             return Err(mlua::Error::external(format!(
                 "sounds must be a list of pack WAV paths, got {other:?}"
-            )))
+            )));
         }
     }
 
@@ -367,6 +512,13 @@ fn table_to_claim(
             fire_spawn,
             sprite_path,
             extra_sheets,
+            worm_sprites,
+            layer,
+            depth,
+            depth_prefix,
+            gpu_prefix,
+            truecolor_prefix,
+            reserve_prefix,
             extra_sounds,
         },
     })
@@ -378,7 +530,9 @@ fn load_pack_sheet(
     _columns: u32,
 ) -> mlua::Result<(String, SpriteStrip)> {
     if relative.contains("..") {
-        return Err(mlua::Error::external("sprite path must stay inside the pack"));
+        return Err(mlua::Error::external(
+            "sprite path must stay inside the pack",
+        ));
     }
     if !is_sheet_path(relative) && !root.join(relative).is_dir() {
         return Err(mlua::Error::external(format!(
@@ -395,7 +549,9 @@ fn load_pack_sound(
     relative: &str,
 ) -> mlua::Result<(String, std::path::PathBuf)> {
     if relative.contains("..") {
-        return Err(mlua::Error::external("sound path must stay inside the pack"));
+        return Err(mlua::Error::external(
+            "sound path must stay inside the pack",
+        ));
     }
     let rel = relative.replace('\\', "/");
     let lower = rel.to_ascii_lowercase();
@@ -427,7 +583,9 @@ fn load_sprite_field(
     };
     if is_sheet_path(&sprite) {
         if sprite.contains("..") {
-            return Err(mlua::Error::external("sprite path must stay inside the pack"));
+            return Err(mlua::Error::external(
+                "sprite path must stay inside the pack",
+            ));
         }
         let path = root.join(&sprite);
         *sprite_sheet = Some(load_sprite_path(&path, columns).map_err(mlua::Error::external)?);
@@ -441,4 +599,3 @@ fn load_sprite_field(
     }
     Ok(())
 }
-

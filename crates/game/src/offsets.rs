@@ -37,6 +37,9 @@ pub const WORM_SELECTED_AMMO: usize = 0x174;
 pub const WORM_ACTIVE_WEAPON: usize = 0x36C;
 /// WorldEntity.state (+0x44).
 pub const WORM_STATE: usize = 0x44;
+/// Ground slope selector used by `WormEntity__calc_sprite`: negative adds the
+/// uphill (+1) pose, positive adds the downhill (+2) pose.
+pub const WORM_SLOPE_DIR: usize = 0x1AC;
 /// WeaponCharging — power bar live.
 pub const WORM_STATE_CHARGING: u32 = 0x73;
 /// AimingAngle — crosshair up, ready for Space.
@@ -107,6 +110,10 @@ pub const SPRITE_WFLY_LNK: u32 = 278;
 pub const WORM_FACING: usize = 0x3DC;
 /// WormEntity show-cursor latch (`+0x268`). Strike targeting.
 pub const WORM_SHOW_CURSOR: usize = 0x268;
+/// WormEntity rendered aim sweep (`+0x270`), read as i32. The low 16 bits
+/// encode a 180-degree sweep; `facing` selects which side of the worm it
+/// occupies. wkFOW `CTaskWorm::getAimAngle` reads the same offset.
+pub const WORM_AIM_ANGLE: usize = 0x270;
 /// WorldRootEntity: non-zero pauses the HUD turn clock (grenade-in-flight).
 pub const WORLD_ROOT_WORM_ACTIVE: usize = 0x108;
 pub const WORLD_ROOT_TURN_TIMER_DISPLAY: usize = 0x188;
@@ -157,6 +164,8 @@ pub const ENT_SPEED_X: usize = 0x90;
 pub const ENT_SPEED_Y: usize = 0x94;
 pub const ENT_SETTLE: usize = 0xAC;
 pub const ENT_MOVED: usize = 0xB8;
+/// WorldEntity explosion-damage accumulator; subclasses consume and clear it.
+pub const ENT_DAMAGE_ACCUM: usize = 0xD4;
 pub const ENT_HELPER: usize = 0xDC;
 pub const ENT_WORM_TEAM: usize = 0xFC;
 
@@ -222,7 +231,10 @@ pub const GAME_RUNTIME_WORLD_ROOT: usize = 0x8;
 pub const COLLISION_LAYER_MISSILE: u32 = 0xF;
 pub const DROP_SKY_Y: i32 = -0x00D0_0000;
 pub const LUA_ACTOR_MAGIC: u32 = 0x774B_4C41;
-pub const LUA_ACTOR_SIZE: usize = 0x140;
+/// Grown from 0x140 to make room for the GPU renderer's presentation state.
+/// The allocation is ours (`spawn_lua_actor` mallocs and zeroes it), so this
+/// is safe to extend; nothing in WA reads past ACTOR_MAGIC.
+pub const LUA_ACTOR_SIZE: usize = 0x150;
 pub const ACTOR_MAGIC: usize = 0xFC;
 pub const ACTOR_SPRITE: usize = 0x100;
 pub const ACTOR_PHASE: usize = 0x104;
@@ -261,6 +273,24 @@ pub const ACTOR_FEET_Y: usize = 0x134;
 pub const ACTOR_CONTACT: usize = 0x138;
 /// Lua brain id (`0` = spawn-table sugar). Last dword of `LUA_ACTOR_SIZE`.
 pub const ACTOR_BRAIN: usize = 0x13C;
+/// Presentation state for the GPU renderer, in the actor struct rather than a
+/// side table keyed by handle: `actor_free` recycles the address, so a side
+/// table that is not pruned would hand a freshly spawned actor a dead one's
+/// rotation. Struct fields die with the object. Nothing in the simulation
+/// reads these, so lockstep safety is by construction rather than discipline.
+/// Degrees clockwise, 16.16 fixed.
+pub const ACTOR_ANGLE: usize = 0x140;
+/// 16.16 fixed; 0x10000 is the sheet's native size. Initialised at spawn, so
+/// a zeroed allocation never means "scale 0".
+pub const ACTOR_SCALE: usize = 0x144;
+/// Premultiplied D3DCOLOR. Alpha 0 is additive, not invisible.
+pub const ACTOR_TINT: usize = 0x148;
+/// Which occlusion band this sprite belongs to, as a render-queue depth.
+/// At or behind TERRAIN (0x180000) it is occluded by terrain; in front of it
+/// terrain is ignored and only the HUD occludes. Both bands ignore worms --
+/// that combination is the whole point of the per-source mask, and is not
+/// expressible as a single painter-order depth.
+pub const ACTOR_DEPTH: usize = 0x14C;
 pub const SHARED_WORLD_ROOT: u32 = 0x14;
 pub const GAME_WORLD_LANDSCAPE: usize = 0x20;
 pub const GAME_WORLD_WATER_LEVEL: usize = 0x5E0;

@@ -13,6 +13,8 @@
 //! FindNearestCached 0x541340) and put that slot in the cache so MapColor
 //! hits instead of returning 0xFFFFFFFF (white).
 
+use crate::log_error;
+#[cfg(debug_assertions)]
 use crate::log_line;
 use crate::rebase::rb;
 use game::offsets::{
@@ -30,6 +32,7 @@ struct SpriteObj([u8; 0x70]);
 struct LoadedSpr {
     display: *mut u8,
     id: i32,
+    layer: u32,
     _sprite: Box<SpriteObj>,
     _spr: Box<[u8]>,
 }
@@ -69,6 +72,8 @@ const PAL_CACHE_COUNT: usize = 0x606;
 const PAL_CACHE: usize = 0x608;
 
 pub fn clear() {
+    #[cfg(debug_assertions)]
+    PALETTE_DUMPED.store(false, std::sync::atomic::Ordering::SeqCst);
     if let Ok(mut g) = LOADED.lock() {
         for s in g.drain(..) {
             if s.display.is_null() {
@@ -94,6 +99,44 @@ pub fn clear() {
     if let Ok(mut r) = RGBA_SHEETS.lock() {
         r.clear();
     }
+    // The map's PaletteContext is rebuilt per match, so the slots go with it.
+    // Only the bookkeeping has to be dropped, and doing it without touching the
+    // old context avoids dereferencing one that has already been torn down.
+    if let Ok(mut r) = RESERVED.lock() {
+        r.clear();
+    }
+    clear_gpu_sheets();
+}
+
+/// Put installed sprites back into the display's sprite table.
+///
+/// Sprites are installed once per match, but WA repopulates its sprite pointer
+/// table when a round begins, which drops every custom slot: the turret stops
+/// drawing, and a worm sprite override then names an empty slot, so the worm
+/// itself disappears. The sprite objects are still alive in LOADED for the
+/// whole match, so this only has to put the pointers back.
+///
+/// Returns how many slots had been lost, which is 0 when nothing cleared them.
+pub fn reassert() -> usize {
+    let mut restored = 0;
+    if let Ok(g) = LOADED.lock() {
+        for s in g.iter() {
+            if s.display.is_null() {
+                continue;
+            }
+            unsafe {
+                let ptrs = (s.display as usize + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
+                let slot = ptrs.add(s.id as usize);
+                if (*slot).is_null() {
+                    *slot = s._sprite.0.as_ptr() as *mut u8;
+                    let layers = (s.display as usize + DISPLAY_SPRITE_LAYERS) as *mut u32;
+                    *layers.add(s.id as usize) = s.layer;
+                    restored += 1;
+                }
+            }
+        }
+    }
+    restored
 }
 
 /// Stock missile render uses `animation_phase` as blit anim_value. Donkey's
@@ -145,6 +188,160 @@ pub fn advance_loop_id(entity: *mut u8, sid: i32, phase_off: usize) {
     }
 }
 
+/// Display layer for sheets installed next, when set.
+///
+/// Sprites normally land on DISPLAY_GAME_LAYER (3), which draws over terrain.
+/// Layers 1 and 2 also carry a PaletteContext, so a sheet can be installed
+/// below the game layer to sit behind the landscape.
+static FORCE_LAYER: Mutex<Option<u32>> = Mutex::new(None);
+/// When set, sheets installed next take exact palette slots instead of snapping.
+static FORCE_RESERVE: Mutex<bool> = Mutex::new(false);
+
+pub fn set_reserve_colours(on: bool) {
+    if let Ok(mut g) = FORCE_RESERVE.lock() {
+        *g = on;
+    }
+}
+#[cfg(debug_assertions)]
+static PALETTE_DUMPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Palette slots this pack owns: (rgb, index).
+///
+/// A pack whose art the map palette cannot express -- a saturated team colour
+/// against an earth-toned map -- puts its colours in unused slots instead of
+/// snapping to whatever is nearest, which for pure blue is black.
+///
+/// The earlier attempt at this corrupted every pack that loaded later. Marking
+/// a slot in use makes it a CANDIDATE for the nearest-colour search, so
+/// wormcraft and worm_toss (alphabetically after sentry_gun) began snapping
+/// their art onto our team colours. Reserved slots are therefore excluded from
+/// that search: ours by exact match, invisible to everyone else.
+static RESERVED: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+/// Ceiling on reserved slots, leaving the map most of its palette.
+const RESERVE_BUDGET: usize = 64;
+/// Weighted distance below which the map's own colour is good enough.
+///
+/// A slot spent on a colour the palette already has is a slot the map loses for
+/// nothing. The tripod's greys sit among 24 greys and match closely; a
+/// saturated team colour scores in the hundreds against an earth-toned palette,
+/// and that is what deserves a slot.
+const RESERVE_KEEP: i32 = 90;
+
+/// Snapshot of reserved slots as a lookup table.
+///
+/// Taken once per nearest-colour search: testing the mutex per candidate would
+/// take it roughly a million times over a pack's sheets.
+fn reserved_mask() -> [bool; 256] {
+    let mut mask = [false; 256];
+    if let Ok(g) = RESERVED.lock() {
+        for (_, slot) in g.iter() {
+            if (*slot as usize) < mask.len() {
+                mask[*slot as usize] = true;
+            }
+        }
+    }
+    mask
+}
+
+/// Give a sheet's own colours exact palette slots.
+///
+/// Called instead of quantize_to_map_palette for opted-in sheets. Writes each
+/// colour into an unused slot so ProcessSprite's MapColor finds it exactly,
+/// leaving the .spr palette untouched. Colours past the budget fall back to
+/// snapping, so a pack cannot exhaust the palette.
+unsafe fn reserve_palette_for(ctx: *mut u8, spr: &mut [u8]) -> Result<(u32, u32), String> {
+    if spr.len() < 12 {
+        return Err("truncated .spr".into());
+    }
+    let pal_n = u16::from_le_bytes([spr[10], spr[11]]) as usize;
+    let mut exact = 0u32;
+    let mut snapped = 0u32;
+    for i in 0..pal_n {
+        let o = 12 + i * 3;
+        if o + 2 >= spr.len() {
+            break;
+        }
+        let rgb = spr[o] as u32 | ((spr[o + 1] as u32) << 8) | ((spr[o + 2] as u32) << 16);
+        let near = unsafe { nearest_with_cost(ctx, rgb) };
+        let good_enough = near.is_some_and(|(_, cost)| cost <= RESERVE_KEEP);
+        if !good_enough && unsafe { reserve_slot(ctx, rgb) }.is_some() {
+            exact += 1;
+            continue;
+        }
+        // Close enough already, or budget spent: snap, never onto a reserved slot.
+        if let Some((slot, _)) = near {
+            let [r, g, b] = unsafe { rgb_at(ctx, slot) };
+            spr[o] = r;
+            spr[o + 1] = g;
+            spr[o + 2] = b;
+            snapped += 1;
+        }
+    }
+    Ok((exact, snapped))
+}
+
+/// Find or create the reserved slot holding `rgb`.
+unsafe fn reserve_slot(ctx: *mut u8, rgb: u32) -> Option<u32> {
+    let Ok(mut reserved) = RESERVED.lock() else {
+        return None;
+    };
+    if let Some((_, slot)) = reserved.iter().find(|(c, _)| *c == rgb) {
+        return Some(*slot);
+    }
+    if reserved.len() >= RESERVE_BUDGET {
+        return None;
+    }
+    unsafe {
+        let in_use = ctx.add(PAL_IN_USE);
+        for i in 1..=255u32 {
+            if *in_use.add(i as usize) != 0 {
+                continue;
+            }
+            let p = ctx.add(PAL_RGB + i as usize * 4);
+            *p = (rgb & 0xff) as u8;
+            *p.add(1) = ((rgb >> 8) & 0xff) as u8;
+            *p.add(2) = ((rgb >> 16) & 0xff) as u8;
+            *in_use.add(i as usize) = 1;
+            // MapColor exact-matches the CACHE, not the rgb table, and returns
+            // 0xFFFFFFFF -- white -- when it misses with free_count at 0. A
+            // reserved slot that is not cached is therefore an invisible slot:
+            // the first attempt at this turned the blue turret white.
+            ensure_cached(ctx, i);
+            reserved.push((rgb, i));
+            return Some(i);
+        }
+    }
+    None
+}
+
+// A map palette holds only what the map needed -- one measured live had 106
+// colours in use and exactly two blues, both desaturated slate -- so a
+// saturated tint has no neighbour and snaps to whatever the weighted metric
+// calls closest, which for pure blue is black.
+//
+// Writing colours into unreferenced slots to fix that was wrong: `free` (6) is
+// WA's allocatable pool, not a count of spare indices, and the ~149 slots that
+// looked free were merely unreferenced. Overwriting their RGB changed what
+// those indices mean for every other sprite drawn from this PaletteContext.
+//
+// Colour for our own sheets is instead resolved on the GPU, where WA already
+// uploads the frame as indices plus a palette texture. See crates/engine/src/
+// shader.rs and the plan in .claude/plans/.
+
+#[cfg(debug_assertions)]
+unsafe fn dump_palette_once(ctx: *mut u8) {
+    if PALETTE_DUMPED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    unsafe { dump_palette(ctx) };
+}
+
+pub fn set_force_layer(layer: Option<u32>) {
+    if let Ok(mut g) = FORCE_LAYER.lock() {
+        *g = layer;
+    }
+}
+
 pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, String> {
     if display.is_null() {
         return Err("display is null".into());
@@ -153,7 +350,22 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
     spr.resize(spr.len() + 16, 0);
 
     let id = unsafe { free_slot(display) }.ok_or("no free sprite slot in 800..=1022")?;
-    let (pal_ctx, layer) = unsafe { palette_ctx(display) };
+    let forced = FORCE_LAYER.lock().ok().and_then(|g| *g);
+    let (pal_ctx, layer) = match forced {
+        Some(want) => {
+            let base = display as usize + DISPLAY_LAYER_CONTEXTS;
+            let ctx = unsafe { *((base + (want as usize) * 4) as *const usize) };
+            if ctx != 0 {
+                (ctx as *mut u8, want)
+            } else {
+                log_error(&format!(
+                    "layer {want} has no PaletteContext; using default"
+                ));
+                unsafe { palette_ctx(display) }
+            }
+        }
+        None => unsafe { palette_ctx(display) },
+    };
     if pal_ctx.is_null() {
         return Err("no PaletteContext on display layers 1-3".into());
     }
@@ -164,14 +376,35 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
 
     let free_before = unsafe { *(pal_ctx.add(PAL_FREE_COUNT) as *const i16) };
     let cache_n = unsafe { *(pal_ctx.add(PAL_CACHE_COUNT) as *const i16) };
+    #[cfg(not(debug_assertions))]
+    let _ = (free_before, cache_n);
 
     let mut sprite = Box::new(SpriteObj([0u8; 0x70]));
     let mut spr = spr.into_boxed_slice();
     unsafe {
-        let snapped = quantize_to_map_palette(pal_ctx, &mut spr)?;
-        log_line(&format!(
-            "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} quantized={snapped}"
-        ));
+        #[cfg(debug_assertions)]
+        dump_palette_once(pal_ctx);
+        let reserve = FORCE_RESERVE.lock().map(|g| *g).unwrap_or(false);
+        if reserve {
+            let (exact, snapped) = reserve_palette_for(pal_ctx, &mut spr)?;
+            #[cfg(debug_assertions)]
+            {
+                let held = RESERVED.lock().map(|g| g.len()).unwrap_or(0);
+                log_line(&format!(
+                    "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} exact={exact} snapped={snapped} reserved_total={held}"
+                ));
+            }
+            #[cfg(not(debug_assertions))]
+            let _ = (exact, snapped);
+        } else {
+            let snapped = quantize_to_map_palette(pal_ctx, &mut spr)?;
+            #[cfg(debug_assertions)]
+            log_line(&format!(
+                "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} quantized={snapped}"
+            ));
+            #[cfg(not(debug_assertions))]
+            let _ = snapped;
+        }
         construct_sprite(sprite.0.as_mut_ptr(), cache);
         let ok = process_sprite(sprite.0.as_mut_ptr(), pal_ctx, spr.as_mut_ptr());
         if ok == 0 {
@@ -183,20 +416,24 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
         *ptrs.add(id as usize) = sprite.0.as_mut_ptr();
         *layers.add(id as usize) = layer;
         *vis.add(layer as usize) = (*vis.add(layer as usize)).wrapping_add(1);
-        let free_after = *(pal_ctx.add(PAL_FREE_COUNT) as *const i16);
-        log_line(&format!(
-            "installed .spr at sprite id {id} layer {layer} ({} frames loop={} delta={} free={})",
-            strip.frames.len(),
-            strip.looping,
-            strip.phase_delta(),
-            free_after
-        ));
+        #[cfg(debug_assertions)]
+        {
+            let free_after = *(pal_ctx.add(PAL_FREE_COUNT) as *const i16);
+            log_line(&format!(
+                "installed .spr at sprite id {id} layer {layer} ({} frames loop={} delta={} free={})",
+                strip.frames.len(),
+                strip.looping,
+                strip.phase_delta(),
+                free_after
+            ));
+        }
     }
 
     if let Ok(mut g) = LOADED.lock() {
         g.push(LoadedSpr {
             display,
             id,
+            layer,
             _sprite: sprite,
             _spr: spr,
         });
@@ -207,6 +444,7 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
             d.retain(|(existing, _)| *existing != id);
             d.push((id, delta));
         }
+        #[cfg(debug_assertions)]
         log_line(&format!("sprite {id} GIF loop delta {delta}"));
     }
     if let Some(feet) = strip.feet_platform() {
@@ -214,6 +452,7 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
             g.retain(|(sid, _)| *sid != id);
             g.push((id, feet));
         }
+        #[cfg(debug_assertions)]
         log_line(&format!(
             "sprite {id} platform x0={} x1={} y={} (sheet {}x{})",
             feet.x0, feet.x1, feet.y, feet.width, feet.height
@@ -341,6 +580,23 @@ fn punch_letterbox(bgra: &mut [u8], w: u32, h: u32) {
     }
 }
 
+/// Frames in an installed sheet, for turning a frame index into an anim phase.
+///
+/// GPU sheets are checked first and deliberately: their pixels live in the
+/// atlas, not in RGBA_SHEETS, so counting that empty pixel vector would
+/// report zero frames. frame_phase then refuses to produce a phase and
+/// `a:frame()` silently does nothing -- which looks exactly like a sprite
+/// that will not animate, with no error anywhere to say why.
+pub fn frame_count(id: i32) -> Option<usize> {
+    if let Ok(gpu) = GPU_SHEETS.lock() {
+        if let Some(sheet) = gpu.iter().find(|s| s.id == id) {
+            return Some(sheet.frames.len());
+        }
+    }
+    let g = RGBA_SHEETS.lock().ok()?;
+    g.iter().find(|s| s.id == id).map(|s| s.frames.len())
+}
+
 pub fn overlay_frame(id: i32, phase: u32) -> Option<(u32, u32, Vec<u8>)> {
     let g = RGBA_SHEETS.lock().ok()?;
     let sheet = g.iter().find(|s| s.id == id)?;
@@ -363,6 +619,25 @@ unsafe fn free_slot(display: *mut u8) -> Option<i32> {
         }
         None
     }
+}
+
+/// Which display layers carry a PaletteContext.
+///
+/// Sprites install on the first one found, which is always the game layer (3).
+/// Drawing behind terrain would mean installing on a lower layer instead, so
+/// this records which are even present before that can be attempted.
+#[cfg(debug_assertions)]
+pub fn report_layers(display: *mut u8) {
+    if display.is_null() {
+        return;
+    }
+    let base = display as usize + DISPLAY_LAYER_CONTEXTS;
+    let mut found = Vec::new();
+    for layer in 0..4u32 {
+        let ctx = unsafe { *((base + (layer as usize) * 4) as *const usize) };
+        found.push(format!("{layer}={}", if ctx != 0 { "ctx" } else { "none" }));
+    }
+    log_line(&format!("display layer contexts: {}", found.join(" ")));
 }
 
 unsafe fn palette_ctx(display: *mut u8) -> (*mut u8, u32) {
@@ -476,7 +751,75 @@ unsafe fn rgb_at(ctx: *mut u8, slot: u32) -> [u8; 3] {
     }
 }
 
+/// Log the map palette's in-use colours, grouped by hue family.
+///
+/// Sprites are snapped to this set, so a tint with no neighbour here cannot
+/// survive: a saturated blue in an earth-toned palette lands on whatever is
+/// closest, which was black. Knowing what the palette actually holds is the
+/// difference between choosing team colours and guessing them.
+/// What the live map palette actually holds, one line per match.
+///
+/// Colour-team choices need to know whether blues exist before picking team
+/// colours, and which families saturate the table. Gated like its only caller:
+/// a Release build neither runs nor compiles it.
+#[cfg(debug_assertions)]
+pub unsafe fn dump_palette(ctx: *mut u8) {
+    if ctx.is_null() {
+        return;
+    }
+    let mut families = [0u32; 8];
+    let mut blues: Vec<String> = Vec::new();
+    let mut n = 0;
+    unsafe {
+        let in_use = ctx.add(PAL_IN_USE);
+        for i in 1..=255u32 {
+            if *in_use.add(i as usize) == 0 {
+                continue;
+            }
+            n += 1;
+            let [r, g, b] = rgb_at(ctx, i);
+            let (r, g, b) = (r as i32, g as i32, b as i32);
+            let mx = r.max(g).max(b);
+            let mn = r.min(g).min(b);
+            let idx = if mx - mn < 24 {
+                0 // grey
+            } else if r >= g && r >= b {
+                if g > b {
+                    1
+                } else {
+                    2
+                } // red/orange, red/magenta
+            } else if g >= r && g >= b {
+                if r > b {
+                    3
+                } else {
+                    4
+                } // yellow/green, green/cyan
+            } else if r > g {
+                5 // magenta/violet
+            } else {
+                6 // blue/cyan
+            };
+            families[idx] += 1;
+            if idx == 6 && blues.len() < 12 {
+                blues.push(format!("{r},{g},{b}"));
+            }
+        }
+    }
+    log_line(&format!(
+        "map palette: {n} in use -- grey {} red {} redmag {} yelgrn {} grncyn {} magvio {} blue {}",
+        families[0], families[1], families[2], families[3], families[4], families[5], families[6]
+    ));
+    log_line(&format!("map palette blues: {}", blues.join("  ")));
+}
+
 unsafe fn nearest_in_use(ctx: *mut u8, rgb: u32) -> Option<u32> {
+    unsafe { nearest_with_cost(ctx, rgb) }.map(|(slot, _)| slot)
+}
+
+/// Nearest in-use slot and how poor the match is.
+unsafe fn nearest_with_cost(ctx: *mut u8, rgb: u32) -> Option<(u32, i32)> {
+    let reserved = reserved_mask();
     let tr = (rgb & 0xff) as i32;
     let tg = ((rgb >> 8) & 0xff) as i32;
     let tb = ((rgb >> 16) & 0xff) as i32;
@@ -485,7 +828,7 @@ unsafe fn nearest_in_use(ctx: *mut u8, rgb: u32) -> Option<u32> {
     unsafe {
         let in_use = ctx.add(PAL_IN_USE);
         for i in 1..=255u32 {
-            if *in_use.add(i as usize) == 0 {
+            if *in_use.add(i as usize) == 0 || reserved[i as usize] {
                 continue;
             }
             let [r, g, b] = rgb_at(ctx, i);
@@ -500,7 +843,7 @@ unsafe fn nearest_in_use(ctx: *mut u8, rgb: u32) -> Option<u32> {
     if slot == 0 {
         None
     } else {
-        Some(slot)
+        Some((slot, best))
     }
 }
 
@@ -534,4 +877,131 @@ unsafe fn process_sprite(sprite: *mut u8, pal_ctx: *mut u8, raw: *mut u8) -> u32
         );
     }
     ret
+}
+
+// ---------------------------------------------------------------------------
+// GPU sheets
+//
+// A sheet installed for the GPU renderer gets an id but no WA sprite slot: no
+// `.spr` is encoded, no palette is quantised or reserved, no entry is written
+// into `DISPLAY_SPRITE_PTRS`. That is the entire point. Those 223 slots
+// (CUSTOM_SPRITE_SLOT_MIN..=MAX) are shared by every loaded pack, and the
+// sentry gun alone spends 72 of them on baked rotations that the GPU path
+// does with one float.
+//
+// Skipping the palette also removes the two historical corruption regressions
+// at their source: `quantize_to_map_palette` and `reserve_palette_for` simply
+// never run for these sheets, so nothing they do can repaint the scene. They
+// keep more than 254 colours and real partial alpha as a side effect.
+
+/// Ids are `0x0100_0000 | n`, chosen so `id & 0xffff` can never collide with
+/// a real stock sprite index. Anything that treats an id as an index into
+/// WA's 1023-entry sprite table must reject these -- see `is_virtual`.
+pub const VIRTUAL_SPRITE_BASE: i32 = 0x0100_0000;
+
+/// A GPU sheet: where each frame lives in the atlas, plus the animation
+/// properties `a:frame` and `a:advance` need.
+pub struct GpuSheet {
+    pub id: i32,
+    pub frames: Vec<render::SheetRect>,
+    pub looping: bool,
+}
+
+static GPU_SHEETS: Mutex<Vec<GpuSheet>> = Mutex::new(Vec::new());
+static NEXT_VIRTUAL: Mutex<i32> = Mutex::new(VIRTUAL_SPRITE_BASE);
+
+pub fn is_virtual(id: i32) -> bool {
+    id >= VIRTUAL_SPRITE_BASE
+}
+
+/// True when this id was installed for the GPU renderer.
+pub fn is_gpu_sheet(id: u32) -> bool {
+    GPU_SHEETS
+        .lock()
+        .map(|g| g.iter().any(|s| (s.id as u32) == id))
+        .unwrap_or(false)
+}
+
+/// Atlas rectangles and animation properties for a GPU sheet.
+#[allow(clippy::type_complexity)]
+pub fn gpu_frame(
+    id: u32,
+) -> Option<(impl Fn(usize) -> Option<render::SheetRect>, usize, bool)> {
+    let sheets = GPU_SHEETS.lock().ok()?;
+    let sheet = sheets.iter().find(|s| (s.id as u32) == id)?;
+    let frames = sheet.frames.clone();
+    let count = frames.len();
+    let looping = sheet.looping;
+    Some((move |i: usize| frames.get(i).copied(), count, looping))
+}
+
+/// Install a sheet for the GPU renderer.
+///
+/// Populates exactly the WormForge-side tables the rest of the engine reads --
+/// feet/collision, frame count, loop delta, name lookup -- and nothing that
+/// touches WA's sprite table or the map palette. `a:move`, `a:on_feet`,
+/// `a:frame`, `a:look` and explosion placement all keep working because none
+/// of them ever consulted WA's table in the first place.
+pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) -> i32 {
+    let id = {
+        let Ok(mut next) = NEXT_VIRTUAL.lock() else {
+            return 0;
+        };
+        let id = *next;
+        *next += 1;
+        id
+    };
+
+    if let Ok(mut g) = GPU_SHEETS.lock() {
+        g.retain(|s| s.id != id);
+        g.push(GpuSheet { id, frames: rects, looping: strip.looping });
+    }
+    if let Some(feet) = strip.feet_platform() {
+        if let Ok(mut g) = SPRITE_FEET.lock() {
+            g.retain(|(s, _)| *s != id);
+            g.push((id, feet));
+        }
+    }
+    let delta = strip.phase_delta();
+    if delta > 0 {
+        if let Ok(mut g) = LOOP_DELTA.lock() {
+            g.retain(|(s, _)| *s != id);
+            g.push((id, delta));
+        }
+    }
+    // frame_count() reads RGBA_SHEETS, which a:frame needs to invert its phase.
+    if let Ok(mut g) = RGBA_SHEETS.lock() {
+        g.retain(|s| s.id != id);
+        g.push(RgbaSheet {
+            id,
+            w: strip.frames.first().map(|f| f.width).unwrap_or(0),
+            h: strip.frames.first().map(|f| f.height).unwrap_or(0),
+            looping: strip.looping,
+            // The atlas holds the pixels; this entry exists only so lookups
+            // keyed on RGBA_SHEETS still find the sheet. Anything that needs
+            // a frame COUNT must use frame_count(), which checks GPU_SHEETS
+            // first for exactly this reason.
+            frames: Vec::new(),
+        });
+    }
+    id
+}
+
+/// Drop every GPU sheet. Called with the rest of the per-match sprite state.
+pub fn clear_gpu_sheets() {
+    if let Ok(mut g) = GPU_SHEETS.lock() {
+        g.clear();
+    }
+    if let Ok(mut next) = NEXT_VIRTUAL.lock() {
+        *next = VIRTUAL_SPRITE_BASE;
+    }
+}
+
+/// How many of the 223 shared custom slots are currently occupied.
+///
+/// The ceiling is global: every loaded pack draws from the same range, so one
+/// pack baking rotations costs every other pack. GPU sheets are deliberately
+/// absent from this count -- that is the point of them.
+pub fn slots_used() -> usize {
+    LOADED.lock().map(|g| g.len()).unwrap_or(0)
 }

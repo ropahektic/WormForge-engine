@@ -40,6 +40,9 @@ pub fn install() -> Result<(), String> {
     physics::install(&catalog)?;
     hud::install(&catalog)?;
     actor::install(&catalog)?;
+    crate::worm_sprite::install(&catalog)?;
+    crate::shader::install(&catalog)?;
+    crate::render_queue::install()?;
     unsafe {
         MinHook::enable_all_hooks().map_err(|e| format!("MinHook enable: {e:?}"))?;
     }
@@ -100,9 +103,6 @@ unsafe extern "C" fn after_load_sprites(runtime: *mut u8) {
         on_gfx_ready(display);
     }));
     if let Err(p) = result {
-        log_error(&format!(
-            "panic after LoadSprites: {}",
-            panic_text(p)
-        ));
+        log_error(&format!("panic after LoadSprites: {}", panic_text(p)));
     }
 }

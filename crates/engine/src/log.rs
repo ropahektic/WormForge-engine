@@ -24,7 +24,7 @@ pub fn error_log_path() -> PathBuf {
     wormforge_dir().join("wkluaerror.txt")
 }
 
-fn wormforge_dir() -> PathBuf {
+pub(crate) fn wormforge_dir() -> PathBuf {
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));

@@ -1,6 +1,9 @@
 # Fire path — planned wrap (do not trap).
 # VAs exist in Ghidra 3.8.1 as FUN_*. Names from openWA. Confirm RET imm16
 # before installing MinHook. Dispatcher: tag spawned missile with owning weapon.
+# 3.8.1 byte verification at 0x51EEF7: fire_type 2 (placed), method 2
+# branches to 0x51EEB0 -> CreateWeaponProjectile. Lua mine overlays redirect
+# method 1 to 2, retaining mine input/ammo/retreat and the existing spawn wrap.
 
 [[function]]
 va = 0x0051B2B0

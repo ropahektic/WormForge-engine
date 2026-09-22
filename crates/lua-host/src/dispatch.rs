@@ -57,9 +57,11 @@ fn call_each(list: &Table, args: impl Clone + mlua::IntoLuaMulti) -> Result<(), 
 pub fn motion_to_table(lua: &Lua, m: &Motion) -> Result<Table, String> {
     let t = lua.create_table().map_err(|e| e.to_string())?;
     t.set("id", m.id).map_err(|e| e.to_string())?;
-    t.set("class_type", m.class_type).map_err(|e| e.to_string())?;
+    t.set("class_type", m.class_type)
+        .map_err(|e| e.to_string())?;
     t.set("damp", m.damp).map_err(|e| e.to_string())?;
-    t.set("wind_scale", m.wind_scale).map_err(|e| e.to_string())?;
+    t.set("wind_scale", m.wind_scale)
+        .map_err(|e| e.to_string())?;
     t.set("gravity_scale", m.gravity_scale)
         .map_err(|e| e.to_string())?;
     t.set("moved", m.moved).map_err(|e| e.to_string())?;

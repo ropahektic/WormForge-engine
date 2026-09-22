@@ -31,7 +31,19 @@ plate_comment = "Ghidra FUN_00510b40. Jump=0x24, JumpUp=0x25, StartTurn=0x34. Th
 name = "WormEntity"
 plate_comment = "Partial. HandleMessage Jump/JumpUp already replicate. Team at +0xFC."
 
-  [[struct.field]]
-  offset = 0xFC
-  name = "team"
-  type = "uint"
+[[struct.field]]
+offset = 0xFC
+name = "team"
+type = "uint"
+
+[[struct.field]]
+offset = 0x1AC
+name = "slope_direction"
+type = "int"
+plate_comment = "WormEntity__calc_sprite adds +1 to supported base sprites when negative and +2 when positive; used to select uphill/downhill custom-weapon poses."
+
+[[function]]
+va = 0x00512E80
+name = "WormEntity__calc_sprite"
+calling_convention = "__usercall"
+plate_comment = "WA 3.8.1 byte-verified: ESI=worm, EAX=sprite_out, stack x_out/y_out/phase_out, RET 12. DrawSprite at 0x50FCD0 calls this before stock blit. Wrap calls original, then remaps only sprite_out for the selected slot; retains stock animation, slope and flip."

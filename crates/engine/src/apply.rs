@@ -1,17 +1,17 @@
 use crate::actor;
-use crate::log_line;
 use crate::log::{log_error, panic_text, wa_directory};
+use crate::log_line;
 use crate::sprite::{self, SpriteRef};
 use crate::world;
-use game::offsets::{
-    GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY, GAME_WORLD_WEAPON_TABLE,
-};
+use game::offsets::{GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY, GAME_WORLD_WEAPON_TABLE};
 use game::weapon::{snapshot_table, write_entry, WeaponEntry};
 use lua_host::{mods_root_from, run_mods};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
-use weapons::{apply_params, discover_mods, filter_requirements, modset_fingerprint, ResolveResult};
+use weapons::{
+    apply_params, discover_mods, filter_requirements, modset_fingerprint, ResolveResult,
+};
 
 static NAMES: Mutex<Vec<CString>> = Mutex::new(Vec::new());
 
@@ -40,9 +40,18 @@ pub fn on_gfx_ready(display: *mut u8) {
     }
 
     log_line("InitGraphic: installing custom sprites after LoadSprites");
+    #[cfg(debug_assertions)]
+    sprite::report_layers(display);
     sprite::clear();
     world::clear_sounds();
     actor::clear_claims();
+    crate::worm_sprite::clear();
+    crate::render_queue::clear_depths();
+    // Flush the previous match's queue census before its counters are reused.
+    crate::queue_census::finish();
+    crate::truecolor::clear();
+    crate::gpu::clear();
+    crate::fog::clear();
 
     let mods_dir = mods_root_from(&wa_directory());
     log_line(&format!("loading mods from {}", mods_dir.display()));
@@ -79,15 +88,61 @@ pub fn on_gfx_ready(display: *mut u8) {
     }
 
     let mut sprite_ids = HashMap::new();
+    // Sheets bound for the GPU atlas. Packed once, after every pack has been
+    // seen, so all of them share a single texture and therefore a single draw
+    // call per frame.
+    let mut gpu_sheets: Vec<(String, gfx::SpriteStrip)> = Vec::new();
     for claim in &scripts.resolved.applied {
+        // A pack may ask for a lower display layer so its sprites draw behind
+        // the landscape instead of over it.
+        sprite::set_force_layer(claim.params.layer);
         let mut install = |path: Option<String>, sheet: &gfx::SpriteStrip, as_weapon: bool| {
+            // Exact palette slots are per sheet, not per pack: the turret needs
+            // them, the worm animation is ordinary worm art the palette already
+            // holds, and every slot taken is one the map no longer has.
+            let reserve = match (&claim.params.reserve_prefix, path.as_ref()) {
+                (Some(prefix), Some(p)) => p.starts_with(prefix.as_str()),
+                _ => false,
+            };
+            // A GPU sheet never reaches install_sheet: no .spr is encoded, no
+            // palette is touched, no WA slot is consumed. That is the whole
+            // reason the path exists.
+            if let (Some(prefix), Some(p)) = (&claim.params.gpu_prefix, path.as_ref()) {
+                if p.starts_with(prefix.as_str()) {
+                    gpu_sheets.push((
+                        gfx::sprite_key(&claim.mod_id, p),
+                        sheet.clone(),
+                    ));
+                    return;
+                }
+            }
+            sprite::set_reserve_colours(reserve);
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 sprite::install_sheet(display, sheet)
             })) {
                 Ok(Ok(id)) => {
+                    if path.as_ref().is_some_and(|p| {
+                        claim
+                            .params
+                            .truecolor_prefix
+                            .as_ref()
+                            .is_some_and(|prefix| p.starts_with(prefix))
+                    }) {
+                        crate::truecolor::register(id as u32, sheet.clone());
+                    }
                     log_line(&format!("{} sprite slot {id}", claim.mod_id));
                     if as_weapon {
                         sprite_ids.insert(claim.slot.index(), id);
+                    }
+                    if let (Some(depth), Some(p)) = (claim.params.depth, path.as_ref()) {
+                        let matches = claim
+                            .params
+                            .depth_prefix
+                            .as_ref()
+                            .is_none_or(|prefix| p.starts_with(prefix.as_str()));
+                        if matches {
+                            crate::render_queue::set_depth(id as u32, depth);
+                        }
                     }
                     if let Some(path) = path {
                         let (w, h) = sheet
@@ -128,6 +183,21 @@ pub fn on_gfx_ready(display: *mut u8) {
         }
     }
 
+    // One atlas for every GPU sheet in every pack, packed after all of them
+    // are known so the whole frame stays a single draw call. `gpu_active` is
+    // decided here and never per frame: an actor that skipped its queue
+    // command has already committed to being drawn by us, so a later bail
+    // would make it vanish rather than fall back.
+    install_gpu_atlas(gpu_sheets);
+
+    // The 223 slots in CUSTOM_SPRITE_SLOT_MIN..=MAX are shared by every
+    // loaded pack and are the ceiling this fork exists to lift, so report the
+    // total rather than leaving it to be counted from the per-slot lines.
+    log_line(&format!(
+        "sprite budget: {} of 223 WA slots used across all packs",
+        sprite::slots_used()
+    ));
+
     lua_host::park_lua(scripts.lua);
     if let Ok(mut g) = GFX.lock() {
         *g = Some(GfxPass {
@@ -162,8 +232,19 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             .and_then(|g| g.as_ref().map(|p| p.display == display as usize))
             .unwrap_or(false);
         if !installed {
-            log_error("InitGraphic miss: sprites installed after palette commit (colours may be wrong)");
+            log_error(
+                "InitGraphic miss: sprites installed after palette commit (colours may be wrong)",
+            );
         }
+    }
+
+    // Runs per round. Sprites are installed once per match, so this only puts
+    // back any slots the round change cleared rather than rebuilding them.
+    let restored = sprite::reassert();
+    if restored > 0 {
+        log_line(&format!(
+            "re-registered {restored} custom sprite slots for this round"
+        ));
     }
 
     let snapshot = unsafe { snapshot_table(table) };
@@ -186,6 +267,7 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             }
         }
         apply_params(&mut entry, &claim.params);
+        crate::worm_sprite::claim(idx, &claim.mod_id, &claim.params.worm_sprites);
         if let Some(spawn) = spawn {
             let id = pass
                 .sprite_ids
@@ -280,16 +362,8 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 .spawn
                 .as_ref()
                 .map(|_| " spawn".to_string())
-                .or_else(|| {
-                    (claim.params.on_click_id != 0).then(|| " on_click".to_string())
-                })
-                .or_else(|| {
-                    claim
-                        .params
-                        .actor
-                        .as_ref()
-                        .map(|a| format!(" actor {a}"))
-                })
+                .or_else(|| { (claim.params.on_click_id != 0).then(|| " on_click".to_string()) })
+                .or_else(|| { claim.params.actor.as_ref().map(|a| format!(" actor {a}")) })
                 .or_else(|| {
                     claim
                         .params
@@ -302,4 +376,68 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
 
     *NAMES.lock().unwrap() = names;
     Ok(())
+}
+
+/// Pack every GPU sheet into one atlas, register the sheets, and enable the
+/// GPU path for this match.
+///
+/// Packed once, after every pack has been seen, so the whole frame stays a
+/// single draw call. `gpu::set_active` is decided here and never per frame:
+/// an actor that skipped its queue command has already committed to being
+/// drawn by us, so a later bail would make it vanish rather than fall back.
+/// Any failure therefore leaves the path inactive, which is a complete
+/// fallback because nothing has skipped a command yet.
+fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>) {
+    crate::gpu::set_active(false);
+    if sheets.is_empty() {
+        return;
+    }
+    // Frames must outlive the Source borrows, so gather them first.
+    let framesets: Vec<Vec<Vec<u8>>> = sheets
+        .iter()
+        .map(|(_, strip)| strip.frames.iter().map(|f| f.rgba.clone()).collect())
+        .collect();
+    let sources: Vec<render::atlas::Source> = sheets
+        .iter()
+        .zip(&framesets)
+        .enumerate()
+        .map(|(i, ((_, strip), frames))| render::atlas::Source {
+            id: i as u32,
+            width: strip.frames.first().map(|f| f.width).unwrap_or(0),
+            height: strip.frames.first().map(|f| f.height).unwrap_or(0),
+            frames,
+        })
+        .collect();
+
+    let Some(atlas) = render::Atlas::pack(&sources, 4096) else {
+        log_error("gpu atlas: sheets do not fit 4096x4096; stock rendering retained");
+        return;
+    };
+    let mut installed = 0;
+    for (i, (key, strip)) in sheets.iter().enumerate() {
+        let Some(packed) = atlas.sheets.iter().find(|s| s.id == i as u32) else {
+            continue;
+        };
+        let id = sprite::install_virtual(strip, packed.frames.clone());
+        if id != 0 {
+            sprite::remember_key(
+                key.clone(),
+                sprite::SpriteRef {
+                    id,
+                    w: strip.frames.first().map(|f| f.width).unwrap_or(0) as i32,
+                    h: strip.frames.first().map(|f| f.height).unwrap_or(0) as i32,
+                    delta: strip.phase_delta(),
+                },
+            );
+            installed += 1;
+        }
+    }
+    log_line(&format!(
+        "gpu atlas: {installed} sheets in {}x{}, 0 WA sprite slots used",
+        atlas.width, atlas.height
+    ));
+    // The device does not exist yet -- this runs at LoadSprites -- so the
+    // pixels are handed over and uploaded on the first present instead.
+    crate::gpu::set_atlas(atlas);
+    crate::gpu::set_active(true);
 }

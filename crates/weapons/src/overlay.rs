@@ -125,6 +125,32 @@ pub struct OverlayParams {
     pub sprite_path: Option<String>,
     /// Extra PNG/GIF/frame-folders installed at gfx init (`sprites = { ... }`).
     pub extra_sheets: Vec<(String, SpriteStrip)>,
+    /// Stock worm sprite id -> pack sheet path, scoped to this weapon slot.
+    pub worm_sprites: Vec<(i32, String)>,
+    /// Display layer for this pack's sheets. Sprites default to the game layer
+    /// (3), which draws over terrain; 1 and 2 sit below it. Note these are
+    /// palette-bound: a sheet installed against another layer's PaletteContext
+    /// renders with the wrong colours, so this is rarely what you want.
+    pub layer: Option<u32>,
+    /// Render-queue depth for this pack's sheets, and which paths it applies
+    /// to. This is the real draw-order control: high is further back, so a
+    /// value between terrain (0x180000) and soil (0x1b0000) puts an object
+    /// behind the landscape. Unlike `layer` it never touches palettes.
+    pub depth: Option<u32>,
+    pub depth_prefix: Option<String>,
+    /// Opt these sheets into the GPU renderer: packed into a texture atlas
+    /// and drawn as quads, never occupying one of the 223 shared WA sprite
+    /// slots and never touching the map palette. Supersedes `truecolor_prefix`
+    /// for sheets it matches.
+    pub gpu_prefix: Option<String>,
+    /// Opt these sheets into RGBA rendering on the D3D9 shader backend.
+    /// Other renderers retain the stock palette approximation.
+    pub truecolor_prefix: Option<String>,
+    /// Sheets whose paths start with this take exact palette slots instead of
+    /// being snapped to the map's colours. For art the map palette cannot
+    /// express -- a saturated team colour on an earth-toned map, where the
+    /// nearest colour to blue is black.
+    pub reserve_prefix: Option<String>,
     /// Pack-relative WAV paths (`sounds = { ... }`) loaded into DSSound slot 451+.
     pub extra_sounds: Vec<(String, std::path::PathBuf)>,
 }
@@ -148,8 +174,15 @@ impl Default for OverlayParams {
             on_click_id: 0,
             on_fire_id: 0,
             fire_spawn: None,
+            layer: None,
+            depth: None,
+            depth_prefix: None,
+            gpu_prefix: None,
+            truecolor_prefix: None,
+            reserve_prefix: None,
             sprite_path: None,
             extra_sheets: Vec::new(),
+            worm_sprites: Vec::new(),
             extra_sounds: Vec::new(),
         }
     }
@@ -274,6 +307,10 @@ pub fn apply_params(entry: &mut WeaponEntry, params: &OverlayParams) {
     }
     if params.uses_click_actor() {
         apply_drop_fire(entry);
+    } else if params.uses_lua_projectile() && entry.fire_type() == 2 && entry.fire_method() == 1 {
+        // Keep stock mine placement/retreat, but dispatch its body through
+        // CreateWeaponProjectile (placed method 2), where Lua owns the spawn.
+        entry.set_fire_method(2);
     }
 }
 
@@ -427,6 +464,28 @@ mod tests {
             ..Default::default()
         }
         .uses_lua_projectile());
+    }
+
+    #[test]
+    fn lua_mine_keeps_placement_and_retreat_but_uses_existing_spawn_wrap() {
+        let mut mine = WeaponEntry::default();
+        mine.set_fire_type(2);
+        mine.set_fire_method(1);
+        mine.set_requires_aiming(0);
+        mine.write_i32(0x1c, 5000);
+        let mut entry = WeaponEntry::default();
+        entry.set_defined(1);
+        entry.write_i32(0x24, 1);
+        entry.copy_fire_from(&mine);
+        apply_params(&mut entry, &OverlayParams { on_fire_id: 1, ..Default::default() });
+        assert_eq!(entry.fire_type(), 2);
+        assert_eq!(entry.fire_method(), 2);
+        assert_eq!(entry.requires_aiming(), 0);
+        assert_eq!(entry.read_i32(0x1c), 5000);
+        assert_eq!(entry.defined(), 1);
+        assert_eq!(entry.read_i32(0x24), 1);
+        apply_params(&mut mine, &OverlayParams::default());
+        assert_eq!(mine.fire_method(), 1); // stock mine is unaffected
     }
 
     #[test]

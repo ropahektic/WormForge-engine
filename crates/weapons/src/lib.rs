@@ -34,6 +34,8 @@ pub struct ModManifest {
     pub weapons: WeaponClaims,
     #[serde(default)]
     pub actors: ActorClaims,
+    #[serde(default)]
+    pub fog: FogClaims,
 }
 
 fn default_version() -> String {
@@ -79,6 +81,15 @@ impl WeaponClaims {
 pub struct ActorClaims {
     #[serde(default)]
     pub register: Vec<String>,
+}
+
+/// Fog-of-war. A pack that declares `[fog]` may drive the engine through
+/// `wa.fog`; without the declaration the verbs log a skip, mirroring how an
+/// undeclared weapon slot is skipped.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct FogClaims {
+    #[serde(default)]
+    pub enable: bool,
 }
 
 #[derive(Debug, Clone)]
