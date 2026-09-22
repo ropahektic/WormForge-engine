@@ -604,7 +604,12 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mu
     }
     // Read presentation state now: the actor can be freed before dispatch.
     let (angle, scale, tint, depth) = if actor.is_null() {
-        (0.0f32, 1.0f32, 0xFFFF_FFFFu32, 0x0019_0000u32)
+        // RQ-intercepted worm/body draws have no actor presentation state.
+        // Depth must sit *in front of* terrain (0x180000): the previous
+        // default (0x190000) put them in the back band, so solid ground /
+        // grass occluded them and they rendered under the landscape.
+        // Stock worms live around 0xd0xxx in WA's queue.
+        (0.0f32, 1.0f32, 0xFFFF_FFFFu32, 0x000D_0000u32)
     } else {
         unsafe {
             let fixed = |v: i32| v as f32 / 65536.0;
@@ -770,6 +775,16 @@ unsafe fn surface_reader(display: usize) -> Option<(usize, usize, usize, impl Fn
 static ORIG_RQ_DRAW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 unsafe extern "C" fn rq_should_intercept(layer: u32, x: i32, y: i32, sprite: u32, anim: u32) -> u8 {
+    // Only steal draws that are definitely ours. The broader `intercept`
+    // path also swallows unknown virtual ids; doing that on every stock
+    // RQ_DrawSpriteLocal call can drop the aim cursor / crosshair.
+    if !is_active() {
+        return 0;
+    }
+    let id = sprite & !game::offsets::SPRITE_MIRROR_X;
+    if !crate::sprite::is_gpu_sheet(id) {
+        return 0;
+    }
     intercept(layer, x, y, sprite, anim, std::ptr::null_mut()) as u8
 }
 

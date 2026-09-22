@@ -138,6 +138,7 @@ impl Catalog {
         c.merge_toml(include_str!("../../../re/FireWeapon.toml"))?;
         c.merge_toml(include_str!("../../../re/MineEntity.toml"))?;
         c.merge_toml(include_str!("../../../re/hurt.toml"))?;
+        c.merge_toml(include_str!("../../../re/Display.toml"))?;
         Ok(c)
     }
 

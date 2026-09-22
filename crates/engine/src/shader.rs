@@ -201,7 +201,9 @@ unsafe extern "C" fn shader_draw_hook() {
 /// means the shader path is unavailable and everything that depends on it stays
 /// switched off. That is a supported configuration, not an error.
 pub fn install(catalog: &Catalog) -> Result<(), String> {
-    let sites: [(&str, &[u8], *mut c_void, &AtomicPtr<c_void>); 3] = [
+    // Present + Cleanup are required for the GPU atlas path. FogDraw is only
+    // used by the legacy truecolor mid-draw bind; skip it if the site differs.
+    let required: [(&str, &[u8], *mut c_void, &AtomicPtr<c_void>); 2] = [
         (
             "Display__D3D9ShaderPresent",
             &[0x83, 0xec, 0x0c, 0x53, 0x57, 0x8d, 0x44, 0x24, 0x08],
@@ -214,15 +216,9 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
             shader_cleanup_hook as _,
             &ORIG_CLEANUP,
         ),
-        (
-            "Display__D3D9ShaderFogDraw",
-            &[0x8b, 0xf3, 0x8b, 0xc7, 0xe8],
-            shader_draw_hook as _,
-            &ORIG_DRAW,
-        ),
     ];
     let mut installed = Vec::new();
-    for (name, bytes, detour, original) in sites {
+    for (name, bytes, detour, original) in required {
         let result = (|| {
             let va = catalog
                 .function_va(name)
@@ -244,12 +240,21 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
                 let _ = unsafe { MinHook::remove_hook(target) };
             }
             log_error(&format!(
-                "truecolor disabled: {e}; stock palette rendering retained"
+                "gpu present hook disabled: {e}; GPU sprites will not draw"
             ));
             return Ok(());
         }
     }
-    #[cfg(debug_assertions)]
-    log_line("shader renderer truecolor/lifecycle hooks installed");
+    // Optional FogDraw (truecolor bind site)
+    if let Some(va) = catalog.function_va("Display__D3D9ShaderFogDraw") {
+        let target = rb(va) as *mut c_void;
+        let bytes: &[u8] = &[0x8b, 0xf3, 0x8b, 0xc7, 0xe8];
+        if unsafe { std::slice::from_raw_parts(target as *const u8, bytes.len()) } == bytes {
+            if let Ok(trampoline) = unsafe { MinHook::create_hook(target, shader_draw_hook as _) } {
+                ORIG_DRAW.store(trampoline, Ordering::SeqCst);
+            }
+        }
+    }
+    crate::log_line("shader renderer GPU present/cleanup hooks installed");
     Ok(())
 }
