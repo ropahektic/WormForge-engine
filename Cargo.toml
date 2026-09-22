@@ -30,3 +30,5 @@ minhook = "0.8"
 
 [profile.release]
 lto = false
+# Public wkLua.dll: no PDB / CV symbols in the shipped binary.
+strip = "symbols"

@@ -1,2 +1,7 @@
 [build]
 target = "i686-pc-windows-msvc"
+
+# MSVC otherwise embeds a CodeView record pointing at wkLua.pdb even for
+# release. Public downloads should not advertise a PDB path.
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/DEBUG:NONE"]
