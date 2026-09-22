@@ -49,7 +49,7 @@ PRs that only rename for consistency are useful. PRs that expose a new C++ layou
 ## Please
 
 - DO NOT vendor wa-engine.js , collisionmanager.rs, wkaim.dll or the "re" folder (if you have access to `REsources/` please gitignore).
-- Do not add OpenGL or a second full renderer for FX. The EdLud GPU atlas path (\gpu_prefix\) is the supported truecolor escape hatch; wrap stock blit for everything else.
+- Do not add OpenGL or a second full renderer for FX. The EdLud GPU atlas path (gpu_prefix) is the supported truecolor escape hatch; wrap stock blit for everything else.
 
 
 ## Layout
@@ -78,7 +78,7 @@ The cdylib is `target/i686-pc-windows-msvc/release/wkLua.dll`.
 
 ## Contributors
 
-- **[EdLud](https://github.com/EdLud)** — GPU sprite renderer (D3D9 atlas / \gpu_prefix\ truecolor path). Merged from their render work; fog-of-war from that fork is not included.
+- **[EdLud](https://github.com/EdLud)** — GPU sprite renderer (D3D9 atlas / gpu_prefix truecolor path). Merged from their render work; fog-of-war from that fork is not included.
 
 ## License
 
