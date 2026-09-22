@@ -3,8 +3,8 @@
 //!
 //! `weaponlnk` / `u` / `d` are the custom-weapon aiming poses (stock sprite id 0
 //! while states 0x67..=0x69). Stock already writes the aim-angle phase — keep it.
-//! `wthrow`* is draw/undraw; when aiming is claimed we remap those to the aim
-//! sheets and freeze phase so stock draw of another weapon never plays.
+//! `wthrow`* is draw/undraw. When unset we copy the aim sheet and freeze phase
+//! (eat stock draw). Real draw GIFs (throw id ≠ link id) play via `drive_phase`.
 
 use crate::{log_line, rebase::rb, sprite};
 use game::{
@@ -157,9 +157,21 @@ unsafe extern "C" fn after_calc(
         if is_link(stock) {
             // Stock phase is the aim angle across the 180° sheet.
         } else if is_throw(stock) {
-            // Eat draw/undraw: hold a mid frame of the aim sheet, no play-through.
-            if !phase_out.is_null() {
-                *phase_out = 0x8000;
+            let link_pose = match stock {
+                THROW_U => LINK_U,
+                THROW_D => LINK_D,
+                _ => LINK,
+            };
+            let eaten = claims
+                .iter()
+                .any(|(s, pose, sheet)| *s == slot && *pose == link_pose && *sheet == *id);
+            if eaten {
+                // Eat draw/undraw: hold a mid frame of the aim sheet, no play-through.
+                if !phase_out.is_null() {
+                    *phase_out = 0x8000;
+                }
+            } else {
+                drive_phase(worm as usize, stock, *id, phase_out);
             }
         } else {
             drive_phase(worm as usize, stock, *id, phase_out);

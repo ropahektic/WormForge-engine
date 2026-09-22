@@ -597,7 +597,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
-        if path in ("/", "/index.html", "/app.js"):
+        if path in ("/", "/index.html", "/app.js", "/aim_bake.js"):
             return SimpleHTTPRequestHandler.do_GET(self)
         if path == "/api/catalog":
             return self._json(200, catalog_payload())

@@ -106,7 +106,7 @@ pub fn init() {
         prev(info);
     }));
 
-    log_line("wkLua build 20260922-strip");
+    log_line("wkLua build 20260922-aimpng");
     log_line(&format!("log file {}", path.display()));
     log_line(&format!("error log {}", err_path.display()));
     if wa_err != err_path {
