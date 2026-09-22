@@ -108,7 +108,40 @@ fails when it should.
 
 Neither test needs a recorder to exist, which is why they come first.
 
-## Result so far
+## W0 result: both tests pass
+
+Measured on this machine, `girder.WAgame`, wkLua loaded, nine packs installed
+including `synctest`.
+
+**Test B — our own layer is reproducible.** Two runs, 93 samples each,
+**identical across every one**. Seven of those samples caught live actors, and
+all seven matched:
+
+```
+sync f=49   rng=6af22799 worms=a35e6047 actors=57bd1fde
+sync f=599  rng=b8bf2786 worms=bed8440b actors=98e0b688
+sync f=649  rng=03f89e55 worms=0a8ac294 actors=4d6f391f
+sync f=1449 rng=402ea97a worms=c1d5f9e2 actors=59825d6a
+...
+```
+
+**Test A — our packs do not perturb WA's RNG.** Same replay with `Mods/`
+emptied: the `rng` column is identical to the packs-on run, frame for frame.
+`synctest` spawned six actors per turn that arced and expired, and WA's shared
+RNG never moved because of it. That is the `debris.spr` class of bug, and we
+do not have it.
+
+Read together: WormForge re-simulates identically from the same input, and it
+does so without disturbing the simulation it sits inside. **W1 is unblocked.**
+
+### Caveat worth keeping
+
+Only 7 of 93 samples caught live actors. The control pack's dots live 90
+frames while the probe samples every 50, so each wave is caught once or twice.
+Seven matching samples is real signal, not noise — but it is thin, and a
+longer actor lifetime would make test B sharper if it is ever in doubt.
+
+## Earlier result
 
 Measured on this machine, wkLua loaded, all packs installed.
 
