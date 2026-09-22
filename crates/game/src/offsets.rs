@@ -160,6 +160,8 @@ pub const SPRITE_WFLY_LNK: u32 = 278;
 pub const WORM_FACING: usize = 0x3DC;
 /// WormEntity show-cursor latch (`+0x268`). Strike targeting.
 pub const WORM_SHOW_CURSOR: usize = 0x268;
+/// WormEntity rendered aim sweep (+0x270).
+pub const WORM_AIM_ANGLE: usize = 0x270;
 /// WorldRootEntity: non-zero pauses the HUD turn clock (grenade-in-flight).
 pub const WORLD_ROOT_WORM_ACTIVE: usize = 0x108;
 pub const WORLD_ROOT_TURN_TIMER_DISPLAY: usize = 0x188;
@@ -281,7 +283,7 @@ pub const GAME_RUNTIME_WORLD_ROOT: usize = 0x8;
 pub const COLLISION_LAYER_MISSILE: u32 = 0xF;
 pub const DROP_SKY_Y: i32 = -0x00D0_0000;
 pub const LUA_ACTOR_MAGIC: u32 = 0x774B_4C41;
-pub const LUA_ACTOR_SIZE: usize = 0x140;
+pub const LUA_ACTOR_SIZE: usize = 0x150;
 pub const ACTOR_MAGIC: usize = 0xFC;
 pub const ACTOR_SPRITE: usize = 0x100;
 pub const ACTOR_PHASE: usize = 0x104;
@@ -320,6 +322,10 @@ pub const ACTOR_FEET_Y: usize = 0x134;
 pub const ACTOR_CONTACT: usize = 0x138;
 /// Lua brain id (`0` = spawn-table sugar). Last dword of `LUA_ACTOR_SIZE`.
 pub const ACTOR_BRAIN: usize = 0x13C;
+pub const ACTOR_ANGLE: usize = 0x140;
+pub const ACTOR_SCALE: usize = 0x144;
+pub const ACTOR_TINT: usize = 0x148;
+pub const ACTOR_DEPTH: usize = 0x14C;
 pub const SHARED_WORLD_ROOT: u32 = 0x14;
 pub const GAME_WORLD_LANDSCAPE: usize = 0x20;
 pub const GAME_WORLD_WATER_LEVEL: usize = 0x5E0;

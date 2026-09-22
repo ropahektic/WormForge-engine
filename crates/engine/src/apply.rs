@@ -45,6 +45,9 @@ pub fn on_gfx_ready(display: *mut u8) {
     crate::worm_sprite::clear();
     crate::mine::clear();
     crate::missile_boom::clear();
+    crate::gpu::clear();
+    crate::truecolor::clear();
+    crate::render_queue::clear_depths();
 
     let mods_dir = mods_root_from(&wa_directory());
     log_line(&format!("loading mods from {}", mods_dir.display()));
@@ -81,8 +84,21 @@ pub fn on_gfx_ready(display: *mut u8) {
     }
 
     let mut sprite_ids = HashMap::new();
+    let mut gpu_sheets: Vec<(String, gfx::SpriteStrip)> = Vec::new();
     for claim in &scripts.resolved.applied {
+        sprite::set_force_layer(claim.params.layer);
         let mut install = |path: Option<String>, sheet: &gfx::SpriteStrip, as_weapon: bool| {
+            let reserve = match (&claim.params.reserve_prefix, path.as_ref()) {
+                (Some(prefix), Some(p)) => p.starts_with(prefix.as_str()),
+                _ => false,
+            };
+            if let (Some(prefix), Some(p)) = (&claim.params.gpu_prefix, path.as_ref()) {
+                if p.starts_with(prefix.as_str()) {
+                    gpu_sheets.push((gfx::sprite_key(&claim.mod_id, p), sheet.clone()));
+                    return;
+                }
+            }
+            sprite::set_reserve_colours(reserve);
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 sprite::install_sheet(display, sheet)
             })) {
@@ -129,6 +145,8 @@ pub fn on_gfx_ready(display: *mut u8) {
             log_line(&format!("{} sound slot {slot} {rel}", claim.mod_id));
         }
     }
+
+    install_gpu_atlas(gpu_sheets);
 
     lua_host::park_lua(scripts.lua);
     if let Ok(mut g) = GFX.lock() {
@@ -388,4 +406,58 @@ unsafe fn copy_panel_icon(world: *mut u8, src: usize, dst: usize) {
     }
     *base.add(dst * 2) = src_hi;
     *base.add(dst * 2 + 1) = src_lo;
+}
+
+
+fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>) {
+    crate::gpu::set_active(false);
+    if sheets.is_empty() {
+        return;
+    }
+    let framesets: Vec<Vec<Vec<u8>>> = sheets
+        .iter()
+        .map(|(_, strip)| strip.frames.iter().map(|f| f.rgba.clone()).collect())
+        .collect();
+    let sources: Vec<render::atlas::Source> = sheets
+        .iter()
+        .zip(&framesets)
+        .enumerate()
+        .map(|(i, ((_, strip), frames))| render::atlas::Source {
+            id: i as u32,
+            width: strip.frames.first().map(|f| f.width).unwrap_or(0),
+            height: strip.frames.first().map(|f| f.height).unwrap_or(0),
+            frames,
+        })
+        .collect();
+
+    let Some(atlas) = render::Atlas::pack(&sources, 4096) else {
+        log_error("gpu atlas: sheets do not fit 4096x4096; stock rendering retained");
+        return;
+    };
+    let mut installed = 0;
+    for (i, (key, strip)) in sheets.iter().enumerate() {
+        let Some(packed) = atlas.sheets.iter().find(|s| s.id == i as u32) else {
+            continue;
+        };
+        let id = sprite::install_virtual(strip, packed.frames.clone());
+        if id != 0 {
+            sprite::remember_key(
+                key.clone(),
+                SpriteRef {
+                    id,
+                    w: strip.frames.first().map(|f| f.width).unwrap_or(0) as i32,
+                    h: strip.frames.first().map(|f| f.height).unwrap_or(0) as i32,
+                    delta: strip.phase_delta(),
+                },
+            );
+            installed += 1;
+        }
+    }
+    log_line(&format!(
+        "gpu atlas: {installed} sheets in {}x{}, 0 WA sprite slots used",
+        atlas.width, atlas.height
+    ));
+    crate::gpu::set_atlas(atlas);
+    crate::gpu::set_active(true);
+    log_line("gpu renderer active: sprites drawn as GPU quads");
 }

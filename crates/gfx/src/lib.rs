@@ -7,6 +7,7 @@
 
 mod gif_decode;
 mod stock_ids;
+pub mod composite;
 
 use std::io::Cursor;
 use std::path::Path;

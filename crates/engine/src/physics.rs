@@ -327,6 +327,8 @@ unsafe extern "thiscall" fn missile_hook(
                 unsafe { write_motion(this, &after) };
             }
         }
+        crate::gpu::begin_frame();
+        crate::truecolor::begin_frame();
         crate::sprite::advance_loop(this);
     }
 }

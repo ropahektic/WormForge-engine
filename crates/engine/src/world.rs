@@ -1092,3 +1092,9 @@ mod tests {
         assert_eq!(trace_pixels(0, 0, 2, 0, |_, _| false), None);
     }
 }
+
+
+pub fn solid_sampler() -> Option<impl Fn(i32, i32) -> bool> {
+    let grid = live_grid()?;
+    Some(move |x: i32, y: i32| grid.solid_px(x, y))
+}
