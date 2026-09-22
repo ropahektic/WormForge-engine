@@ -108,7 +108,7 @@ fn flush_hud() {
     crate::overlay::clear();
 }
 
-fn resolve_world() -> Option<usize> {
+pub(crate) fn resolve_world() -> Option<usize> {
     unsafe {
         let session = *(rb(G_GAME_SESSION) as *const usize);
         if session == 0 {

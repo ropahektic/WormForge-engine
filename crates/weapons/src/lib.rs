@@ -7,12 +7,17 @@
 
 mod overlay;
 mod stock;
+mod templates;
 
 pub use overlay::{
-    ActorSpawn, OverlayClaim, OverlayParams, ResolveResult, ScreenBlit, SkippedClaim, SpawnExplode,
-    SpawnFrom, SpriteOrigin, apply_params, resolve_claims,
+    ActorSpawn, AttachedSpawn, ClusterHoming, ClusterSpec, HomingMode, OverlayClaim, OverlayParams,
+    ResolveResult, ScreenBlit, SkippedClaim, SpawnExplode, SpawnFrom, SpriteOrigin, apply_params,
+    resolve_claims,
 };
-pub use stock::{StockWeapon, STOCK_NAMES, parse_stock_weapon};
+pub use stock::{parse_panel_icon, parse_stock_weapon, StockWeapon, STOCK_NAMES};
+pub use templates::{
+    template_by_id, BodyKind, FireStyle, FireTemplate, SpriteUse, FIRE_TEMPLATES,
+};
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -212,5 +217,24 @@ register = ["example.boss.mole"]
 "#;
         let m = parse_manifest(src).unwrap();
         assert_eq!(m.actors.register, vec!["example.boss.mole"]);
+    }
+
+    #[test]
+    fn fire_templates_use_real_gfx_stems() {
+        for t in FIRE_TEMPLATES {
+            assert_eq!(STOCK_NAMES[t.copy_from as usize].is_empty(), false);
+            for s in t.sprites {
+                assert!(
+                    gfx::stock_sprite_id(s.name).is_some(),
+                    "template {} sprite {}",
+                    t.id,
+                    s.name
+                );
+            }
+        }
+        assert_eq!(template_by_id("power_missile").unwrap().copy_from, StockWeapon::Bazooka);
+        assert!(FIRE_TEMPLATES.iter().any(|t| t.fire == FireStyle::Hitscan));
+        assert!(FIRE_TEMPLATES.iter().any(|t| t.fire == FireStyle::Drop));
+        assert!(FIRE_TEMPLATES.iter().any(|t| t.fire == FireStyle::Cursor));
     }
 }

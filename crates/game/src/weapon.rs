@@ -1,9 +1,12 @@
 use core::ffi::c_char;
 
 use crate::offsets::{
-    STOCK_WEAPON_COUNT, WEAPON_AVAILABILITY, WEAPON_BOUNCE_PCT, WEAPON_CREATES_PROJECTILE,
-    WEAPON_DAMAGE, WEAPON_DEFINED, WEAPON_ENTRY_SIZE, WEAPON_FIRE_METHOD, WEAPON_FIRE_TYPE,
-    WEAPON_GRAVITY_PCT, WEAPON_NAME1, WEAPON_REQUIRES_AIMING, WEAPON_SPECIAL_SUBTYPE,
+    STOCK_WEAPON_COUNT, WEAPON_AVAILABILITY, WEAPON_BOUNCE_PCT, WEAPON_CLUSTER_BOUNCE,
+    WEAPON_CLUSTER_DAMAGE, WEAPON_CLUSTER_GRAVITY, WEAPON_CLUSTER_HOMING, WEAPON_CLUSTER_HOMING_KIND,
+    WEAPON_CLUSTER_MISSILE_TYPE, WEAPON_CLUSTER_RENDER_TIMER, WEAPON_CLUSTER_SPRITE, WEAPON_CLUSTER_WIND,
+    WEAPON_CREATES_PROJECTILE, WEAPON_DAMAGE, WEAPON_DEFINED, WEAPON_ENTRY_SIZE, WEAPON_FIRE_METHOD,
+    WEAPON_FIRE_TYPE, WEAPON_GRAVITY_PCT, WEAPON_MINE_BLAST, WEAPON_MINE_FUSE, WEAPON_MINE_MASK,
+    WEAPON_MINE_PROXIMITY, WEAPON_MINE_TRIGGER, WEAPON_NAME1, WEAPON_REQUIRES_AIMING, WEAPON_SPECIAL_SUBTYPE,
     WEAPON_SPRITE_ID, WEAPON_TABLE_BYTES, WEAPON_UNKNOWN_18, WEAPON_WIND_PCT,
 };
 
@@ -171,6 +174,74 @@ impl WeaponEntry {
 
     pub fn set_wind_pct(&mut self, value: i32) {
         self.write_i32(WEAPON_WIND_PCT, value);
+    }
+
+    pub fn set_cluster_sprite_id(&mut self, value: i32) {
+        self.write_i32(WEAPON_CLUSTER_SPRITE, value);
+    }
+
+    pub fn cluster_sprite_id(&self) -> i32 {
+        self.read_i32(WEAPON_CLUSTER_SPRITE)
+    }
+
+    pub fn set_cluster_damage(&mut self, value: i32) {
+        self.write_i32(WEAPON_CLUSTER_DAMAGE, value);
+    }
+
+    pub fn set_cluster_gravity_pct(&mut self, value: i32) {
+        self.write_i32(WEAPON_CLUSTER_GRAVITY, value);
+    }
+
+    pub fn set_cluster_wind_pct(&mut self, value: i32) {
+        self.write_i32(WEAPON_CLUSTER_WIND, value);
+    }
+
+    pub fn set_cluster_bounce_pct(&mut self, value: i32) {
+        self.write_i32(WEAPON_CLUSTER_BOUNCE, value);
+    }
+
+    pub fn set_cluster_missile_type(&mut self, value: i32) {
+        self.write_i32(WEAPON_CLUSTER_MISSILE_TYPE, value);
+    }
+
+    pub fn set_cluster_render_timer(&mut self, value: i32) {
+        self.write_i32(WEAPON_CLUSTER_RENDER_TIMER, value);
+    }
+
+    pub fn set_cluster_homing_params(&mut self, values: [i32; 5]) {
+        for (i, v) in values.iter().enumerate() {
+            self.write_i32(WEAPON_CLUSTER_HOMING + i * 4, *v);
+        }
+    }
+
+    pub fn set_cluster_homing_kind(&mut self, kind: i32, p1: i32, p2: i32) {
+        self.write_i32(WEAPON_CLUSTER_HOMING_KIND, kind);
+        self.write_i32(WEAPON_CLUSTER_HOMING_KIND + 4, p1);
+        self.write_i32(WEAPON_CLUSTER_HOMING_KIND + 8, p2);
+    }
+
+    pub fn is_mine(&self) -> bool {
+        self.fire_type() == 2 && self.fire_method() == 1
+    }
+
+    pub fn set_mine_proximity(&mut self, value: i32) {
+        self.write_i32(WEAPON_MINE_PROXIMITY, value);
+    }
+
+    pub fn set_mine_fuse(&mut self, value: i32) {
+        self.write_i32(WEAPON_MINE_FUSE, value);
+    }
+
+    pub fn set_mine_mask(&mut self, value: i32) {
+        self.write_i32(WEAPON_MINE_MASK, value);
+    }
+
+    pub fn set_mine_trigger(&mut self, value: i32) {
+        self.write_i32(WEAPON_MINE_TRIGGER, value);
+    }
+
+    pub fn set_mine_blast(&mut self, value: i32) {
+        self.write_i32(WEAPON_MINE_BLAST, value);
     }
 }
 

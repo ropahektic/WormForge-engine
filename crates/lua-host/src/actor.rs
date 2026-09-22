@@ -8,7 +8,7 @@ use game::offsets::{
     ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE, CLASS_MINE,
     CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE,
+    WORM_FACING, WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -24,6 +24,8 @@ pub struct ActorEvent {
     pub left_ground: bool,
     pub hit_worm: bool,
     pub in_water: bool,
+    /// Falloff-adjusted blast damage accumulated by stock WorldEntity logic.
+    pub damage: i32,
 }
 
 pub struct SpawnArgs {
@@ -39,6 +41,8 @@ pub struct SpawnArgs {
 
 pub struct ActorNative {
     pub explode: fn(handle: u32, damage: i32, explosion_id: i32, below: bool),
+    /// Hold the actor on one frame of its current sheet.
+    pub set_frame: fn(handle: u32, frame: i32),
     pub despawn: fn(handle: u32),
     pub in_water: fn(handle: u32) -> bool,
     pub on_feet: fn(handle: u32) -> bool,
@@ -88,6 +92,7 @@ impl Default for ActorNative {
             gravity: |_| {},
             move_body: |_, _, _| 0,
             advance: |_| {},
+            set_frame: |_, _| {},
             spawn: |_| Err("spawn not bound".into()),
             list_actors: Vec::new,
             list_worms: |_| Vec::new(),
@@ -185,6 +190,18 @@ pub fn register_click(lua: &Lua, cb: Function) -> mlua::Result<u32> {
 
 pub fn register_select(lua: &Lua, cb: Function) -> mlua::Result<u32> {
     register_cb(lua, "_selects", cb)
+}
+
+pub fn register_explode(lua: &Lua, cb: Function) -> mlua::Result<u32> {
+    register_cb(lua, "_explodes", cb)
+}
+
+pub fn register_proximity(lua: &Lua, cb: Function) -> mlua::Result<u32> {
+    register_cb(lua, "_proximity", cb)
+}
+
+pub fn register_place(lua: &Lua, cb: Function) -> mlua::Result<u32> {
+    register_cb(lua, "_places", cb)
 }
 
 fn register_cb(lua: &Lua, table: &str, cb: Function) -> mlua::Result<u32> {
@@ -306,6 +323,43 @@ pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String>
     })
 }
 
+pub fn weapon_emit(
+    table: &'static str,
+    emit_id: u32,
+    label: &str,
+    worm: u32,
+    slot: i32,
+    x: i32,
+    y: i32,
+) -> Result<(), String> {
+    if emit_id == 0 {
+        return Ok(());
+    }
+    with_lua(|lua| {
+        let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
+        let fns: Table = wa.get(table).map_err(|e| e.to_string())?;
+        let spec = match fns.get::<Value>(emit_id).map_err(|e| e.to_string())? {
+            Value::Table(t) => t,
+            _ => return Err(format!("{label} {emit_id} missing")),
+        };
+        let cb: Function = match spec.get::<Value>("on").map_err(|e| e.to_string())? {
+            Value::Function(f) => f,
+            _ => return Err(format!("{label} {emit_id} has no function")),
+        };
+        if let Ok(m) = spec.get::<String>("mod") {
+            let _ = wa.set("_mod", m);
+        }
+        let ev = lua.create_table().map_err(|e| e.to_string())?;
+        ev.set("x", x).map_err(|e| e.to_string())?;
+        ev.set("y", y).map_err(|e| e.to_string())?;
+        ev.set("slot", slot).map_err(|e| e.to_string())?;
+        ev.set("worm", WormHandle(worm))
+            .map_err(|e| e.to_string())?;
+        with_spawn_owner(worm, || cb.call::<()>(ev).map_err(|e| e.to_string()))?;
+        Ok(())
+    })
+}
+
 pub fn actor_spawned(_handle: u32, _brain_id: u32) {}
 
 pub fn actor_freed(_handle: u32) {}
@@ -343,7 +397,8 @@ pub fn actor_frame(handle: u32, brain_id: u32, ev: ActorEvent) -> Result<(), Str
             }
         }
         if let Some(f) = frame {
-            f.call::<()>((actor, t)).map_err(|e| e.to_string())?;
+            let owner = read_handle(handle, ACTOR_OWNER) as u32;
+            with_spawn_owner(owner, || f.call::<()>((actor, t)).map_err(|e| e.to_string()))?;
         }
         Ok(())
     })
@@ -356,6 +411,7 @@ fn event_table(lua: &Lua, ev: &ActorEvent) -> Result<Table, String> {
         .map_err(|e| e.to_string())?;
     t.set("hit_worm", ev.hit_worm).map_err(|e| e.to_string())?;
     t.set("in_water", ev.in_water).map_err(|e| e.to_string())?;
+    t.set("damage", ev.damage).map_err(|e| e.to_string())?;
     t.set("msg", 2u32).map_err(|e| e.to_string())?;
     Ok(t)
 }
@@ -500,6 +556,15 @@ impl UserData for ActorHandle {
             advance(this.0);
             Ok(())
         });
+        methods.add_method("frame", |_, this, frame: i32| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            if let Some(set) = native_set_frame() {
+                set(this.0, frame);
+            }
+            Ok(())
+        });
         methods.add_method("look", |lua, this, name: String| {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
@@ -533,6 +598,18 @@ impl UserData for ActorHandle {
 impl UserData for WormHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, this| Ok(this.0));
+        fields.add_field_method_get("facing", |_, this| {
+            Ok(if this.0 == 0 {
+                1
+            } else {
+                let direction = unsafe { read_i32(this.0 as *mut u8, WORM_FACING) };
+                if direction < 0 {
+                    -1
+                } else {
+                    1
+                }
+            })
+        });
         fields.add_field_method_get("team", |_, this| {
             if this.0 == 0 {
                 return Ok(0i32);
@@ -821,6 +898,10 @@ pub fn native_drop_carry() -> Option<fn(u32)> {
 
 pub fn native_look() -> Option<fn(u32, i32, u32, i32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.look)
+}
+
+pub fn native_set_frame() -> Option<fn(u32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.set_frame)
 }
 
 pub fn native_keys() -> Option<fn() -> u32> {

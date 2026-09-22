@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
-use weapons::{OverlayClaim, OverlayParams, StockWeapon, parse_stock_weapon};
+use weapons::{HomingMode, OverlayClaim, OverlayParams, StockWeapon, parse_panel_icon, parse_stock_weapon};
 
 pub struct BindContext {
     pub mod_id: String,
@@ -135,6 +135,12 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         .map_err(|e| e.to_string())?;
     wa.set("_selects", lua.create_table().map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
+    wa.set("_explodes", lua.create_table().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    wa.set("_proximity", lua.create_table().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    wa.set("_places", lua.create_table().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
 
     let on = lua.create_table().map_err(|e| e.to_string())?;
     bind_on(lua, &on, "gravity_before")?;
@@ -232,6 +238,10 @@ fn table_to_claim(
         Some(s) => Some(parse_stock_weapon(&s).map_err(mlua::Error::external)?),
         None => None,
     };
+    let panel_icon = match get_string(&spec, "panel_icon")?.or(get_string(&spec, "icon")?) {
+        Some(s) => Some(parse_panel_icon(&s).map_err(mlua::Error::external)?),
+        None => None,
+    };
     let actor: Option<String> = spec.get("actor")?;
     let is_weapon = get_bool(&spec, "is_weapon")?.unwrap_or(true);
     let (cursor_on_select, on_select_id) = spawn::parse_select(lua, &spec)?;
@@ -312,6 +322,23 @@ fn table_to_claim(
         }
     }
 
+    let mut worm_sprites = Vec::new();
+    if let Some(poses) = spec.get::<Option<Table>>("worm_sprites")? {
+        for pair in poses.pairs::<String, String>() {
+            let (name, path) = pair?;
+            let id = gfx::stock_worm_sprite_id(&name).ok_or_else(|| {
+                mlua::Error::external(format!("unknown stock worm sprite '{name}'"))
+            })?;
+            worm_sprites.push((id, path.replace('\\', "/")));
+        }
+        worm_sprites.sort_by_key(|(id, _)| *id);
+        for (_, path) in &worm_sprites {
+            let (path, mut sheet) = load_pack_sheet(root, path, 1)?;
+            sheet.looping = false;
+            extra_sheets.push((path, sheet));
+        }
+    }
+
     let mut extra_sounds = Vec::new();
     match spec.get::<Value>("sounds")? {
         Value::Nil => {}
@@ -344,6 +371,82 @@ fn table_to_claim(
         }
     }
 
+    let mut cluster_sprite_id = None;
+    let mut cluster_damage = None;
+    let mut cluster_bounce_pct = None;
+    let mut cluster_gravity_pct = None;
+        let mut cluster_wind_pct = None;
+        let mut cluster_homing = None;
+        if let Some(cluster) = spec.get::<Option<Table>>("cluster")? {
+            cluster_damage = get_i32(&cluster, "damage")?;
+            cluster_bounce_pct = get_i32(&cluster, "bounce_pct")?;
+            cluster_gravity_pct = get_i32(&cluster, "gravity_pct")?;
+            cluster_wind_pct = get_i32(&cluster, "wind_pct")?;
+            if let Some(h) = get_string(&cluster, "homing")? {
+                cluster_homing = HomingMode::parse(&h);
+                if cluster_homing.is_none() && h != "off" {
+                    return Err(mlua::Error::external(format!(
+                        "cluster.homing must be lock/avoid/dodge/off, got '{h}'"
+                    )));
+                }
+            }
+        let mut cluster_sheet = None;
+        let mut cluster_path = None;
+        load_sprite_field(
+            root,
+            &cluster,
+            "sprite",
+            sprite_columns as u32,
+            &mut cluster_sprite_id,
+            &mut cluster_sheet,
+            &mut cluster_path,
+        )?;
+        if let (Some(path), Some(sheet)) = (cluster_path.take(), cluster_sheet.take()) {
+            extra_sheets.push((path, sheet));
+        }
+        if let Some(p) = cluster.get::<Option<Table>>("params")? {
+            if cluster_damage.is_none() {
+                cluster_damage = get_i32(&p, "damage")?;
+            }
+            if cluster_bounce_pct.is_none() {
+                cluster_bounce_pct = get_i32(&p, "bounce_pct")?;
+            }
+            if cluster_gravity_pct.is_none() {
+                cluster_gravity_pct = get_i32(&p, "gravity_pct")?;
+            }
+            if cluster_wind_pct.is_none() {
+                cluster_wind_pct = get_i32(&p, "wind_pct")?;
+            }
+        }
+    }
+
+    let mut mine_proximity = None;
+    let mut mine_fuse = None;
+    let mut mine_mask = None;
+    let mut mine_trigger = None;
+    let mut mine_blast = None;
+    if let Some(mine) = spec.get::<Option<Table>>("mine")? {
+        mine_proximity = get_i32(&mine, "proximity")?;
+        mine_fuse = get_i32(&mine, "fuse")?;
+        mine_mask = get_i32(&mine, "mask")?;
+        mine_trigger = get_i32(&mine, "trigger")?;
+        mine_blast = get_i32(&mine, "blast")?;
+    }
+
+    let (on_explode_id, explode_spawn) = spawn::parse_step(lua, &spec, "on_explode", crate::actor::register_explode)?;
+    let (on_proximity_id, proximity_spawn) =
+        spawn::parse_step(lua, &spec, "on_proximity", crate::actor::register_proximity)?;
+    let (on_place_id, place_spawn) = spawn::parse_step(lua, &spec, "on_place", crate::actor::register_place)?;
+    install_attached_sheet(root, sprite_columns as u32, &explode_spawn, &mut extra_sheets)?;
+    install_attached_sheet(root, sprite_columns as u32, &proximity_spawn, &mut extra_sheets)?;
+    install_attached_sheet(root, sprite_columns as u32, &place_spawn, &mut extra_sheets)?;
+    if let Some(child) = fire_spawn.as_ref().and_then(|s| s.on_explode.as_ref()) {
+        install_attached_sheet(root, sprite_columns as u32, &Some((**child).clone()), &mut extra_sheets)?;
+    }
+    if let Some(child) = spawn.as_ref().and_then(|s| s.on_explode.as_ref()) {
+        install_attached_sheet(root, sprite_columns as u32, &Some((**child).clone()), &mut extra_sheets)?;
+    }
+
     Ok(OverlayClaim {
         mod_id: mod_id.to_string(),
         logical_id,
@@ -367,7 +470,26 @@ fn table_to_claim(
             fire_spawn,
             sprite_path,
             extra_sheets,
+            worm_sprites,
             extra_sounds,
+            cluster_sprite_id,
+            cluster_damage,
+            cluster_bounce_pct,
+            cluster_gravity_pct,
+            cluster_wind_pct,
+            cluster_homing,
+            panel_icon,
+            mine_proximity,
+            mine_fuse,
+            mine_mask,
+            mine_trigger,
+            mine_blast,
+            on_explode_id,
+            explode_spawn,
+            on_proximity_id,
+            proximity_spawn,
+            on_place_id,
+            place_spawn,
         },
     })
 }
@@ -413,6 +535,43 @@ fn load_pack_sound(
     Ok((rel, path))
 }
 
+fn install_attached_sheet(
+    root: &std::path::Path,
+    columns: u32,
+    attached: &Option<weapons::AttachedSpawn>,
+    extra: &mut Vec<(String, gfx::SpriteStrip)>,
+) -> mlua::Result<()> {
+    let Some(a) = attached else {
+        return Ok(());
+    };
+    if let Some(path) = &a.path {
+        push_extra_sheet(root, columns, path, extra)?;
+    }
+    if let Some(path) = &a.trail_path {
+        push_extra_sheet(root, columns, path, extra)?;
+    }
+    if let Some(path) = a.spawn.cluster.as_ref().and_then(|c| c.trail_path.as_ref()) {
+        push_extra_sheet(root, columns, path, extra)?;
+    }
+    if let Some(child) = &a.spawn.on_explode {
+        install_attached_sheet(root, columns, &Some((**child).clone()), extra)?;
+    }
+    Ok(())
+}
+
+fn push_extra_sheet(
+    root: &std::path::Path,
+    columns: u32,
+    path: &str,
+    extra: &mut Vec<(String, gfx::SpriteStrip)>,
+) -> mlua::Result<()> {
+    if extra.iter().any(|(p, _)| p == path) {
+        return Ok(());
+    }
+    extra.push(load_pack_sheet(root, path, columns)?);
+    Ok(())
+}
+
 fn load_sprite_field(
     root: &std::path::Path,
     table: &Table,
@@ -435,7 +594,7 @@ fn load_sprite_field(
     } else {
         *sprite_id = Some(stock_sprite_id(&sprite).ok_or_else(|| {
             mlua::Error::external(format!(
-                "unknown sprite '{sprite}' (png/gif path or grenade/bazooka/mine/holy)"
+                "unknown sprite '{sprite}' (png/gif path or a Gfx.dir name, e.g. missile/grenade/uzihit)"
             ))
         })?);
     }

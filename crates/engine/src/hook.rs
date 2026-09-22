@@ -40,6 +40,8 @@ pub fn install() -> Result<(), String> {
     physics::install(&catalog)?;
     hud::install(&catalog)?;
     actor::install(&catalog)?;
+    crate::worm_sprite::install(&catalog)?;
+    crate::mine::install(&catalog)?;
     unsafe {
         MinHook::enable_all_hooks().map_err(|e| format!("MinHook enable: {e:?}"))?;
     }

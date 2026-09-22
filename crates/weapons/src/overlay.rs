@@ -28,11 +28,109 @@ pub enum ScreenBlit {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HomingMode {
+    Lock,
+    Avoid,
+    Dodge,
+}
+
+/// LuaActor cluster spray. Not the stock cluster-bomb slab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ClusterHoming {
+    #[default]
+    Off,
+    /// Steer toward the owner's aim cursor (or world pointer).
+    Aim,
+    /// Steer toward the nearest other worm.
+    Worm,
+}
+
+impl ClusterHoming {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "off" | "" | "false" => Some(Self::Off),
+            "lock" | "aim" | "cursor" | "true" => Some(Self::Aim),
+            "worm" | "target" => Some(Self::Worm),
+            "avoid" | "dodge" => Some(Self::Aim),
+            _ => None,
+        }
+    }
+}
+
+/// One native cluster body: N bits, trail, arc, impact / bounce / homing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClusterSpec {
+    pub count: i32,
+    pub spread: i32,
+    pub power: i32,
+    /// 0 = use the spawn sprite.
+    pub sprite: i32,
+    pub trail: i32,
+    /// Pack GIF/PNG for puffs; resolved after gfx init.
+    pub trail_path: Option<String>,
+    /// 0 = no bounce. 100 = grenade-like.
+    pub bounce_pct: i32,
+    pub homing: ClusterHoming,
+    /// Explode when a bit lands (or finishes bouncing).
+    pub impact: bool,
+}
+
+impl Default for ClusterSpec {
+    fn default() -> Self {
+        Self {
+            count: 1,
+            spread: 0,
+            power: 0,
+            sprite: 0,
+            trail: 0,
+            trail_path: None,
+            bounce_pct: 0,
+            homing: ClusterHoming::Off,
+            impact: false,
+        }
+    }
+}
+
+impl ClusterSpec {
+    /// Stock CreateClusters: 30% base × 0x18 px/tick, as 16.16.
+    pub const STOCK_POWER: i32 = ((0x1e << 16) / 100) * 0x18;
+
+    /// `kind = "cluster"` with no extra keys.
+    pub fn bouquet(impact: bool) -> Self {
+        Self {
+            count: 5,
+            spread: 45,
+            power: Self::STOCK_POWER,
+            sprite: 0,
+            trail: 609,
+            trail_path: None,
+            bounce_pct: 0,
+            homing: ClusterHoming::Off,
+            impact,
+        }
+    }
+}
+
+impl HomingMode {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "lock" => Some(Self::Lock),
+            "avoid" => Some(Self::Avoid),
+            "dodge" => Some(Self::Dodge),
+            "off" | "" => None,
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpawnExplode {
     pub damage: i32,
     pub id: i32,
     /// Detonate at the feet / just below, not the sprite centre.
     pub below: bool,
+    /// Blast during spawn, before the next frame. Invisible push/cluster seeds use this.
+    pub now: bool,
 }
 
 impl Default for SpawnExplode {
@@ -41,6 +139,47 @@ impl Default for SpawnExplode {
             damage: 50,
             id: 100,
             below: true,
+            now: false,
+        }
+    }
+}
+
+/// Extra LuaActor fired from a weapon or actor step (explode / proximity / place).
+#[derive(Debug, Clone)]
+pub struct AttachedSpawn {
+    pub sprite: i32,
+    pub delta: u32,
+    pub vx: i32,
+    pub vy: i32,
+    /// How many bits to spray. 1 = a single body (old banana kick).
+    pub count: i32,
+    /// Fan width in degrees around straight up. Stock cluster is 45°.
+    pub spread: i32,
+    /// Launch speed 16.16 along each ray. 0 falls back to stock CreateClusters.
+    pub power: i32,
+    /// Linger smoke puffs (smklt25). 0 = none. Prefer ClusterSpec.trail.
+    pub trail: i32,
+    /// Pack GIF/PNG for puffs; resolved after gfx init.
+    pub trail_path: Option<String>,
+    /// Pack-relative sheet installed at gfx init; resolved at emit.
+    pub path: Option<String>,
+    pub spawn: ActorSpawn,
+}
+
+impl Default for AttachedSpawn {
+    fn default() -> Self {
+        Self {
+            sprite: 0,
+            delta: 0,
+            vx: 0,
+            vy: 0,
+            count: 1,
+            spread: 0,
+            power: 0,
+            trail: 0,
+            trail_path: None,
+            path: None,
+            spawn: ActorSpawn::default(),
         }
     }
 }
@@ -61,9 +200,15 @@ pub struct ActorSpawn {
     pub persist: bool,
     /// Die when the body is below the water line.
     pub drown: bool,
+    /// Draw the body. `false` / `sprite = false` uses the 1023 blit reject.
+    pub visible: bool,
     /// Non-zero: Lua `on.frame` / `on.land` owns policy. `0` keeps native sugar.
     pub brain_id: u32,
     pub explode: Option<SpawnExplode>,
+    /// Spawned when this actor blasts. Does not replace the blast.
+    pub on_explode: Option<Box<AttachedSpawn>>,
+    /// `kind = "cluster"` / `cluster = { ... }`. Native fan, bounce, homing.
+    pub cluster: Option<ClusterSpec>,
     pub sprite_w: i32,
     pub sprite_h: i32,
     pub feet: Option<FeetPlatform>,
@@ -84,8 +229,11 @@ impl Default for ActorSpawn {
             damage_worms: true,
             persist: false,
             drown: true,
+            visible: true,
             brain_id: 0,
             explode: None,
+            on_explode: None,
+            cluster: None,
             sprite_w: 0,
             sprite_h: 0,
             feet: None,
@@ -125,8 +273,38 @@ pub struct OverlayParams {
     pub sprite_path: Option<String>,
     /// Extra PNG/GIF/frame-folders installed at gfx init (`sprites = { ... }`).
     pub extra_sheets: Vec<(String, SpriteStrip)>,
+    /// Stock worm sprite id -> pack sheet path, scoped to this weapon slot.
+    pub worm_sprites: Vec<(i32, String)>,
     /// Pack-relative WAV paths (`sounds = { ... }`) loaded into DSSound slot 451+.
     pub extra_sounds: Vec<(String, std::path::PathBuf)>,
+    pub cluster_sprite_id: Option<i32>,
+    pub cluster_damage: Option<i32>,
+    pub cluster_bounce_pct: Option<i32>,
+    pub cluster_gravity_pct: Option<i32>,
+    pub cluster_wind_pct: Option<i32>,
+    /// Homing discriminator written onto the cluster sub-pellet slab.
+    pub cluster_homing: Option<HomingMode>,
+    /// Copy this stock weapon's hi/lo panel .img pointers onto the overlay slot.
+    pub panel_icon: Option<StockWeapon>,
+    /// MineEntity fire_params[0] — proximity radius in pixels.
+    pub mine_proximity: Option<i32>,
+    /// MineEntity fire_params[1] — arm delay. Negative keeps scheme MineFuse.
+    pub mine_fuse: Option<i32>,
+    /// MineEntity fire_params[2] — detect bitmask (1 << entity+0x30).
+    pub mine_mask: Option<i32>,
+    /// MineEntity fire_params[3] — beep fuse after a worm is seen.
+    pub mine_trigger: Option<i32>,
+    /// MineEntity fire_params[6] — CreateExplosion id/radius arg.
+    pub mine_blast: Option<i32>,
+    /// Lua `on_explode` callback. Does not steal MineEntity.
+    pub on_explode_id: u32,
+    pub explode_spawn: Option<AttachedSpawn>,
+    /// Lua `on_proximity` callback. First scan hit only.
+    pub on_proximity_id: u32,
+    pub proximity_spawn: Option<AttachedSpawn>,
+    /// Lua `on_place` callback. MineEntity ctor / body spawn.
+    pub on_place_id: u32,
+    pub place_spawn: Option<AttachedSpawn>,
 }
 
 impl Default for OverlayParams {
@@ -150,7 +328,26 @@ impl Default for OverlayParams {
             fire_spawn: None,
             sprite_path: None,
             extra_sheets: Vec::new(),
+            worm_sprites: Vec::new(),
             extra_sounds: Vec::new(),
+            cluster_sprite_id: None,
+            cluster_damage: None,
+            cluster_bounce_pct: None,
+            cluster_gravity_pct: None,
+            cluster_wind_pct: None,
+            cluster_homing: None,
+            panel_icon: None,
+            mine_proximity: None,
+            mine_fuse: None,
+            mine_mask: None,
+            mine_trigger: None,
+            mine_blast: None,
+            on_explode_id: 0,
+            explode_spawn: None,
+            on_proximity_id: 0,
+            proximity_spawn: None,
+            on_place_id: 0,
+            place_spawn: None,
         }
     }
 }
@@ -182,6 +379,7 @@ impl OverlayParams {
                     damage: self.damage.unwrap_or(50),
                     id: 100,
                     below: true,
+                    now: false,
                 }),
                 persist: true,
                 drown: true,
@@ -272,8 +470,64 @@ pub fn apply_params(entry: &mut WeaponEntry, params: &OverlayParams) {
     if let Some(v) = params.sprite_id {
         entry.set_sprite_id(v);
     }
+    if let Some(v) = params.cluster_sprite_id {
+        entry.set_cluster_sprite_id(v);
+    }
+    if let Some(v) = params.cluster_damage {
+        entry.set_cluster_damage(v);
+    }
+    if let Some(v) = params.cluster_bounce_pct {
+        entry.set_cluster_bounce_pct(v);
+    }
+    if let Some(v) = params.cluster_gravity_pct {
+        entry.set_cluster_gravity_pct(v);
+    }
+    if let Some(v) = params.cluster_wind_pct {
+        entry.set_cluster_wind_pct(v);
+    }
+    if let Some(mode) = params.cluster_homing {
+        apply_cluster_homing(entry, mode, params.cluster_sprite_id);
+    }
+    if entry.is_mine() {
+        if let Some(v) = params.mine_proximity {
+            entry.set_mine_proximity(v);
+        }
+        if let Some(v) = params.mine_fuse {
+            entry.set_mine_fuse(v);
+        }
+        if let Some(v) = params.mine_mask {
+            entry.set_mine_mask(v);
+        }
+        if let Some(v) = params.mine_trigger {
+            entry.set_mine_trigger(v);
+        }
+        if let Some(v) = params.mine_blast {
+            entry.set_mine_blast(v);
+        }
+    }
     if params.uses_click_actor() {
         apply_drop_fire(entry);
+    } else if params.uses_lua_projectile() && entry.fire_type() == 2 && entry.fire_method() == 1 {
+        // Keep stock mine placement/retreat, but dispatch its body through
+        // CreateWeaponProjectile (placed method 2), where Lua owns the spawn.
+        entry.set_fire_method(2);
+    }
+}
+
+fn apply_cluster_homing(entry: &mut WeaponEntry, mode: HomingMode, sprite: Option<i32>) {
+    entry.set_cluster_missile_type(1);
+    let (params, kind, t1, t2) = match mode {
+        HomingMode::Lock => ([2, 0x83, 0x32, 0x64, 0x32], 1, 0x1F4, 0x1194),
+        HomingMode::Avoid => ([3, 0x86, 0xA, 0x14, 0x32], 2, 0x1F4, 0x1194),
+        HomingMode::Dodge => ([2, 0x87, 0x32, 0x64, 0x32], 2, 0x64, 0x26AC),
+    };
+    entry.set_cluster_homing_params(params);
+    entry.set_cluster_homing_kind(kind, t1, t2);
+    // Homing burn blits `render_timer`, not the flight sprite. Stock cluster
+    // leaves that 0; copy the bit sprite so the body stays visible.
+    let body = sprite.filter(|id| *id != 0).unwrap_or_else(|| entry.cluster_sprite_id());
+    if body != 0 {
+        entry.set_cluster_render_timer(body);
     }
 }
 
@@ -347,6 +601,84 @@ mod tests {
         assert_eq!(entry.bounce_pct(), 100);
         assert_eq!(entry.read_i32(0x74), 200);
         assert_eq!(entry.read_i32(0x78), 100);
+    }
+
+    #[test]
+    fn apply_params_writes_cluster_bit_sprite() {
+        let mut entry = WeaponEntry::default();
+        apply_params(
+            &mut entry,
+            &OverlayParams {
+                sprite_id: Some(51),
+                cluster_sprite_id: Some(54),
+                cluster_bounce_pct: Some(100),
+                ..Default::default()
+            },
+        );
+        assert_eq!(entry.sprite_id(), 51);
+        assert_eq!(entry.cluster_sprite_id(), 54);
+        assert_eq!(entry.read_i32(0x124), 54);
+        assert_eq!(entry.read_i32(0x13C), 100);
+    }
+
+    #[test]
+    fn lua_cluster_bouquet_defaults() {
+        let c = ClusterSpec::bouquet(true);
+        assert_eq!(c.count, 5);
+        assert_eq!(c.spread, 45);
+        assert_eq!(c.power, ClusterSpec::STOCK_POWER);
+        assert_eq!(c.trail, 609);
+        assert_eq!(c.bounce_pct, 0);
+        assert_eq!(c.homing, ClusterHoming::Off);
+        assert!(c.impact);
+        assert_eq!(ClusterHoming::parse("worm"), Some(ClusterHoming::Worm));
+        assert_eq!(ClusterHoming::parse("aim"), Some(ClusterHoming::Aim));
+        assert_eq!(ClusterHoming::parse("off"), Some(ClusterHoming::Off));
+    }
+
+    #[test]
+    fn apply_params_writes_cluster_homing_lock() {
+        let mut entry = WeaponEntry::default();
+        apply_params(
+            &mut entry,
+            &OverlayParams {
+                cluster_sprite_id: Some(94),
+                cluster_homing: Some(HomingMode::Lock),
+                ..Default::default()
+            },
+        );
+        assert_eq!(entry.read_i32(0x168), 1);
+        assert_eq!(entry.read_i32(0x174), 2);
+        assert_eq!(entry.read_i32(0x188), 1);
+        assert_eq!(entry.read_i32(0x170), 94);
+    }
+
+    #[test]
+    fn apply_params_writes_mine_brain() {
+        let mut entry = WeaponEntry::default();
+        entry.set_fire_type(2);
+        entry.set_fire_method(1);
+        apply_params(
+            &mut entry,
+            &OverlayParams {
+                sprite_id: Some(3),
+                damage: Some(80),
+                mine_proximity: Some(40),
+                mine_fuse: Some(3000),
+                mine_mask: Some(1 << 18),
+                mine_trigger: Some(1000),
+                mine_blast: Some(50),
+                ..Default::default()
+            },
+        );
+        assert_eq!(entry.sprite_id(), 3);
+        assert_eq!(entry.damage(), 80);
+        assert_eq!(entry.read_i32(0x3C), 40);
+        assert_eq!(entry.read_i32(0x40), 3000);
+        assert_eq!(entry.read_i32(0x44), 1 << 18);
+        assert_eq!(entry.read_i32(0x48), 1000);
+        assert_eq!(entry.read_i32(0x54), 50);
+        assert_eq!(entry.fire_method(), 1);
     }
 
     #[test]
@@ -424,6 +756,69 @@ mod tests {
         .uses_click_actor());
         assert!(OverlayParams {
             fire_spawn: Some(ActorSpawn::default()),
+            ..Default::default()
+        }
+        .uses_lua_projectile());
+    }
+
+    #[test]
+    fn lua_mine_keeps_placement_and_retreat_but_uses_existing_spawn_wrap() {
+        let mut mine = WeaponEntry::default();
+        mine.set_fire_type(2);
+        mine.set_fire_method(1);
+        mine.set_requires_aiming(0);
+        mine.write_i32(0x1c, 5000);
+        let mut entry = WeaponEntry::default();
+        entry.set_defined(1);
+        entry.write_i32(0x24, 1);
+        entry.copy_fire_from(&mine);
+        apply_params(
+            &mut entry,
+            &OverlayParams {
+                on_fire_id: 1,
+                ..Default::default()
+            },
+        );
+        assert_eq!(entry.fire_type(), 2);
+        assert_eq!(entry.fire_method(), 2);
+        assert_eq!(entry.requires_aiming(), 0);
+        assert_eq!(entry.read_i32(0x1c), 5000);
+        assert_eq!(entry.defined(), 1);
+        assert_eq!(entry.read_i32(0x24), 1);
+        apply_params(&mut mine, &OverlayParams::default());
+        assert_eq!(mine.fire_method(), 1);
+    }
+
+    #[test]
+    fn mine_on_explode_does_not_steal_placement() {
+        let mut entry = WeaponEntry::default();
+        entry.set_fire_type(2);
+        entry.set_fire_method(1);
+        apply_params(
+            &mut entry,
+            &OverlayParams {
+                on_explode_id: 9,
+                explode_spawn: Some(AttachedSpawn {
+                    sprite: 1023,
+                    spawn: ActorSpawn {
+                        visible: false,
+                        explode: Some(SpawnExplode {
+                            damage: 0,
+                            id: 40,
+                            below: true,
+                            now: true,
+                        }),
+                        damage_worms: false,
+                        ..ActorSpawn::default()
+                    },
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        assert_eq!(entry.fire_method(), 1);
+        assert!(!OverlayParams {
+            on_explode_id: 9,
             ..Default::default()
         }
         .uses_lua_projectile());

@@ -19,10 +19,19 @@ pub fn kind_id(mod_id: &str, kind: &str) -> String {
 /// Concrete Donkey / airstrike click-drop, implemented natively.
 pub const NATIVE_DROP: &str = "drop";
 
+/// Fan of LuaActor bits. Bounce / homing / impact are data on the spawn table.
+pub const NATIVE_CLUSTER: &str = "cluster";
+
 pub fn is_drop(kind: &str) -> bool {
     let k = kind.trim();
     let tail = k.rsplit('.').next().unwrap_or(k);
     tail.eq_ignore_ascii_case(NATIVE_DROP)
+}
+
+pub fn is_cluster(kind: &str) -> bool {
+    let k = kind.trim();
+    let tail = k.rsplit('.').next().unwrap_or(k);
+    tail.eq_ignore_ascii_case(NATIVE_CLUSTER)
 }
 
 #[cfg(test)]
@@ -43,5 +52,13 @@ mod tests {
         assert!(is_drop("drop"));
         assert!(is_drop("example.gif_donkey.drop"));
         assert!(!is_drop("boss_mole"));
+    }
+
+    #[test]
+    fn cluster_kind_matches_short_and_namespaced() {
+        assert!(is_cluster("cluster"));
+        assert!(is_cluster("CLUSTER"));
+        assert!(is_cluster("example.pack.cluster"));
+        assert!(!is_cluster("sentry"));
     }
 }

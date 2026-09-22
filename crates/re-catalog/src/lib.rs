@@ -136,6 +136,7 @@ impl Catalog {
         c.merge_toml(include_str!("../../../re/WormEntity.toml"))?;
         c.merge_toml(include_str!("../../../re/Hud.toml"))?;
         c.merge_toml(include_str!("../../../re/FireWeapon.toml"))?;
+        c.merge_toml(include_str!("../../../re/MineEntity.toml"))?;
         c.merge_toml(include_str!("../../../re/hurt.toml"))?;
         Ok(c)
     }
@@ -214,6 +215,14 @@ mod tests {
         assert_eq!(hooks[0].action, "wrap_after");
         assert_eq!(hooks[1].wa_function, "GfxHandler__LoadSprites");
         assert_eq!(hooks[2].wa_function, "CollisionManager__apply_projectile_gravity");
-        assert_eq!(hooks.len(), 8);
+        assert_eq!(hooks.len(), 9);
+        assert_eq!(hooks[8].wa_function, "WormEntity__calc_sprite");
+        assert_eq!(hooks[8].action, "wrap_after");
+        assert_eq!(
+            Catalog::builtin()
+                .unwrap()
+                .function_va("WormEntity__calc_sprite"),
+            Some(0x00512E80)
+        );
     }
 }

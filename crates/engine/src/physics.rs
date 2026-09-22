@@ -321,10 +321,20 @@ unsafe extern "thiscall" fn missile_hook(
 }
 
 unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
+    if msg == MSG_RENDER_SCENE {
+        crate::actor::begin_puff_frame();
+    }
     let orig = ORIG_ROOT.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
+    }
+    if msg == MSG_FRAME_FINISH {
+        crate::actor::flush_deferred();
+        crate::actor::tick_puffs();
+    }
+    if msg == MSG_RENDER_SCENE {
+        crate::actor::draw_puffs(this);
     }
     if !holding() {
         return;
@@ -368,6 +378,7 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         crate::actor::on_weapon_slot(this);
         crate::world::pump_space_fire(this);
         apply_carry(this);
+        crate::worm_sprite::tick(this as usize);
     }
 }
 

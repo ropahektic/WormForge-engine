@@ -10,11 +10,13 @@ mod hud;
 mod hurt;
 mod overlay;
 mod log;
+mod mine;
 mod physics;
 mod rebase;
 mod sprite;
 mod version;
 mod world;
+mod worm_sprite;
 
 pub use log::{attach_console, error_log_path, log_error, log_line, log_path, panic_text};
 pub use rebase::{init_rebase, rb, wa_base};

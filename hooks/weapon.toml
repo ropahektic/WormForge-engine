@@ -40,4 +40,9 @@ comment = "If the slot owns a click actor, spawn LuaActor at the click instead o
 [[hook]]
 wa_function = "FireWeapon__CreateWeaponProjectile"
 action = "wrap"
-comment = "If the slot owns on_fire / fire spawn, create a LuaActor at launch instead of MissileEntity. Otherwise call original (tag later)."
+comment = "If the slot owns on_fire / fire spawn, create a LuaActor at launch or placement instead of MissileEntity. Lua mine overlays keep fire_type 2 and use method 2. Otherwise call original (tag later)."
+
+[[hook]]
+wa_function = "WormEntity__calc_sprite"
+action = "wrap_after"
+comment = "Stock computes worm pose, then slot-scoped worm_sprites remaps only the output sprite id."

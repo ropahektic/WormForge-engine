@@ -1,0 +1,86 @@
+[[function]]
+va = 0x0051E1C0
+name = "FireWeapon__CreateMine"
+calling_convention = "__stdcall"
+plate_comment = "Fire type 2 method 1. Alloc 0x1BC, then MineEntity ctor."
+
+[[function]]
+va = 0x00506660
+name = "MineEntity__ctor"
+calling_convention = "__stdcall"
+plate_comment = "stdcall RET 0x18. (this, owner, fire_params, spawn_ctx, snap_ground, player_placed). Copies fire_params[0..7] to this+0x170. Sprite blit is hardcoded 0x2D/0x2F in pick_sprite — table sprite_id is unused."
+
+[[function]]
+va = 0x00506AB0
+name = "MineEntity__dtor_inner"
+calling_convention = "__fastcall"
+plate_comment = "ECX=this. Unregisters from GameWorld mine list."
+
+[[function]]
+va = 0x00506E60
+name = "MineEntity__pick_sprite"
+calling_convention = "__thiscall"
+plate_comment = "thiscall RET 4. ECX=this, stack out_x, EDI=out_sprite. Writes 0x2D mineon or 0x2F mineoff."
+
+[[function]]
+va = 0x00506EF0
+name = "MineEntity__draw"
+calling_convention = "__stdcall"
+plate_comment = "Draw + fuse label. Calls pick_sprite then RQ_DRAW_SPRITE_LOCAL."
+
+[[function]]
+va = 0x00507110
+name = "MineEntity__explode"
+calling_convention = "__usercall"
+plate_comment = "EAX=this then ESI=this. CreateExplosion stdcall RET 10h (damage=100, blast this+0x124, 0, team this+0x144); EAX=x ECX=y+1.0. ESI is the sender — omitting it jumps into a coordinate."
+
+[[function]]
+va = 0x00507140
+name = "MineEntity__proximity_scan"
+calling_convention = "__usercall"
+plate_comment = "EAX=this, stack radius. Hits first entity whose (1<<(layer+0x30)) bit is set in this+0x114 (fire_params[2])."
+
+[[function]]
+va = 0x005072E0
+name = "MineEntity__HandleMessage"
+calling_convention = "__thiscall"
+plate_comment = "FrameFinish: rest-arm, proximity, beep fuse, drown, explosion knock. Render msg 3 draws."
+
+[[vtable]]
+va = 0x006643E8
+name = "MineEntityVtable"
+
+[[struct]]
+name = "MineEntity"
+size = 0x1BC
+plate_comment = "Class type 8. Bounce scales hardcoded 0x9999 at +0x6C/+0x70."
+
+  [[struct.field]]
+  offset = 0x114
+  name = "detect_mask"
+  type = "uint"
+  comment = "Copied from WeaponEntry+0x44."
+
+  [[struct.field]]
+  offset = 0x118
+  name = "trigger_fuse"
+  type = "int"
+  comment = "Beep countdown. WeaponEntry+0x48. -0x14 per frame."
+
+  [[struct.field]]
+  offset = 0x11C
+  name = "arm_fuse"
+  type = "int"
+  comment = "WeaponEntry+0x40. Negative = scheme MineFuse; wait until at rest."
+
+  [[struct.field]]
+  offset = 0x120
+  name = "proximity"
+  type = "int"
+  comment = "WeaponEntry+0x3C. Manhattan pixels for proximity_scan."
+
+  [[struct.field]]
+  offset = 0x124
+  name = "blast"
+  type = "int"
+  comment = "WeaponEntry+0x54. Second CreateExplosion arg (id/radius), not HP damage."

@@ -37,6 +37,9 @@ pub const WORM_SELECTED_AMMO: usize = 0x174;
 pub const WORM_ACTIVE_WEAPON: usize = 0x36C;
 /// WorldEntity.state (+0x44).
 pub const WORM_STATE: usize = 0x44;
+/// Ground slope selector used by `WormEntity__calc_sprite`: negative adds the
+/// uphill (+1) pose, positive adds the downhill (+2) pose.
+pub const WORM_SLOPE_DIR: usize = 0x1AC;
 /// WeaponCharging — power bar live.
 pub const WORM_STATE_CHARGING: u32 = 0x73;
 /// AimingAngle — crosshair up, ready for Space.
@@ -58,12 +61,50 @@ pub const WEAPON_FIRE_TYPE: usize = 0x30;
 pub const WEAPON_SPECIAL_SUBTYPE: usize = 0x34;
 pub const WEAPON_FIRE_METHOD: usize = 0x38;
 pub const WEAPON_FIRE_PARAMS: usize = 0x3C;
+/// MineEntity ctor copies fire_params[0..7] (entry+0x3C..+0x58).
+/// Missiles ignore these first slots; mines use them as the whole brain.
+pub const WEAPON_MINE_PROXIMITY: usize = 0x3C;
+pub const WEAPON_MINE_FUSE: usize = 0x40;
+pub const WEAPON_MINE_MASK: usize = 0x44;
+pub const WEAPON_MINE_TRIGGER: usize = 0x48;
+pub const WEAPON_MINE_BLAST: usize = 0x54;
 pub const WEAPON_DAMAGE: usize = 0x50;
+pub const MINE_ENTITY_CTOR: u32 = 0x0050_6660;
+pub const MINE_ENTITY_DTOR: u32 = 0x0050_6AB0;
+pub const MINE_PICK_SPRITE: u32 = 0x0050_6E60;
+pub const MINE_EXPLODE: u32 = 0x0050_7110;
+pub const MINE_PROXIMITY_SCAN: u32 = 0x0050_7140;
+pub const MINE_SPRITE_ON: i32 = 0x2D;
+pub const MINE_SPRITE_OFF: i32 = 0x2F;
+/// Mine bounce scales (ctor writes 0x9999 here, ~60%).
+pub const MINE_BOUNCE_X: usize = 0x6C;
+pub const MINE_BOUNCE_Y: usize = 0x70;
+pub const MINE_WIND: usize = 0x74;
 /// Missile sprite id (WeaponFireParams+0x24). Bazooka=48, Grenade=50.
 pub const WEAPON_SPRITE_ID: usize = 0x60;
 pub const WEAPON_GRAVITY_PCT: usize = 0x70;
 pub const WEAPON_WIND_PCT: usize = 0x74;
 pub const WEAPON_BOUNCE_PCT: usize = 0x78;
+/// Cluster slab is `WeaponFireParams.cluster_params` at entry+0x10C.
+/// OpenWA mirrors primary `[3..]` (collision_radius..) into that array, so
+/// primary sprite_id `[9]` is cluster_params[6], not [9].
+pub const WEAPON_CLUSTER_DAMAGE: usize = 0x114;
+pub const WEAPON_CLUSTER_SPRITE: usize = 0x124;
+pub const WEAPON_CLUSTER_GRAVITY: usize = 0x134;
+pub const WEAPON_CLUSTER_WIND: usize = 0x138;
+pub const WEAPON_CLUSTER_BOUNCE: usize = 0x13C;
+/// cluster_params[23] — same discriminator as primary missile_type (1=homing).
+pub const WEAPON_CLUSTER_MISSILE_TYPE: usize = 0x168;
+/// cluster_params[25] — primary `render_timer`. Homing burn blits this id
+/// instead of cluster_params[6]; stock cluster leaves it 0 (invisible).
+pub const WEAPON_CLUSTER_RENDER_TIMER: usize = 0x170;
+/// cluster_params[26..30] — homing_params (strength, sprite, turn, accel, speed).
+pub const WEAPON_CLUSTER_HOMING: usize = 0x174;
+/// cluster_params[31] — unknown_0xc4[0]: 1=direct lock, 2=pigeon/magic dodge.
+pub const WEAPON_CLUSTER_HOMING_KIND: usize = 0x188;
+/// GameWorld+0x144: two frontend .img pointers per stock weapon (hi then lo).
+/// WeaponPanelIcons draw: `[world + 4*(frame + 2*weapon_id) + 0x144]`.
+pub const GAME_WORLD_PANEL_IMG: usize = 0x144;
 /// Unused stock id: GetSpriteFrameForBlit rejects `id-1 >= 0x3FE`, so 1023
 /// draws nothing. Do not put custom sheets here — install into 800..=1022.
 pub const CUSTOM_SPRITE_SENTINEL: i32 = 1023;
@@ -129,6 +170,8 @@ pub const WORLD_ENTITY_VTABLE: u32 = 0x0066_41F8;
 pub const WA_CRT_MALLOC: u32 = 0x005C_0AB8;
 pub const WA_MALLOC: u32 = 0x005C_0AE3;
 pub const CREATE_EXPLOSION: u32 = 0x0054_8080;
+/// WorldEntity explosion knock (EDI=this, stdcall damage/radius/x/y). VA 0x004FF390.
+pub const APPLY_EXPLOSION_KNOCK: u32 = 0x004F_F390;
 pub const RQ_DRAW_SPRITE_LOCAL: u32 = 0x0054_2060;
 pub const WORLD_ENTITY_VTABLE_SLOTS: usize = 32;
 pub const STUB_RETURNS0: u32 = 0x0054_5780;
@@ -157,6 +200,10 @@ pub const ENT_SPEED_X: usize = 0x90;
 pub const ENT_SPEED_Y: usize = 0x94;
 pub const ENT_SETTLE: usize = 0xAC;
 pub const ENT_MOVED: usize = 0xB8;
+/// Knock mass for CreateExplosion (WorldEntity+0xCC). 0 = no blast throw.
+pub const ENT_BLAST_MASS: usize = 0xCC;
+/// WorldEntity explosion-damage accumulator; subclasses consume and clear it.
+pub const ENT_DAMAGE_ACCUM: usize = 0xD4;
 pub const ENT_HELPER: usize = 0xDC;
 pub const ENT_WORM_TEAM: usize = 0xFC;
 

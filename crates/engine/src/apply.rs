@@ -4,7 +4,7 @@ use crate::log::{log_error, panic_text, wa_directory};
 use crate::sprite::{self, SpriteRef};
 use crate::world;
 use game::offsets::{
-    GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY, GAME_WORLD_WEAPON_TABLE,
+    GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY, GAME_WORLD_PANEL_IMG, GAME_WORLD_WEAPON_TABLE,
 };
 use game::weapon::{snapshot_table, write_entry, WeaponEntry};
 use lua_host::{mods_root_from, run_mods};
@@ -43,6 +43,8 @@ pub fn on_gfx_ready(display: *mut u8) {
     sprite::clear();
     world::clear_sounds();
     actor::clear_claims();
+    crate::worm_sprite::clear();
+    crate::mine::clear();
 
     let mods_dir = mods_root_from(&wa_directory());
     log_line(&format!("loading mods from {}", mods_dir.display()));
@@ -166,6 +168,11 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
         }
     }
 
+    let restored = sprite::reassert();
+    if restored > 0 {
+        log_line(&format!("re-registered {restored} custom sprite slots for this round"));
+    }
+
     let snapshot = unsafe { snapshot_table(table) };
     let pass = match GFX.lock() {
         Ok(g) => g.clone(),
@@ -186,6 +193,17 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             }
         }
         apply_params(&mut entry, &claim.params);
+        if let Some(icon) = claim.params.panel_icon {
+            unsafe {
+                copy_panel_icon(world, icon.index(), idx);
+            }
+            log_line(&format!(
+                "{} panel icon {}",
+                claim.mod_id,
+                icon.name()
+            ));
+        }
+        crate::worm_sprite::claim(idx, &claim.mod_id, &claim.params.worm_sprites);
         if let Some(spawn) = spawn {
             let id = pass
                 .sprite_ids
@@ -194,7 +212,7 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 .or(claim.params.sprite_id)
                 .unwrap_or(0);
             let delta = if spawn.loop_anim {
-                sprite::loop_delta(id)
+                sprite::actor_loop_delta(id)
             } else {
                 0
             };
@@ -234,7 +252,7 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             let delta = spawn
                 .as_ref()
                 .filter(|s| s.loop_anim)
-                .map(|_| sprite::loop_delta(id))
+                .map(|_| sprite::actor_loop_delta(id))
                 .unwrap_or(0);
             actor::claim_fire(idx, id, delta, spawn, claim.params.on_fire_id);
             log_line(&format!(
@@ -270,6 +288,35 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
         unsafe {
             write_entry(table, idx, &entry);
         }
+        if entry.is_mine() && !claim.params.uses_lua_projectile() {
+            let sprite = pass
+                .sprite_ids
+                .get(&idx)
+                .copied()
+                .or(claim.params.sprite_id)
+                .unwrap_or(0);
+            crate::mine::claim(
+                idx,
+                crate::mine::MineTune {
+                    sprite,
+                    damage: claim.params.damage.unwrap_or(0),
+                    bounce_pct: claim.params.bounce_pct,
+                    gravity_pct: claim.params.gravity_pct,
+                    wind_pct: claim.params.wind_pct,
+                    explode: claim.params.explode_spawn.clone(),
+                    explode_id: claim.params.on_explode_id,
+                    proximity: claim.params.proximity_spawn.clone(),
+                    proximity_id: claim.params.on_proximity_id,
+                    place: claim.params.place_spawn.clone(),
+                    place_id: claim.params.on_place_id,
+                },
+            );
+            log_line(&format!(
+                "{} MineEntity slot {idx} sprite {sprite} damage {}",
+                claim.mod_id,
+                claim.params.damage.unwrap_or(100)
+            ));
+        }
         log_line(&format!(
             "applied {} -> slot {} ({}){}",
             claim.mod_id,
@@ -302,4 +349,20 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
 
     *NAMES.lock().unwrap() = names;
     Ok(())
+}
+
+/// Panel tiles read two frontend .img pointers per stock weapon from
+/// GameWorld+0x144. Copy the source slot's hi/lo pair onto the overlay slot.
+unsafe fn copy_panel_icon(world: *mut u8, src: usize, dst: usize) {
+    if world.is_null() || src == dst || src > 70 || dst > 70 {
+        return;
+    }
+    let base = world.add(GAME_WORLD_PANEL_IMG) as *mut u32;
+    let src_hi = *base.add(src * 2);
+    let src_lo = *base.add(src * 2 + 1);
+    if src_hi == 0 && src_lo == 0 {
+        return;
+    }
+    *base.add(dst * 2) = src_hi;
+    *base.add(dst * 2 + 1) = src_lo;
 }

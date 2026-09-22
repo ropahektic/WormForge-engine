@@ -11,8 +11,8 @@ mod sandbox;
 mod spawn;
 
 pub use actor::{
-    actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_fire,
-    weapon_select, ActorEvent, ActorNative, SpawnArgs,
+    actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, SpawnArgs,
 };
 pub use dispatch::{gravity_after, gravity_before, hurt, missile_frame, run_hud, worm_message, Hurt};
 
@@ -131,6 +131,307 @@ mod tests {
 
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    #[test]
+    fn turret_pack_overlays_dynamite_with_mine_placement() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/turret");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::Dynamite);
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::Mine));
+        assert_ne!(claim.params.on_fire_id, 0);
+        assert_eq!(claim.params.worm_sprites.len(), 6);
+        let mut turret_sheets = 0;
+        for (path, sheet) in &claim.params.extra_sheets {
+            if path.contains("turret_t") {
+                assert_eq!(sheet.frames.len(), 120);
+                turret_sheets += 1;
+            } else if path.contains("uzihit") {
+                assert_eq!(sheet.frames.len(), 10);
+            } else if path.contains("equip") {
+                assert_eq!(sheet.frames.len(), 10);
+                assert!(!sheet.looping);
+            }
+        }
+        assert_eq!(turret_sheets, 18);
+    }
+
+    #[test]
+    fn cluster_bit_sprite_and_homing_and_panel_icon() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-cluster-bit");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("c"),
+            "user.hello_world",
+            r#"
+id = "user.hello_world"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["cluster_bomb"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "cluster_bomb",
+  name = "hello world",
+  copy_from = "cluster_bomb",
+  panel_icon = "banana",
+  sprite = "crshairr",
+  contact = true,
+  fuse = true,
+  cluster = {
+    sprite = "targetw",
+    contact = true,
+    homing = "lock",
+  },
+})
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        let c = &scripts.resolved.applied[0];
+        assert_eq!(c.params.sprite_id, Some(2));
+        assert_eq!(c.params.cluster_sprite_id, Some(94));
+        assert_eq!(c.params.cluster_homing, Some(weapons::HomingMode::Lock));
+        assert_eq!(c.params.panel_icon, Some(StockWeapon::BananaBomb));
+    }
+
+    #[test]
+    fn mine_brain_and_sprite() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-mine-brain");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("m"),
+            "user.mine",
+            r#"
+id = "user.mine"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["bazooka"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "bazooka",
+  name = "My Weapon",
+  copy_from = "mine",
+  sprite = "crshairb",
+  params = { damage = 80, bounce_pct = 100 },
+  mine = { proximity = 40, fuse = 3000, trigger = 1000 },
+})
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        let c = &scripts.resolved.applied[0];
+        assert_eq!(c.params.sprite_id, Some(3));
+        assert_eq!(c.params.damage, Some(80));
+        assert_eq!(c.params.bounce_pct, Some(100));
+        assert_eq!(c.params.mine_proximity, Some(40));
+        assert_eq!(c.params.mine_fuse, Some(3000));
+        assert_eq!(c.params.mine_trigger, Some(1000));
+    }
+
+    #[test]
+    fn mine_on_explode_invisible_now_keeps_mine_entity() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-mine-emit");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("m"),
+            "user.mine_emit",
+            r#"
+id = "user.mine_emit"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["bazooka"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "bazooka",
+  copy_from = "mine",
+  sprite = "crshairb",
+  on_explode = {
+    spawn = {
+      sprite = false,
+      explode = { damage = 0, id = 40, now = true },
+      damage_worms = false,
+    },
+  },
+  on_proximity = {
+    spawn = {
+      sprite = false,
+      explode = { damage = 0, id = 20, now = true },
+      damage_worms = false,
+      damage_terrain = false,
+    },
+  },
+})
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        let c = &scripts.resolved.applied[0];
+        assert!(!c.params.uses_lua_projectile());
+        let boom = c.params.explode_spawn.as_ref().expect("explode spawn");
+        assert!(!boom.spawn.visible);
+        assert_eq!(boom.sprite, game::offsets::CUSTOM_SPRITE_SENTINEL);
+        assert_eq!(boom.spawn.explode.unwrap().now, true);
+        assert!(!boom.spawn.damage_worms);
+        assert!(!boom.spawn.persist);
+        assert_eq!(boom.count, 1);
+        let prox = c.params.proximity_spawn.as_ref().expect("proximity spawn");
+        assert!(!prox.spawn.visible);
+        assert!(!prox.spawn.damage_terrain);
+    }
+
+    #[test]
+    fn fire_spawn_can_chain_on_explode() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-fire-emit");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("f"),
+            "user.fire_emit",
+            r#"
+id = "user.fire_emit"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["bazooka"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "bazooka",
+  on_fire = {
+    spawn = {
+      sprite = "missile",
+      explode = { damage = 50 },
+      on_explode = {
+        sprite = false,
+        explode = { damage = 0, id = 40, now = true },
+        damage_worms = false,
+      },
+    },
+  },
+})
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        let c = &scripts.resolved.applied[0];
+        assert!(c.params.uses_lua_projectile());
+        let child = c
+            .params
+            .fire_spawn
+            .as_ref()
+            .expect("fire spawn")
+            .on_explode
+            .as_ref()
+            .expect("nested explode");
+        assert!(!child.spawn.visible);
+        assert_eq!(child.spawn.explode.unwrap().now, true);
+    }
+
+    #[test]
+    fn cluster_actor_parses_data_values() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-cluster-actor");
+        let _ = std::fs::remove_dir_all(&root);
+        let mine = pack(
+            &root.join("m"),
+            "user.cluster_mine",
+            r#"
+id = "user.cluster_mine"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["bazooka"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "bazooka",
+  copy_from = "mine",
+  on_explode = {
+    spawn = {
+      kind = "cluster",
+      sprite = "banana",
+      trail = "smklt25",
+      count = 5,
+      spread = 45,
+      power = 0xA0000,
+      impact = true,
+      bounce = true,
+      homing = "worm",
+      explode = { damage = 30, id = 100 },
+    },
+  },
+})
+"#,
+        );
+        let scripts = run_mods(&[mine]).unwrap();
+        let c = &scripts.resolved.applied[0];
+        assert!(!c.params.uses_lua_projectile());
+        let boom = c.params.explode_spawn.as_ref().expect("explode cluster");
+        let spec = boom.spawn.cluster.as_ref().expect("cluster spec");
+        assert_eq!(spec.count, 5);
+        assert_eq!(spec.spread, 45);
+        assert_eq!(spec.power, 0xA0000);
+        assert_eq!(spec.trail, 609);
+        assert_eq!(spec.sprite, 51);
+        assert_eq!(spec.bounce_pct, 100);
+        assert_eq!(spec.homing, weapons::ClusterHoming::Worm);
+        assert!(spec.impact);
+        assert_eq!(boom.count, 5);
+
+        let fire = pack(
+            &root.join("f"),
+            "user.cluster_fire",
+            r#"
+id = "user.cluster_fire"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["bazooka"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "bazooka",
+  on_fire = {
+    spawn = {
+      kind = "cluster",
+      sprite = "banana",
+      count = 8,
+      spread = 90,
+      impact = false,
+      bounce = false,
+      homing = false,
+      collide = false,
+      explode = false,
+    },
+  },
+})
+"#,
+        );
+        let scripts = run_mods(&[fire]).unwrap();
+        let c = &scripts.resolved.applied[0];
+        assert!(c.params.uses_lua_projectile());
+        let spawn = c.params.fire_spawn.as_ref().expect("fire cluster");
+        let fx = spawn.cluster.as_ref().expect("fx spec");
+        assert_eq!(fx.count, 8);
+        assert_eq!(fx.spread, 90);
+        assert!(!fx.impact);
+        assert_eq!(fx.bounce_pct, 0);
+        assert_eq!(fx.homing, weapons::ClusterHoming::Off);
+        assert!(!spawn.collide);
+        assert!(spawn.explode.is_none());
     }
 
     fn pack(dir: &std::path::Path, _id: &str, toml: &str, lua: &str) -> LoadedMod {
@@ -349,6 +650,62 @@ wa.log(wa.actors.kind("mole"))
     }
 
     #[test]
+    fn pack_sheet_is_loaded_at_replace_not_looked_up() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-pxgif");
+        let _ = std::fs::remove_dir_all(&root);
+        let png = include_bytes!("../../../mods/examples/circle_bazooka/sprites/ball.png");
+        let pack = pack(
+            &root.join("p"),
+            "user.my_weapon",
+            r#"
+id = "user.my_weapon"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["mine"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "mine",
+  name = "PX gif",
+  copy_from = "mine",
+  sprite = "sprites/cweps_gfx__swormb.png",
+  on_explode = {
+    spawn = {
+      kind = "cluster",
+      sprite = "sprites/cweps_gfx__swormb.png",
+      count = 5,
+      spread = 45,
+      power = 655360,
+      impact = true,
+    },
+  },
+})
+"#,
+        );
+        std::fs::create_dir_all(pack.root.join("sprites")).unwrap();
+        std::fs::write(pack.root.join("sprites/cweps_gfx__swormb.png"), png).unwrap();
+        let scripts = run_mods(&[pack]).unwrap();
+        let c = &scripts.resolved.applied[0];
+        assert!(c.params.sprite_sheet.is_some());
+        assert_eq!(
+            c.params.sprite_path.as_deref(),
+            Some("sprites/cweps_gfx__swormb.png")
+        );
+        let boom = c.params.explode_spawn.as_ref().expect("explode cluster");
+        assert_eq!(
+            boom.path.as_deref(),
+            Some("sprites/cweps_gfx__swormb.png")
+        );
+        assert!(c
+            .params
+            .extra_sheets
+            .iter()
+            .any(|(p, _)| p == "sprites/cweps_gfx__swormb.png"));
+    }
+
+    #[test]
     fn png_strip_loads_from_pack() {
         let root = std::env::temp_dir().join("wklua-lua-host-circle");
         let _ = std::fs::remove_dir_all(&root);
@@ -529,6 +886,7 @@ wa.weapons.replace({
                 left_ground: false,
                 hit_worm: false,
                 in_water: false,
+                damage: 0,
             },
         )
         .unwrap();

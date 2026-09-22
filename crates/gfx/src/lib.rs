@@ -3,34 +3,86 @@
 //!
 //! Projectile look: a PNG strip (`sprites/ball.png`, 1 row × N columns)
 //! or a GIF (`sprites/foo.gif`, native frames, looped). Stock names
-//! (`grenade`, `bazooka`, …) remain a fallback that borrows a WA sprite.
+//! (`grenade`, `missile`, `uzihit`, …) remain a fallback that borrows a WA sprite.
 
 mod gif_decode;
+mod stock_ids;
 
 use std::io::Cursor;
 use std::path::Path;
 
 pub use gif_decode::{load_gif_bytes, load_gif_file};
+pub use stock_ids::STOCK_SPRITES;
 
-/// Stock sprites we expose by name only.
+/// Gfx.dir stem (or a short alias) → Display sprite id.
+///
+/// Names are the `.spr` archive stems (missile=48, grenade=50, uzihit=114, …).
+/// Aliases: `bazooka`→missile, `holy`→hgrenade, `mine`→mineon, `cursor`→cursorr,
+/// `homing`→hmissil1, `pigeon`→pigeonr0.
+fn lookup_stock(name: &str) -> Option<i32> {
+    STOCK_SPRITES
+        .binary_search_by_key(&name, |&(n, _)| n)
+        .ok()
+        .map(|i| STOCK_SPRITES[i].1)
+}
+
 pub fn stock_sprite_id(name: &str) -> Option<i32> {
-    match name.trim().to_ascii_lowercase().as_str() {
-        "grenade" => Some(50),
-        "bazooka" | "missile" => Some(48),
-        "mine" => Some(45),
-        "holy" | "holy_grenade" => Some(56),
-        "cursor" | "cursorr" => Some(32),
-        "cursorb" => Some(33),
-        "cursorg" => Some(34),
-        "cursory" => Some(35),
-        "cursorp" => Some(36),
-        "cursorc" => Some(37),
-        _ => None,
-    }
+    let lowered = name.trim().to_ascii_lowercase();
+    let key = match lowered.as_str() {
+        "bazooka" => "missile",
+        "holy" | "holy_grenade" => "hgrenade",
+        "mine" => "mineon",
+        "cursor" => "cursorr",
+        "homing" | "homing_missile" => "hmissil1",
+        "pigeon" => "pigeonr0",
+        other => other,
+    };
+    lookup_stock(key)
+        .or_else(|| lookup_stock(&key.replace('-', "_")))
+        .or_else(|| lookup_stock(&key.replace('_', "-")))
+}
+
+/// First non-`_2` stem for a Display id (frontend duplicates keep the `_2` suffix).
+pub fn stock_sprite_name(id: i32) -> Option<&'static str> {
+    STOCK_SPRITES
+        .iter()
+        .find(|(n, i)| *i == id && !n.ends_with("_2"))
+        .or_else(|| STOCK_SPRITES.iter().find(|(_, i)| *i == id))
+        .map(|(n, _)| *n)
 }
 
 pub fn sprite_key(mod_id: &str, relative: &str) -> String {
     format!("{mod_id}:{relative}")
+}
+
+/// Stock and custom-weapon worm poses, including slope variants. Used only by
+/// slot-scoped `worm_sprites`, never to replace global stock sheets.
+pub fn stock_worm_sprite_id(name: &str) -> Option<i32> {
+    match name {
+        "weaponlnk" => Some(-1),
+        "weaponlnku" => Some(-2),
+        "weaponlnkd" => Some(-3),
+        "wbazlnk" => Some(436),
+        "wbazlnku" => Some(437),
+        "wbazlnkd" => Some(438),
+        "wbaz" => Some(525),
+        "wbazu" => Some(526),
+        "wbazd" => Some(527),
+        "wthrow" => Some(591),
+        "wthrowu" => Some(592),
+        "wthrowd" => Some(593),
+        _ => None,
+    }
+}
+
+/// Inverse of WA's floor(phase * frame_count / 65536). Round UP so an
+/// explicit frame does not accidentally select its predecessor.
+pub fn frame_phase(frame: i32, count: usize) -> Option<u32> {
+    if count == 0 || count > 0x10000 {
+        return None;
+    }
+    let index = frame.rem_euclid(count as i32) as u64;
+    Some((index * 0x10000).div_ceil(count as u64) as u32)
 }
 
 /// One RGBA8888 frame (row-major, 4 bytes per pixel).
@@ -258,12 +310,53 @@ pub fn slice_strip(width: u32, height: u32, rgba: &[u8], columns: u32) -> Result
     })
 }
 
+pub fn slice_rows(width: u32, height: u32, rgba: &[u8], rows: u32) -> Result<SpriteStrip, String> {
+    if rows == 0 {
+        return Err("sprite rows must be > 0".into());
+    }
+    if height % rows != 0 {
+        return Err(format!(
+            "png height {height} is not divisible by {rows} rows"
+        ));
+    }
+    let fh = height / rows;
+    if width == 0 || fh == 0 {
+        return Err("empty sprite frame".into());
+    }
+    let expect = (width as usize) * (height as usize) * 4;
+    if rgba.len() < expect {
+        return Err("rgba buffer too small for png size".into());
+    }
+    let mut frames = Vec::with_capacity(rows as usize);
+    for row in 0..rows {
+        let mut frame = vec![0u8; (width as usize) * (fh as usize) * 4];
+        for y in 0..fh as usize {
+            let src = ((row as usize * fh as usize + y) * width as usize) * 4;
+            let dst = y * (width as usize) * 4;
+            frame[dst..dst + (width as usize) * 4]
+                .copy_from_slice(&rgba[src..src + (width as usize) * 4]);
+        }
+        frames.push(RgbaFrame {
+            width,
+            height: fh,
+            rgba: frame,
+        });
+    }
+    Ok(SpriteStrip {
+        frames,
+        fps: 10,
+        looping: false,
+    })
+}
+
 pub fn load_strip_bytes(bytes: &[u8], columns: u32) -> Result<SpriteStrip, String> {
     let (w, h, rgba) = load_png_rgba(bytes)?;
-    // Default `sprite_columns` is 8 (PNG strips). A single glyph PNG is not a
-    // strip: only slice when the image is a horizontal sheet.
+    // Horizontal sheet: N columns, one row. Vertical sheet: one column of
+    // square cells (height divisible by width).
     if columns > 1 && w % columns == 0 && w / columns > 0 && w > h {
         slice_strip(w, h, &rgba, columns)
+    } else if h > w && w > 0 && h % w == 0 {
+        slice_rows(w, h, &rgba, h / w)
     } else {
         Ok(SpriteStrip {
             frames: vec![RgbaFrame {
@@ -385,7 +478,7 @@ pub fn encode_spr(strip: &SpriteStrip) -> Result<Vec<u8>, String> {
             let g = frame.rgba[o + 1];
             let b = frame.rgba[o + 2];
             let a = frame.rgba[o + 3];
-            if a < 16 || (r as u16) + (g as u16) + (b as u16) < 12 {
+            if spr_key(r, g, b, a) {
                 bm[i] = 0;
                 continue;
             }
@@ -450,6 +543,15 @@ pub fn encode_spr(strip: &SpriteStrip) -> Result<Vec<u8>, String> {
     Ok(data)
 }
 
+/// Index 0 in a `.spr`. Real alpha, near-black, and the opaque backdrops
+/// sprite packs use instead of alpha (`128,128,192` and magenta).
+pub fn spr_key(r: u8, g: u8, b: u8, a: u8) -> bool {
+    a < 16
+        || (r as u16) + (g as u16) + (b as u16) < 12
+        || (r, g, b) == (128, 128, 192)
+        || (r, g, b) == (255, 0, 255)
+}
+
 fn nearest_palette(palette: &[[u8; 3]], r: u8, g: u8, b: u8) -> u8 {
     let mut best = i32::MAX;
     let mut idx = 1u8;
@@ -488,13 +590,44 @@ mod tests {
         );
         assert_eq!(stock_sprite_id("grenade"), Some(50));
         assert_eq!(stock_sprite_id("bazooka"), Some(48));
+        assert_eq!(stock_sprite_id("missile"), Some(48));
         assert_eq!(stock_sprite_id("cursor"), Some(32));
         assert_eq!(stock_sprite_id("cursorr"), Some(32));
+        assert_eq!(stock_sprite_id("uzihit"), Some(114));
+        assert_eq!(stock_sprite_id("cluster"), Some(53));
+        assert_eq!(stock_sprite_id("clustlet"), Some(54));
+        assert_eq!(stock_sprite_id("pigeon"), Some(175));
+        assert_eq!(stock_sprite_name(48), Some("missile"));
+        assert_eq!(stock_sprite_id("petrol-1"), stock_sprite_id("petrol_1"));
         assert!(stock_sprite_id("circle").is_none());
         assert!(is_sheet_path("sprites/ball.png"));
         assert!(is_sheet_path("sprites/200w.gif"));
         assert!(is_sheet_path("foo.GIF"));
         assert!(!is_sheet_path("grenade"));
+    }
+
+    #[test]
+    fn custom_weapon_pose_names_resolve() {
+        assert_eq!(stock_worm_sprite_id("weaponlnk"), Some(-1));
+        assert_eq!(stock_worm_sprite_id("weaponlnku"), Some(-2));
+        assert_eq!(stock_worm_sprite_id("weaponlnkd"), Some(-3));
+        assert_eq!(stock_worm_sprite_id("wthrow"), Some(591));
+        assert_eq!(stock_worm_sprite_id("wthrowu"), Some(592));
+        assert_eq!(stock_worm_sprite_id("wthrowd"), Some(593));
+    }
+
+    #[test]
+    fn explicit_frames_round_trip_through_stock_phase_mapping() {
+        for count in [1, 2, 10, 120, 360, 65536] {
+            for index in 0..count {
+                let phase = frame_phase(index as i32, count).unwrap();
+                assert_eq!((phase as u64 * count as u64) >> 16, index as u64);
+            }
+            assert_eq!(frame_phase(-1, count), frame_phase(count as i32 - 1, count));
+            assert_eq!(frame_phase(count as i32, count), Some(0));
+        }
+        assert_eq!(frame_phase(0, 0), None);
+        assert_eq!(frame_phase(0, 65537), None);
     }
 
     #[test]
@@ -539,6 +672,48 @@ mod tests {
         assert_eq!(strip.frames[0].width, 2);
         assert_eq!(strip.frames[7].rgba[0], 7 * 30);
         assert_eq!(strip.frames[7].rgba[1], 200);
+    }
+
+    #[test]
+    fn slices_ten_square_rows() {
+        let fw = 2u32;
+        let rows = 10u32;
+        let mut rgba = vec![0u8; (fw * fw * rows * 4) as usize];
+        for row in 0..rows {
+            let v = (row * 20) as u8;
+            for y in 0..fw {
+                for x in 0..fw {
+                    let i = (((row * fw + y) * fw + x) * 4) as usize;
+                    rgba[i] = v;
+                    rgba[i + 3] = 255;
+                }
+            }
+        }
+        let png = encode_rgba_png(fw, fw * rows, &rgba);
+        let strip = load_strip_bytes(&png, 1).unwrap();
+        assert_eq!(strip.frames.len(), 10);
+        assert_eq!(strip.frames[0].width, 2);
+        assert_eq!(strip.frames[0].height, 2);
+        assert_eq!(strip.frames[9].rgba[0], 9 * 20);
+    }
+
+    #[test]
+    fn turret_uzihit_is_ten_frames() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../mods/examples/turret/sprites/uzihit.png");
+        let strip = load_strip_file(&path, 1).expect("uzihit.png");
+        assert_eq!(strip.frames.len(), 10);
+        assert_eq!(strip.frames[0].width, strip.frames[0].height);
+        let spr = encode_spr(&strip).expect("uzihit.spr");
+        let pal_n = u16::from_le_bytes([spr[10], spr[11]]) as usize;
+        let pal_end = 12 + pal_n * 3;
+        let header = pal_end;
+        let mut meta = header + 12;
+        while meta % 4 != 0 {
+            meta += 1;
+        }
+        let bitmap = meta + 12 * 10;
+        assert_eq!(spr[bitmap], 0, "pack backdrop must be .spr index 0");
     }
 
     #[test]

@@ -6,9 +6,13 @@ use crate::actor::{
     WorldHandle, WormHandle,
 };
 use game::offsets::{CLASS_CRATE, CLASS_MINE, CLASS_MISSILE, CLASS_OIL};
+use actors::is_cluster;
 use gfx::{is_sheet_path, sprite_key, stock_sprite_id};
 use mlua::{Function, Lua, Table, Value};
-use weapons::{ActorSpawn, SpawnExplode, SpawnFrom, ScreenBlit, SpriteOrigin};
+use weapons::{
+    ActorSpawn, AttachedSpawn, ClusterHoming, ClusterSpec, SpawnExplode, SpawnFrom, ScreenBlit,
+    SpriteOrigin,
+};
 
 pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
     let mut spawn = ActorSpawn::default();
@@ -33,17 +37,26 @@ pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
     };
     spawn.brain_id = parse_brain(lua, s)?;
     let auto = spawn.brain_id == 0;
-    spawn.gravity = get_bool(s, "gravity")?.unwrap_or(auto);
-    spawn.loop_anim = get_bool(s, "loop")?.unwrap_or(auto);
-    spawn.collide = get_bool(s, "collide")?.unwrap_or(auto);
+    spawn.visible = match s.get::<Value>("sprite")? {
+        Value::Boolean(false) => false,
+        _ => get_bool(s, "visible")?.unwrap_or(true),
+    };
+    if get_bool(s, "visible")? == Some(false) {
+        spawn.visible = false;
+    }
+    spawn.gravity = get_bool(s, "gravity")?.unwrap_or(auto && spawn.visible);
+    spawn.loop_anim = get_bool(s, "loop")?.unwrap_or(auto && spawn.visible);
+    spawn.collide = get_bool(s, "collide")?.unwrap_or(auto && spawn.visible);
     spawn.collide_terrain = get_bool(s, "collide_terrain")?.unwrap_or(spawn.collide);
     spawn.collide_worms = get_bool(s, "collide_worms")?.unwrap_or(spawn.collide);
     spawn.explode = parse_explode(s)?;
     let explode_on = spawn.explode.is_some();
     spawn.damage_terrain = get_bool(s, "damage_terrain")?.unwrap_or(explode_on);
     spawn.damage_worms = get_bool(s, "damage_worms")?.unwrap_or(explode_on);
-    spawn.persist = get_bool(s, "persist")?.unwrap_or(explode_on && auto);
-    spawn.drown = get_bool(s, "drown")?.unwrap_or(auto);
+    spawn.persist = get_bool(s, "persist")?.unwrap_or(explode_on && auto && spawn.visible);
+    spawn.drown = get_bool(s, "drown")?.unwrap_or(auto && spawn.visible);
+    spawn.on_explode = parse_nested_emit(lua, s, "on_explode")?;
+    spawn.cluster = parse_cluster(lua, s, explode_on)?;
     spawn.screen = match get_string(s, "screen")?.as_deref() {
         None => {
             if get_bool(s, "screen")?.unwrap_or(false) {
@@ -132,6 +145,146 @@ fn parse_event(
             "{key} must be a function or table, got {other:?}"
         ))),
     }
+}
+
+pub fn parse_step(
+    lua: &Lua,
+    spec: &Table,
+    key: &str,
+    register: fn(&Lua, Function) -> mlua::Result<u32>,
+) -> mlua::Result<(u32, Option<AttachedSpawn>)> {
+    match spec.get::<Value>(key)? {
+        Value::Nil => Ok((0, None)),
+        Value::Function(f) => Ok((register(lua, f)?, None)),
+        Value::Table(t) => {
+            let id = match t.get::<Value>("on")? {
+                Value::Function(f) => register(lua, f)?,
+                Value::Nil => 0,
+                other => {
+                    return Err(mlua::Error::external(format!(
+                        "{key}.on must be a function, got {other:?}"
+                    )))
+                }
+            };
+            let attached = match t.get::<Value>("spawn")? {
+                Value::Nil => None,
+                Value::Table(s) => Some(parse_attached(lua, &s)?),
+                other => {
+                    return Err(mlua::Error::external(format!(
+                        "{key}.spawn must be a table, got {other:?}"
+                    )))
+                }
+            };
+            Ok((id, attached))
+        }
+        other => Err(mlua::Error::external(format!(
+            "{key} must be a function or table, got {other:?}"
+        ))),
+    }
+}
+
+fn parse_nested_emit(lua: &Lua, s: &Table, key: &str) -> mlua::Result<Option<Box<AttachedSpawn>>> {
+    match s.get::<Value>(key)? {
+        Value::Nil => Ok(None),
+        Value::Table(t) => {
+            let inner = match t.get::<Value>("spawn")? {
+                Value::Nil => t,
+                Value::Table(s) => s,
+                other => {
+                    return Err(mlua::Error::external(format!(
+                        "{key}.spawn must be a table, got {other:?}"
+                    )))
+                }
+            };
+            Ok(Some(Box::new(parse_attached(lua, &inner)?)))
+        }
+        other => Err(mlua::Error::external(format!(
+            "{key} must be a table, got {other:?}"
+        ))),
+    }
+}
+
+pub fn parse_attached(lua: &Lua, s: &Table) -> mlua::Result<AttachedSpawn> {
+    let mut attached = AttachedSpawn {
+        sprite: 0,
+        delta: 0,
+        vx: get_i32(s, "vx")?.unwrap_or(0),
+        vy: get_i32(s, "vy")?.unwrap_or(0),
+        count: get_i32(s, "count")?.unwrap_or(1).clamp(1, 16),
+        spread: get_i32(s, "spread")?.unwrap_or(0),
+        power: get_i32(s, "power")?.unwrap_or(0),
+        trail: 0,
+        trail_path: None,
+        path: None,
+        spawn: parse_spawn(lua, s)?,
+    };
+    if attached.spawn.from == SpawnFrom::Sky {
+        attached.spawn.from = SpawnFrom::Cursor;
+    }
+    match s.get::<Value>("sprite")? {
+        Value::Nil => {}
+        Value::Boolean(false) => {
+            attached.sprite = game::offsets::CUSTOM_SPRITE_SENTINEL;
+            attached.spawn.visible = false;
+        }
+        Value::Boolean(true) => {}
+        Value::String(name) => {
+            let name = name.to_str()?.replace('\\', "/");
+            if is_sheet_path(&name) {
+                attached.path = Some(name);
+            } else {
+                let resolved = resolve_sprite_name(lua, &name)?;
+                attached.sprite = resolved.0;
+                attached.delta = resolved.1;
+                if attached.spawn.sprite_w == 0 && resolved.2 != 0 {
+                    attached.spawn.sprite_w = resolved.2;
+                    attached.spawn.sprite_h = resolved.3;
+                }
+            }
+        }
+        other => {
+            return Err(mlua::Error::external(format!(
+                "sprite must be a name or false, got {other:?}"
+            )))
+        }
+    }
+    if !attached.spawn.visible {
+        attached.sprite = game::offsets::CUSTOM_SPRITE_SENTINEL;
+    }
+    if get_bool(s, "persist")?.is_none() {
+        attached.spawn.persist = false;
+    }
+    if get_bool(s, "collide_worms")?.is_none() {
+        attached.spawn.collide_worms = false;
+    }
+    if let Some(c) = &attached.spawn.cluster {
+        if attached.count <= 1 {
+            attached.count = c.count;
+        }
+        if attached.spread == 0 {
+            attached.spread = c.spread;
+        }
+        if attached.power == 0 {
+            attached.power = c.power;
+        }
+        if attached.trail == 0 {
+            attached.trail = c.trail;
+        }
+        if attached.trail_path.is_none() {
+            attached.trail_path = c.trail_path.clone();
+        }
+        if attached.sprite == 0 && c.sprite != 0 {
+            attached.sprite = c.sprite;
+        }
+    }
+    match parse_trail(lua, s)? {
+        None => {}
+        Some((id, path)) => {
+            attached.trail = id;
+            attached.trail_path = path;
+        }
+    }
+    Ok(attached)
 }
 
 pub fn bind_world(lua: &Lua, actors: &Table, wa: &Table) -> Result<(), String> {
@@ -318,16 +471,36 @@ pub fn runtime_spawn(
     let vx = get_i32(&spec, "vx")?.unwrap_or(ivx);
     let vy = get_i32(&spec, "vy")?.unwrap_or(ivy);
     let (mut sprite, mut delta, mut w, mut h) = inherit_sprite(inherit);
-    if let Some(name) = get_string(&spec, "sprite")? {
-        let resolved = resolve_sprite_name(lua, &name)?;
-        sprite = resolved.0;
-        delta = resolved.1;
-        if resolved.2 != 0 {
-            w = resolved.2;
-            h = resolved.3;
+    match spec.get::<Value>("sprite")? {
+        Value::Nil => {}
+        Value::Boolean(false) => {
+            sprite = game::offsets::CUSTOM_SPRITE_SENTINEL;
+        }
+        Value::Boolean(true) => {}
+        Value::String(name) => {
+            let resolved = resolve_sprite_name(lua, name.to_str()?.as_ref())?;
+            sprite = resolved.0;
+            delta = resolved.1;
+            if resolved.2 != 0 {
+                w = resolved.2;
+                h = resolved.3;
+            }
+        }
+        other => {
+            return Err(mlua::Error::external(format!(
+                "sprite must be a name or false, got {other:?}"
+            )))
         }
     }
+    if !spawn.visible {
+        sprite = game::offsets::CUSTOM_SPRITE_SENTINEL;
+    }
     let mut spawn = spawn;
+    if let Some(c) = spawn.cluster.as_ref() {
+        if c.sprite != 0 && sprite == 0 {
+            sprite = c.sprite;
+        }
+    }
     if spawn.sprite_w == 0 {
         spawn.sprite_w = w;
         spawn.sprite_h = h;
@@ -361,7 +534,7 @@ pub(crate) fn resolve_sprite_name(lua: &Lua, name: &str) -> mlua::Result<(i32, u
         sprite_key(&mod_id, name)
     } else {
         return Err(mlua::Error::external(format!(
-            "unknown sprite '{name}' (pack path, wa.sprites.key, or grenade/bazooka/mine/holy/cursor)"
+            "unknown sprite '{name}' (pack path, wa.sprites.key, or a Gfx.dir name)"
         )));
     };
     native_resolve_sprite()
@@ -473,9 +646,164 @@ fn parse_explode(s: &Table) -> mlua::Result<Option<SpawnExplode>> {
             damage: get_i32(&t, "damage")?.unwrap_or(50),
             id: get_i32(&t, "id")?.unwrap_or(100),
             below: get_bool(&t, "below")?.unwrap_or(true),
+            now: get_bool(&t, "now")?.unwrap_or(false),
         })),
         other => Err(mlua::Error::external(format!(
             "spawn.explode must be a table or bool, got {other:?}"
+        ))),
+    }
+}
+
+fn parse_cluster(lua: &Lua, s: &Table, explode_on: bool) -> mlua::Result<Option<ClusterSpec>> {
+    let kind_cluster = match get_string(s, "kind")? {
+        Some(k) => is_cluster(&k),
+        None => false,
+    };
+    let nested = match s.get::<Value>("cluster")? {
+        Value::Nil => None,
+        Value::Boolean(false) => return Ok(None),
+        Value::Boolean(true) => Some(None),
+        Value::Table(t) => Some(Some(t)),
+        other => {
+            return Err(mlua::Error::external(format!(
+                "cluster must be a table or bool, got {other:?}"
+            )))
+        }
+    };
+    let named = kind_cluster || nested.is_some();
+    let mut spec = if named {
+        ClusterSpec::bouquet(explode_on)
+    } else {
+        ClusterSpec {
+            impact: explode_on,
+            ..ClusterSpec::default()
+        }
+    };
+    apply_cluster_fields(lua, s, &mut spec, named)?;
+    if let Some(Some(inner)) = nested {
+        apply_cluster_fields(lua, &inner, &mut spec, true)?;
+    }
+    let active = named
+        || spec.count > 1
+        || spec.bounce_pct > 0
+        || spec.homing != ClusterHoming::Off
+        || spec.trail != 0
+        || spec.trail_path.is_some();
+    if !active {
+        return Ok(None);
+    }
+    spec.count = spec.count.clamp(1, 16);
+    if named && spec.spread == 0 {
+        spec.spread = 45;
+    }
+    Ok(Some(spec))
+}
+
+fn apply_cluster_fields(
+    lua: &Lua,
+    s: &Table,
+    spec: &mut ClusterSpec,
+    sprites: bool,
+) -> mlua::Result<()> {
+    if let Some(n) = get_i32(s, "count")? {
+        spec.count = n;
+    }
+    if let Some(n) = get_i32(s, "spread")? {
+        spec.spread = n;
+    }
+    if let Some(n) = get_i32(s, "power")? {
+        spec.power = n;
+    }
+    if let Some(b) = parse_bounce(s)? {
+        spec.bounce_pct = b;
+    }
+    if let Some(h) = parse_cluster_homing(s)? {
+        spec.homing = h;
+    }
+    if let Some(i) = get_bool(s, "impact")? {
+        spec.impact = i;
+    }
+    if let Some((id, path)) = parse_trail(lua, s)? {
+        spec.trail = id;
+        spec.trail_path = path;
+    }
+    if sprites {
+        if let Some(id) = parse_optional_sprite(lua, s, "sprite")? {
+            spec.sprite = id;
+        }
+    }
+    Ok(())
+}
+
+fn parse_bounce(s: &Table) -> mlua::Result<Option<i32>> {
+    match s.get::<Value>("bounce")? {
+        Value::Nil => get_i32(s, "bounce_pct"),
+        Value::Boolean(true) => Ok(Some(100)),
+        Value::Boolean(false) => Ok(Some(0)),
+        Value::Integer(i) => Ok(Some((i as i32).clamp(0, 200))),
+        Value::Number(n) => Ok(Some((n as i32).clamp(0, 200))),
+        other => Err(mlua::Error::external(format!(
+            "bounce must be a bool or percent, got {other:?}"
+        ))),
+    }
+}
+
+fn parse_cluster_homing(s: &Table) -> mlua::Result<Option<ClusterHoming>> {
+    match s.get::<Value>("homing")? {
+        Value::Nil => Ok(None),
+        Value::Boolean(true) => Ok(Some(ClusterHoming::Aim)),
+        Value::Boolean(false) => Ok(Some(ClusterHoming::Off)),
+        Value::String(name) => {
+            let name = name.to_str()?;
+            match ClusterHoming::parse(name.as_ref()) {
+                Some(h) => Ok(Some(h)),
+                None => Err(mlua::Error::external(format!(
+                    "homing must be off/aim/worm (or lock), got '{name}'"
+                ))),
+            }
+        }
+        other => Err(mlua::Error::external(format!(
+            "homing must be a bool or name, got {other:?}"
+        ))),
+    }
+}
+
+fn parse_trail(lua: &Lua, s: &Table) -> mlua::Result<Option<(i32, Option<String>)>> {
+    match s.get::<Value>("trail")? {
+        Value::Nil => Ok(None),
+        Value::Boolean(false) => Ok(Some((0, None))),
+        Value::Boolean(true) => Ok(Some((stock_sprite_id("smklt25").unwrap_or(609), None))),
+        Value::String(name) => {
+            let name = name.to_str()?.replace('\\', "/");
+            if is_sheet_path(&name) {
+                return Ok(Some((0, Some(name))));
+            }
+            let mut id = resolve_sprite_name(lua, &name)?.0;
+            if id == 130 {
+                id = stock_sprite_id("smklt25").unwrap_or(609);
+            }
+            Ok(Some((id, None)))
+        }
+        other => Err(mlua::Error::external(format!(
+            "trail must be a sprite name or bool, got {other:?}"
+        ))),
+    }
+}
+
+fn parse_optional_sprite(lua: &Lua, s: &Table, key: &str) -> mlua::Result<Option<i32>> {
+    match s.get::<Value>(key)? {
+        Value::Nil => Ok(None),
+        Value::Boolean(false) => Ok(Some(game::offsets::CUSTOM_SPRITE_SENTINEL)),
+        Value::Boolean(true) => Ok(None),
+        Value::String(name) => {
+            let name = name.to_str()?.to_string();
+            if is_sheet_path(&name) {
+                return Ok(None);
+            }
+            Ok(Some(resolve_sprite_name(lua, &name)?.0))
+        }
+        other => Err(mlua::Error::external(format!(
+            "{key} must be a sprite name or false, got {other:?}"
         ))),
     }
 }

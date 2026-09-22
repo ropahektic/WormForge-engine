@@ -12,9 +12,9 @@ use lua_host::SpawnArgs;
 use minhook::MinHook;
 use re_catalog::Catalog;
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
-use weapons::{ActorSpawn, ScreenBlit, SpawnFrom, SpriteOrigin};
+use weapons::{ActorSpawn, AttachedSpawn, ClusterHoming, ClusterSpec, ScreenBlit, SpawnFrom, SpriteOrigin};
 
 type StrikeFireFn = unsafe extern "system" fn(*mut u8, *mut u8, *mut u8);
 type CreateProjFn = unsafe extern "thiscall" fn(*mut u8, *mut u8, *mut u8);
@@ -58,6 +58,42 @@ static FIRES: Mutex<Vec<FireClaim>> = Mutex::new(Vec::new());
 static SELECTS: Mutex<Vec<SelectClaim>> = Mutex::new(Vec::new());
 static LAST_SLOT: Mutex<Vec<(u32, i32)>> = Mutex::new(Vec::new());
 static LIVE: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+static CHILD_EMITS: Mutex<Vec<(u32, AttachedSpawn)>> = Mutex::new(Vec::new());
+static TRAILS: Mutex<Vec<(u32, i32)>> = Mutex::new(Vec::new());
+static CLUSTERS: Mutex<Vec<(u32, ClusterLive)>> = Mutex::new(Vec::new());
+static PUFFS: Mutex<Vec<SmokePuff>> = Mutex::new(Vec::new());
+const SPRITE_SMOKE: i32 = 609;
+const PUFF_LIFE: u8 = 18;
+
+struct SmokePuff {
+    x: i32,
+    y: i32,
+    sprite: i32,
+    age: u8,
+}
+
+#[derive(Clone, Copy)]
+struct ClusterLive {
+    bounce_pct: i32,
+    homing: ClusterHoming,
+    #[allow(dead_code)]
+    impact: bool,
+    /// Homing waits until the blast/launch apex (vy >= 0, Y+ down).
+    seek: bool,
+}
+static DEFERRED: Mutex<Vec<DeferredEmit>> = Mutex::new(Vec::new());
+static EMIT_DEPTH: AtomicU32 = AtomicU32::new(0);
+static PUFF_DRAWN: AtomicBool = AtomicBool::new(false);
+
+#[derive(Clone)]
+struct DeferredEmit {
+    owner: u32,
+    x: i32,
+    y: i32,
+    inherit: i32,
+    emit: AttachedSpawn,
+    wait: u8,
+}
 
 pub fn install(catalog: &Catalog) -> Result<(), String> {
     build_vtable();
@@ -88,6 +124,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         gravity: native_gravity,
         move_body: native_move,
         advance: native_advance,
+        set_frame: native_set_frame,
         spawn: native_spawn,
         list_actors: native_list_actors,
         list_worms: native_list_worms,
@@ -328,7 +365,7 @@ unsafe fn try_spawn_drop(worm: *mut u8, ctx: *mut u8) -> bool {
         SpawnFrom::Sky => DROP_SKY_Y,
         SpawnFrom::Cursor => cursor_y,
     };
-    match spawn_lua_actor(SpawnBody {
+    match spawn_configured(SpawnBody {
         owner: worm,
         x,
         y,
@@ -390,7 +427,7 @@ unsafe fn try_lua_projectile(worm: *mut u8, ctx: *mut u8) -> bool {
     let Some(spawn) = claim.spawn else {
         return false;
     };
-    match spawn_lua_actor(SpawnBody {
+    match spawn_configured(SpawnBody {
         owner: worm,
         x,
         y,
@@ -468,10 +505,15 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         if spawn.collide_worms { -1 } else { 0 },
     );
     write_i32(this, ENT_WIND_SCALE, 0);
-    // Stock gravity leaf is `vy += cm_gravity * scale`. The GUI `gravity`
-    // flag only auto-ticks; `a:gravity()` must still see a real scale.
-    write_i32(this, ENT_GRAVITY_SCALE, 0x10000);
+    // Missile-layer objects still get stock CM gravity from +0x60.
+    // `gravity = false` must zero the scale or the body falls through dirt.
+    write_i32(
+        this,
+        ENT_GRAVITY_SCALE,
+        if spawn.gravity { 0x10000 } else { 0 },
+    );
     write_i32(this, ENT_DAMP, 0x10000);
+    write_i32(this, ENT_BLAST_MASS, 0x10000);
     write_i32(this, ENT_POS_X, body.x);
     write_i32(this, ENT_POS_Y, body.y);
     write_i32(this, ENT_SPEED_X, body.vx);
@@ -483,7 +525,15 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         }
     }
     write_i32(this, ACTOR_MAGIC, LUA_ACTOR_MAGIC as i32);
-    write_i32(this, ACTOR_SPRITE, body.sprite);
+    write_i32(
+        this,
+        ACTOR_SPRITE,
+        if spawn.visible {
+            body.sprite
+        } else {
+            CUSTOM_SPRITE_SENTINEL
+        },
+    );
     write_i32(this, ACTOR_PHASE, 0);
     write_i32(
         this,
@@ -532,7 +582,8 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         write_i32(this, ACTOR_FEET_Y, spawn.sprite_h.saturating_sub(1).max(0));
     }
     let mut flags = 0;
-    if spawn.explode.is_some() {
+    let impact = spawn.cluster.as_ref().map(|c| c.impact).unwrap_or(true);
+    if spawn.explode.is_some() && impact {
         flags |= ACTOR_FLAG_EXPLODE;
     }
     if spawn.gravity {
@@ -572,17 +623,36 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     write_i32(this, ACTOR_BRAIN, spawn.brain_id as i32);
     lua_host::actor_spawned(this as u32, spawn.brain_id);
     remember_live(this as u32);
+    if let Some(c) = spawn.cluster.as_ref() {
+        remember_cluster(this as u32, c);
+        if c.trail != 0 {
+            remember_trail(this as u32, c.trail);
+            drop_puff(this);
+        }
+    }
+    if let Some(child) = spawn.on_explode.as_ref() {
+        remember_child(this as u32, (**child).clone());
+    }
 
     let world = read_i32(this, ENT_WORLD) as *mut u8;
     if !world.is_null() {
         let w = world.add(GAME_WORLD_MISSILE_WEIGHT) as *mut i32;
         *w = (*w).saturating_add(7);
     }
+    // Mine / crater origin is inside the mask. First-tick land would detonate immediately.
+    if spawn.collide_terrain && terrain_under_feet(this) {
+        write_i32(this, ACTOR_CONTACT, 1);
+        log_line("LuaActor spawn still in mask, seed contact so land waits");
+    }
     log_line(&format!(
-        "LuaActor ready helper={:#x} owner={:?}",
+        "LuaActor ready helper={:#x} owner={:?} y={:#x}",
         read_i32(this, ENT_HELPER) as u32,
-        owner
+        owner,
+        read_i32(this, ENT_POS_Y)
     ));
+    if spawn.explode.is_some_and(|e| e.now) {
+        explode(this);
+    }
     Ok(this as u32)
 }
 
@@ -646,9 +716,8 @@ unsafe extern "thiscall" fn actor_message(
         match msg {
             MSG_FRAME_FINISH => tick(this),
             MSG_RENDER_SCENE => blit(this),
-            MSG_EXPLOSION => {
-                forward_message(this, sender, msg, size, data);
-            }
+            MSG_EXPLOSION => apply_explosion_knock(this, data),
+            MSG_IMPACT => {}
             _ => forward_message(this, sender, msg, size, data),
         }
     }));
@@ -674,29 +743,32 @@ unsafe fn tick(this: *mut u8) {
     let auto_phys = (flags
         & (ACTOR_FLAG_GRAVITY | ACTOR_FLAG_COLLIDE_TERRAIN | ACTOR_FLAG_COLLIDE_WORMS))
         != 0;
-    if (flags & ACTOR_FLAG_GRAVITY) != 0 {
-        apply_gravity(this);
-    }
-    let mut worm_hit = false;
+    // CM message 1 already ran update_0 (stock gravity + rope) on this body.
+    // Homemade pos+=vel / a second gravity leaf made the arc twice as fast.
+    apply_cluster_homing(this);
+    let worm_hit = false;
     let mut land_now = false;
     let mut left_ground = false;
     if auto_phys {
-        let hit = step_move(
-            this,
-            (flags & ACTOR_FLAG_COLLIDE_TERRAIN) != 0,
-            (flags & ACTOR_FLAG_COLLIDE_WORMS) != 0,
-        );
-        worm_hit = hit & 2 != 0;
-        land_now = hit & 4 != 0;
-        left_ground = hit & 8 != 0;
+        let collide_t = (flags & ACTOR_FLAG_COLLIDE_TERRAIN) != 0;
+        let was_contact = read_i32(this, ACTOR_CONTACT) != 0;
+        let on_terrain =
+            collide_t && (terrain_under_feet(this) || read_i32(this, ENT_SETTLE) > 0);
+        land_now = on_terrain && !was_contact;
+        left_ground = !on_terrain && was_contact;
+        write_i32(this, ACTOR_CONTACT, if on_terrain { 1 } else { 0 });
+        drop_puff(this);
     }
     let brain = read_i32(this, ACTOR_BRAIN) as u32;
     if brain != 0 {
+        let damage = read_i32(this, ENT_DAMAGE_ACCUM).max(0);
+        write_i32(this, ENT_DAMAGE_ACCUM, 0);
         let ev = lua_host::ActorEvent {
             land: land_now,
             left_ground,
             hit_worm: worm_hit,
             in_water: drowned(this, world),
+            damage,
         };
         if let Err(e) = lua_host::actor_frame(this as u32, brain, ev) {
             log_error(&format!("LuaActor brain: {e}"));
@@ -726,6 +798,10 @@ unsafe fn tick(this: *mut u8) {
 
 unsafe fn blit(this: *mut u8) {
     let flags = read_i32(this, ACTOR_FLAGS);
+    let sprite_id = read_i32(this, ACTOR_SPRITE);
+    if sprite_id == 0 || sprite_id == CUSTOM_SPRITE_SENTINEL {
+        return;
+    }
     if (flags & (ACTOR_FLAG_SCREEN_FILL | ACTOR_FLAG_SCREEN_FRONT)) != 0 {
         crate::overlay::push(
             read_i32(this, ACTOR_SPRITE),
@@ -778,6 +854,7 @@ unsafe fn blit(this: *mut u8) {
         };
     let anim = read_i32(this, ACTOR_PHASE) as u32;
     draw_sprite_local(rq, 0x0005_0001, blit_x, blit_y, sprite, anim);
+    draw_puffs(this);
 }
 
 #[allow(dead_code)]
@@ -812,20 +889,18 @@ unsafe fn apply_gravity(this: *mut u8) {
 }
 
 /// bits: 1 terrain, 2 worm, 4 land edge, 8 left ground
-unsafe fn step_move(this: *mut u8, collide_terrain: bool, collide_worms: bool) -> i32 {
+unsafe fn step_move(this: *mut u8, collide_terrain: bool, _collide_worms: bool) -> i32 {
     let x = read_i32(this, ENT_POS_X).wrapping_add(read_i32(this, ENT_SPEED_X));
     let y = read_i32(this, ENT_POS_Y).wrapping_add(read_i32(this, ENT_SPEED_Y));
-    let helper = read_i32(this, ENT_HELPER);
-    let mut worm_hit = false;
-    if collide_worms && helper != 0 {
-        if try_move(this, x, y) == 0 {
-            worm_hit = true;
-        }
-    } else {
-        write_i32(this, ENT_POS_X, x);
-        write_i32(this, ENT_POS_Y, y);
-    }
+    write_i32(this, ENT_POS_X, x);
+    write_i32(this, ENT_POS_Y, y);
+    let bounce_pct = cluster_get(this as u32)
+        .map(|c| c.bounce_pct)
+        .unwrap_or(0);
     let on_terrain = collide_terrain && terrain_under_feet(this);
+    if on_terrain && bounce_pct > 0 {
+        return bounce_step(this, bounce_pct);
+    }
     let was_contact = read_i32(this, ACTOR_CONTACT) != 0;
     let land_now = on_terrain && !was_contact;
     let left_ground = !on_terrain && was_contact;
@@ -840,14 +915,33 @@ unsafe fn step_move(this: *mut u8, collide_terrain: bool, collide_worms: bool) -
     if on_terrain {
         bits |= 1;
     }
-    if worm_hit {
-        bits |= 2;
-    }
     if land_now {
         bits |= 4;
     }
     if left_ground {
         bits |= 8;
+    }
+    bits
+}
+
+unsafe fn bounce_step(this: *mut u8, bounce_pct: i32) -> i32 {
+    let vx = read_i32(this, ENT_SPEED_X);
+    let vy = read_i32(this, ENT_SPEED_Y);
+    let mag_y = vy.unsigned_abs() as i32;
+    let bounced = mag_y.saturating_mul(bounce_pct.clamp(0, 200)) / 100;
+    let bounced = bounced.saturating_mul(7) / 8;
+    let nx = vx.saturating_mul(bounce_pct.clamp(0, 200)) / 100;
+    let ny = -bounced.max(0x8_000);
+    write_i32(this, ENT_SPEED_X, nx);
+    write_i32(this, ENT_SPEED_Y, ny);
+    let x = read_i32(this, ENT_POS_X);
+    let y = lift_clear(x, read_i32(this, ENT_POS_Y));
+    write_i32(this, ENT_POS_Y, y);
+    let rest = nx.unsigned_abs() < 0xC000 && bounced < 0x1_4000;
+    write_i32(this, ACTOR_CONTACT, if rest { 1 } else { 0 });
+    let mut bits = 1;
+    if rest {
+        bits |= 4;
     }
     bits
 }
@@ -910,6 +1004,23 @@ fn native_look(handle: u32, id: i32, delta: u32, w: i32, h: i32) {
     }
 }
 
+fn native_set_frame(handle: u32, frame: i32) {
+    let this = handle as *mut u8;
+    unsafe {
+        if !is_actor(this) || read_i32(this, ACTOR_DEAD) != 0 {
+            return;
+        }
+        let id = read_i32(this, ACTOR_SPRITE);
+        let Some(n) = sprite::frame_count(id) else {
+            return;
+        };
+        if let Some(phase) = gfx::frame_phase(frame, n) {
+            write_i32(this, ACTOR_PHASE, phase as i32);
+            write_i32(this, ACTOR_DELTA, 0);
+        }
+    }
+}
+
 fn remember_live(handle: u32) {
     if handle == 0 {
         return;
@@ -925,11 +1036,593 @@ fn forget_live(handle: u32) {
     if let Ok(mut g) = LIVE.lock() {
         g.retain(|h| *h != handle);
     }
+    if let Ok(mut g) = CHILD_EMITS.lock() {
+        g.retain(|(h, _)| *h != handle);
+    }
+    if let Ok(mut g) = TRAILS.lock() {
+        g.retain(|(h, _)| *h != handle);
+    }
+    if let Ok(mut g) = CLUSTERS.lock() {
+        g.retain(|(h, _)| *h != handle);
+    }
+}
+
+fn remember_child(handle: u32, emit: AttachedSpawn) {
+    if handle == 0 {
+        return;
+    }
+    if let Ok(mut g) = CHILD_EMITS.lock() {
+        g.retain(|(h, _)| *h != handle);
+        g.push((handle, emit));
+    }
+}
+
+fn take_child(handle: u32) -> Option<AttachedSpawn> {
+    let mut g = CHILD_EMITS.lock().ok()?;
+    let i = g.iter().position(|(h, _)| *h == handle)?;
+    Some(g.remove(i).1)
+}
+
+/// Spawn a LuaActor from an explode / proximity / place attachment.
+pub fn emit_attached(
+    owner: *mut u8,
+    x: i32,
+    y: i32,
+    emit: &AttachedSpawn,
+    inherit_sprite: i32,
+) -> Option<u32> {
+    let depth = EMIT_DEPTH.fetch_add(1, Ordering::SeqCst);
+    if depth >= 8 {
+        EMIT_DEPTH.fetch_sub(1, Ordering::SeqCst);
+        log_error("attached spawn depth 8, stopping");
+        return None;
+    }
+    let cluster = cluster_of(emit);
+    let visible = emit.spawn.visible;
+    let sprite = if !visible || emit.sprite == CUSTOM_SPRITE_SENTINEL {
+        CUSTOM_SPRITE_SENTINEL
+    } else if cluster.sprite != 0 {
+        cluster.sprite
+    } else if emit.sprite != 0 {
+        emit.sprite
+    } else if let Some(path) = &emit.path {
+        sprite::lookup_key(path)
+            .map(|r| r.id)
+            .unwrap_or(inherit_sprite)
+    } else if inherit_sprite != 0 {
+        inherit_sprite
+    } else {
+        CUSTOM_SPRITE_SENTINEL
+    };
+    let delta = if emit.delta != 0 {
+        emit.delta
+    } else {
+        sprite::actor_loop_delta(sprite)
+    };
+    let n = cluster.count.clamp(1, 16);
+    let trail = trail_sprite(&cluster, n);
+    let rest = cluster.power <= 0;
+    let y = if rest {
+        y
+    } else {
+        let before = y;
+        let y = lift_clear(x, y);
+        if y != before {
+            log_line(&format!("attached lift y {before:#x} -> {y:#x}"));
+        }
+        y
+    };
+    let mut bit_spawn = emit.spawn.clone();
+    if let Some(c) = bit_spawn.cluster.as_mut() {
+        c.count = 1;
+        c.trail = trail;
+        c.trail_path = cluster.trail_path.clone();
+        c.sprite = sprite;
+    } else if n > 1 || trail != 0 || cluster.bounce_pct > 0 || cluster.homing != ClusterHoming::Off
+    {
+        bit_spawn.cluster = Some(ClusterSpec {
+            count: 1,
+            spread: cluster.spread,
+            power: cluster.power,
+            sprite,
+            trail,
+            trail_path: cluster.trail_path.clone(),
+            bounce_pct: cluster.bounce_pct,
+            homing: cluster.homing,
+            impact: cluster.impact,
+        });
+    }
+    let mut first = None;
+    let mut last_err = None;
+    for i in 0..n {
+        let (vx, vy) = bit_vel(i, n, emit, &cluster);
+        let ox = (i * 2 - (n - 1)) * 0x2_0000;
+        let bx = x.wrapping_add(ox);
+        let by = y;
+        let result = unsafe {
+            spawn_lua_actor(SpawnBody {
+                owner,
+                x: bx,
+                y: by,
+                vx,
+                vy,
+                sprite,
+                delta,
+                spawn: bit_spawn.clone(),
+            })
+        };
+        match result {
+            Ok(handle) => unsafe {
+                if first.is_none() {
+                    first = Some(handle);
+                }
+                let p = handle as *mut u8;
+                write_i32(p, ENT_WIND_SCALE, 0);
+                if trail != 0 {
+                    remember_trail(handle, trail);
+                    drop_puff(p);
+                }
+            },
+            Err(e) => last_err = Some(e),
+        }
+    }
+    EMIT_DEPTH.fetch_sub(1, Ordering::SeqCst);
+    if let Some(e) = last_err {
+        log_error(&format!("attached spawn: {e}"));
+    }
+    first
+}
+
+fn cluster_of(emit: &AttachedSpawn) -> ClusterSpec {
+    let mut c = emit.spawn.cluster.clone().unwrap_or(ClusterSpec {
+        count: emit.count,
+        spread: emit.spread,
+        power: emit.power,
+        sprite: emit.sprite,
+        trail: emit.trail,
+        trail_path: emit.trail_path.clone(),
+        bounce_pct: 0,
+        homing: ClusterHoming::Off,
+        impact: emit.spawn.explode.is_some(),
+    });
+    if c.count <= 1 {
+        c.count = emit.count.max(1);
+    }
+    if c.spread == 0 {
+        c.spread = emit.spread;
+    }
+    if c.power == 0 {
+        c.power = emit.power;
+    }
+    if c.trail == 0 {
+        c.trail = emit.trail;
+    }
+    if c.trail_path.is_none() {
+        c.trail_path = emit.trail_path.clone();
+    }
+    if c.sprite == 0 {
+        c.sprite = emit.sprite;
+    }
+    c
+}
+
+fn bit_vel(i: i32, n: i32, emit: &AttachedSpawn, cluster: &ClusterSpec) -> (i32, i32) {
+    if n <= 1 {
+        return (emit.vx, emit.vy);
+    }
+    let mid = (n - 1).max(1);
+    let k = i * 2 - (n - 1);
+    let spread = if cluster.spread != 0 {
+        cluster.spread
+    } else {
+        45
+    };
+    let power = if cluster.power > 0 {
+        cluster.power
+    } else if emit.vy < 0 {
+        -emit.vy
+    } else {
+        0
+    };
+    if power == 0 {
+        return (0, 0);
+    }
+    // Stock CreateClusters: fixed up ± spread, speed along the ray (not straight up + x kick).
+    let deg = 90.0 + (spread as f32) * (k as f32) / (mid as f32);
+    let rad = deg.to_radians();
+    let vx = (power as f32 * rad.cos()).round() as i32;
+    let vy = -(power as f32 * rad.sin()).round() as i32;
+    (vx, vy)
+}
+
+unsafe fn apply_explosion_knock(this: *mut u8, data: *mut u8) {
+    if this.is_null() || data.is_null() {
+        return;
+    }
+    let args = [
+        this as u32,
+        read_i32(data, 0xC) as u32,
+        read_i32(data, 0x10) as u32,
+        read_i32(data, 4) as u32,
+        read_i32(data, 8) as u32,
+        rb(APPLY_EXPLOSION_KNOCK),
+    ];
+    core::arch::asm!(
+        "push edi",
+        "mov edi, dword ptr [{args}]",
+        "push dword ptr [{args} + 16]",
+        "push dword ptr [{args} + 12]",
+        "push dword ptr [{args} + 8]",
+        "push dword ptr [{args} + 4]",
+        "call dword ptr [{args} + 20]",
+        "pop edi",
+        args = in(reg) args.as_ptr(),
+        out("eax") _,
+        out("ecx") _,
+        out("edx") _,
+    );
+}
+
+fn trail_sprite(cluster: &ClusterSpec, n: i32) -> i32 {
+    if let Some(path) = cluster.trail_path.as_deref() {
+        if let Some(s) = sprite::lookup_key(path) {
+            return s.id;
+        }
+    }
+    if cluster.trail == 130 || (cluster.trail == 0 && n > 1) {
+        SPRITE_SMOKE
+    } else {
+        cluster.trail
+    }
+}
+
+fn remember_trail(handle: u32, sprite: i32) {
+    if handle == 0 || sprite == 0 {
+        return;
+    }
+    if let Ok(mut g) = TRAILS.lock() {
+        g.retain(|(h, _)| *h != handle);
+        g.push((handle, sprite));
+    }
+}
+
+fn remember_cluster(handle: u32, spec: &ClusterSpec) {
+    if handle == 0 {
+        return;
+    }
+    if let Ok(mut g) = CLUSTERS.lock() {
+        g.retain(|(h, _)| *h != handle);
+        g.push((
+            handle,
+            ClusterLive {
+                bounce_pct: spec.bounce_pct,
+                homing: spec.homing,
+                impact: spec.impact,
+                seek: false,
+            },
+        ));
+    }
+}
+
+fn cluster_get(handle: u32) -> Option<ClusterLive> {
+    let g = CLUSTERS.lock().ok()?;
+    g.iter().find(|(h, _)| *h == handle).map(|(_, c)| *c)
+}
+
+unsafe fn apply_cluster_homing(this: *mut u8) {
+    let Some(live) = cluster_get(this as u32) else {
+        return;
+    };
+    if live.homing == ClusterHoming::Off {
+        return;
+    }
+    if !live.seek {
+        // Still climbing from the mine blast / launch. Don't steer until the apex.
+        if read_i32(this, ENT_SPEED_Y) < 0 {
+            return;
+        }
+        cluster_arm_seek(this as u32);
+    }
+    let target = match live.homing {
+        ClusterHoming::Off => return,
+        ClusterHoming::Aim => cluster_aim_xy(this),
+        ClusterHoming::Worm => cluster_worm_xy(this),
+    };
+    let Some((tx, ty)) = target else {
+        return;
+    };
+    steer_toward(this, tx, ty);
+}
+
+fn cluster_arm_seek(handle: u32) {
+    if let Ok(mut g) = CLUSTERS.lock() {
+        if let Some((_, c)) = g.iter_mut().find(|(h, _)| *h == handle) {
+            c.seek = true;
+        }
+    }
+}
+
+unsafe fn cluster_aim_xy(this: *mut u8) -> Option<(i32, i32)> {
+    let owner = read_i32(this, ACTOR_OWNER) as *mut u8;
+    if !owner.is_null() && read_i32(owner, ENT_CLASS_TYPE) == CLASS_WORM {
+        let cx = read_i32(owner, WORM_CURSOR_X);
+        let cy = read_i32(owner, WORM_CURSOR_Y);
+        if cx != 0 || cy != 0 {
+            return Some((cx, cy));
+        }
+    }
+    let (px, py, _) = crate::world::pointer();
+    if px != 0 || py != 0 {
+        Some((px, py))
+    } else {
+        None
+    }
+}
+
+unsafe fn cluster_worm_xy(this: *mut u8) -> Option<(i32, i32)> {
+    let owner = read_i32(this, ACTOR_OWNER) as u32;
+    let x = read_i32(this, ENT_POS_X);
+    let y = read_i32(this, ENT_POS_Y);
+    let mut best = None;
+    let mut best_d = i64::MAX;
+    for w in list_worms(this) {
+        if w == 0 || w == owner || w == this as u32 {
+            continue;
+        }
+        let p = w as *mut u8;
+        let wx = read_i32(p, ENT_POS_X);
+        let wy = read_i32(p, ENT_POS_Y);
+        let dx = (wx as i64) - (x as i64);
+        let dy = (wy as i64) - (y as i64);
+        let d = dx.abs() + dy.abs();
+        if d < best_d {
+            best_d = d;
+            best = Some((wx, wy));
+        }
+    }
+    best
+}
+
+unsafe fn steer_toward(this: *mut u8, tx: i32, ty: i32) {
+    let x = read_i32(this, ENT_POS_X);
+    let y = read_i32(this, ENT_POS_Y);
+    let vx = read_i32(this, ENT_SPEED_X);
+    let vy = read_i32(this, ENT_SPEED_Y);
+    let dx = (tx as i64) - (x as i64);
+    let dy = (ty as i64) - (y as i64);
+    let mag = dx.abs() + dy.abs();
+    if mag == 0 {
+        return;
+    }
+    let speed = (vx.unsigned_abs() as i64) + (vy.unsigned_abs() as i64);
+    let speed = speed.max(0x1_0000);
+    let want_vx = (speed * dx / mag) as i32;
+    let want_vy = (speed * dy / mag) as i32;
+    write_i32(this, ENT_SPEED_X, vx + (want_vx - vx) / 6);
+    write_i32(this, ENT_SPEED_Y, vy + (want_vy - vy) / 6);
+}
+
+unsafe fn spawn_configured(body: SpawnBody) -> Result<u32, String> {
+    if let Some(c) = body.spawn.cluster.as_ref() {
+        if c.count > 1 {
+            let emit = AttachedSpawn {
+                sprite: if c.sprite != 0 { c.sprite } else { body.sprite },
+                delta: body.delta,
+                vx: body.vx,
+                vy: body.vy,
+                count: c.count,
+                spread: c.spread,
+                power: c.power,
+                trail: c.trail,
+                trail_path: c.trail_path.clone(),
+                path: None,
+                spawn: body.spawn.clone(),
+            };
+            return emit_attached(body.owner, body.x, body.y, &emit, 0)
+                .ok_or_else(|| "cluster spawn failed".into());
+        }
+    }
+    spawn_lua_actor(body)
+}
+
+fn drop_puff(this: *mut u8) {
+    let h = this as u32;
+    let sprite = {
+        let Ok(g) = TRAILS.lock() else {
+            return;
+        };
+        g.iter().find(|(id, _)| *id == h).map(|(_, s)| *s)
+    };
+    let Some(sprite) = sprite else {
+        return;
+    };
+    let x = unsafe { read_i32(this, ENT_POS_X) };
+    let y = unsafe { read_i32(this, ENT_POS_Y) };
+    if let Ok(mut g) = PUFFS.lock() {
+        if g.len() > 80 {
+            g.remove(0);
+        }
+        g.push(SmokePuff {
+            x,
+            y,
+            sprite,
+            age: 0,
+        });
+    }
+}
+
+pub fn begin_puff_frame() {
+    PUFF_DRAWN.store(false, Ordering::SeqCst);
+}
+
+pub fn tick_puffs() {
+    PUFF_DRAWN.store(false, Ordering::SeqCst);
+    if let Ok(mut g) = PUFFS.lock() {
+        for p in g.iter_mut() {
+            p.age = p.age.saturating_add(1);
+        }
+        g.retain(|p| p.age < PUFF_LIFE);
+    }
+}
+
+pub fn draw_puffs(entity: *mut u8) {
+    if entity.is_null() {
+        return;
+    }
+    if PUFF_DRAWN.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let world = unsafe {
+        let w = read_i32(entity, ENT_WORLD) as *mut u8;
+        if w.is_null() {
+            entity
+        } else {
+            w
+        }
+    };
+    let rq = unsafe { *(world.add(GAME_WORLD_RENDER_QUEUE) as *const *mut u8) };
+    if rq.is_null() {
+        PUFF_DRAWN.store(false, Ordering::SeqCst);
+        return;
+    }
+    let Ok(g) = PUFFS.lock() else {
+        PUFF_DRAWN.store(false, Ordering::SeqCst);
+        return;
+    };
+    for p in g.iter() {
+        let anim = (p.age as u32) << 12;
+        unsafe {
+            draw_sprite_local(rq, 0x0005_0001, p.x, p.y, p.sprite as u32, anim);
+        }
+    }
+}
+
+/// Hold one extra FRAME_FINISH so we never spawn inside the blast walk.
+pub fn emit_attached_later(
+    owner: *mut u8,
+    x: i32,
+    y: i32,
+    emit: &AttachedSpawn,
+    inherit_sprite: i32,
+) {
+    if owner.is_null() {
+        log_error("attached spawn later: no owner");
+        return;
+    }
+    if let Ok(mut g) = DEFERRED.lock() {
+        g.push(DeferredEmit {
+            owner: owner as u32,
+            x,
+            y,
+            inherit: inherit_sprite,
+            emit: emit.clone(),
+            wait: 1,
+        });
+    }
+}
+
+pub fn flush_deferred() {
+    let mut ready = Vec::new();
+    if let Ok(mut g) = DEFERRED.lock() {
+        let mut i = 0;
+        while i < g.len() {
+            if g[i].wait > 0 {
+                g[i].wait -= 1;
+                i += 1;
+            } else {
+                ready.push(g.remove(i));
+            }
+        }
+    }
+    for item in ready {
+        emit_attached(
+            item.owner as *mut u8,
+            item.x,
+            item.y,
+            &item.emit,
+            item.inherit,
+        );
+    }
+}
+
+/// WA Y+ is down. Walk up until the pixel is air, then a few more so feet clear the lip.
+fn lift_clear(x: i32, y: i32) -> i32 {
+    const PX: i32 = 0x10000;
+    let mut py = y;
+    for _ in 0..64 {
+        if !crate::world::solid_fixed(x, py) {
+            break;
+        }
+        py = py.wrapping_sub(PX);
+    }
+    // Always pop out of the crater lip, even when the origin pixel already reads as air.
+    py.wrapping_sub(PX * 16)
+}
+
+/// CreateExplosion ESI must be a stock WorldEntity (worm/mine/missile).
+/// LuaActor is 0x140 with a custom vtable; the blast walk then hits a null.
+pub fn stock_owner(from: *mut u8, fallback: u32) -> *mut u8 {
+    unsafe {
+        if let Some(&w) = list_worms(from).first() {
+            return w as *mut u8;
+        }
+        if fallback != 0 {
+            let p = fallback as *mut u8;
+            if let Some(&w) = list_worms(p).first() {
+                return w as *mut u8;
+            }
+            return p;
+        }
+        from
+    }
+}
+
+fn stock_class(p: *mut u8) -> bool {
+    if p.is_null() {
+        return false;
+    }
+    let class = unsafe { read_i32(p, ENT_CLASS_TYPE) };
+    class == CLASS_MINE || class == CLASS_MISSILE || class == CLASS_WORM
+}
+
+fn blast_sender(this: *mut u8) -> *mut u8 {
+    if stock_class(this) {
+        return this;
+    }
+    let owner = unsafe { read_i32(this, ACTOR_OWNER) } as *mut u8;
+    if stock_class(owner) {
+        return owner;
+    }
+    unsafe {
+        if let Some(&w) = list_worms(this).first() {
+            return w as *mut u8;
+        }
+        if let Some(&w) = list_worms(owner).first() {
+            return w as *mut u8;
+        }
+    }
+    if !owner.is_null() {
+        owner
+    } else {
+        this
+    }
+}
+
+fn emit_child(this: *mut u8, x: i32, y: i32) {
+    let Some(emit) = take_child(this as u32) else {
+        return;
+    };
+    let (owner, inherit) = unsafe {
+        let o = read_i32(this, ACTOR_OWNER) as *mut u8;
+        let owner = if o.is_null() { this } else { o };
+        (owner, read_i32(this, ACTOR_SPRITE))
+    };
+    emit_attached_later(owner, x, y, &emit, inherit);
 }
 
 fn native_spawn(args: &SpawnArgs) -> Result<u32, String> {
     unsafe {
-        spawn_lua_actor(SpawnBody {
+        spawn_configured(SpawnBody {
             owner: args.owner as *mut u8,
             x: args.x,
             y: args.y,
@@ -1064,10 +1757,12 @@ unsafe fn explode_at(
         0
     };
     let dmg = if damage_worms { damage as u32 } else { 0 };
+    let sender = blast_sender(this);
     log_line(&format!(
-        "LuaActor explode damage={dmg} id={boom} below={below} at {x:#x},{y:#x}"
+        "LuaActor explode damage={dmg} id={boom} below={below} at {x:#x},{y:#x} sender={sender:?}"
     ));
-    create_explosion(this, x, y, boom, dmg, 0, 0);
+    create_explosion(sender, x, y, boom, dmg, 0, 0);
+    emit_child(this, x, y);
 }
 
 fn native_explode(handle: u32, damage: i32, explosion_id: i32, below: bool) {
@@ -1163,6 +1858,7 @@ unsafe fn terrain_under_feet(this: *mut u8) -> bool {
     false
 }
 
+#[allow(dead_code)]
 unsafe fn try_move(this: *mut u8, x: i32, y: i32) -> u32 {
     let f = rb(WORLD_ENTITY_TRY_MOVE) as u32;
     let args = [this as u32, y as u32, x as u32, f];

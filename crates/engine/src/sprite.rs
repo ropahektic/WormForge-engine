@@ -16,12 +16,12 @@
 use crate::log_line;
 use crate::rebase::rb;
 use game::offsets::{
-    CONSTRUCT_SPRITE, CUSTOM_SPRITE_SLOT_MAX, CUSTOM_SPRITE_SLOT_MIN, DISPLAY_GAME_LAYER,
-    DISPLAY_LAYER_CONTEXTS, DISPLAY_LAYER_VISIBILITY, DISPLAY_SPRITE_BANKS, DISPLAY_SPRITE_CACHE,
-    DISPLAY_SPRITE_LAYERS, DISPLAY_SPRITE_PTRS, MISSILE_ANIM_PHASE, MISSILE_RENDER_SPRITE,
-    PROCESS_SPRITE,
+    CONSTRUCT_SPRITE, CUSTOM_SPRITE_SENTINEL, CUSTOM_SPRITE_SLOT_MAX, CUSTOM_SPRITE_SLOT_MIN,
+    DISPLAY_GAME_LAYER, DISPLAY_LAYER_CONTEXTS, DISPLAY_LAYER_VISIBILITY, DISPLAY_SPRITE_BANKS,
+    DISPLAY_SPRITE_CACHE, DISPLAY_SPRITE_LAYERS, DISPLAY_SPRITE_PTRS, MISSILE_ANIM_PHASE,
+    MISSILE_RENDER_SPRITE, PROCESS_SPRITE,
 };
-use gfx::{encode_spr, FeetPlatform, SpriteStrip};
+use gfx::{encode_spr, spr_key, FeetPlatform, SpriteStrip};
 use std::sync::Mutex;
 
 #[repr(C, align(8))]
@@ -30,6 +30,7 @@ struct SpriteObj([u8; 0x70]);
 struct LoadedSpr {
     display: *mut u8,
     id: i32,
+    layer: u32,
     _sprite: Box<SpriteObj>,
     _spr: Box<[u8]>,
 }
@@ -96,6 +97,32 @@ pub fn clear() {
     }
 }
 
+/// Put installed sprites back into the display's sprite table.
+///
+/// Sprites are installed once per match, but WA repopulates its sprite pointer
+/// table when a round begins, which drops every custom slot.
+pub fn reassert() -> usize {
+    let mut restored = 0;
+    if let Ok(g) = LOADED.lock() {
+        for s in g.iter() {
+            if s.display.is_null() {
+                continue;
+            }
+            unsafe {
+                let ptrs = (s.display as usize + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
+                let slot = ptrs.add(s.id as usize);
+                if (*slot).is_null() {
+                    *slot = s._sprite.0.as_ptr() as *mut u8;
+                    let layers = (s.display as usize + DISPLAY_SPRITE_LAYERS) as *mut u32;
+                    *layers.add(s.id as usize) = s.layer;
+                    restored += 1;
+                }
+            }
+        }
+    }
+    restored
+}
+
 /// Stock missile render uses `animation_phase` as blit anim_value. Donkey's
 /// anim_kind is 0x64 so FrameFinish does not advance it; we do, using GIF fps.
 pub fn advance_loop(entity: *mut u8) {
@@ -116,13 +143,42 @@ pub fn loop_delta(id: i32) -> u32 {
         .unwrap_or(0)
 }
 
+/// Phase step for LuaActor strip playback.
+///
+/// Custom GIF/PNG sheets use their installed fps. Stock multi-frame sheets
+/// (banana, grenade, clustlet, …) are not in `LOOP_DELTA`, so without a
+/// fallback `ACTOR_PHASE` stays 0 and bits look frozen — stock MissileEntity
+/// tumbles those sheets via its own anim_kind path.
+pub fn actor_loop_delta(id: i32) -> u32 {
+    let d = loop_delta(id);
+    if d != 0 {
+        return d;
+    }
+    if id <= 0 || id >= CUSTOM_SPRITE_SENTINEL as i32 {
+        return 0;
+    }
+    // Known stock sheet lengths; everything else assumes the common 32-frame tumble.
+    let n = match id {
+        54 => 6u64, // clustlet
+        _ => 32u64,
+    };
+    let fps = 10u64;
+    ((0x10000 * fps) / (n * 50)).max(1) as u32
+}
+
 pub fn remember_key(key: String, sprite: SpriteRef) {
     if key.is_empty() || sprite.id == 0 {
         return;
     }
     if let Ok(mut g) = SPRITE_KEYS.lock() {
         g.retain(|(k, _)| k != &key);
-        g.push((key, sprite));
+        g.push((key.clone(), sprite));
+        if let Some((_, rel)) = key.split_once(':') {
+            if !rel.is_empty() && rel != key {
+                g.retain(|(k, _)| k != rel);
+                g.push((rel.to_string(), sprite));
+            }
+        }
     }
 }
 
@@ -197,6 +253,7 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
         g.push(LoadedSpr {
             display,
             id,
+            layer,
             _sprite: sprite,
             _spr: spr,
         });
@@ -223,6 +280,11 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
     Ok(id)
 }
 
+pub fn frame_count(id: i32) -> Option<usize> {
+    let g = RGBA_SHEETS.lock().ok()?;
+    g.iter().find(|s| s.id == id).map(|s| s.frames.len())
+}
+
 pub fn feet_for_id(id: i32) -> Option<FeetPlatform> {
     let g = SPRITE_FEET.lock().ok()?;
     g.iter().find(|(sid, _)| *sid == id).map(|(_, f)| *f)
@@ -246,7 +308,7 @@ fn remember_rgba(id: i32, strip: &SpriteStrip) {
             let g = frame.rgba[o + 1];
             let b = frame.rgba[o + 2];
             let a = frame.rgba[o + 3];
-            if a < 16 {
+            if spr_key(r, g, b, a) {
                 continue;
             }
             bgra[o] = b;

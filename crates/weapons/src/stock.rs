@@ -185,6 +185,71 @@ pub fn parse_stock_weapon(s: &str) -> Result<StockWeapon, String> {
         .ok_or_else(|| format!("unknown stock weapon '{s}'"))
 }
 
+/// Frontend `hi/*.img` stem or a stock slot name → panel weapon id.
+pub fn parse_panel_icon(s: &str) -> Result<StockWeapon, String> {
+    let key = s.trim().to_ascii_lowercase().replace('-', "_");
+    if let Ok(slot) = parse_stock_weapon(&key) {
+        return Ok(slot);
+    }
+    let slot = match key.as_str() {
+        "airstrke" => StockWeapon::AirStrike,
+        "aqua" => StockWeapon::AquaSheep,
+        "armagedn" => StockWeapon::Armageddon,
+        "axe" => StockWeapon::BattleAxe,
+        "banana" => StockWeapon::BananaBomb,
+        "baseball" => StockWeapon::BaseballBat,
+        "blwtorch" => StockWeapon::BlowTorch,
+        "bullet" => StockWeapon::MagicBullet,
+        "canister" => StockWeapon::CrateShower,
+        "carpet" => StockWeapon::CarpetBomb,
+        "clone" => StockWeapon::DoubleTurnTime,
+        "cluster" => StockWeapon::ClusterBomb,
+        "cow" => StockWeapon::MadCow,
+        "cratespy" => StockWeapon::CrateSpy,
+        "damagex2" => StockWeapon::DamageX2,
+        "dragball" => StockWeapon::DragonBall,
+        "drill" => StockWeapon::PneumaticDrill,
+        "firepnch" => StockWeapon::FirePunch,
+        "firestrk" => StockWeapon::NapalmStrike,
+        "girders" => StockWeapon::GirderPack,
+        "gravity" => StockWeapon::LowGravity,
+        "hgrenade" => StockWeapon::HolyGrenade,
+        "hmissile" => StockWeapon::HomingMissile,
+        "invisibl" => StockWeapon::Invisibility,
+        "jetpack" => StockWeapon::JetPack,
+        "laser" => StockWeapon::LaserSight,
+        "launch" => StockWeapon::SheepLauncher,
+        "mbbomb" => StockWeapon::MbBomb,
+        "minestrk" => StockWeapon::MineStrike,
+        "mingvase" => StockWeapon::MingVase,
+        "mole" => StockWeapon::MoleBomb,
+        "molestrk" => StockWeapon::MoleSquadron,
+        "nuke" => StockWeapon::NuclearTest,
+        "oldwoman" => StockWeapon::OldWoman,
+        "parachut" => StockWeapon::Parachute,
+        "petrolbm" => StockWeapon::PetrolBomb,
+        "pigeon" => StockWeapon::HomingPigeon,
+        "postal" => StockWeapon::MailStrike,
+        "quake" => StockWeapon::Earthquake,
+        "rope" => StockWeapon::NinjaRope,
+        "sbanana" => StockWeapon::SuperBanana,
+        "scales" => StockWeapon::ScalesOfJustice,
+        "select" => StockWeapon::SelectWorm,
+        "shpstrke" => StockWeapon::SheepStrike,
+        "skipgo" => StockWeapon::SkipGo,
+        "speed" => StockWeapon::FastWalk,
+        "sprsheep" => StockWeapon::SuperSheep,
+        "suicide" => StockWeapon::SuicideBomber,
+        "surender" => StockWeapon::Surrender,
+        "tamborin" => StockWeapon::SalvationArmy,
+        "thrower" => StockWeapon::FlameThrower,
+        other => {
+            return Err(format!("unknown panel icon '{other}'"));
+        }
+    };
+    Ok(slot)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,5 +259,12 @@ mod tests {
         assert_eq!(parse_stock_weapon("bazooka").unwrap(), StockWeapon::Bazooka);
         assert_eq!(StockWeapon::Bazooka.index(), 1);
         assert_eq!(STOCK_NAMES.len(), 71);
+    }
+
+    #[test]
+    fn panel_icon_accepts_hi_stems() {
+        assert_eq!(parse_panel_icon("cluster").unwrap(), StockWeapon::ClusterBomb);
+        assert_eq!(parse_panel_icon("hmissile").unwrap(), StockWeapon::HomingMissile);
+        assert_eq!(parse_panel_icon("banana_bomb").unwrap(), StockWeapon::BananaBomb);
     }
 }
