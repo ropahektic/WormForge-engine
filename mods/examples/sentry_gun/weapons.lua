@@ -27,10 +27,14 @@ local SINK_PX     = 8      -- pixels the planted turret settles into the ground
 local MUZZLE_UP   = 25     -- pixels from the anchor up to the turret pivot
 local MUZZLE_OUT  = 11     -- pixels from the pivot along the bore
 
--- Lockstep forbids math.random (sandbox.rs nils it), so barrel deviation walks
--- a fixed pattern keyed to the shot counter. Every 5th round is pin-point,
--- which is what the original rolled for at random.
-local SPREAD = { 0.0, 1.5, -1.0, 2.0, -2.0, 1.0, -1.5, 0.5 }
+-- Barrel deviation, in tenths of a degree so the draw stays integer.
+-- PX rolled this at random and kept every 5th round pin-point. This pack used
+-- to walk a fixed eight-entry table instead, because math.random is nil in the
+-- sandbox and there was nothing to replace it. wa.random() draws from WA's own
+-- shared RNG -- both peers advance it in step and a replay reproduces it -- so
+-- the original intent is available again, and a 20-round magazine no longer
+-- cycles the same eight values two and a half times.
+local SPREAD_TENTHS = 20 -- +-2.0 degrees
 
 -- PX ejects its shell casing (sprite 115, WA's stock "uzicase") on every shot:
 -- perpendicular to the barrel, kicked out to whichever side the turret is
@@ -42,10 +46,12 @@ local SPREAD = { 0.0, 1.5, -1.0, 2.0, -2.0, 1.0, -1.5, 0.5 }
 local CASING        = "sprites/casing"
 local CASING_FRAMES = 16
 local CASING_LIFE   = 100    -- PX SetLifeTime(100)
--- Lockstep substitutes for PX's RandomFloat(-0.3, 0.3) rad (~+-17 deg) and
--- RandomInt-free RandomFloat(2.0, 3.0) speed.
-local CASING_JITTER = { -15, 9, -6, 15, -9, 3, -12, 12 }
-local CASING_SPEED  = { 2.0, 2.6, 2.2, 3.0, 2.4, 2.8, 2.1, 2.9 }
+-- PX's RandomFloat(-0.3, 0.3) rad (~+-17 deg) and RandomFloat(2.0, 3.0)
+-- speed, drawn now rather than approximated by a fixed table. Integer ranges:
+-- degrees directly, speed in hundredths.
+local CASING_JITTER_DEG = 17
+local CASING_SPEED_MIN  = 200
+local CASING_SPEED_MAX  = 300
 
 local state = {}
 local active_team = nil   -- team currently taking its turn; turrets hold fire
@@ -250,7 +256,7 @@ local function fire(a, s)
   s.shots = s.shots + 1
   local dev = 0
   if s.shots % 5 ~= 0 then
-    dev = SPREAD[(s.shots % #SPREAD) + 1]
+    dev = wa.random(-SPREAD_TENTHS, SPREAD_TENTHS) / 10
   end
 
   local rad = math.rad(s.angle + dev)
@@ -265,10 +271,10 @@ local function fire(a, s)
   -- the turret currently faces (s.side, PX's TurretSide), a fixed pattern
   -- standing in for PX's random jitter and speed. Cosmetic, so it fires even
   -- on a shot the self-blast check below is about to cancel.
-  local jitter = CASING_JITTER[(s.shots % #CASING_JITTER) + 1]
+  local jitter = wa.random(-CASING_JITTER_DEG, CASING_JITTER_DEG)
   local eject_rad = rad + math.rad(90 * s.side + jitter)
   local edx, edy = math.sin(eject_rad), math.cos(eject_rad)
-  local speed = CASING_SPEED[(s.shots % #CASING_SPEED) + 1]
+  local speed = wa.random(CASING_SPEED_MIN, CASING_SPEED_MAX) / 100
   wa.actors.spawn({
     sprite = CASING,
     x = a.x,

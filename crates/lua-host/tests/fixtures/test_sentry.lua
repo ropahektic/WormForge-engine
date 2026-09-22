@@ -9,7 +9,22 @@ return function(load_pack)
   local enemy = { id = 2, team = 2, x = 200 * PX, y = 83 * PX,
                   vx = 0, vy = 0, visible = true }
   local blocked, terrain_hits = false, 0
+  -- Stands in for wa.random, which draws from WA's shared RNG in the real
+  -- engine. A fixed sequence here on purpose: this test asserts the sentry is
+  -- deterministic, so its randomness must be too. The mapping onto the
+  -- requested range matches the engine's -- lo + draw % span -- so a change on
+  -- either side shows up as a different shot pattern.
+  local draw_at = 0
+  local DRAWS = { 7, 23, 41, 4, 88, 15, 62, 30, 51, 9, 77, 36 }
   wa = {
+    random = function(a, b)
+      draw_at = draw_at + 1
+      local d = DRAWS[((draw_at - 1) % #DRAWS) + 1]
+      if a == nil then return d end
+      local lo, hi = 1, a
+      if b ~= nil then lo, hi = a, b end
+      return lo + d % (hi - lo + 1)
+    end,
     weapons = { replace = function(s) spec = s end },
     msg = { START_TURN = 1 },
     on = { worm_message = function(cb) turn = cb end },
