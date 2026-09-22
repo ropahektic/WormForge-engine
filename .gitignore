@@ -38,3 +38,8 @@ WA.exe
 gfx.dir
 sprites.dat
 _edlud_fetch/
+
+# local worktrees / fetch checkouts
+/_gpu_test/
+/_edlud_fetch/
+
