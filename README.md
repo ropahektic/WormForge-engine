@@ -78,7 +78,7 @@ The cdylib is `target/i686-pc-windows-msvc/release/wkLua.dll`.
 
 ## Contributors
 
-- **[EdLud](https://github.com/EdLud)** — GPU sprite renderer (D3D9 atlas / gpu_prefix truecolor path). Merged from their render work; fog-of-war from that fork is not included.
+- **[EdLud](https://github.com/EdLud)** — GPU sprite renderer (D3D9 atlas / gpu_prefix truecolor path). 
 
 ## License
 
