@@ -50,6 +50,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     // Flush the previous match's queue census before its counters are reused.
     crate::queue_census::finish();
     crate::sync::finish();
+    world::clear_input_latch();
     crate::truecolor::clear();
     crate::gpu::clear();
     crate::fog::clear();

@@ -3,6 +3,7 @@
 
 use crate::log::{log_error, log_line};
 use crate::rebase::rb;
+use game::latch::FrameLatch;
 use game::entity::{read_i32, write_i32};
 use game::offsets::*;
 use std::collections::VecDeque;
@@ -159,6 +160,10 @@ pub fn view_cam() -> (i32, i32, i32, i32) {
 /// OS mouse (so a held drag tracks). Client pixels are scaled onto the
 /// display so windowed / DPI stretch still covers the whole map.
 pub fn pointer() -> (i32, i32, bool) {
+    latched(&POINTER, poll_pointer)
+}
+
+fn poll_pointer() -> (i32, i32, bool) {
     let down = mouse_down();
     let (cx, cy, vw, vh) = view_cam();
     if let Some((mx, my, cw, ch)) = client_mouse() {
@@ -270,8 +275,64 @@ fn key_down(vk: i32) -> bool {
     }
 }
 
+/// Local input, sampled once per simulation frame.
+///
+/// Everything that reads local input goes through here -- packs via
+/// `wa.world.keys()` / `pointer()`, and `pump_space_fire` below -- so that
+/// within one frame they all see the same thing. Before this, each call polled
+/// `GetAsyncKeyState` afresh, so two reads in one frame could disagree while
+/// the simulation had not advanced at all.
+///
+/// It is also the one place a recorder needs to tap: "the input this frame was
+/// X" now has a single answer to write down.
+///
+/// Keyed on WA's own frame counter. A consequence worth knowing: while the
+/// simulation is not advancing, the sample does not change either. That is
+/// correct for anything that feeds the simulation. A pack wanting a live
+/// cursor for pure decoration would need a separate, explicitly-unlatched
+/// call, which does not exist yet because nothing has asked for one.
+/// Two latches rather than one: keys and cursor are independent inputs, and a
+/// pack reading only `keys()` should not pay for the cursor's scaling maths.
+static KEYS: FrameLatch<u32> = FrameLatch::new();
+static POINTER: FrameLatch<(i32, i32, bool)> = FrameLatch::new();
+
+/// WA's sim frame, or `None` outside a game (frontend, map editor).
+fn sim_frame() -> Option<i64> {
+    let world = session_world();
+    if world.is_null() {
+        return None;
+    }
+    Some(unsafe { read_i32(world, GAME_WORLD_FRAME_COUNTER) } as i64)
+}
+
+/// Outside a game there is no frame to be consistent with, so answer live
+/// rather than serving a sample held over from the last match.
+fn latched<T: Copy>(latch: &FrameLatch<T>, sample: impl FnOnce() -> T) -> T {
+    match sim_frame() {
+        None => sample(),
+        Some(frame) => latch.get(frame, sample),
+    }
+}
+
+/// Drop both held samples. A new match restarts WA's frame counter, and the
+/// first frame must not inherit the last frame of the previous game.
+pub fn clear_input_latch() {
+    KEYS.clear();
+    POINTER.clear();
+}
+
 /// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint (shift), 64 Q, 128 Space (shoot).
 pub fn keys() -> u32 {
+    latched(&KEYS, poll_keys)
+}
+
+/// True while Space is held, as sampled for this frame. `pump_space_fire` and
+/// a pack reading `keys().space` therefore always agree.
+fn space_held() -> bool {
+    keys() & 128 != 0
+}
+
+fn poll_keys() -> u32 {
     let mut m = 0u32;
     if key_down(0x25) || key_down(0x41) {
         m |= 1;
@@ -371,7 +432,10 @@ pub fn pump_space_fire(worm: *mut u8) {
     unsafe {
         keep_stock_fire_armed(worm);
     }
-    let down = key_down(0x20);
+    // The latched sample, not a fresh poll: this runs inside a worm's
+    // FRAME_FINISH, and a pack's keys() may run in the same frame. Polling
+    // separately let them disagree about whether Space was held.
+    let down = space_held();
     let mut was = false;
     if let Ok(mut g) = SPACE_FIRE.lock() {
         if let Some(s) = g.iter_mut().find(|s| s.handle == handle) {

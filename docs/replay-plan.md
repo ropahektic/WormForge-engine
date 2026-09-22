@@ -246,10 +246,25 @@ lifetime if test B is ever in doubt.
 
 Ordered by payoff. The first two are worth doing whether or not replay ships.
 
-1. **Per-frame input latch.** Latch `keys()` / `pointer()` once at the frame
-   counter site and have every reader — including `pump_space_fire` — read the
-   latch instead of polling. Fixes gap 2 on its own merits (two calls in one
-   frame can currently disagree) and creates the single place a recorder taps.
+1. ✅ **Per-frame input latch — DONE.** `crates/game/src/latch.rs` holds the
+   frame-keyed cache (5 tests); `world.rs` routes `keys()`, `pointer()` and
+   `pump_space_fire` through it. Every raw `GetAsyncKeyState` is now confined to
+   two `poll_*` functions.
+
+   Keyed on WA's frame counter rather than refreshed from a hook, so it does
+   not depend on whether the world root dispatches to worms before or after —
+   the first reader in a frame samples, everyone else that frame agrees. Two
+   latches, not one: keys and cursor are independent, and a keys-only pack
+   should not pay for the cursor's scaling maths.
+
+   Consequence, documented rather than hidden: while the simulation is not
+   advancing the sample does not change either. Correct for anything feeding
+   the simulation; a pack wanting a live cursor for decoration would need an
+   explicitly unlatched call, which does not exist because nothing has asked.
+
+   **Verified behaviour-preserving in-game**: the W0 gate re-run produced hashes
+   bit-identical to the pre-latch run, sample for sample. The probe proved a
+   refactor safe, which is the instrument paying for itself outside replay.
 2. **Retire `pump_space_fire`'s local poll** (gap 1). It posts
    `MSG_RELEASE_WEAPON` and spends ammo off a raw `GetAsyncKeyState`, bypassing
    the path WA uses to put that message on the wire — a live multiplayer desync
