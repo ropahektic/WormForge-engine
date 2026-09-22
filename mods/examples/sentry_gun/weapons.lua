@@ -724,6 +724,11 @@ wa.weapons.replace({
 })
 
 -- Each turn reloads and reactivates every turret, as the original did.
+-- `pairs(state)` is fine here because the body is order-independent: every
+-- entry gets the same reset, none reads another. If this ever grows an early
+-- `return` or a read of `state` inside the loop, switch to
+-- `ipairs(wa.sorted(state))` -- string-keyed `pairs()` order differs per
+-- process (Lua randomises its string-hash seed).
 wa.on.worm_message(function(worm, msg)
   if msg ~= wa.msg.START_TURN then
     return

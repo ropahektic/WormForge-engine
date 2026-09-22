@@ -30,6 +30,7 @@ If Lua can already do it with actors + `wa.land` + sprites, do not add a native 
 4. Lockstep: if it moves or damages, it runs on messages both peers already see.
    - HUD must not write physics.
    - No `math.random`, no clock, no `GetAsyncKeyState` as sim.
+   - `pairs()` order over **string-keyed** tables varies per process (Lua randomises its string-hash seed). Integer keys — actor/worm `id`s — iterate reproducibly; for anything else use `wa.sorted(t)` before iterating.
    - `wa.world.keys()` / `pointer()` are local until extra packets exist.
 5. `cargo test --workspace` and a 3.8.1 launch that logs `wkLua build …`.
 

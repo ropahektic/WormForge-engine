@@ -171,6 +171,32 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     hud.set("line", line).map_err(|e| e.to_string())?;
     wa.set("hud", hud).map_err(|e| e.to_string())?;
 
+    // Lockstep: `pairs()` order over string-keyed tables varies per process
+    // (Lua 5.4 randomises its string-hash seed), so packs get `wa.sorted(t)`
+    // -- a deterministic key order to iterate instead. Array return, so the
+    // call site is `for _, k in ipairs(wa.sorted(t)) do ... t[k] ... end`.
+    let sorted = lua
+        .create_function(|lua, t: Table| {
+            let mut keys: Vec<Value> = t
+                .pairs::<Value, Value>()
+                .map(|kv| kv.map(|(k, _)| k))
+                .collect::<Result<_, _>>()?;
+            // Fail before sorting, not during: `sort_by` takes an infallible
+            // comparator, and an `unwrap_or(Equal)` there would silently emit
+            // an address-influenced order -- the bug this exists to prevent.
+            for k in &keys {
+                cmp_key(k, k).map_err(mlua::Error::external)?;
+            }
+            keys.sort_by(|a, b| cmp_key(a, b).unwrap_or(std::cmp::Ordering::Equal));
+            let out = lua.create_table()?;
+            for (i, k) in keys.into_iter().enumerate() {
+                out.set((i + 1) as i64, k)?;
+            }
+            Ok(out)
+        })
+        .map_err(|e| e.to_string())?;
+    wa.set("sorted", sorted).map_err(|e| e.to_string())?;
+
     spawn::bind_world(lua, &wa.get("actors").map_err(|e| e.to_string())?, &wa)?;
 
     globals.set("wa", wa.clone()).map_err(|e| e.to_string())?;
@@ -217,6 +243,44 @@ fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     on.set(name, f).map_err(|e| e.to_string())
+}
+
+/// Total order over Lua keys so `wa.sorted` is deterministic.
+///
+/// Rank first by a coarse type order both peers compute identically, then
+/// within a rank by value: integers numerically, floats by `total_cmp`
+/// (NaN sorts after everything, deterministically), strings byte-wise,
+/// booleans with false before true. Integers always sort before floats,
+/// even across the same numeric value -- `t[1]` and `t[1.0]` are distinct
+/// keys in Lua 5.4, so the order must not depend on which one `pairs()`
+/// happened to visit first.
+///
+/// Anything without a same-process-independent order (tables, functions,
+/// threads, userdata, lightuserdata, nil) is refused with an error rather
+/// than sorted by address: addresses are exactly what made `pairs()` vary,
+/// so sorting by them would reintroduce the nondeterminism under a new name.
+fn cmp_key(a: &Value, b: &Value) -> Result<std::cmp::Ordering, String> {
+    use std::cmp::Ordering;
+    fn rank(v: &Value) -> Result<u8, String> {
+        match v {
+            Value::Integer(_) => Ok(0),
+            Value::Number(_) => Ok(1),
+            Value::String(_) => Ok(2),
+            Value::Boolean(_) => Ok(3),
+            other => Err(format!(
+                "wa.sorted cannot order {} keys deterministically; use string, integer, float or boolean keys",
+                other.type_name()
+            )),
+        }
+    }
+    Ok(rank(a)?.cmp(&rank(b)?).then_with(|| match (a, b) {
+        (Value::Integer(x), Value::Integer(y)) => x.cmp(y),
+        (Value::Number(x), Value::Number(y)) => x.total_cmp(y),
+        (Value::String(x), Value::String(y)) => x.as_bytes().as_ref().cmp(y.as_bytes().as_ref()),
+        (Value::Boolean(x), Value::Boolean(y)) => x.cmp(y),
+        // Different ranks already decided; same-type pairs are covered.
+        _ => Ordering::Equal,
+    }))
 }
 
 /// Convert a Lua value to the fog crate's dependency-free `Value` for
@@ -730,4 +794,74 @@ mod tests {
         assert_eq!(lua.globals().get::<String>("seen").unwrap(), "packa");
     }
 
+    /// Gap 5 remainder: `pairs()` over string-keyed tables varies per process
+    /// (Lua 5.4 randomises its string-hash seed), so packs iterating one with
+    /// gameplay effects would desync. `wa.sorted` returns the same key order
+    /// on both peers for the orderable key types.
+    #[test]
+    fn sorted_returns_string_keys_in_byte_order() {
+        let lua = Lua::new();
+        install(&lua, &ctx("sort")).unwrap();
+        let order: Vec<String> = lua
+            .load(r#"return wa.sorted({ zebra = 1, apple = 2, Mango = 3 })"#)
+            .eval::<Table>()
+            .unwrap()
+            .sequence_values::<String>()
+            .collect::<mlua::Result<_>>()
+            .unwrap();
+        assert_eq!(order, vec!["Mango", "apple", "zebra"]);
+    }
+
+    /// Integers sort among themselves numerically, and always before floats
+    /// even for equal numeric values -- `t[1]` and `t[1.0]` are distinct keys
+    /// in Lua 5.4, so the order must not depend on visit order. Booleans sort
+    /// false before true, after strings.
+    #[test]
+    fn sorted_orders_mixed_scalar_keys_deterministically() {
+        let lua = Lua::new();
+        install(&lua, &ctx("sort")).unwrap();
+        let order: Vec<String> = lua
+            .load(
+                r#"
+                local t = { [10] = 1, [2] = 2, [1.5] = 3, [1] = 4, b = 5, [true] = 6, [false] = 7 }
+                local names = {}
+                for _, k in ipairs(wa.sorted(t)) do names[#names + 1] = type(k) .. ":" .. tostring(k) end
+                return names
+                "#,
+            )
+            .eval::<Table>()
+            .unwrap()
+            .sequence_values::<String>()
+            .collect::<mlua::Result<_>>()
+            .unwrap();
+        assert_eq!(
+            order,
+            vec![
+                "number:1",
+                "number:2",
+                "number:10",
+                "number:1.5",
+                "string:b",
+                "boolean:false",
+                "boolean:true",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+    }
+
+    /// Keys with no same-process-independent order are refused: sorting table
+    /// keys by address would reintroduce the nondeterminism under a new name.
+    #[test]
+    fn sorted_refuses_unsortable_keys() {
+        let lua = Lua::new();
+        install(&lua, &ctx("sort")).unwrap();
+        let err = lua
+            .load(r#"return wa.sorted({ [{}] = 1 })"#)
+            .exec()
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("wa.sorted"), "unexpected error: {err}");
+    }
 }

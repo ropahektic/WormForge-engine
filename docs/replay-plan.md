@@ -1,8 +1,7 @@
 # WormForge replay: `.WF_WAgame`
 
-> **Status: W0 complete and passed (2026-09-22). W1 in progress: items 1, 3, 4
-> and 5 done (4 live-verified); items 6 (string-keyed `pairs()`) and 7
-> (`coroutine`) remain, then W2.**
+> **Status: W0 complete and passed (2026-09-22). W1 in progress: items 1, 3, 4,
+> 5 and 6 done (4 live-verified); item 7 (`coroutine`) remains, then W2.**
 >
 > This is the canonical plan. `docs/replay.md` is its companion: what W0
 > measures, how to run the gate, and the results. Sections below are annotated
@@ -368,10 +367,31 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
 
    Verified: the gate passes and the hashes are bit-identical to the pre-change
    baseline, as they must be, since handles were deliberately never hashed.
-6. **`wa.sorted(t)`** and document the `pairs()` hazard (gap 5) — **reduced by
-   item 5.** What remains is `pairs()` over *string*-keyed tables, which still
-   varies per process. Lower priority now that the common integer-keyed case
-   is fixed; the probe will surface it if it ever bites.
+6. ✅ **`wa.sorted(t)` — DONE.** `api.rs` exposes it beside `wa.hud`: it collects
+   a table's keys and returns them sorted as an array, so the call site is
+   `for _, k in ipairs(wa.sorted(t)) do ... t[k] ... end`. Order is
+   type-ranked (integer, float, string, boolean) then by value — integers
+   numerically, floats by `total_cmp` (NaN last, deterministically), strings
+   byte-wise, booleans false-before-true. Integers always precede floats even
+   for equal numeric values, because `t[1]` and `t[1.0]` are distinct keys
+   and the order must not depend on visit order. Keys with no
+   process-independent order (tables, functions, threads, userdata) are
+   refused with an error: sorting them by address would reintroduce the
+   nondeterminism under a new name. Three host tests cover string order,
+   mixed-scalar determinism and the refusal.
+
+   Determinism-neutral like item 4, gated the same way: host tests, not the
+   sync-gate hash (the order it returns never reaches the sim unless a pack
+   acts on it; the hash would pass either way).
+
+   The hazard is now documented where pack authors will meet it: the lockstep
+   bullet in `README.md`, the same bullet in `contributing-with-an-agent.md`,
+   and a comment on the one live `pairs()` in the examples
+   (`sentry_gun/weapons.lua`, the START_TURN reset). That loop body is
+   order-independent so it stays as `pairs()` — the comment records why that
+   is safe and what would invalidate it. Integer keys are unaffected either
+   way: Lua hashes integers without a per-process seed, which is why item 5
+   settled the common `state[a.id]` pattern without a `CFLAGS` hack.
 7. **Strip `coroutine`**, or keep it deliberately and say why (gap 8).
 
 Record the latch into the `[wf]` stream as part of W2, not here — W1 is about
