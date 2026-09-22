@@ -83,6 +83,37 @@ piece of work.
 
 Neither test needs a recorder to exist, which is why they come first.
 
+## Result so far
+
+Measured on this machine, wkLua loaded, all packs installed.
+
+**Positive — `girder.WAgame` played twice: byte-identical**, 93 samples
+covering 4,649 frames. Every `rng`, `worms` and `actors` value matched.
+
+```
+A a: 93 frames   B b: 93 frames
+RESULT: IDENTICAL across all 93 sampled frames.
+```
+
+**Negative — `girder` against `kamikaze`: diverges at the first sample**, and
+the tool names both components that moved.
+
+```
+RESULT: DIVERGED.
+  first divergence at f=49
+    -> rng differs (6af22799 vs 774b761c)
+    -> worms differs (a35e6047 vs b1c402f4)
+```
+
+The negative control matters as much as the positive one: a gate that cannot
+fail proves nothing. Together they say the probe reads live state, varies with
+it, and reports a real difference as a difference.
+
+What this does **not** yet establish: the packs were loaded but inert
+throughout, because a corpus replay only fires stock weapons. So this is
+"WA plus wkLua with idle packs is reproducible", which is the right first
+gate but not the whole question. Tests A and B below close the rest.
+
 ## Cost
 
 Off unless a `sync.txt` marker sits beside `wkLua.log`
