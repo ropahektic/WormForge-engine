@@ -1,6 +1,8 @@
 # WormForge replay: `.WF_WAgame`
 
-> **Status: W0 complete and passed (2026-09-22). W1 is unblocked.**
+> **Status: W0 complete and passed (2026-09-22). W1 in progress: items 1, 3, 4
+> and 5 done (4 live-verified); items 6 (string-keyed `pairs()`) and 7
+> (`coroutine`) remain, then W2.**
 >
 > This is the canonical plan. `docs/replay.md` is its companion: what W0
 > measures, how to run the gate, and the results. Sections below are annotated
@@ -320,9 +322,33 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
 
    Still open: retire the fixed-pattern tables in `sentry_gun`
    (`SPREAD`, `CASING_JITTER`), which now have a real RNG to use.
-4. **Set `wa._mod` for non-weapon hooks** (gap 7, found in W0). Needs hook
-   registration to record the owning pack. Fixes "sprite is not installed" for
-   any pack spawning from `worm_message` / `hurt` / `gravity_*`.
+4. ✅ **Set `wa._mod` for non-weapon hooks — DONE.** `bind_on`
+   (`lua-host/src/api.rs`) records the owning pack by reading `wa._mod` at
+   registration time — the same way brains and fire/click specs pick up their
+   pack — and a wrapper around every registered hook re-establishes it at
+   dispatch. Arguments and return values (`"eat"`, hurt's rewritten amount)
+   pass through untouched, so no dispatcher changed. Fixes "sprite is not
+   installed" for any pack spawning from `worm_message` / `hurt` /
+   `gravity_*`.
+
+   Two host tests cover the mechanism: two-pack attribution in `run_mods`
+   load order, and return-value transparency. The first attempt captured
+   `ctx.mod_id` at bind time instead — `ensure_wa` only runs for the first
+   pack, so every later pack's hooks would have been attributed to whoever
+   installed first; the two-pack test caught it, which is why the capture is
+   registration-time now.
+
+   Verified live with a temporary probe pack spawning a bare `sprites/dot.png`
+   from a `worm_message` hook across a girder replay: 0/4 spawns on the
+   pre-fix DLL (each failing with "sprite is not installed", `wa._mod` stuck
+   on the last-installed pack), 4/4 on the fixed one with `wa._mod` restored
+   to the owning pack. The fix is determinism-neutral — `rng` and `worms`
+   columns byte-identical across both runs — which is exactly why the
+   sync-gate hash cannot gate it; the live probe is the instrument for
+   changes of this shape.
+
+   synctest's `wa.sprites.key` pre-resolution is now belt-and-braces rather
+   than required; its comment says so.
 5. ✅ **Stable ids — DONE, for worms as well as actors.** Actors carry a
    spawn-order sequence in a new struct field (`ACTOR_SEQ`, 0x150), reset each
    match. Worms use `team * 16 + index`, which is not invented: it is the key

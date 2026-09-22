@@ -2,7 +2,7 @@ use crate::dispatch::{self, HudLine};
 use crate::spawn::{self, get_bool, get_i32, get_string};
 use actors::kind_id;
 use gfx::{is_sheet_path, load_sprite_path, sprite_key, stock_sprite_id, SpriteStrip};
-use mlua::{Function, Lua, Table, Value};
+use mlua::{Function, Lua, MultiValue, Table, Value};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -97,6 +97,7 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     Ok(())
 }
 
+/// Build the `wa` table if this Lua state has none yet.
 fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     let globals = lua.globals();
     if let Ok(wa) = globals.get::<Table>("wa") {
@@ -176,14 +177,42 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     Ok(wa)
 }
 
+/// Register a `wa.on.<name>` hook, remembering which pack registered it.
+///
+/// The remembering is the point. `wa.actors.spawn` resolves a relative sprite
+/// path against `wa._mod`, and only the weapon-event dispatchers used to set
+/// that. A hook registered here used to run with whatever `_mod` the last
+/// weapon event left behind, so with several packs installed a path resolved
+/// against the wrong pack and the spawn failed with "sprite is not installed"
+/// while the sheet sat in the atlas.
+///
+/// The owner is read from `wa._mod` at registration time -- the same way
+/// brains and fire/click specs pick up their pack (`actor.rs`). During a
+/// pack's load script `install` has just set `_mod` to that pack, and from a
+/// weapon-event context the dispatcher has set it to the running pack, so a
+/// hook registered at runtime is attributed correctly too. Wrapping at
+/// registration rather than fixing each dispatcher keeps it to one place and
+/// covers hooks added later for free.
 fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
     let f = lua
         .create_function(move |lua, cb: Function| {
             let wa: Table = lua.globals().get("wa")?;
             let hooks: Table = wa.get("_hooks")?;
             let list: Table = hooks.get(name)?;
+            // The pack in whose name this hook is registered. Empty means
+            // nobody had set `_mod` yet; such a hook keeps the old
+            // stale-field behaviour rather than guessing a pack.
+            let owner: String = wa.get("_mod").unwrap_or_default();
+            // MultiValue so every hook shape passes through untouched --
+            // arguments in, and return values (worm_message's "eat", hurt's
+            // rewritten amount) back out.
+            let wrapped = lua.create_function(move |lua, args: MultiValue| {
+                let wa: Table = lua.globals().get("wa")?;
+                wa.set("_mod", owner.clone())?;
+                cb.call::<MultiValue>(args)
+            })?;
             let n = list.len()?;
-            list.set(n + 1, cb)?;
+            list.set(n + 1, wrapped)?;
             Ok(())
         })
         .map_err(|e| e.to_string())?;
@@ -606,4 +635,99 @@ fn load_sprite_field(
         })?);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ctx(mod_id: &str) -> BindContext {
+        BindContext {
+            mod_id: mod_id.to_string(),
+            root: PathBuf::new(),
+            allowed_slots: HashSet::new(),
+            allowed_register: HashSet::new(),
+            fog_allowed: false,
+            claims: Rc::new(RefCell::new(Vec::new())),
+            logs: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+
+    /// Gap 7: hooks that no weapon dispatcher drives (`hud` here, and the same
+    /// path serves worm_message / hurt / gravity_*) used to run with whatever
+    /// `wa._mod` the last weapon event left behind. With two packs installed
+    /// that resolves spawn sprite paths against the wrong pack. Registration
+    /// must remember the owner, and the wrapper must re-establish it.
+    #[test]
+    fn non_weapon_hooks_run_with_their_own_pack_id() {
+        let lua = Lua::new();
+        // The load order run_mods produces: install a, run a's script, install
+        // b, run b's script. install sets wa._mod, so each registration reads
+        // its own pack -- and the wrapper must keep that alive at dispatch.
+        install(&lua, &ctx("packa")).unwrap();
+        lua.load(
+            r#"
+            hits = {}
+            wa.on.hud(function() hits[#hits + 1] = wa._mod end)  -- pack a's script
+        "#,
+        )
+        .exec()
+        .unwrap();
+        install(&lua, &ctx("packb")).unwrap();
+        lua.load(
+            r#"
+            wa.on.hud(function() hits[#hits + 1] = wa._mod end)  -- pack b's script
+        "#,
+        )
+        .exec()
+        .unwrap();
+
+        // Poison the field the way a pack-a weapon event would have, then
+        // dispatch both hooks the way dispatch.rs does: walk the list, call
+        // each entry, read back whatever the handler saw.
+        lua.load(r#"wa._mod = "packa""#).exec().unwrap();
+        let wa: Table = lua.globals().get("wa").unwrap();
+        let hooks: Table = wa.get("_hooks").unwrap();
+        let list: Table = hooks.get("hud").unwrap();
+        for i in 1..=list.len().unwrap() {
+            let f: mlua::Function = list.get(i).unwrap();
+            f.call::<()>(()).unwrap();
+        }
+
+        let hits: Table = lua.globals().get("hits").unwrap();
+        assert_eq!(hits.get::<String>(1).unwrap(), "packa");
+        assert_eq!(hits.get::<String>(2).unwrap(), "packb");
+        assert_eq!(hits.len().unwrap(), 2);
+    }
+
+    /// The wrapper must stay transparent: worm_message dispatch reads the
+    /// callback's return to spot "eat", hurt's pre phase does the same for a
+    /// rewritten amount. Wrap-and-call must hand return values through.
+    #[test]
+    fn hook_wrapper_passes_return_values_through() {
+        let lua = Lua::new();
+        install(&lua, &ctx("packa")).unwrap();
+        lua.load(
+            r#"
+            seen = nil
+            wa.on.worm_message(function() seen = wa._mod return "eat" end)
+        "#,
+        )
+        .exec()
+        .unwrap();
+        let wa: Table = lua.globals().get("wa").unwrap();
+        let list: Table = wa
+            .get::<Table>("_hooks")
+            .unwrap()
+            .get("worm_message")
+            .unwrap();
+        let f: mlua::Function = list.get(1).unwrap();
+        lua.load(r#"wa._mod = "stale""#).exec().unwrap();
+        let ret: String = f
+            .call::<String>((lua.create_table().unwrap(), 0x24u32))
+            .unwrap();
+        assert_eq!(ret, "eat");
+        assert_eq!(lua.globals().get::<String>("seen").unwrap(), "packa");
+    }
+
 }
