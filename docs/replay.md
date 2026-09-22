@@ -48,17 +48,38 @@ A corpus of 18 curated single-feature replays already exists at
 `~/worms_work/wkFOW/clones/openwa/testdata/replays/` (girder, napalm, kamikaze,
 cluster, freeze_nuke_armageddon, …).
 
+Measured behaviour of `/play`, so the timings are not a surprise:
+
+- WA **does** exit on its own when the replay ends. A 93-second replay takes
+  around three minutes of wall clock, so the script blocks for a while.
+- WA writes **no** `User/Logs` entry for a `/play` run, and prints nothing
+  about checksums to stdout or stderr on a clean run. The corpus's
+  `*_expected.log` baselines therefore cannot be reproduced this way — they
+  come from OpenWA's own Rust test runner, not from stock WA.
+
 ### The two tests, which answer different questions
 
-**A — does WormForge's presence perturb WA at all?** Run the same vanilla
-replay with `wkLua.dll` present and absent and compare WA's own checksums.
-A mismatch is the `debris.spr` class of bug and is worth fixing whether or not
-replay ever ships. Repeat with the GPU renderer off to say whether it is the
-cause.
+**A — do our packs perturb WA?** Same replay twice, once with `Mods/`
+populated and once with it emptied, comparing the **`rng`** column. WA has one
+shared RNG for gameplay and effects, so anything of ours that reaches it shows
+up here. This is the `debris.spr` class of bug and is worth fixing whether or
+not replay ever ships.
 
-**B — is our own layer reproducible?** Run the same vanilla replay twice with
-a scripted, input-free pack — one that spawns actors on a turn-start timer and
-never calls `keys()` or `pointer()` — and diff the hash streams.
+(The original plan was to compare WA's own checksums with the DLL present and
+absent. That is not observable from outside: WA reports nothing on a clean
+run, and with the DLL absent there is no probe to produce a stream. Comparing
+packs-on against packs-off keeps the probe in both runs and still isolates
+what we contribute.)
+
+**B — is our own layer reproducible?** Same replay twice with a scripted,
+input-free pack — one that spawns actors on a turn-start timer and never calls
+`keys()` or `pointer()` — diffing the **`actors`** column.
+
+Note that a replay from the corpus only fires stock weapons, so `actors` stays
+at `811c9dc5` throughout — that is the FNV basis, i.e. the empty-list hash, and
+seeing it is confirmation the empty case is handled rather than a sign nothing
+ran. Test B needs a pack that acts without input, which is why it is a separate
+piece of work.
 
 Neither test needs a recorder to exist, which is why they come first.
 
