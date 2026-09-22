@@ -1,0 +1,30 @@
+//=============================================================================
+// * KtK Control *
+//=============================================================================
+// Version: 1.3;
+// Author: Danylo;
+// Improvement: 0rang3;
+//-----------------------------------------------------------------------------
+// Description:
+
+//   KtK Control is the game object that sets the timer for attackers to kill 
+// the king (a piece of terrain usualy drawn as worm king) and shows 
+// destruction percentage of the king (currently only when it's damaged).
+
+//   Ktk Control allows to create a timer that sets time limit for attackers to
+// kill the king. Timer types:
+//   - AttackOnly : timer elapses only during the turn of an attacker team and 
+//     for all attacker players timer is common.
+//   - DefendAndCompensate : same as AttackOnly but 4 turn seconds of a defender
+//     team compensate 1 second of attacker timer.
+
+//   Destruction percentage of the king is shown like health bar as far as 
+// king is damaged.
+
+// The KtK Control should be placed on map above the king using the map editor.
+//   Don't forget to set proper parameters.
+// There can be only 1 or 2 kings on map.
+
+//   Added Drawing ability to the script, so you can place a king on any map
+// without drawing king on it.
+//-----------------------------------------------------------------------------

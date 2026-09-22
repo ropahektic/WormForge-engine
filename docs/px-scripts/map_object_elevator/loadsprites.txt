@@ -1,0 +1,190 @@
+int frames;
+
+CSpriteManager : CObject;
+CSpriter : CObject;
+
+CSpriteManager *SM;
+
+CSprite* ElevatorSprite;
+CSprite* TerminalSprite;
+CSprite* WCrateSprite;
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+                 if(frames < 15)
+                 {
+                 frames = frames+1;
+                 }
+                 if(frames == 10){CreateSpriters();}
+         }
+super;
+}
+
+void CreateSpriters()
+{
+for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+	obj = CGObject(Env->Objs.Objs[i]);
+	if(obj == NullObj) continue;
+
+	if(obj->ClType == EObjectClass(79))
+		{
+        local building = CBuilding(obj);
+
+        if(building->HasSprite == false)
+        	{
+            building->HasSprite = true;
+            SM->MakeSpriter(building->PosX, building->PosY, building);
+            }
+		}
+    }
+}
+
+void loadsprites::InitGraphic()
+{
+    local spr       = GetAttachment("elevator.png");
+    ElevatorSprite     = LoadSprite(spr, 1, 0);
+
+    local spr2       = GetAttachment("terminal.png");
+    TerminalSprite     = LoadSprite(spr2, 1, 0);
+
+    local spr3       = GetAttachment("metalbox.png");
+    WCrateSprite     = LoadSprite(spr3, 20, 0);
+}
+
+void loadsprites::Init(){}
+
+void loadsprites::FirstFrame()
+{
+	SM = new CSpriteManager();
+}
+
+CSpriteManager::CSpriteManager()
+{
+	super(Root, GS);
+}
+
+void __DrawBuilding()
+{
+	SM->Draw();
+}
+
+void CSpriteManager::Draw()
+{
+	for(int i=0 ; i<Childs.Count ; i+=1)
+	{
+		local p = CSpriter(Childs.Objs[i]);
+		if(p == CSpriter(NullObj)) { continue;}
+		p->Draw();
+	}
+}
+
+void CSpriteManager::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		super;
+	}
+	if(Type == M_DRAWQUEUE)
+	{
+		AddCustomRender(14, "__DrawBuilding");
+	}
+
+	if(Type == M_FRAME)
+	{
+		for(int i=0 ; i<Childs.Count ; i+=1)
+		{
+			local p = CSpriter(Childs.Objs[i]);
+			if(p == CSpriter(NullObj)) continue;
+
+			if(p->Dead)
+			{
+				p->Free(true);
+				break;
+			}
+		}
+	}
+}
+
+void CSpriteManager::MakeSpriter(float x, float y, CBuilding* link)
+{
+     local Buildin = new CSpriter(this, x, y);
+     Buildin->PosX = x;
+     Buildin->PosY = y;
+     Buildin->LinkedBuilding = link;
+}
+
+CSpriter::CSpriter(CSpriteManager* SM, float x, float y)
+{
+    super(SM, GS);
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+    Dead = false;
+
+    CBuilding* LinkedBuilding = NullObj;
+}
+
+void CSpriter::Draw()
+{
+    if(Dead) return;
+
+    if(LinkedBuilding != NullObj)
+    {
+
+        if(StrCmp(LinkedBuilding->ClassType,"Elevator"))
+        {
+             CQuad qs;
+             FillSpriteQuad(&qs, ElevatorSprite->Index, 0.0, 0);
+             TransformQuad(&qs,0,1,1,LinkedBuilding->PosX,LinkedBuilding->PosY);
+             qs.blend = 0;
+             for (local i = 0; i < 4; i += 1) qs.v[i].color = -1;
+	     RenderQuad(&qs, 0);
+        }
+
+
+        if(StrCmp(LinkedBuilding->ClassType,"Terminal"))
+        {
+             CQuad q;
+             FillSpriteQuad(&q, TerminalSprite->Index, 0.0, 0);
+             TransformQuad(&q,0,1,1,LinkedBuilding->PosX,LinkedBuilding->PosY);
+             q.blend = 0;
+             for (local i = 0; i < 4; i += 1) q.v[i].color = -1;
+	     RenderQuad(&q, 0);
+        }
+        if(StrCmp(LinkedBuilding->ClassType,"Weapon Crate"))
+        {
+             CQuad q;
+             FillSpriteQuad(&q, WCrateSprite->Index, LinkedBuilding->AnimPhase, 0);
+             TransformQuad(&q,0,1,1,LinkedBuilding->PosX,LinkedBuilding->PosY);
+             q.blend = 0;
+             for (local i = 0; i < 4; i += 1) q.v[i].color = -1;
+	     RenderQuad(&q, 0);
+        }
+    }
+}
+
+void CSpriter::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if(Type == M_FRAME)
+     {
+               if(LinkedBuilding != NullObj)
+               {
+               Destroy();
+               PosX = 0;
+               PosY = 0;
+               }
+               else{ Dead = true; return;}
+     }
+}
+
+void CSpriter::Destroy()
+{
+      if (LinkedBuilding->Health < 1) //Destroying
+      {
+      Dead = true; return;
+      }
+}

@@ -1,0 +1,132 @@
+require utils, p_sprite_builder, pxparticles, sprite_curtis_250, sprite_curtis_461;
+
+CSprite* tdynamite_aiming;
+CSprite* tmingv_aiming;
+
+void thrown_explosives_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("tdynamite.png");
+    tdynamite_aiming = LoadSprite(f, 4, 0);
+    f = GetAttachment("tmingv.png");
+    tmingv_aiming = LoadSprite(f, 1, 0);
+}
+
+//---------------------------------THROWN DYNAMITE----------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Thrown Dynamite";
+     sprite = tdynamite_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -9.0;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.2;
+     Params->animate = true;
+     Params->anim_speed = 1.70;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Thrown Dynamite")) {
+         if (tdyna_anim) {
+              local sprite = tdynamite_aiming->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.70;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              tdyna_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  tdyna_anim = true;
+}
+
+//---------------PARTICLE FX---------------//
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("Thrown Dynamite")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+            DoAnimParticleEffects(
+
+            461,     //   SPRITE
+            1,       //   RADIUS
+            -12,     //   RELX
+            -22,     //   RELY
+            55,      //   LIFETIME
+            0.015,   //   SPEED
+            1.0,     //   VELO.MIN
+            5.0,     //   VELO.MAX
+            255,     //   START.ALPHA
+            255,     //   END.ALPHA
+            0,       //   WIND
+            0.50,    //   START.SIZE
+            0.05,    //   END.SIZE
+            0.00,    //   ANGLE.MIN
+            0.00,    //   ANGLE.MAX
+            0.0,     //   RANDOMNESS
+            -3.0);   //   GRAVITY
+        }
+    }
+}
+
+//---------------------------------THROWN MING VASE---------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Thrown Ming Vase";
+     sprite = tmingv_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -11.0;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.2;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Thrown Ming Vase")) {
+         if (tmingv_anim) {
+              local sprite = tmingv_aiming->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              tmingv_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  tmingv_anim = true;
+}

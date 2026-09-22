@@ -1,0 +1,13 @@
+CSprite* wtwang;
+
+void coward_s::InitGraphic()
+{
+   CFile *f;
+
+   f = GetAttachment("wtwang.png");
+   wtwang = LoadSprite(f, 49, 0);
+          
+
+   SetSpriteOverride(506, wtwang);
+      
+}

@@ -1,0 +1,35 @@
+require utils, fow_darkness;
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+   if(Type == M_TURNBEGIN && darkControl->enabled == true)
+   {
+      local lighttorchutil = GS->GetWeaponByName("Light Torch");
+      GS->Info.AddWeaponEx(WormTeam, lighttorchutil->GetWeaponIndex(), lighttorchutil->GetPageIndex(), 1);
+   }             
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{ 
+  if(Weap->CheckName("FoW Mode"))
+  {  
+     if(darkControl->enabled == false)
+     {
+        darkControl->enabled = true;
+        
+        local lighttorchutil = GS->GetWeaponByName("Light Torch");
+        GS->Info.AddWeaponEx(WormTeam, lighttorchutil->GetWeaponIndex(), lighttorchutil->GetPageIndex(), 1); 
+        
+        ShowMessage("FoW Mode: ON");
+     }
+         
+     else if(darkControl->enabled == true)
+     {
+        darkControl->enabled = false;
+        
+        ShowMessage("FoW Mode: OFF");
+     }      
+  } 
+  super;
+}

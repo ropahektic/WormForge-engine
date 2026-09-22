@@ -1,0 +1,119 @@
+require pxparticles, utils;
+
+void CMissile::tfx_defcue()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,255,255);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.38,0.38);
+p0->SetEndSize(0.01,0.01);
+}
+}
+//------------------------------------------------------------------------------
+void CMissile::tfx_remcue()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,30,0);
+p0->SetEndColor(255,65,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.43,0.43);
+p0->SetEndSize(0.01,0.01);
+}
+}
+//------------------------------------------------------------------------------
+void CMissile::tfx_hypcue()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(RandomInt(0,255),RandomInt(0,255),RandomInt(0,255));
+p0->SetEndColor(RandomInt(0,255),RandomInt(0,255),RandomInt(0,255));
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.42,0.42);
+p0->SetEndSize(0.01,0.01);
+}
+}
+//------------------------------------------------------------------------------
+void CMissile::tfx_guicue()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,30,0);
+p0->SetEndColor(255,65,0);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(14);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.42,0.42);
+p0->SetEndSize(0.01,0.01);
+}
+}
+//------------------------------------------------------------------------------
+void CMissile::tfx_chpsht()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,36,32);
+p0->SetEndColor(28,80,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(255);
+p0->SetLifeTime(8);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.43,0.43);
+p0->SetEndSize(0.01,0.01);
+}
+}
+//------------------------------------------------------------------------------
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+{
+if (weap->CheckName("Cue"))
+{tfx_defcue();}
+
+if (weap->CheckName("Remote Cue"))
+{tfx_remcue();}
+
+if (weap->CheckName("Hyper Cue"))
+{tfx_hypcue();}
+
+if (weap->CheckName("Guidance Cue"))
+{tfx_guicue();}
+
+if (weap->CheckName("Cheap Shot"))
+{tfx_chpsht();}
+
+}
+super;
+}

@@ -1,0 +1,105 @@
+//credits to Entuser!
+require utils;
+
+CSprite* lgraph;
+CColMask* lasermask;
+
+void laserray::InitGraphic()
+{
+     lf = GetAttachment("laser.png");
+     lgraph = LoadSprite(lf, 1, 0);
+
+//     laserbitmask = MakeCircleMask(2);
+     laserbitmask = MakeRectMask(2, 2);
+     lasermask = new CColMask(0, 0, laserbitmask);
+};
+
+void MakeLaserRayF(CObject* parent, fixed x, fixed y, float width, float ang, int len)
+{
+     rdx = sin(ang - 1.57);
+     rdy = 0 - cos(ang - 1.57);
+     dx = sin(ang);
+     dy = 0 - cos(ang);   //lol, TODO
+
+     tx = float(x);
+     ty = float(y);
+     nparts = int(len / 100);
+
+     w = (random() / 4 + 0.85) * width;
+     w = w / 2;
+     wdx = w * rdx;
+     wdy = w * rdy;
+
+     wscale = 1;
+
+     lastl = len - nparts * 100;
+
+     CQuad q;
+     q.blend = 1;
+
+     for (i = 0; i <= nparts; i += 1)
+     {
+           l = 100.0;
+           if (i == nparts)
+           {
+              l = lastl;
+           };
+
+           if (0 >= l) break;
+
+           q.v[0].x = tx + wdx;
+           q.v[0].y = ty + wdy;
+           q.v[3].x = tx - wdx;
+           q.v[3].y = ty - wdy;
+
+           w = wscale * (random() / 3 + 0.82) * width;
+
+
+           wdx = w * rdx;
+           wdy = w * rdy;
+
+           wscale -= 0.75 / (nparts + 1);
+
+           q.v[1].x = tx + dx * l + wdx;
+           q.v[1].y = ty + dy * l + wdy;
+           q.v[2].x = tx + dx * l - wdx;
+           q.v[2].y = ty + dy * l - wdy;
+
+           for (j = 0; j < 4; j+=1) q.v[j].color = ARGB(255, 255, 48, 48);     //0xFFFF3030
+
+           if (i == 0)
+           {
+            q.v[0].color = ARGB(192, 255, 96, 96);          //0xC0FF6060
+            q.v[3].color = ARGB(192, 255, 96, 96);
+           };
+
+           parent->AddSpriteQ(10, &q, lgraph->Index, 0, 64);
+           tx += dx * l;
+           ty += dy * l;
+     };
+
+     q.v[0].x = tx + wdx;
+     q.v[0].y = ty + wdy;
+     q.v[3].x = tx - wdx;
+     q.v[3].y = ty - wdy;
+
+     q.v[1].x = tx + dx * 7 + wdx;
+     q.v[1].y = ty + dy * 7 + wdy;
+     q.v[2].x = tx + dx * 7 - wdx;
+     q.v[2].y = ty + dy * 7 - wdy;
+
+     q.v[1].color = ARGB(16, 255, 48, 48);          //0x10FF3030
+     q.v[2].color = ARGB(16, 255, 48, 48);
+
+     parent->AddSpriteQ(10, &q, lgraph->Index, 0, 64);
+};
+
+void MakeLaserRay(CObject* parent, fixed x, fixed y, float width,
+  float ang, int alen)
+{
+     len = 0;
+     Trace(parent, lasermask, x, y, ang, 5, alen, -1, &len);
+
+     MakeLaserRayF(parent, x, y, width, ang, len);
+
+};

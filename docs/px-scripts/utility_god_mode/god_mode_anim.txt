@@ -1,0 +1,19 @@
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "God Mode";
+     sprite = 0;
+//     Params->objStates->use_current_state_sprite = true;
+     Params->objStates->use_current_state_scale = 1.5;
+     Params->objStates->all_states = true;
+     Params->objStates->global_scale = true;
+     Params->draw_hand = false;
+
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

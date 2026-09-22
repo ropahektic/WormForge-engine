@@ -1,0 +1,159 @@
+
+void CaveInitmap(int RNGa)
+{
+	local xi = 0;
+    local yi = 0;
+    local widthRow = cSizeX;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+
+    //not sure if all these below are correct.
+    //feel free to check against C source: http://www.roguebasin.com/index.php?title=Cellular_Automata_Method_for_Generating_Random_Cave-Like_Levels
+
+	for(yi=1; yi<size_y-1; yi++)
+		{
+		for(xi=1; xi<size_x-1; xi++)
+			{
+        	local NewRNG = BigAssRandomArray[(yi * 40) + xi] + RNGa;
+        	BigAssRandomArray[(yi * 40) + xi] = NewRNG;
+			CaveMap[(yi * widthRow) + xi] = CaveRandpick(NewRNG);
+    		}
+    	}
+
+    for(yi=0; yi<size_y; yi++)
+	for(xi=0; xi<size_x; xi++)
+		CaveMap2[(yi * widthRow) + xi] = 0;
+	for(yi=0; yi<size_y; yi++)
+		CaveMap[(yi * widthRow)] = 0;
+        CaveMap[(yi * widthRow) + size_x - 1 ] = 0;
+	for(xi=0; xi<size_x; xi++)
+		CaveMap[xi] = 0;
+        CaveMap[((size_y - 1)*widthRow) + xi] = 0;
+}
+
+void CaveGeneration()
+{
+	local xi = 0;
+    local yi = 0;
+    local ii = 0;
+    local jj = 0;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+    local widthRow = cSizeX;
+
+    local adjcount_r1 = 0;
+ 	local adjcount_r2 = 0;
+
+	for(yi=1; yi<size_y-1; yi++)
+	for(xi=1; xi<size_x-1; xi++)
+ 	{
+ 		adjcount_r1 = 0;
+ 		adjcount_r2 = 0;
+
+ 		for(ii= -1; ii<=1; ii++)
+		for(jj= -1; jj<=1; jj++)
+ 			{
+ 			if(CaveMap[((yi+ii)*widthRow)+xi+jj] != 0) adjcount_r1++;
+ 			}
+ 		for(ii = yi - 2; ii<=yi+2; ii++)
+ 		for(jj = xi - 2; jj<=xi+2; jj++)
+ 			{
+ 			if( abs( ii - yi ) == 2 && abs( jj - xi ) == 2 ) continue;
+ 			if(ii<0 || jj<0 || ii>=size_y || jj>=size_x) continue;
+ 			if(CaveMap[(ii*widthRow)+jj] != 0) adjcount_r2++;
+ 			}
+ 			
+ 		if(adjcount_r1 >= r1_cutoff || adjcount_r2 <= r2_cutoff) CaveMap2[(yi*widthRow)+xi] = 1;
+ 		else CaveMap2[(yi*widthRow)+xi] = 0;
+ 	}
+ 	
+ 	for(yi=1; yi<size_y-1; yi++)
+ 	for(xi=1; xi<size_x-1; xi++)
+ 		CaveMap[(yi*widthRow)+xi] = CaveMap2[(yi*widthRow)+xi];
+}
+
+int RandHoleT()
+{
+    hremover = (hremover +1)%33;
+    if(hremover == 0){dohole = !dohole;}
+    local Ri = 0;
+
+    if(dohole == 1)
+		{
+ 		Ri = GS->GetRandom()%25;
+        if(Ri < 15){Ri = 15;}
+        if(Ri > 25){Ri = 15;}
+		}
+	else {Ri = 0;}
+    return Ri;
+}
+
+void CavernPrintmap(int toggleLand, int gridSize, int holeSize)
+{
+ 	local xi;
+    local yi;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+    local widthRow = cSizeX;
+    hremover = 0;
+    local hsiztmp = 0;
+    dohole = 1;
+    local LocalCircle = CicleMaskMedium;
+    local LocalCircleOL = CicleMaskMediumOL;
+
+    if(toggleLand == 1)
+		{
+        for(yi=0; yi<size_y; yi++)
+        	{
+            for(xi=0; xi<size_x; xi++)
+            	{
+                if(CaveMap[(yi*widthRow)+xi] == 0){}
+				else
+					{
+                    local ppX = (xi*gridSize) + cOffX - 6;
+                    local ppY = (yi*gridSize) + cOffY - 6;
+                    if(xi < (size_x - 1) && WormNotThere(ppX, ppY, true) ){GG->land->Draw( LocalCircleOL, ppX, ppY);}
+                	}
+            	}
+        	}
+    	}
+
+    for(yi=0; yi<size_y; yi++)
+ 		{
+ 		for(xi=0; xi<size_x; xi++)
+ 			{
+ 			if(CaveMap[(yi*widthRow)+xi] == 0){}
+            else
+				{
+	            if(toggleLand == 0){GG->land->MakeHole (holeSize,(xi*gridSize) + cOffX,(yi*gridSize) + cOffY);}
+                if(toggleLand == 1)
+					{
+                    local pppX = (xi*gridSize) + cOffX;
+                    local pppY = (yi*gridSize) + cOffY;
+                    if(xi < (size_x - 1)  && WormNotThere(pppX, pppY, false) ){GG->land->Draw(LocalCircle, pppX, pppY);}
+                    }
+            	}
+ 			}
+ 		}
+}
+
+void CaveGenExt(int fp, int co1, int co2, int gens, int sx, int sy, int offx, int offy, int RNGa)
+{
+    fillprob = fp; //40
+    r1_cutoff = co1; //5
+    r2_cutoff = co2; //2
+    local generations = gens; //3
+    cSizeX = sx; //442 / 19; //19x19 == size of hole
+    cSizeY = sy; //380 / 19;
+    cOffX = offx;
+    cOffY = offy;
+
+    CaveInitmap(RNGa);
+
+    local ii = 0;
+    for(ii=0; ii<generations; ii++)
+    	{
+        CaveGeneration();
+    	}
+    CavernPrintmap(1, 19, 14);
+}

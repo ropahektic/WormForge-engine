@@ -1,0 +1,55 @@
+/* 
+
+Made by: DannyB, February 2023
+
+*/
+
+// This script fixes a bug, where changing menus while have remaining shots, causes weapons and utilities to be mixed together. 
+
+require utils_dannyb;
+
+bool bef_active;
+
+void Bounce_Explosion_Fix_SCRIPT::FirstFrame() 
+{
+     // initialize variable
+     bef_active = false;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{        
+     if(Current_Worm != NullObj && CurWeapon != NullObj)
+     {
+          if(Current_Worm->ObjState == WS_JETPACK || Current_Worm->ObjState == WS_ROPING || Current_Worm->ObjState == WS_PARACHUTE || Current_Worm->ObjState == WS_BUNGEE || Current_Worm->ObjState == WS_JUMP)
+          {
+               if(CurWeapon->launch.action == WAction_Bounce)
+               {
+                    if(type == M_SPACE)
+                    {
+                         bef_active = true;
+                    }
+               }     
+          }
+     }
+     
+     super;         
+}
+
+override void CWorm::FireFinal(CWeapon* weap, CShootDesc* sdesc)
+{
+     if(bef_active == true)
+     {
+          sdesc->X = PosX + TurnSide;  
+          sdesc->Y = PosY - 3;
+          sdesc->SpX = 0.1;  
+          sdesc->SpY = 0.1;
+          
+          bef_active = false;
+          
+          super;
+     }
+     else
+     {
+          super;
+     }
+}

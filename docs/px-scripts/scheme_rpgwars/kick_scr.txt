@@ -1,0 +1,32 @@
+
+void kick_scr::InitGraphic()
+{
+}
+
+void kick_scr::Init()
+{
+}
+
+void kick_scr::FirstFrame()
+{
+}
+
+//This makes kick dig terrain.
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+         if(Weap->CheckName("Kick"))
+         {
+         //Kick really digs this terrain
+            local ang = (1 - FireAngle) * 3.14159;
+            if (TurnSide < 0)
+            {
+               ang = 6.28318 - ang;
+            };
+            GG->land->ApplyMask(1, PosX + sin(ang) * 8, PosY - cos(ang) * 8);
+            GG->land->ApplyMask(1, PosX + sin(ang) * 16, PosY - cos(ang) * 16);
+            GG->land->ApplyMask(1, PosX + sin(ang) * 24, PosY - cos(ang) * 24);
+            GG->land->ApplyMask(1, PosX + sin(ang) * 32, PosY - cos(ang) * 32);
+         }
+super;
+}

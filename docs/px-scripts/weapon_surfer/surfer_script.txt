@@ -1,0 +1,27 @@
+// script by PyroMan
+
+require utils, p_sprite_builder;
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+         if (weap->CheckName("Surfer"))
+         {
+             if (PosY + Env->Gravity >= Env->Water - 8)
+             {
+                  SpY = -2.5*(0.5+abs(SpX)/8);
+                  PlaySound(58, 1.0, 1.0, 1.0);
+             }
+             if (PosX < -100 && PosY > Env->Water - 200) 
+             {
+                SpX += 0.065;
+             }            
+             if (PosX > GS->LevelSX+100 && PosY > Env->Water - 200)
+             {
+                SpX -= 0.065;
+             }
+         }
+    }
+}

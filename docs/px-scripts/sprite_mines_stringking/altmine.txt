@@ -1,0 +1,17 @@
+//List of sprites
+CSprite* mineon;
+CSprite* mineoff;
+
+void altmine::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("mineon.png");
+   mineon = LoadSprite(f, 4, 0);
+   f = GetAttachment("mineoff.png");
+   mineoff = LoadSprite(f, 1, 0);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(45, mineon);
+   SetSpriteOverride(47, mineoff);
+}

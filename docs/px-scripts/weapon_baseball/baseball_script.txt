@@ -1,0 +1,12 @@
+CSprite* baseballbt;
+
+void baseball_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+
+   f = GetAttachment("baseballbt.png");
+   baseballbt = LoadSprite(f, 7, 0);
+
+   SetSpriteOverride(734, baseballbt);
+}

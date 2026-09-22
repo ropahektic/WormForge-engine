@@ -1,0 +1,225 @@
+require utils;
+
+CRainManager : CObject;
+CRainBlob : CObject;
+
+CRainManager *RM;
+CSprite* RBlobSprite;
+CSoundFile* RainSound;
+
+int SpawnZone;
+int SpawnZoneNum;
+int TimeSpawn[500];
+int BlobsNum;
+
+bool RainStarted;
+
+// LevelSX, LevelSY - map dimensions
+
+
+void Rain::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("rain.wav");	RainSound = new CSoundFile(f);
+	
+        local spr       = GetAttachment("gray_rb.png");
+        RBlobSprite     = LoadSprite(spr, 7, 0);             //1st frame - base 	
+}
+
+void Rain::Init()
+{
+RainStarted = false;
+BlobsNum = 0;
+}
+
+void Rain::FirstFrame()
+{
+	RM = new CRainManager();
+} 
+
+CRainManager::CRainManager()
+{
+	super(Root, GS);
+}
+
+void __DrawRain()
+{
+	RM->Draw();
+}
+
+void CRainManager::Draw()
+{
+	for(int i=0 ; i<Childs.Count ; i+=1)
+	{
+		local p = CRainBlob(Childs.Objs[i]);
+		if(p == CRainBlob(NullObj)) continue;
+		p->Draw();
+	}
+}
+
+void CRainManager::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		super;
+	}
+	if(Type == M_DRAWQUEUE)
+	{                         
+		AddCustomRender(6, "__DrawRain");
+	}
+	
+	if(Type == M_FRAME)
+	{
+		for(int i=0 ; i<Childs.Count ; i+=1)
+		{
+			local p = CRainBlob(Childs.Objs[i]);
+			if(p == CRainBlob(NullObj)) continue;
+			
+			if(p->Dead)
+			{
+				BlobsNum = BlobsNum - 1; p->Free(true);
+				break;
+			}
+		}
+	}
+}
+
+void CRainManager::MakeRain(float x, float y)
+{
+     local Rblob = new CRainBlob(this, x, y);
+     Rblob->PosX = x;
+     Rblob->PosY = y;
+}
+
+CRainBlob::CRainBlob(CRainManager* RM, float x, float y)
+{       
+    super(RM, GS);
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+    Dead = false;    
+
+//    IsMaterial  = false; //ye baby 
+//    ColGroup    = 4423679;
+//    ClType      = EObjectClass(70);   //935
+//    ColMask = new CColMask(1,1,MakeRectMask(2,2));
+    
+    RemovingStage = false; //final stage of r blob!
+    AnimPhase = 0.0;   
+}
+
+void CRainBlob::Draw()
+{
+	if(Dead) return;
+	
+local col = ARGB(200,78,173,243);
+local rot = -Env->Wind;    //rotation
+	
+            //anim
+             if(RemovingStage == false)
+             {
+             CQuad q;
+             FillSpriteQuad(&q, RBlobSprite->Index, AnimPhase, 0);
+             TransformQuad(&q,rot,1,0.5,PosX,PosY);
+             q.blend = 0;
+             for (local i = 0; i < 4; i += 1) q.v[i].color = col;      //-1 willnot change spr color
+	     	 RenderQuad(&q, 0);
+             //AddSprite(10, PosX, PosY, 0, RBlobSprite->Index, 0);
+             }
+             
+             if(RemovingStage == true)
+             {
+             if(AnimPhase < 1.0){
+             CQuad t;
+             FillSpriteQuad(&t, RBlobSprite->Index, AnimPhase, 0);
+             TransformQuad(&t,rot,1,0.5,PosX,PosY);
+             t.blend = 0;
+             for (local i = 0; i < 4; i += 1) t.v[i].color = col;
+	     RenderQuad(&t, 0);
+	     }
+    }
+             //anim end
+}
+
+void CRainBlob::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+             if(Type == M_FRAME && RemovingStage == false)
+             { 
+             PosY = PosY + 8;
+             PosX = PosX + Env->Wind*8;    
+             int hitx1;
+             int hity1;
+             local flags = 2+4;
+             local hit1 = CGObject(TraceLine(this, PosX, PosY, PosX + Env->Wind*6, PosY+16, flags, &hitx1, &hity1));
+                          if(hit1 != NullObj || PosY > GS->LevelSY)
+                          {
+                                             RemovingStage = true;
+                          }
+             }
+            
+             
+             if(Type == M_FRAME && RemovingStage == true)                                                                       
+             {
+                     //SpY = 0;
+                     if(AnimPhase < 1.0)
+                     {
+                     AnimPhase = AnimPhase + 0.1;
+                     }
+                     else
+                     {
+                     Dead = true; return;
+                     }
+             }
+}
+   
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if(Type == M_FRAME)
+ {
+         if(RainStarted == false)
+         {
+         RainStarted = true;
+         RainSound->Play(1.5, 0.0, true);
+         
+         SpawnZone = 50;
+         SpawnZoneNum = int(GS->LevelSX / SpawnZone);
+         for(local t = 0; t < SpawnZoneNum; t++)
+                   {
+                   TimeSpawn[t] = RandomInt(0,60);
+                   }    
+         }
+         if(RainStarted == true)
+         {
+                        if(BlobsNum < 150)
+                        {        
+                        SpawnRain();
+                        }
+         }
+ }
+super;
+}
+
+void SpawnRain()
+{
+     for(local t = 0; t < SpawnZoneNum+1; t++)
+     {    
+         if(TimeSpawn[t] < 1)
+         { 
+         TimeSpawn[t] = RandomInt(25,75);
+         local rndx = RandomInt(1,49);
+         local SpawnX = SpawnZone*t-rndx;
+         local SpawnY = -130;
+         
+         BlobsNum = BlobsNum + 1;
+         RM->MakeRain(SpawnX, SpawnY);
+         }
+         
+         else
+         
+         {
+         TimeSpawn[t] = TimeSpawn[t] - 1;
+         }
+     }
+     return;
+}                                 

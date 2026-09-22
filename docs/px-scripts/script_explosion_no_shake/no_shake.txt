@@ -1,0 +1,27 @@
+require utils, wosc_lib;
+
+bool noshakycamera;
+
+void no_shake::Init()
+{
+  noshakycamera = true;
+}
+
+// noshakycamera
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+
+  if (Type == M_FRAME && noshakycamera)
+  {
+    local w = GetCurrentWorm();
+    if(w == NullObj)
+      return;
+
+    if(w->isPlacing)
+      return;
+
+    w->ForceFocus(w->PosX, w->PosY);
+    GS->ShakeX = 0.0;  GS->ShakeY = 0.0;
+  }
+}

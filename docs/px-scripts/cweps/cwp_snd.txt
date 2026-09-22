@@ -1,0 +1,216 @@
+require utils;
+
+//----------------------------MUTE-SOUND----------------------------------------
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+if(CurWeapon->CheckName("Gravler")
+|| CurWeapon->CheckName("Gravler FD")
+|| CurWeapon->CheckName("Gravler FD ")
+|| CurWeapon->CheckName("Homing Mortar")
+|| CurWeapon->CheckName("Homing Mortar ")
+|| CurWeapon->CheckName("Petrol Rocket")
+|| CurWeapon->CheckName("Petrol Rocket ")
+|| CurWeapon->CheckName("Blaster Worm")
+|| CurWeapon->CheckName("Blaster Worm ")
+|| CurWeapon->CheckName("Pigeon Cannon")
+|| CurWeapon->CheckName("Pigeon Cannon ")
+|| CurWeapon->CheckName("S.M.A.R.T Bomb")
+|| CurWeapon->CheckName("S.M.A.R.T Bomb ")
+|| CurWeapon->CheckName("S.M.A.R.T.E.R Bomb")
+|| CurWeapon->CheckName("S.M.A.R.T.E.R Bomb ")
+|| CurWeapon->CheckName("Cloud Buster")
+|| CurWeapon->CheckName("Stone Blaster")
+|| CurWeapon->CheckName("Windy Nade")
+|| CurWeapon->CheckName("Windy Cluster")
+|| CurWeapon->CheckName("Frag Grenade ")
+|| CurWeapon->CheckName("Cluster Frag ")
+|| CurWeapon->CheckName("Basketball ")
+|| CurWeapon->CheckName("Baseball Bomb")
+|| CurWeapon->CheckName("Thumper Nade")
+|| CurWeapon->CheckName("Bumper Bomb")
+|| CurWeapon->CheckName("Super Bumper Bomb")
+|| CurWeapon->CheckName("Ion Bomb")
+|| CurWeapon->CheckName("Super Ion Bomb")
+|| CurWeapon->CheckName("Magic Slammer")
+|| CurWeapon->CheckName("Super Magic Slammer")
+|| CurWeapon->CheckName("Gravedigger")
+|| CurWeapon->CheckName("Gravedigger ")
+|| CurWeapon->CheckName("Super Gravedigger")
+|| CurWeapon->CheckName("Super Gravedigger ")
+|| CurWeapon->CheckName("Crossbow")
+|| CurWeapon->CheckName("Crossbow ")
+|| CurWeapon->CheckName("Explosive Arrow")
+|| CurWeapon->CheckName("Explosive Arrow ")
+|| CurWeapon->CheckName("Windy Arrow")
+|| CurWeapon->CheckName("Windy Arrow ")
+|| CurWeapon->CheckName("Rebounder")
+|| CurWeapon->CheckName("Rebounder ")
+|| CurWeapon->CheckName("Homing Arrow")
+|| CurWeapon->CheckName("Homing Arrow ")
+|| CurWeapon->CheckName("Multi-Bolt")
+|| CurWeapon->CheckName("Multi-Bolt ")
+|| CurWeapon->CheckName("Wildfire-Bolt")
+|| CurWeapon->CheckName("Wildfire-Bolt ")
+|| CurWeapon->CheckName("Shadow-Bolt")
+|| CurWeapon->CheckName("Shadow-Bolt ")
+|| CurWeapon->CheckName("Tele Arrow")
+|| CurWeapon->CheckName("Tele Arrow ")
+|| CurWeapon->CheckName("Snow Ball")
+|| CurWeapon->CheckName("SlingShot")
+|| CurWeapon->CheckName("Javelin")
+|| CurWeapon->CheckName("Ninja Star")
+|| CurWeapon->CheckName("Staff of Jolting")
+|| CurWeapon->CheckName("Fire Orbs")
+|| CurWeapon->CheckName("Ether Balloons")
+|| CurWeapon->CheckName("Girder Launcher")
+|| CurWeapon->CheckName("Thrown Dynamite")
+|| CurWeapon->CheckName("Thrown Ming Vase")
+|| CurWeapon->CheckName("Ascender")
+|| CurWeapon->CheckName("Descender")
+|| CurWeapon->CheckName("Super Ascender")
+|| CurWeapon->CheckName("Super Descender")
+|| CurWeapon->CheckName("Remote Roller ")
+|| CurWeapon->CheckName("Super Remote Roller ")
+|| CurWeapon->CheckName("Fire Pellet")
+|| CurWeapon->CheckName("Torch Flame"))
+{
+if (sound == 140 || sound == 194) return;         // FIRE!
+else if (sound == 177 || sound == 231) return;    // WATCH THIS...
+else super;
+} else
+{
+super;
+}
+}
+//---------------------------FIRING-SOUND---------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if(Weap->CheckName("Gravler")
+|| Weap->CheckName("Gravler FD")
+|| Weap->CheckName("Gravler FD "))
+{PlaySound(75,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Homing Mortar")
+|| Weap->CheckName("Homing Mortar "))
+{PlaySound(75,1.0,1.0,1.0);
+ PlaySound(44,1.0,1.5,1.0);}
+
+if(Weap->CheckName("Blaster Worm")
+|| Weap->CheckName("Blaster Worm "))
+{PlaySound(75,1.0,1.0,1.0);
+ PlaySound(157,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Pigeon Cannon")
+|| Weap->CheckName("Pigeon Cannon "))
+{PlaySound(75,1.0,1.0,1.0);
+ PlaySound(51,1.0,1.0,1.0);}
+
+if(Weap->CheckName("S.M.A.R.T Bomb")
+|| Weap->CheckName("S.M.A.R.T Bomb ")
+|| Weap->CheckName("S.M.A.R.T.E.R Bomb")
+|| Weap->CheckName("S.M.A.R.T.E.R Bomb "))
+{PlaySound(75,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Cloud Buster"))
+{PlaySound(75,1.0,1.0,0.5);
+ PlaySound(26,1.0,1.2,0.8);}
+
+if(Weap->CheckName("Stone Blaster"))
+{PlaySound(75,1.0,1.0,0.4);}
+
+if(Weap->CheckName("Frag Grenade")
+|| Weap->CheckName("Cluster Frag")
+|| Weap->CheckName("Basketball"))
+{PlaySound(96,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Ion Bomb")
+|| Weap->CheckName("Super Ion Bomb"))
+{PlaySound(122,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Gravedigger")
+|| Weap->CheckName("Gravedigger ")
+|| Weap->CheckName("Super Gravedigger")
+|| Weap->CheckName("Super Gravedigger "))
+{PlaySound(126,1.0,1.6,1.0);}
+
+if(Weap->CheckName("Crossbow")
+|| Weap->CheckName("Crossbow "))
+{PlaySound(8,1.0,1.0,1.0);
+ PlaySound(29,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Explosive Arrow")
+|| Weap->CheckName("Explosive Arrow ")
+|| Weap->CheckName("Windy Arrow")
+|| Weap->CheckName("Windy Arrow ")
+|| Weap->CheckName("Rebounder")
+|| Weap->CheckName("Rebounder ")
+|| Weap->CheckName("Homing Arrow")
+|| Weap->CheckName("Homing Arrow ")
+|| Weap->CheckName("Wildfire-Bolt")
+|| Weap->CheckName("Wildfire-Bolt "))
+{PlaySound(8,1.0,1.0,1.0);
+ PlaySound(29,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Multi-Bolt")
+|| Weap->CheckName("Multi-Bolt "))
+{PlaySound(8,1.0,1.0,1.0);
+ PlaySound(29,1.0,1.0,1.0);
+ PlaySound(122,1.0,1.5,1.0);}
+
+if(Weap->CheckName("Shadow-Bolt")
+|| Weap->CheckName("Shadow-Bolt "))
+{PlaySound(8,1.0,1.0,1.0);
+ PlaySound(29,1.0,1.0,1.0);
+ PlaySound(46,1.0,0.7,1.0);}
+
+if(Weap->CheckName("Tele Arrow")
+|| Weap->CheckName("Tele Arrow "))
+{PlaySound(8,1.0,1.0,1.0);
+ PlaySound(29,1.0,1.0,1.0);
+ PlaySound(67,1.0,1.0,1.0);}
+
+if(Weap->CheckName("SlingShot"))
+{PlaySound(99,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Javelin"))
+{PlaySound(11,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Ninja Star"))
+{PlaySound(96,1.0,2.5,1.0);}
+
+if(Weap->CheckName("Staff of Jolting"))
+{PlaySound(122,1.0,1.5,1.0);}
+
+if(Weap->CheckName("Girder Launcher"))
+{PlaySound(95,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Remote Roller")
+|| Weap->CheckName("Remote Roller ")
+|| Weap->CheckName("Super Remote Roller")
+|| Weap->CheckName("Super Remote Roller "))
+{PlaySound(88,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Pogo Sheep"))
+{PlaySound(76,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Battering Ram"))
+{PlaySound(50,1.0,1.0,1.0);}
+
+if(Weap->CheckName("Super Worm"))
+{ShowMessage("It's a Bird    It's a Plane");}
+
+if(Weap->CheckName("Fire Pellet"))
+{PlaySound(75,1.0,1.5,0.6);}
+
+super;
+}
+
+override void CMissile::StartFly()
+{
+if(weap->CheckName("Super Worm"))
+{
+ShowMessage("It's Super Worm!");
+PlaySound(76,1.0,1.0,1.0);
+}
+super;
+}

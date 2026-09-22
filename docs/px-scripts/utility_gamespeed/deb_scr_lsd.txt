@@ -1,0 +1,47 @@
+require utils;
+
+bool deb_lsd_state;
+
+override void CTurnGame::Message(CObject* sender, EMType type, int size, CMessageData* data)
+{
+    if (type == M_FRAME)
+    {
+        if (deb_lsd_state)
+        {
+            // Normal time + sinus(from none to double speed) + extra speed
+            deb_gamespeed_SetGameSpeed(65536.0 + sin(GS->Tick / 50.0) * 65536.0 + 32768.0);
+        }
+    }
+    else if (type == M_TURNEND)
+    {
+        // Reset the game speed
+        if (deb_lsd_state)
+        {
+            deb_lsd_SetLsd(false);
+        }
+    }
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (Weap->CheckName("LSD"))
+    {
+        deb_lsd_SwitchLsd();
+    }
+    super; 
+}
+
+void deb_lsd_SwitchLsd()
+{
+    deb_lsd_SetLsd(!deb_lsd_state);
+}
+
+void deb_lsd_SetLsd(bool enable)
+{
+    deb_lsd_state = enable;
+    if (!deb_lsd_state)
+    {
+        deb_gamespeed_ResetGameSpeed();
+    }
+}

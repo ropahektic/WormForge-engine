@@ -1,0 +1,327 @@
+require utils;
+
+CBitmap32* ShieldBitmap;
+
+void possessed::InitGraphic() 
+{
+    local spr       = GetAttachment("shield.png");      
+    ShieldBitmap     = LoadImage(spr);
+}
+
+void possessed::Init()   
+{
+
+}
+
+void possessed::FirstFrame()
+{
+
+}
+
+/*
+Idea: Possessed objects: At the start of the game every non-worm object gets 
+'Possessed'quality, which makes an object sentient. What exactly it does is 
+randomly selected from a preset.
+Affects mines and barrels.
+
+List of 'Behaviors':
+1) Armored - gains armor that regenerates inbetween turns.             DONE
+2) Neo - deflects missiles.                                            DONE
+3) Teleporting - swaps position with a random worm when shot           DONE
+4) Absorbing - eats first shot each turn and shoots back twice as hard.DONE
+5) Bouncy - launches objects above it high in the air.                 DONE
+6) Invisible - removes 'render'. (possible graphic effects around it)  DONE
+7) Terraforming - when shot incases itself in a forcefield.            DONE
+8) Vengeful - WIP
+9) Digger - digs straight down few meters when in danger.              DONE
+10) ??? - WIP
+11) Scared - flings itself in a random direction if a worm is nearby.  DONE
+
+*/
+
+
+
+override void CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
+{
+PossessType = 0;
+Armor = 0;
+super;
+}
+
+override void COilDrum::COilDrum(CObject* Parent,fixed X,fixed Y,bool Snap)
+{
+PossessType = 0;
+Armor = 0;
+super;
+}
+
+void CMine::Possess()
+{
+   PossessType = RandomInt(1,11);
+   //PossessType = 1;
+   if(PossessType == 8 || PossessType == 10){PossessType = PossessType + 1;}    //Dont forget to remove this once I add new types.
+   if(PossessType == 1)
+   {
+   Armor = 10;
+   }
+   
+   if(PossessType == 7 || PossessType == 4 || PossessType == 3)
+   {
+   Armor = 1;
+   }
+}
+
+void COilDrum::Possess()
+{
+   PossessType = RandomInt(1,11);
+   //PossessType = 1;
+   if(PossessType == 8 || PossessType == 10){PossessType = PossessType + 1;}    //Dont forget to remove this once I add new types.
+   if(PossessType == 1)
+   {
+   Armor = 10;
+   }
+   
+   if(PossessType == 7 || PossessType == 4 || PossessType == 3)
+   {
+   Armor = 1;
+   }
+}
+
+
+
+void CMine::Possess_Frame()
+{
+                 if(PossessType == 0)
+                 {
+                 Possess();
+                 }
+                 
+                 if(GetCurrentWorm() == NullObj)
+                 {                
+                                  if(PossessType == 1 || PossessType == 7 ||  PossessType == 4 ||  PossessType == 3)
+                                  {
+                                    if(Armor < 1){Armor = 1;}// at least 1 armor
+                                  }
+                 }
+                 
+                 //if(GetCurrentWorm() != NullObj)
+                 //{                
+                                  if(PossessType == 11)
+                                  {
+                                  Scared();
+                                  }
+                 //}
+                 
+                 //if(GetCurrentWorm() != NullObj)
+                 //{                
+                                  if(PossessType == 9)
+                                  {
+                                  Digging();
+                                  }
+                 //}
+                 
+                 //if(GetCurrentWorm() != NullObj)
+                 //{                
+                                  if(PossessType == 2)
+                                  {
+                                  Deflecting();
+                                  }
+                 //}
+                 
+                 //if(GetCurrentWorm() != NullObj)
+                 //{                
+                                  if(PossessType == 5)
+                                  {
+                                  Bounce();
+                                  }
+                 //}
+}
+
+void COilDrum::Possess_Frame()
+{
+                 if(PossessType == 0)
+                 {
+                 Possess();
+                 }
+                 
+                 if(GetCurrentWorm() == NullObj)
+                 {                
+                                  if(PossessType == 1 || PossessType == 7 ||  PossessType == 4 ||  PossessType == 3)
+                                  {
+                                    if(Armor < 1){Armor = 1;}// at least 1 armor
+                                  }
+                 }
+                 
+                 //if(GetCurrentWorm() != NullObj)
+                 //{                
+                                  if(PossessType == 11)
+                                  {
+                                  Scared();
+                                  }
+                 //}
+                 
+                 //if(GetCurrentWorm() != NullObj)
+                 //{                
+                                  if(PossessType == 9)
+                                  {
+                                  Digging();
+                                  }
+                 //}
+                 
+                 //if(GetCurrentWorm() != NullObj)
+                 //{                
+                                  if(PossessType == 2)
+                                  {
+                                  Deflecting();
+                                  }
+                 //}
+                 
+                 //if(GetCurrentWorm() != NullObj)
+                 //{                
+                                  if(PossessType == 5)
+                                  {
+                                  Bounce();
+                                  }
+                 //}
+}
+
+
+
+
+override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+            Possess_Frame();
+         }
+         
+         if(Type == M_GUNEXP)
+         {
+            if(PossessType == 1 && Armor > 0)
+            {
+                 Armor = Armor - 1;
+                 return;
+            }
+            if(PossessType == 7 && Armor > 0)
+            {
+                 Armor = Armor - 1;
+                 Terraform();
+            }
+            if(PossessType == 4 && Armor > 0)
+            {
+                 Armor = Armor - 1;
+                 Shoot();
+            }
+            if(PossessType == 3 && Armor > 0)
+            {
+                 Armor = Armor - 1;
+                 Swap();
+                 return;
+            }
+         }
+         
+         if(Type == M_EXPLOSION)
+         {
+         fixed x = MData->fparams[1];
+         fixed y = MData->fparams[2];
+                 if(x <= PosX + 50 && x >= PosX - 50)
+                 {
+                         if(y <= PosY + 50 && y >= PosY - 50)
+                         {
+                              if(PossessType == 1 && Armor > 0)
+                              {
+                                   Armor = Armor - 1;
+                                   return;
+                              }
+                              if(PossessType == 7 && Armor > 0)
+                              {
+                                   Armor = Armor - 1;
+                                   Terraform();
+                              }
+                              if(PossessType == 4 && Armor > 0)
+                              {
+                                   Armor = Armor - 1;
+                                   Shoot();
+                              }
+                              if(PossessType == 3 && Armor > 0)
+                              {
+                                   Armor = Armor - 1;
+                                   Swap();
+                                   return;
+                              }
+                         }
+                 }
+         }
+super;
+}
+
+override void COilDrum::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+            Possess_Frame();
+         }
+         
+         if(Type == M_GUNEXP)
+         {
+                                 if(PossessType == 1 && Armor > 0)
+                                 {
+                                      Armor = Armor - 1;
+                                      return;
+                                 }
+                                 if(PossessType == 7 && Armor > 0)
+                                 {
+                                      Armor = Armor - 1;
+                                      Terraform();
+                                      return;
+                                 }
+                                 if(PossessType == 4 && Armor > 0)
+                                 {
+                                      Armor = Armor - 1;
+                                      Shoot();
+                                      return;
+                                 }
+                                 if(PossessType == 3 && Armor > 0)
+                                 {
+                                      Armor = Armor - 1;
+                                      Swap();
+                                      return;
+                                 }
+         }
+         
+         if(Type == M_EXPLOSION)
+         {
+         fixed x = MData->fparams[1];
+         fixed y = MData->fparams[2];
+                 if(x <= PosX + 100 && x >= PosX - 100)
+                 {
+                         if(y <= PosY + 100 && y >= PosY - 100)
+                         {
+                                 if(PossessType == 1 && Armor > 0)
+                                 {
+                                      Armor = Armor - 1;
+                                      return;
+                                 }
+                                 if(PossessType == 7 && Armor > 0)
+                                 {
+                                      Armor = Armor - 1;
+                                      Terraform();
+                                      return;
+                                 }
+                                 if(PossessType == 4 && Armor > 0)
+                                 {
+                                      Armor = Armor - 1;
+                                      Shoot();
+                                      return;
+                                 }
+                                 if(PossessType == 3 && Armor > 0)
+                                 {
+                                      Armor = Armor - 1;
+                                      Swap();
+                                      return;
+                                 }
+                         }
+                 }
+         }
+super;
+}

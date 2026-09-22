@@ -1,0 +1,996 @@
+require utils, pxparticles, pxtexbeam, weapon_lightning, weapon_sentry_gun;
+
+//////////////////////////
+// Global variables
+
+float TazerSegmentLength;
+int TazerNumSegments;
+int TazerLifeTime;
+int TazerLifeTimeAfterHit;
+int TazerStartDie;
+float TazerSearchRadius;
+float TazerSearchRadiusSqr;
+float TazerNoiseScale;
+int TazerWormDamage;
+int TazerObjectDamage;
+bool TazerCanFire;
+
+// Most of those variables should be members of CTazerShot, but since PX has so many memory leaks, better have static tables
+// Since there will be only one worm using a tazer at once, that shouldn't be a problem
+int TazerNumPoints;
+int TazerQueueHead;
+int TazerQueueTail;
+int thinkingTimer;
+int thinkTimer;
+float TazerPointsX[128];
+float TazerPointsY[128];
+float TazerNoise[128];
+
+CGObject* TazerIgnoreList[64];
+int TazerIgnoreNum;
+
+CTraceRes *TazerTrace;
+
+CSprite* laserSprite;
+
+CSprite* tazer_lightningBeamSprite;
+CSprite* tazer_lightningGlowSprite;
+
+CSprite* wormTazedSprite1;
+CSprite* wormTazedSprite2;
+
+CSoundFile* tazerLoopSound;
+CSoundFile* tazerHitSound;
+
+#WEAPON_TAZER
+
+//CLogFile *tazerLog;
+
+///////////////////////////////////////////////////
+// Initialization
+
+void tazer::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("sentryservoloop.wav");	tazerLoopSound = new CSoundFile(f);
+	f = GetAttachment("sentryservoloop.wav");	tazerHitSound = new CSoundFile(f);
+	
+	TazerSegmentLength = 10.0;	// The length of each segment of the arc
+	TazerNumSegments = 33;		// Maximum number of segments in the arc, must be a power of 2 plus 1
+
+	// Override these numbers for infinite Tazer
+	// TazerNumSegments = 257;
+	// TazerLifeTime = 512;
+	// TazerLifeTimeAfterHit = 10;
+	// TazerStartDie = 64;
+	
+	
+	TazerLifeTime = 16;			// How far the arc can progress
+	TazerLifeTimeAfterHit = 20;	// Same, but after the initial hit (for making chains slightly easier)
+	TazerStartDie = 6;			// The arc starts to fade out when its life reaches this value
+	
+	TazerNoiseScale = 10.0;
+	TazerWormDamage = 24;
+	TazerObjectDamage = 12;
+	
+	TazerSearchRadius = TazerSegmentLength * TazerLifeTimeAfterHit;
+	TazerSearchRadiusSqr = TazerSearchRadius * TazerSearchRadius;
+	
+	TazerNumPoints = 0;
+	TazerTrace = new CTraceRes;
+	TazerObjectsZappedNum = 0;
+	
+	TazerCanFire = true;
+	
+	thinkingTimer = 30;
+	thinkTimer = thinkingTimer;
+	
+	//tazerLog = new CLogFile("tazer_log.txt");
+}
+
+void tazer::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("worm_tazed1.png");	wormTazedSprite1 = LoadSprite(f, 4, 0);
+	f = GetAttachment("worm_tazed2.png");	wormTazedSprite2 = LoadSprite(f, 4, 0);
+	f = GetAttachment("lightning_beam.png");	tazer_lightningBeamSprite = LoadSprite(f, 1, 0);
+	f = GetAttachment("lightning_glow.png");	tazer_lightningGlowSprite = LoadSprite(f, 1, 0);
+}
+
+///////////////////////////////////////////////////
+// CTazerDamage
+
+CTazerDamage : CObject;
+
+CTazerDamage::CTazerDamage(CObject *parent, CGObject *target, int side)
+{
+	super(parent, GS);
+	
+	Target = target;
+	DamageSide = side;
+	
+	if(Target->ClType == OC_Worm)
+	{
+		CWorm *w = CWorm(Target);
+		w->Taze();
+	}
+	
+	NextDie = 24;
+	
+	GlowSize = 10.0;
+	Removed = false;
+	Dead = false;
+	
+	PosX = target->PosX;
+	PosY = target->PosY;
+	
+	PRegister(&Target);
+	
+	tazerHitSound->Play(1.0, 0.0, false);
+}
+
+void CTazerDamage::Zap(CGObject* obj)
+{
+	if(obj->ClType == OC_Mine)
+	{
+		// Trigger mines
+		CMine *mine = CMine(obj);
+		
+		// If the mine is not a special mine, can be triggered, and has not been triggered yet
+		if(mine->Radius > 0 && mine->Active == 0 && mine->Prefuse <= 0)
+		{
+			// Almost instant explosion
+			mine->Fuse = 400;
+			
+			// Trigger the mine
+			mine->Active = 1;
+			mine->nPulses = 2;
+		}
+	}
+	else
+	{
+		CMessageData msg;
+		msg.params[0]	= 0;
+		msg.fparams[1]	= obj->PosX;
+		msg.fparams[2]	= obj->PosY;
+		msg.fparams[3]	= 1.2 * DamageSide;
+		msg.fparams[4]	= -4.0;
+		msg.params[5] = TazerObjectDamage;
+		msg.params[6] = 0;
+		
+		if(obj->ClType == OC_Worm)
+		{
+			CWorm *w = CWorm(Target);
+			w->UnTaze();
+			msg.params[5] = TazerWormDamage;
+		}
+		else
+		{
+			msg.params[5] = TazerObjectDamage;
+		}
+		
+		msg.params[6]	= 0;
+		
+		if(#WEAPON_MAGNET)
+		{
+			if(obj is CMagnet)
+			{
+				// Instantly destroy magnets
+				CMagnet *mag = CMagnet(obj);
+				if (mag->TurnsRemaining <= 0) { mag->Recharge(); return; }
+				else
+					{
+					mag->Health = 1;
+					mag->Message(this, M_GUNEXP, 1032, &msg);
+					return;
+					}
+			}
+		}
+		
+		if(#WEAPON_FAN)
+		{
+			if(obj is PxFan)
+			{
+                local fanobj = PxFan(obj);
+				if (fanobj->TurnsRemaining <= 0) { fanobj->Recharge(); return; }
+				else
+					{
+					fanobj->Health = 1;
+					fanobj->TakeDamage(TazerObjectDamage, 0);
+					fanobj->Message(this, M_GUNEXP, 1032, &msg);
+					return;
+					}
+			}
+		}
+		
+		if(#WEAPON_BOWLINGBALL)
+		{
+			if(obj is CBowlingBall)
+			{
+				// Send bowling balls flying and charge them
+				CBowlingBall *ball = CBowlingBall(obj);
+				if (ball->ZapTurnsRemaining == 0) ball->Zap(0);
+                else ball->Zap(1);
+				return;
+			}
+		}
+		     
+		if(#WEAPON_KSENTRY)
+		{
+		        if(obj is PxSentryGun)
+		        {
+			// Stun sentries
+			   PxSentryGun *sentry = PxSentryGun(obj);
+                           sentry->Stun(2);
+                           sentry->Message(this, M_GUNEXP, 1032, &msg);
+			   return;
+                        }
+		}
+		
+        if(##WEAPON_SENTRYLASER)
+		{
+		        if(obj is PxSentryLaser)
+        		{
+				// Stun sentries
+	        	PxSentryLaser *sentry = PxSentryLaser(obj);
+                sentry->Stun(2);
+                sentry->Message(this, M_GUNEXP, 1032, &msg);
+	        	return;
+         		}
+		}
+		
+		if(#WEAPON_CUSTOMTURRET)
+		{
+			if(obj is CCustomTurret)
+			{
+				
+				CCustomTurret *custur = CCustomTurret(obj);
+				custur->ammoCurrent = 0;
+				custur->Message(this, M_GUNEXP, 1032, &msg);
+				return;
+			}
+		}
+		
+		if(#LAMP_MISSILE)
+		{
+			if(obj is CLampMissile)
+			{
+				CLampMissile *lamp = CLampMissile(obj);
+				lamp->Recharge();
+				return;
+			}
+		}
+		
+		obj->Message(this, M_GUNEXP, 1032, &msg);
+	}
+}
+
+void CTazerDamage::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		if(Removed) return;
+		
+		if((NextDie <= 0) || (Target == CGObject(NullObj)))
+		{
+			if(Target != CGObject(NullObj))
+			{
+				Zap(Target);
+			}
+			
+			PUnregister(&Target);
+			Removed = true;
+			Free(true);
+			return;
+		}
+		NextDie = NextDie - 1;
+		
+		GlowSize = RandomFloat(0.4, 0.7);
+		
+		PosX = Target->PosX;
+		PosY = Target->PosY;
+		
+		PxParticle *p = new PxParticle(tazer_lightningGlowSprite->Index, PosX, PosY);
+		p->SetBlendMode(1);
+		p->SetLifeTime(50);
+		p->SetRandomVelocity(1.0, 3.0);
+		p->SetAirResistance(0.0);
+		p->GravityFactor(1.0);
+		p->SetAlpha(255);
+		p->SetColor(255,200,0);
+		p->SetStartSize(0.1, 0.1);
+		p->SetEndSize(0.01, 0.01);
+	}
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Removed) return;
+		
+		CQuad q;
+		FillSpriteQuad(&q, tazer_lightningGlowSprite->Index, 0, 0);
+		TransformQuad(&q, 0, GlowSize, GlowSize, PosX, PosY);
+		q.blend = 1;
+		for(i=0 ; i<4 ; i+=1) q.v[i].color = RGB(80,100,255);
+		AddSpriteQ(9.9, &q, tazer_lightningGlowSprite->Index, 0, 64);
+	}
+	
+	super;
+}
+
+///////////////////////////////////////////////////
+// CTazerShot
+
+CTazerShot : CObject;
+
+CTazerShot::CTazerShot(CObject *parent, CWorm *owner)
+{
+	super(parent, GS);
+	ClType = OC_AirStrike;
+	
+	ClearIgnoreList();
+	AddToIgnoreList(owner);
+	
+	float ang = (1 - owner->FireAngle) * 3.14159;
+	if(owner->TurnSide < 0) 
+	{
+		ang = 6.28318 - ang;
+	}
+	
+	LifeTime = TazerLifeTime;
+	
+	Removed = false;
+	Dead = false;
+	
+	DieFraction = 0.0;
+	DieRate = 0.05;
+	
+	DirX = sin(ang);
+	DirY = -cos(ang);
+	PosX = owner->PosX + 4 * DirX;
+	PosY = owner->PosY + 4 * DirY;
+	
+	LastX = owner->PosX;
+	LastY = owner->PosY;
+	
+	NextProgress = 0;
+	StopProgress = false;
+	
+	NumRemoveOnNextLink = 0;
+	
+	ClearPoints();
+	AddPoint(PosX, PosY);
+	
+	SoundObj = tazerLoopSound->Play(1.0, 0.0, false);
+}
+
+void CTazerShot::ClearPoints()
+{
+	TazerNumPoints = 0;
+	TazerQueueHead = 0;
+	TazerQueueTail = 0;
+}
+
+float CTazerShot::PointX(int i)
+{
+	i = (TazerQueueHead+i) % 64;
+	return TazerPointsX[i];
+}
+
+float CTazerShot::PointY(int i)
+{
+	i = (TazerQueueHead+i) % 64;
+	return TazerPointsY[i];
+}
+
+void CTazerShot::AddPoint(float x, float y)
+{
+	TazerPointsX[TazerQueueTail] = x;
+	TazerPointsY[TazerQueueTail] = y;
+	TazerQueueTail = (TazerQueueTail+1) % 64;
+	TazerNumPoints += 1;
+}
+
+void CTazerShot::RemovePoint()
+{
+	TazerQueueHead = (TazerQueueHead+1) % 64;
+	TazerNumPoints -= 1;
+}
+
+void CTazerShot::ClearIgnoreList()
+{
+	TazerIgnoreNum = 0;
+}
+
+bool CTazerShot::AddToIgnoreList(CGObject *obj)
+{
+	if(TazerIgnoreNum == 63) return false;
+	
+	TazerIgnoreList[TazerIgnoreNum] = obj;
+	TazerIgnoreNum += 1;
+	
+	return true;
+}
+
+bool CTazerShot::IsValidTarget(CGObject *obj)
+{
+	bool ok = false;
+	
+	///////////////////////////////
+	
+	if(obj->ClType == OC_Worm) ok = true;
+	if(obj->ClType == OC_Mine) ok = true;
+	if(obj->ClType == OC_OilDrum) ok = true;
+	if(obj->ClType == OC_Crate) ok = true;
+	
+	if(#WEAPON_MAGNET)
+	{
+		if(obj is CMagnet) ok = true;
+	}
+	
+	if(#WEAPON_BOWLINGBALL)
+	{
+		if(obj is CBowlingBall) ok = true;
+	}
+	
+	if(#WEAPON_FAN)
+	{
+		if(obj is PxFan) ok = true;
+	}
+	
+	if(obj is PxSentryGun) ok = true;
+	if(obj is PxSentryLaser) ok = true;
+	
+	if(#WEAPON_CUSTOMTURRET)
+	{
+	    if (obj is CTurretBase) ok = true;
+	}
+	
+	if(#LAMP_MISSILE)
+	{
+		if(obj is CLampMissile) ok = true;
+	}
+	
+	///////////////////////////////
+	
+	if(ok)
+	{
+		for(int i=0 ; i<TazerIgnoreNum ; i += 1)
+		{
+			if(TazerIgnoreList[i] == obj) return false;
+		}
+		return true;
+	}
+	
+	return false;
+}
+
+CGObject *CTazerShot::FindTarget()
+{
+	float best_distance;
+	CGObject *target = NullObj;
+	
+	for(int i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == NullObj) continue;
+		
+		if(IsValidTarget(obj))
+		{
+			float dx = obj->PosX - PosX;
+			float dy = obj->PosY - PosY;
+			float d = dx*dx + dy*dy;
+			
+			if(d <= TazerSearchRadiusSqr)
+			{
+				if(target == NullObj || d < best_distance)
+				{
+					target = obj;
+					best_distance = d;
+				}
+			}
+		}
+	}
+	
+	return target;
+}
+
+void CTazerShot::GenerateNoise(float scale, float start, float end)
+{
+	int i;
+	int k = TazerNumSegments;
+	int l = k >> 1;
+	
+	for(i=0 ; i<TazerNumSegments ; i+=1) TazerNoise[i] = 0.0;
+	TazerNoise[0] = start;
+	TazerNoise[TazerNumSegments-1] = end;
+	
+	while(l > 0)
+	{
+		for(i=l ; i<TazerNumSegments ; i+=k)
+		{
+			TazerNoise[i] = (TazerNoise[i-l] + TazerNoise[i+l]) * 0.5 + RandomFloat(-scale, scale);
+		}
+		k = l;
+		l = k >> 1;
+	}
+}
+
+void CTazerShot::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		if(Removed) return;
+		
+		GenerateNoise(1.0, 0.0, 0.0);
+		
+		if(NextProgress == 0)
+		{
+			//NextProgress = RandomInt(0,2);
+			NextProgress = 0; // don't slow the progress down, maybe it looks better that way?
+		}
+		else
+		{
+			NextProgress = NextProgress - 1;
+			return;
+		}
+		
+		if(TazerNumPoints >= TazerNumSegments || NumRemoveOnNextLink > 0)
+		{
+			RemovePoint();
+			NumRemoveOnNextLink = NumRemoveOnNextLink - 1;
+		}
+		
+		if(LifeTime == 0)
+		{
+			if(SoundObj != CSound(NullObj))
+			{
+				SoundObj->Stop();
+				SoundObj = CSound(NullObj);
+			}
+			
+			Removed = true;
+			Free(true);
+			return;
+		}
+		else
+			LifeTime = LifeTime - 1;
+		
+		bool snapToTarget = false;
+		CGObject *target = NullObj;
+		
+		if(LifeTime <= TazerStartDie)
+		{
+			// The electrical arc is dying, fade it out
+			RemovePoint();
+			RemovePoint();
+			NumRemoveOnNextLink = NumRemoveOnNextLink - 2;
+			
+			float f = TazerStartDie;
+			f = LifeTime / f;
+			DieFraction = 1.0 - f;
+		}
+		else
+			DieFraction = 0.0;
+		
+		if(StopProgress) return;
+		
+		target = FindTarget();
+		if(target != NullObj)
+		{
+			// Curve towards targets
+			float tx = target->PosX - PosX;
+			float ty = target->PosY - PosY;
+			float td = sqrt(tx*tx + ty*ty);
+			tx = tx/td;
+			ty = ty/td;
+			
+			float l = sqrt(TazerSegmentLength / td);
+			
+			// Near enough?
+			if(l >= 0.9)
+			{
+				// Snap to the target
+				l = 1.0;
+				snapToTarget = true;
+				
+				// Add the target to the ignore list so we don't zap it again and again
+				AddToIgnoreList(target);
+				
+				CGObject *newtarget = FindTarget();
+				if(newtarget != CGObject(NullObj))
+				{
+					// Reset the life time of the electrical arc
+					LifeTime = TazerLifeTimeAfterHit;
+				}
+				else
+					StopProgress = true;
+				
+				// Make it pause a bit
+				//NextProgress = RandomInt(2,4);
+				NextProgress = 14; // longer pause 
+				
+				// The number of points to remove from the arc the next time it links with something
+				// Kinda hard to explain but it's basically for removing excess points from the arc to make it look like
+				// it's linking the currently hit objects with the previously hit one.
+				NumRemoveOnNextLink = TazerNumPoints;
+				
+				// Bam, damage
+				if(tx < 0)
+					new CTazerDamage(GetObject(25, 0), target, -1);
+				else
+					new CTazerDamage(GetObject(25, 0), target, 1);
+			}
+			
+			DirX = DirX + (tx - DirX) * l;
+			DirY = DirY + (ty - DirY) * l;
+			
+			td = sqrt(DirX*DirX + DirY*DirY);
+			DirX = DirX/td;
+			DirY = DirY/td;
+		}
+		else
+		{
+			// No target, take a random direction
+			DirX = DirX + RandomFloat(-1.0, 1.0);
+			DirY = DirY + RandomFloat(-1.0, 1.0);
+			
+			float td = sqrt(DirX*DirX + DirY*DirY);
+			if(td == 0)
+			{
+				DirX = 0;
+				DirY = 1;
+			}
+			else
+			{
+				DirX = DirX/td;
+				DirY = DirY/td;
+			}
+		}
+		
+		if(snapToTarget == false)
+		{
+			// Avoid terrain
+			float endx = PosX + DirX * TazerSegmentLength * 2;
+			float endy = PosY + DirY * TazerSegmentLength * 2;
+			TraceLineEx(this, PosX, PosY, endx, endy, CMASK_TERRAIN, TazerTrace);
+			
+			if(TazerTrace->StartsSolid)
+			{
+				TraceLineEx(this, LastX, LastY, endx, endy, CMASK_TERRAIN, TazerTrace);
+				if(TazerTrace->StartsSolid)
+				{
+					Dead = true;
+					return;
+				}
+			}
+			
+			if(TazerTrace->Hit)
+			{
+				if(true)
+				{
+					// So we just hit some terrain, what are we supposed to do now?
+					
+					// Temporary vars, we'll use them for calculations later
+					float tx;
+					float ty;
+					float dx;
+					float dy;
+					float newPosX;
+					float newPosY;
+					
+					// Move away from the terrain to make sure we aren't too close to it
+					newPosX = TazerTrace->HitX + TazerTrace->NormalX * TazerSegmentLength;
+					newPosY = TazerTrace->HitY + TazerTrace->NormalY * TazerSegmentLength;
+					
+					// Let's try to follow the shape of the terrain and see if we're getting anywhere
+					dx = TazerTrace->TangentX;
+					dy = TazerTrace->TangentY;
+					
+					// New direction doesn't matter if we don't have a target, heh
+					if(target != NullObj)
+					{
+						// Now we can either follow the terrain in one direction or the other
+						// See which direction brings us closer to the target
+						
+						// Case 1: Projected new position if we follow the tangent's direction
+						float x1 = newPosX + dx * 2 * TazerSegmentLength;
+						float y1 = newPosY + dy * 2 * TazerSegmentLength;
+						
+						// Case 2: Projected new position if we follow the opposite direction
+						float x2 = newPosX - dx * 2 * TazerSegmentLength;
+						float y2 = newPosY - dy * 2 * TazerSegmentLength;
+						
+						// Distance to target when using case 1
+						tx = target->PosX - x1;
+						ty = target->PosY - y1;
+						float d1 = tx*tx+ty*ty;
+						
+						// Distance to target when using case 2
+						tx = target->PosX - x2;
+						ty = target->PosY - y2;
+						float d2 = tx*tx+ty*ty;
+						
+						if(d2 < d1)
+						{
+							// Case 2 brings us closer to the target, use the opposite tangent then
+							dx = -dx;
+							dy = -dy;
+							x1 = x2;
+							y1 = y2;
+						}
+					}
+					
+					// Calculate the final movement direction vector
+					newPosX += dx * TazerSegmentLength;
+					newPosY += dy * TazerSegmentLength;
+					DirX = newPosX - PosX;
+					DirY = newPosY - PosY;
+					float td = sqrt(DirX*DirX + DirY*DirY);
+					DirX = DirX / td;
+					DirY = DirY / td;
+				}
+				else
+				{
+					// OLD ALGORITHM
+					
+					float tx = TazerTrace->HitX - PosX;
+					float ty = TazerTrace->HitY - PosY;
+					float l = 1 - (sqrt(tx*tx+ty*ty) / (TazerSegmentLength * 2));
+					
+					tx = TazerTrace->HitX + TazerTrace->NormalX * TazerSegmentLength;
+					ty = TazerTrace->HitY + TazerTrace->NormalY * TazerSegmentLength;
+					
+					DirX = tx - PosX;
+					DirY = ty - PosY;
+					float td = sqrt(DirX*DirX + DirY*DirY);
+					DirX = DirX/td;
+					DirY = DirY/td;
+					
+					if(target != NullObj)
+					{
+						float x1 = PosX + DirX * TazerSegmentLength;
+						float y1 = PosY + DirY * TazerSegmentLength;
+						float x2 = PosX - DirX * TazerSegmentLength;
+						float y2 = PosY - DirY * TazerSegmentLength;
+						
+						tx = target->PosX - x1;
+						ty = target->PosY - y1;
+						float d1 = tx*tx+ty*ty;
+						
+						tx = target->PosX - x2;
+						ty = target->PosY - y2;
+						float d2 = tx*tx+ty*ty;
+						
+						if(d2 < d1)
+						{
+							DirX = -DirX;
+							DirY = -DirY;
+							x1 = x2;
+							y1 = y2;
+						}
+						
+						int hitx;
+						int hity;
+						
+						if(TraceLine(this, PosX, PosY, x1, y1, CMASK_TERRAIN, &hitx, &hity) != NullObj)
+						{
+							DirX = -DirX;
+							DirY = -DirY;
+						}
+					}
+				}
+			}
+		}
+		
+		LastX = PosX;
+		LastY = PosY;
+		
+		if(snapToTarget)
+		{
+			PosX = target->PosX;
+			PosY = target->PosY;
+		}
+		else
+		{
+			PosX += DirX * TazerSegmentLength;
+			PosY += DirY * TazerSegmentLength;
+		}
+		
+		AddPoint(PosX, PosY);
+	}
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Removed) return;
+		
+		if(TazerNumPoints >= 2)
+		{
+			StartTexturedBeam(this, 10, tazer_lightningBeamSprite->Index, 0.0, 1);
+			
+			CQuad q;
+			int num = (TazerNumPoints - 1);
+			
+			for(int i=0 ; i<=num ; i += 1)
+			{
+				float t = num;
+				t = i / t;
+				float x = PointX(i);
+				float y = PointY(i);
+				
+				if(i > 0 && i < num)
+				{
+					float dx = y - PointY(i-1);
+					float dy = PointX(i-1) - x;
+					float d = sqrt(dx*dx+dy*dy);
+					
+					dx = dx / d;
+					dy = dy / d;
+					
+					x = x + TazerNoiseScale * TazerNoise[i-1] * dx;
+					y = y + TazerNoiseScale * TazerNoise[i-1] * dy;
+				}
+				
+				// Dome curve thing where f(0)=f(1)=0 and f(0.5)=1
+				// basically that means that the beam will be thicker in the middle and thinner at the extremities
+				float f = (4.0 * t * (1.0-t) + 0.1);
+				if(f > 1.0) f = 1.0;
+				float f2 = f * (1.0 - DieFraction);
+				
+				float s;
+				float r;
+				float g;
+				float b;
+				
+				r = 80.0 * f2;
+				g = 100.0 * f2;
+				b = 255.0 * f2;
+				
+				TexturedBeamPoint(x, y, f * 9.0, t, RGB(r,g,b));
+				
+				FillSpriteQuad(&q, tazer_lightningGlowSprite->Index, 0, 0);
+				
+				if(i==num-1)
+				{
+					// Make the tip of the arc glow stronger
+					TransformQuad(&q, 0, 0.9, 0.9, x, y);
+				}
+				else
+				{
+					TransformQuad(&q, 0, 0.3, 0.3, x, y);
+				}
+				
+				q.blend = 1;
+				for(int k=0 ; k<4 ; k+=1) q.v[k].color = RGB(r,g,b);
+				AddSpriteQ(9.9, &q, tazer_lightningGlowSprite->Index, 0, 64);
+			}
+			
+			EndTexturedBeam();
+		}
+	}
+	
+	super;
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+	super;
+	TazerCanFire = true;
+}
+
+///////////////////////////
+// CWorm overrides
+
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	super;
+	Tazed = false;
+	TazedPosX = PosX;
+	TazedPosY = PosY;
+	TazedAnim = 0;
+	TazedAnimCycle = 0.0;
+	TazedAnimAngle = float(0.0);
+}
+
+void CWorm::Taze()
+{
+	Tazed = true;
+	TazedPosX = PosX;
+	TazedPosY = PosY;
+	
+	if(RandomInt(0,1) == 0)
+	{
+		TazedAnim = wormTazedSprite1->Index;
+	}
+	else
+	{
+		TazedAnim = wormTazedSprite2->Index;
+	}
+	
+	TazedAnimCycle = 0.0;
+	TazedAnimAngle = 3.141593 + RandomFloat(-0.2, 0.2);
+	//TazedAnimAngle = 0.0;
+	
+	SetState(WS_IDLE);
+	SpeedDivider = 1000;
+}
+
+void CWorm::UnTaze()
+{
+	Tazed = false;
+	SpeedDivider = 1;
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		if(Tazed)
+		{
+			// Makes the worm invisible
+			SetState(WS_IDLE);
+			Anim->Reset();
+			Anim->SetAnimEx(136, 0.0);
+			TazedAnimCycle = TazedAnimCycle + 0.1;
+			if(TazedAnimCycle >= 1.0) TazedAnimCycle -= 1.0;
+			
+			if(int(TazedPosX) != int(PosX) || int(TazedPosY) != int(PosY))
+			{
+				UnTaze();
+			}
+		}
+	}
+	
+	if(Type == M_DRAWQUEUE)
+	{
+	    if (Think)
+	    	{
+			if (thinkTimer <= 0)
+                {
+                TazerCanFire = true;
+                Think = false;
+                }
+			else
+				{
+                    thinkTimer -= 1;
+                }
+            }
+            
+		if(Tazed)
+		{
+			if(TurnSide < 0)
+			{
+				AddSpriteEx(8, PosX, PosY, TazedAnim + 262144, TazedAnimCycle, TazedAnimAngle, 1.0);
+			}
+			else
+			{
+				AddSpriteEx(8, PosX, PosY, TazedAnim, TazedAnimCycle, TazedAnimAngle, 1.0);
+			}
+		}
+	}
+	
+	super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Tazer"))
+	{
+		if(TazerCanFire)
+		{
+			new CTazerShot(GetObject(25, 0), this);
+			TazerCanFire = false;
+		}
+	}
+	else if(Weap->CheckName("Electric Charge"))
+	{
+		if(TazerCanFire)
+		{
+                new CTazerShot(GetObject(25, 0), this);
+                if (thinkTimer != thinkingTimer) thinkTimer = thinkingTimer;
+                Think = true;
+			    TazerCanFire = false;
+		}
+	}
+	else
+	{
+		super;
+	}
+}

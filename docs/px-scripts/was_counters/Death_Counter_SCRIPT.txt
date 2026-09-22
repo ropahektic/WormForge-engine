@@ -1,0 +1,27 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a death-counter to the game (can be used for statistical GUI's)
+
+int death_counts[6];
+
+void Death_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          death_counts[i] = 0;
+     }
+}
+
+override void CWorm::SetState(EObjState State)
+{
+     if(State == WS_DEAD)
+     { 
+          death_counts[getWormTeam(this, 0)]++;
+     }
+     
+     super;
+}

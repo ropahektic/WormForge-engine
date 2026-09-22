@@ -1,0 +1,47 @@
+require utils, p_sprite_builder;
+
+CSprite* squawks_aiming;
+CSprite* fsquawksa;
+CSprite* fsquawksb;
+
+void squawks_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("squawks.png");
+    squawks_aiming = LoadSprite(f, 4, 0);
+    f = GetAttachment("fsquawksa.png");
+    fsquawksb = LoadSprite(f, 32, 1);
+    f = GetAttachment("fsquawksb.png");
+    fsquawksa = LoadSprite(f, 32, 1);
+    
+    SetSpriteOverride(464, fsquawksa);
+    SetSpriteOverride(465, fsquawksb);
+}
+
+//---------------------------------SQUAWKS------------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Squawks";
+     sprite = squawks_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -11.4;
+     Params->animate = true;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     Params->anim_speed = 1.30;
+     Params->hand_rotation = -0.0;
+     Params->dont_rotate_with_angle = true;
+     Params->hand_ang_if_static = 0.4;
+     Params->ang_if_static = 0.0;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

@@ -1,0 +1,10 @@
+   CSprite* wormhit2;
+
+   void worm_blood::InitGraphic()
+{
+   CFile *f;
+   
+   f = GetAttachment("wormhit2.png");
+   wormhit2 = LoadSprite(f, 10, 0);
+   SetSpriteOverride(119, wormhit2);
+}

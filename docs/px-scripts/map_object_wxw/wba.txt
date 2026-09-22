@@ -1,0 +1,69 @@
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+local w = GetCurrentWorm();
+
+if (w != NullObj)
+	{
+	if (WAmount != 0)
+	    {
+	    if (CurWeapon->CheckName("Personal Invisibility") ||
+			CurWeapon->CheckName("Ninja Rope") ||
+			CurWeapon->CheckName("Parachute") ||
+			CurWeapon->CheckName("Skip Go") ||
+			CurWeapon->CheckName("Surrender") ||
+			CurWeapon->CheckName("Low Gravity") ||
+			CurWeapon->CheckName("Medkit 50"))
+        	{
+        	CanFire = true;
+			}
+		else
+			{
+			CanFire = false;
+			if(Type == M_SPACE)
+			    {
+			    if(ObjState != WS_ROPING && ObjState != WS_AFTERROPE && ObjState != WS_PARACHUTE)
+			        {
+	    			PlayLocalSound(120, 3, 1, 1);
+					ShowMessage("Touch all walls before attack!");
+        			setWeapon(this,"Ninja Rope",true);
+        			SetState(WS_AIMING);
+        			return;
+			    	}
+			    }
+			}
+		}
+
+	else
+	    {
+     	if(ObjState == WS_ROPING || ObjState == WS_AFTERROPE || ObjState == WS_PARACHUTE || CurWeapon->CheckName("Ninja Rope"))
+			{
+			CanFire = true;
+			}
+		else
+		    {
+		    if(CurWeapon != NullObj)
+			    {
+    		   	if (!CurWeapon->CheckName("Personal Invisibility") &&
+				   	!CurWeapon->CheckName("Ninja Rope") &&
+				   	!CurWeapon->CheckName("Parachute") &&
+					!CurWeapon->CheckName("Skip Go") &&
+					!CurWeapon->CheckName("Surrender") &&
+					!CurWeapon->CheckName("Low Gravity") &&
+					!CurWeapon->CheckName("Medkit 50"))
+	        		{
+				    CanFire = false;
+				    if(Type == M_SPACE)
+				    	{
+			    		PlayLocalSound(120, 3, 1, 1);
+        				ShowMessage("Attack from rope!");
+        				setWeapon(this,"Ninja Rope",true);
+        				SetState(WS_AIMING);
+        				return;
+        				}
+					}
+				}
+			}
+		}
+	}
+super;
+}

@@ -1,0 +1,23 @@
+/* 
+
+Modified by: DannyB, February 2023 (organization and cleanup)
+Original coder: unknown
+
+*/
+
+// This script adds various utilities.
+
+CSoundFile* CHAT_SOUND;
+
+void Chat_Sound_SCRIPT::Init()
+{
+     // initialize sound data
+     CHAT_SOUND = new CSoundFile(GetAttachment("send message.wav"));
+}  
+
+override bool CGame::EnterToChat(CMQueue* queue, string message)
+{ 
+     CHAT_SOUND->Play(1.0, 0.0, false);
+    
+     super;
+}

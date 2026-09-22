@@ -1,0 +1,752 @@
+
+require utils, pxparticles, pxtexbeam;
+
+#WEAPON_LIGHTNINGSTRIKE
+
+/////////////////////////////////////////
+// Uses custom message type 1000
+// Sent to objects when hit by lightning
+// params[0] : Lightning type (0 : lightning strike, 1 : tazer)
+// params[1] : Owner team
+
+CSprite* lightningBeamSprite;
+CSprite* lightningGlowSprite;
+
+CSoundFile* lightningStartSound;
+CSoundFile* lightningHitSound;
+
+CColMask* LIGHTNING_HITMASK;
+
+int LightningR;
+int LightningG;
+int LightningB;
+
+// Main beam : 9 divisions
+// Sub-beams : 6 * 9 divisions
+// = 63
+
+float NoiseTable[63];
+
+// Generate this table randomly to decide which point of the main beam will have a sub beam attached to it
+
+bool AttachSubBeam[9];
+
+PxDeadWormManager : CObject;
+
+PxDeadWormManager *DW_M;
+
+void lightningstrike::FirstFrame()
+{
+	CFile *f;
+	
+	f = GetAttachment("lightningthund.wav");	lightningStartSound = new CSoundFile(f);
+	f = GetAttachment("lightninghit.wav");		lightningHitSound = new CSoundFile(f);
+	
+	LIGHTNING_HITMASK = new CColMask(12, 12, MakeCircleMask(12));
+	DW_M = new PxDeadWormManager();
+	
+	LightningR = 120;
+	LightningG = 140;
+	LightningB = 255;
+}
+
+void lightningstrike::InitGraphic()
+{
+	CFile *f;
+	
+	f = GetAttachment("lightning_beam.png");	lightningBeamSprite = LoadSprite(f, 1, 0);
+	f = GetAttachment("lightning_glow.png");	lightningGlowSprite = LoadSprite(f, 1, 0);
+}
+
+///////////////////////////////////////////////////
+// PxDeadWorm (used to resurrect worms from graves)
+
+PxDeadWorm : CObject
+
+PxDeadWormManager::PxDeadWormManager()
+{
+	super(Root, GS);
+}
+
+PxDeadWorm* PxDeadWormManager::DeadWormFromGrave(CGObject *grave)
+{
+	PxDeadWorm *deadworm;
+	
+	for(int i=0 ; i<Childs.Count ; i+=1)
+	{
+		deadworm = PxDeadWorm(Childs.Objs[i]);
+		if(deadworm == PxDeadWorm(NullObj)) continue;
+		
+		if(deadworm->GraveObj == grave)
+		{
+			return deadworm;
+		}
+	}
+	
+	return PxDeadWorm(NullObj);
+}
+
+PxDeadWorm::PxDeadWorm(CWorm *worm, CGObject *grave)
+{
+	super(DW_M, GS);
+	
+	GraveObj = grave;
+	PRegister(&GraveObj);
+	
+	WormNumber = worm->WormNumber;
+	WormTeam = worm->WormTeam;
+	WormName = worm->GetName();
+	
+	ResurrectedWorm = CWorm(NullObj);
+	
+	RemoveMe = false;
+}
+
+void PxDeadWorm::Resurrect(int health)
+{
+	if(RemoveMe) return;
+	if(GraveObj == CGObject(NullObj)) return;
+	
+	ResurrectedWorm = RessurectWormEx(WormNumber, WormTeam, 0, 0, WormName, health);
+	ResurrectedWorm->PosX = GraveObj->PosX;
+	ResurrectedWorm->PosY = GraveObj->PosY-5;
+	
+	ResurrectedWorm->ResurrectedByLightning = true;
+	
+	GraveObj->Free(true);
+	PUnregister(&GraveObj);
+	
+	RemoveMe = true;
+}
+
+void PxDeadWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		if(RemoveMe)
+		{
+			if(ResurrectedWorm != CWorm(NullObj))
+			{
+				ResurrectedWorm->ResurrectedByLightning = false;
+			}
+			Free(true);
+			return;
+		}
+		
+		if(GraveObj == CGObject(NullObj))
+		{
+			PUnregister(&GraveObj);
+			RemoveMe = true;
+			return;
+		}
+	}
+	
+	if(Type == M_DRAWQUEUE)
+	{
+		return;
+	}
+	
+	super;
+}
+
+///////////////////////////////////////////////////
+// PxLightningStrike
+
+PxLightningStrike : CObject;
+
+PxLightningStrike::PxLightningStrike(CObject* Parent, CShootDesc* Desc)
+{
+	super(Parent, GS);
+	ClType = OC_AirStrike;
+	
+	// Lightning parameters
+	LightningPitch = 30.0;
+	LightningMaxDistance = 300.0;
+	LightningMinY = -270;
+	
+	// Calculate the lightning strike's starting position (where the cloud will appear)
+	// and ending position (where the lightning will strike)
+	
+	float ang = (LightningPitch * 3.141593) / 180.0;
+	DirX = sin(ang);
+	DirY = cos(ang);
+	
+	if(Desc->SpX < 0) DirX = -DirX;
+	
+	// Perform a projection on y = LightningMinY (maximum height at which the lightning cloud can appear)
+	float y = LightningMinY;
+	float x = Desc->AddX - (Desc->AddY - y) * (DirX / DirY);
+	
+	StartX = int(x);
+	StartY = int(y);
+	
+	LightningHitLand = true;
+	
+	// Trace down and get the exact strike position
+	int hitX;
+	int hitY;
+	
+	int tracemask =	  CMASK_TERRAIN
+					| CMASK_WORM_ON_TERRAIN
+					| CMASK_WORM_USING_WEAPON
+					| CMASK_WORM_IN_MIDAIR
+					| CMASK_WORM_ON_ROPE
+					| CMASK_WORM_FROZEN
+					| CMASK_GASCANISTER
+					| CMASK_MINE
+					| CMASK_CRATE
+					| CMASK_DONORCARD
+					| CMASK_GRAVESTONE
+					| CMASK_OTHERWEAPON
+					| CMASK_OILDRUM;
+	
+	if(TraceLine(this, StartX, StartY, StartX + 10000 * DirX, StartY + 10000 * DirY, tracemask, &hitX, &hitY) == NullObj)
+	{
+		// Didn't hit anything, just spawn the cloud high in the sky and make it strike some arbitrary point
+		x = StartX + LightningMaxDistance * DirX;
+		y = StartY + LightningMaxDistance * DirY;
+		hitX = x;
+		hitY = y;
+		
+		LightningHitLand = false;
+	}
+	else
+	{
+		if(hitY - LightningMaxDistance * DirY > StartY)
+		{
+			// Hit something but it's too far away from the cloud
+			// Move the cloud down accordingly to the hit position
+			x = hitX - LightningMaxDistance * DirX;
+			y = hitY - LightningMaxDistance * DirY;
+			StartX = x;
+			StartY = y;
+		}
+	}
+	
+	EndX = hitX;
+	EndY = hitY;
+	
+	// Must be a multiple of 2 + 1, because we're generating fractal noise
+	
+	// this should have been used to allocate the noise table but due to an issue with EAX,
+	// the noise table has been declared as a global variable (see line 15)
+	//NoiseDivs = (1 << 4) + 1;		// 17
+	NoiseDivs = (1 << 3) + 1;		// 9
+	SubNoiseDivs = (1 << 3) + 1;	// 9
+	MaxSubBeams = (NoiseDivs * 2) / 3;
+	
+	GenerateNoise();
+	
+	// Timer stuff
+	CloudGenerateTimer = 0;
+	LightningHitDelay = 150;
+	LightningTime = 16;
+	PostLightningTime = 60;
+	
+	// Internal states
+	Dead = false;
+	IsFirstFrame = true;
+	OwnerTeam = Desc->Team;
+	GroundGlowSize = 0.5;
+}
+
+// Calculates fractal noise from NoiseTable[offset] to NoiseTable[offset+divs-1]
+void PxLightningStrike::CalcNoise(int offset, int divs, float scale, float start, float end)
+{
+	int i;
+	int k = divs;
+	int l = k >> 1;
+	
+	for(i=0 ; i<divs ; i+=1) NoiseTable[offset+i] = 0.0;
+	NoiseTable[offset] = start;
+	NoiseTable[offset+divs-1] = end;
+	
+	while(l > 0)
+	{
+		for(i=l ; i<divs ; i+=k)
+		{
+			NoiseTable[offset+i] = (NoiseTable[offset+i-l] + NoiseTable[offset+i+l]) * 0.5 + RandomFloat(-scale, scale);
+		}
+		k = l;
+		l = k >> 1;
+	}
+}
+
+// Fills NoiseTable with fractal noise (1 main beam + 6 secondary beams), and generates the secondary beam attachment table
+void PxLightningStrike::GenerateNoise()
+{
+	int i;
+	
+	CalcNoise(0, NoiseDivs, 1.0, 0.0, 0.0);
+	
+	for(i=0 ; i<NoiseDivs ; i+=1) AttachSubBeam[i] = false;
+	for(i=0 ; i<MaxSubBeams ; i+=1) AttachSubBeam[RandomInt(1,NoiseDivs-1)] = true;
+	
+	for(i=0 ; i<MaxSubBeams ; i+=1)
+	{
+		float offset = RandomFloat(2.0,6.0);
+		if(RandomInt(0,1) == 0) offset = -offset;
+		
+		CalcNoise(NoiseDivs + SubNoiseDivs * i, SubNoiseDivs, 0.5, 0.0, offset);
+	}
+	
+	GroundGlowSize = RandomFloat(0.5,0.8);
+}
+
+// Renders one lightning beam using data previously generated by GenerateNoise
+void PxLightningStrike::RenderBeam(int offset, int divs, float width, float endwidth, float scale, float x1, float y1, float x2, float y2, float glowalpha)
+{
+	float fraction;
+	float x;
+	float y;
+	float d = divs - 1;
+	
+	int i;
+	float j;
+	
+	float dx = x2-x1;
+	float dy = y2-y1;
+	float dd = sqrt(dx*dx+dy*dy);
+	
+	dx = dx / dd;
+	dy = dy / dd;
+	
+	StartTexturedBeam(this, 11, lightningBeamSprite->Index, 0.0, 1);
+	
+	CQuad q;
+			
+	for(i=0 ; i<divs ; i+=1)
+	{
+		j = i;
+		fraction = j / d;
+		x = Lerp(fraction, x1, x2) + scale * dy * NoiseTable[offset+i];
+		y = Lerp(fraction, y1, y2) - scale * dx * NoiseTable[offset+i];
+		
+		float w = Lerp(fraction, width, endwidth);
+		float r = LightningR * glowalpha * (1.0 - fraction);
+		float g = LightningG * glowalpha * (1.0 - fraction);
+		float b = LightningB * glowalpha * (1.0 - fraction);
+		
+		TexturedBeamPoint(x, y, w, fraction, RGB(LightningR, LightningG, LightningB));
+		
+		FillSpriteQuad(&q, lightningGlowSprite->Index, 0, 0);
+		TransformQuad(&q, 0, 0.5, 0.5, x, y);
+		q.blend = 1;
+		for(int k=0 ; k<4 ; k+=1) q.v[k].color = RGB(r,g,b);
+		AddSpriteQ(9.9, &q, lightningGlowSprite->Index, 0, 64);
+	}
+	
+	EndTexturedBeam();
+}
+
+// Renders the main lightning beam and its secondary beams
+void PxLightningStrike::RenderLightning()
+{
+	if(LightningHitDelay >= 8) return;
+	
+	int divs = NoiseDivs;
+	float endx = EndX;
+	float endy = EndY;
+	
+	if(LightningHitDelay > 0)
+	{
+		float fr = (8.0 - LightningHitDelay) / 8.0;
+		float fdivs = NoiseDivs * fr;
+		divs = fdivs;
+		
+		endx = Lerp(fr, StartX, EndX);
+		endy = Lerp(fr, StartY, EndY);
+	}
+	
+	RenderBeam(0, divs, 35.0, 3.0, 15.0, StartX, StartY, endx, endy, 1.0);
+	
+	float fraction;
+	float x;
+	float y;
+	float d = divs - 1;
+	
+	int i;
+	float j;
+	
+	int subBeam = 0;
+	
+	for(i=0 ; i<divs ; i+=1)
+	{
+		if(AttachSubBeam[i])
+		{
+			j = i;
+			fraction = j / d;
+			x = Lerp(fraction, StartX, endx) + 10.0 * DirY * NoiseTable[i];
+			y = Lerp(fraction, StartY, endy) - 10.0 * DirX * NoiseTable[i];
+			
+			RenderBeam(NoiseDivs + SubNoiseDivs * subBeam, SubNoiseDivs, Lerp(fraction, 10.0, 1.0), 0.1, 15.0 * (1.0 - fraction), x, y,
+				x + DirX * 100.0 * (1.0 - fraction), y + DirY * 100.0 * (1.0 - fraction), 0.5 * (1.0 - fraction));
+			
+			subBeam = subBeam + 1;
+		}
+	}
+	
+	CQuad q;
+	
+	FillSpriteQuad(&q, lightningGlowSprite->Index, 0, 0);
+	TransformQuad(&q, 0, 1.8, 1.8, StartX+10*DirX, StartY+10*DirY);
+	q.blend = 1;
+	for(i=0 ; i<4 ; i+=1) q.v[i].color = RGB(LightningR,LightningG,LightningB);
+	AddSpriteQ(9.9, &q, lightningGlowSprite->Index, 0, 64);
+	
+	if(LightningHitDelay <= 0 && LightningHitLand)
+	{
+		FillSpriteQuad(&q, lightningGlowSprite->Index, 0, 0);
+		TransformQuad(&q, 0, GroundGlowSize, GroundGlowSize, EndX, EndY);
+		q.blend = 1;
+		for(i=0 ; i<4 ; i+=1) q.v[i].color = RGB(LightningR,LightningG,LightningB);
+		AddSpriteQ(9.9, &q, lightningGlowSprite->Index, 0, 64);
+	}
+}
+
+// Applies the lightning strike effect to a particular object
+void PxLightningStrike::LightningHit(CGObject *obj)
+{
+	if(#WEAPON_MAGNET)
+	{
+		if(obj is CMagnet)
+		{
+			// Recharge magnets
+			local mag = CMagnet(obj);
+			mag->Recharge();
+			return;
+		}
+	}
+	
+	if(#WEAPON_BOWLINGBALL)
+	{
+		if(obj is CBowlingBall)
+		{
+			// Overcharge bowling balls
+			local ball = CBowlingBall(obj);
+			ball->Zap(0);
+			return;
+		}
+	}
+	
+	if(#WEAPON_FAN)
+	{
+		if(obj is PxFan)
+		{
+			// Recharge fan
+			local fanobj = PxFan(obj);
+			fanobj->Recharge();
+			return;
+		}
+	}
+	
+    if(#WEAPON_SENTRYLASER)
+	{
+	  	if(obj is PxSentryLaser)
+        {
+        PxSentryLaser *sentry = PxSentryLaser(obj);
+	    sentry->OwnerTeam = OwnerTeam;
+	    sentry->TurretActive = false;
+	    return;
+	    }
+    }
+        
+            
+	if(#WEAPON_KSENTRY)
+	{
+	  	if(obj is PxSentryGun)
+	  	{
+		// Changes sentry teams
+		local sentry = PxSentryGun(obj);
+		sentry->OwnerTeam = OwnerTeam;
+		sentry->TurretActive = false;
+		return;
+	  	}
+    }
+    
+    if(#WEAPON_BARRELLAUNCHER)
+	{
+	  	if(obj is NapalmDrum || obj is MinesDrum || obj is ElectroDrum || obj is IceDrum || obj is TeleportDrum)
+	  	{
+		CMessageData msg;
+		msg.params[0]	= 0;
+		msg.fparams[1]	= EndX;
+		msg.fparams[2]	= EndY;
+		msg.fparams[3]	= 0.0;
+		msg.fparams[4]	= 0.0;
+		msg.params[5]	= 100;
+		msg.params[6]	= 0;
+
+		obj->Message(this, M_GUNEXP, 1032, &msg);
+	  	}
+    }
+	
+	if(#WEAPON_TURRET)
+	{
+		if(obj is CTurretBase)
+		{
+            local turret = CTurretBase(obj);
+            turret->turretTeam = OwnerTeam;
+			return;
+		}
+	}
+	
+	if(#LAMP_MISSILE)
+	{
+		if(obj is CLampMissile)
+		{
+			// Recharge lamps
+			local lamp = CLampMissile(obj);
+			lamp->Recharge();
+			return;
+		}
+	}
+	
+	if(obj->ClType == OC_Mine)
+	{
+		// Trigger mines
+		local mine = CMine(obj);
+		
+		// If the mine is not a special mine, can be triggered, and has not been triggered yet
+		if(mine->Radius > 0 && mine->Active == 0 && mine->Prefuse <= 0)
+		{
+			// If the mine has a random timer
+			if(mine->Fuse < 0)
+			{
+				// Give it a random fuse time (between 1 and 5)
+				mine->Fuse = RandomInt(1000, 5000);
+			}
+			
+			// Trigger the mine
+			mine->Active = 1;
+			mine->nPulses = mine->Fuse / 250;
+		}
+	}
+	else if(obj->ClType == OC_OilDrum || obj->ClType == OC_Crate)
+	{
+		// Blow up oil drums and crates
+		CMessageData msg;
+		msg.params[0]	= 0;
+		msg.fparams[1]	= EndX;
+		msg.fparams[2]	= EndY;
+		msg.fparams[3]	= 0.0;
+		msg.fparams[4]	= 0.0;
+		msg.params[5]	= 100;
+		msg.params[6]	= 0;
+		
+		obj->Message(this, M_GUNEXP, 1032, &msg);
+	}
+	else if(obj->ClType == OC_Worm)
+	{
+		// Heal worms
+		local worm = CWorm(obj);
+		
+		if(worm->ResurrectedByLightning == false)
+		{
+			int health = GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber);
+			GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, health + 25);
+		}
+	}
+	else if(obj->ClType == OC_Cross)
+	{
+		// Resurrect worms from their grave
+		local deadworm = DW_M->DeadWormFromGrave(obj);
+		
+		if(deadworm != PxDeadWorm(NullObj))
+		{
+			deadworm->Resurrect(25);
+		}
+		else
+		{
+			ShowMessage("Grave has no bound worm, could not resurrect!");
+		}
+	}
+	
+	// Allows any object to define its own custom behaviour
+	//CMessageData msg;
+	//msg.params[0]	= 0;
+	//msg.params[1]	= OwnerTeam;
+	//obj->Message(this, EMType(1000), 1032, &msg);
+}
+
+// Performs a mask test and applies the lightning strike effect to all detected objects
+void PxLightningStrike::DoLightningStrike()
+{
+	CGObject *obj;
+	
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+    {
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == NullObj) continue;
+		
+		if(LIGHTNING_HITMASK->Check(EndX, EndY, obj->ColMask, obj->PosX, obj->PosY))
+		{
+			LightningHit(obj);
+		}
+	}
+}
+
+void PxLightningStrike::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		PxParticle *p;
+		
+		if(Dead)
+		{
+			Free(true);
+			return;
+		}
+		
+		if(IsFirstFrame)
+		{
+			lightningStartSound->Play(1.0, 0.0, false);
+			IsFirstFrame = false;
+		}
+		
+		if(LightningTime > 0)
+		{
+			if(LightningHitDelay <= 0)
+			{
+				GenerateNoise();
+				
+				if(LightningHitLand)
+				{
+					p = new PxParticle(lightningGlowSprite->Index, EndX, EndY);
+					p->SetBlendMode(1);
+					p->SetLifeTime(50);
+					p->SetRandomVelocity(1.0, 3.0);
+					p->SetAirResistance(0.0);
+					p->GravityFactor(1.0);
+					p->SetAlpha(255);
+					p->SetColor(LightningR, LightningG, LightningB);
+					p->SetStartSize(0.1, 0.1);
+					p->SetEndSize(0.01, 0.01);
+				}
+				
+				LightningTime = LightningTime - 1;
+				if(LightningHitLand && LightningTime <= 0)
+				{
+					DoLightningStrike();
+				}
+			}
+			else
+			{
+				LightningHitDelay = LightningHitDelay - 1;
+				if(LightningHitDelay == 0)
+				{
+					lightningHitSound->Play(1.0, 0.0, false);
+				}
+			}
+		}
+		else
+		{
+			PostLightningTime = PostLightningTime - 1;
+			if(PostLightningTime <= 0)
+			{
+				Dead = true;
+			}
+		}
+		
+		if(CloudGenerateTimer <= 0)
+		{
+			float xvel;
+			float yvel;
+			
+			// Core clouds
+			if(LightningTime > 0)
+			{
+				p = new PxParticle(618, StartX, StartY);
+				p->SetAnimSpeed(0.02);
+				p->SetLifeTime(100);
+				
+				xvel = RandomFloat(-1.0, 1.0);
+				yvel = 1.0 - (xvel * xvel);
+				
+				p->SetVelocity(16.0 * xvel, RandomFloat(-8.0, 1.0) * yvel);
+				p->SetAirResistance(0.3);
+				p->SetStartAlpha(0);
+				p->SetEndAlpha(255);
+				p->SetStartSize(1.2, 1.2);
+				p->SetEndSize(0.6, 0.6);
+				p->SetStartColor(45,40,60);
+				p->SetEndColor(45,40,60);
+			}
+			
+			// Surrounding clouds
+			p = new PxParticle(618, StartX, StartY);
+			p->SetAnimSpeed(0.02);
+			p->SetLifeTime(140);
+			
+			xvel = RandomFloat(-1.0, 1.0);
+			yvel = 1.0 - (xvel * xvel);
+			
+			p->SetVelocity(16.0 * xvel, RandomFloat(-8.0, 1.0) * yvel);
+			p->SetAirResistance(0.15);
+			p->SetStartAlpha(0);
+			p->SetEndAlpha(255);
+			p->SetStartSize(1.0, 1.0);
+			p->SetEndSize(0.01, 0.01);
+			p->SetStartColor(45,40,60);
+			p->SetEndColor(45,40,60);
+			
+			CloudGenerateTimer = 2;
+		}
+		CloudGenerateTimer = CloudGenerateTimer - 1;
+	}
+	
+	if(Type == M_DRAWQUEUE)
+	{
+		if(LightningTime <= 0) return;
+		
+		//AddSprite(10, StartX, StartY, 0, 2, 0.0);
+		//AddSprite(10, EndX, EndY, 0, 2, 0.0);
+		RenderLightning();
+		return;
+	}
+	
+	super;
+}
+
+///////////////////////////////////////////////////
+// CWorm overrides
+
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	super;
+	ResurrectedByLightning = false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Lightning Strike"))
+	{
+		new PxLightningStrike(GetObject(25, 0), Desc);
+	}
+	else
+	{
+		super;
+	}
+}
+
+override void CWorm::Free(bool freeMem)
+{
+	CGObject *obj;
+	
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+    {
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == NullObj) continue;
+		
+		if(obj->ClType == OC_Cross)
+		{
+			if(obj->PosX == PosX && obj->PosY == PosY)
+			{
+				new PxDeadWorm(this, obj);
+				break;
+			}
+		}
+	}
+	
+	super;
+}

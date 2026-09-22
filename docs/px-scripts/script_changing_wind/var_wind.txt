@@ -1,0 +1,40 @@
+// based on WindChanger by ravander
+// scripted by PyroMan
+
+require utils;
+
+int WindDelay;
+int varWind;
+float p_wind;
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        local w = GetCurrentWorm();
+        if (w != NullObj)
+        {
+            // 50 frames in PX worms = 1 second. 500 = 10 seconds, 1000 = 20 seconds.
+            // Override this line in your scheme to change timings.
+            
+            if (WindDelay == 1) varWind = RandomInt(500, 1000);
+            
+            if (WindDelay == varWind) p_wind = RandomFloat(-0.3, 0.3);
+
+            if (WindDelay > varWind && WindDelay < varWind+150) 
+            {                                                                
+               local wind2 = Env->Wind - (Env->Wind-p_wind)/(varWind+150 - WindDelay);
+               CMessageData* mdata = new CMessageData;
+               mdata->fparams[0] = wind2;          
+               Root->Message(Root, M_UPDATEWIND,4,mdata);
+               delete mdata;
+            }
+            if (WindDelay >= varWind+150) 
+            {
+               WindDelay = 0;
+            }
+            WindDelay++;
+        }
+    }
+    super;
+}

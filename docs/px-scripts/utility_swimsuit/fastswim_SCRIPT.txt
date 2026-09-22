@@ -1,0 +1,27 @@
+int swimmultiply;
+
+void fastswim_SCRIPT::FirstFrame()
+{
+    swimmultiply = 2;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_TURNBEGIN)
+    {
+        swimmultiply = 2;
+    }
+    
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Fast Walk"))
+    {
+        if (swimmultiply != 6) swimmultiply = 6;
+        else swimmultiply = 2;
+    }
+
+    super;
+}

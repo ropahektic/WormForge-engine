@@ -1,0 +1,9 @@
+CSprite* bg;
+
+void bg_replace::InitGraphic()
+{
+   CFile* file;
+   file = GetAttachment("bg.png");
+   bg = LoadSprite(file, 1, 0);
+   SetSpriteOverride(621, bg);
+}

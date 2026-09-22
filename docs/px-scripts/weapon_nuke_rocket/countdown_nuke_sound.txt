@@ -1,0 +1,15 @@
+CSoundFile* countdown;
+
+void countdown_nuke_sound::Init()
+{
+	countdown       = new CSoundFile(GetAttachment("Countdown to Lift-off.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Space Rocket"))
+  {
+             countdown->Play(1.5, 0.0, false);
+  }
+  super;
+}

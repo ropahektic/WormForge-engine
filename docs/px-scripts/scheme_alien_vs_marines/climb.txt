@@ -1,0 +1,116 @@
+require utils, weapon_stun_mine;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+Climbing = false;
+PressingKeys = false;
+ClimbSpeed = 0.25;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) 
+{
+	if(Weap->CheckName("Climb"))
+	{
+         if(Climbing == false){Climbing = true;}
+         else{Climbing = false;}
+	}
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if(Type == M_GUNEXP || Type == M_EXPLOSION || Type == M_TURNEND)
+ {
+ Climbing = false;
+ }
+ 
+ if(Type == M_FRAME)
+ {
+  if(Climbing == true)
+  {
+	        local hitx1 = 0;
+	        local hity1 = 0;
+	        local hitx2 = 0;
+	        local hity2 = 0;
+	        local hitx3 = 0;
+	        local hity3 = 0;
+	        local hitx4 = 0;
+	        local hity4 = 0;
+                CGObject *hit1 = TraceLine(this, PosX, PosY, PosX + 24*TurnSide, PosY - 24, 2, &hitx1, &hity1);
+                CGObject *hit2 = TraceLine(this, PosX, PosY, PosX + 24*TurnSide, PosY, 2, &hitx2, &hity2);
+                CGObject *hit3 = TraceLine(this, PosX, PosY, PosX + 24*TurnSide, PosY + 24, 2, &hitx3, &hity3);
+                CGObject *hit4 = TraceLine(this, PosX, PosY, PosX, PosY - 24, 2, &hitx4, &hity4);                  
+		if(hit1 == NullObj && hit2 == NullObj && hit3 == NullObj && hit4 == NullObj){Climbing = false;} 
+
+    if(PressingKeys == false)
+    {		
+    if(SpX != 0){SpX = 0;}
+    if(SpY != 0){SpY = 0;}
+    }
+		
+    if(SpX > 0.0){SpX = SpX - 0.1;}
+    if(SpX < 0.0){SpX = SpX + 0.1;}
+    if(SpY > 0.0){SpY = SpY - 0.1;}
+    if(SpY < 0.0){SpY = SpY + 0.1;}
+  
+    if(GravityFactor == 1)
+    {
+    GravityFactor = 0;
+    }
+    
+    //if(SpX > 0){TurnSide = 1;}
+    //if(SpX < 0){TurnSide = -1;}
+  }
+  else
+  {
+    if(GravityFactor == 0)
+    {
+    GravityFactor = 1;
+    }
+  }
+  if(Stunned == true && Climbing == true)
+  {
+  Climbing = false;
+  }
+ }
+ 
+ if(Climbing == true && Stunned == false)
+ {             
+             if(Type == M_PUP || Type == M_PDOWN || Type == M_PLEFT || Type == M_PRIGHT)
+             {
+             PressingKeys = true;
+             }
+             else
+             {
+             PressingKeys = false;
+             }
+             
+             if(Type == M_PUP)
+             {
+             SpY = SpY - ClimbSpeed;
+             return;
+             }
+             if(Type == M_PDOWN)
+             {
+             SpY = SpY + ClimbSpeed;
+             return;
+             }
+             if(Type == M_PLEFT)
+             {
+             SpX = SpX - ClimbSpeed;
+             return;
+             }
+             if(Type == M_PRIGHT)
+             {
+             SpX = SpX + ClimbSpeed;
+             return;
+             }
+             
+             if(SpY > 2)SpY = 2;
+             if(SpY < -2)SpY = -2;
+             if(SpX > 2)SpX = 2;
+             if(SpX < -2)SpX = -2;
+ }
+ super;
+}   

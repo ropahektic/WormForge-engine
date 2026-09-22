@@ -1,0 +1,104 @@
+require utils, utils_steps, p_sprite_builder;   
+
+CSprite* gunfblt;
+
+void fam_script::InitGraphic()
+{
+f = GetAttachment("gunfbullet.png");
+gunfblt = LoadSprite(f, 1, 0);  
+}
+
+CWeapon* famas;
+int famshoots;
+
+void fam_script::FirstFrame()
+{
+famas = GetWeaponByName("FAMAS");
+famshoots = 3;     //12 (4 bursts)
+}
+
+//---------------CWorm Class Overrides---------------//
+override CWorm::CWorm(CObject * Parent, int aTeam, int aIndex, CWormParams * params)
+{
+    super;
+    famascooldown = 0;
+    GunShotsFired = 0;
+    SpreadsFired = 0;
+    GunShooting = false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (Weap->CheckName("FAMAS"))
+    {
+       if (GunShotsFired<2)
+       {            
+         GunShotsFired++; //For some reason MShotsFired++ normally doesn't work.
+         Desc->Y    -=    6.1      ;                  //Hotfix
+         Desc->SpY = Desc->SpY+RandomInt(-0.5,0.5);  //Spread        
+         super(famas, Desc);  
+         GunShooting=true;
+         return;   //Return HERE makes it loop.
+       }      
+        super(famas, Desc); //Separate shots here bc of the sound   
+        GunShooting = false;   
+        if (SpreadsFired < famshoots) //4
+        {        
+        GunShotsFired = 0;
+        nAvalShoots = 1;
+        nTotalShoots = 0; 
+        SpreadsFired++;    
+        SetState(WS_AIMING); 
+        return;
+        }      
+        nTotalShoots = 1; 
+        GunShooting = false;
+        GunShotsFired = 0;
+        SpreadsFired = 0;     
+        SetState(WS_IDLE); 
+    }        
+    else {GunShooting=false; //Shouldn't be neccessary, however i'm insecure.
+    super; }
+}
+  
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+  if (Type == M_FRAME)
+  {
+        if (CurWeapon != NullObj && CurWeapon->CheckName("FAMAS"))
+        {
+        if (GunShooting)
+        {
+           // Persist animation.  
+           nShoots = 1;
+           nShooted = 0;
+        }
+     }
+  }
+  if (GetCurrentWorm() == this)
+  {
+  if (Type==M_SETWEAPON)
+  {
+     if(CurWeapon!=NullObj && CurWeapon->CheckName("FAMAS") == true)
+     {
+     GunShotsFired=0; GunShooting=false;  //Reset variables
+     }    
+  }
+  } 
+   
+}
+
+//Well organized workflow oriented SPB
+override void CMissile::Message(CObject* sender,EMType Type,
+int MSize,CMessageData* MData){super
+;if(Type==M_FRAME
+){if(weap->CheckName("FAMAS"
+)){if(gunfblt_anim){local sprite
+=
+gunfblt->Index;WeapSpriteParams* Params= new WeapSpriteParams;Params->animate=true;Params->
+anim_speed=1.50; Params
+->ZPlane = 22.0; new WeapSprite(this,sprite,Params);weap->launch.anim.spriteIndex=0;gunfblt_anim=false;}
+}}} override CMissile::CMissile
+(CObject* parent,CWeaponLaunch* ldata,
+CShootDesc* sdata){super;gunfblt_anim = true;}        

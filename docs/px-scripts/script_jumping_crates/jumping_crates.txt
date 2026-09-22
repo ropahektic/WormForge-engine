@@ -1,0 +1,62 @@
+require utils;
+
+bool jumpingcrates;
+
+void jumping_crates::Init()
+{
+  jumpingcrates = true;
+}
+
+// jumpingcrates
+override void CGObject::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+
+if(Type == M_FRAME && jumpingcrates)
+  	{
+  	if(ClType == OC_Crate)
+  		{
+    	local currworm = GetCurrentWorm();
+    	if(currworm == NullObj) return;
+
+    	for(local i=0; i < Env->Objs.Count; i++)
+    		{
+      		local obj = Env->Objs.Objs[i];
+      		if(obj == NullObj) continue;
+      		if(obj == this) continue;
+      		if(obj != currworm && obj->ClType != OC_Missile && obj->ClType != OC_Arrow) continue;
+
+      		local dist = DistBetweenObjs(obj, this);
+      		if(dist > 2 && dist < 100)
+      			{
+        		local objB = CGObject(obj);
+        		if(!objB->IsMoving() && objB->ObjState != WS_WALKING) continue;
+
+        		local trgx = PosX - objB->PosX;
+        		local direction = Sign(trgx);
+        		if(abs(trgx) > 40)  // i'm not over this object
+        			{
+          			if(dist < 60) Move(direction, 8, direction, -1);
+        			}
+        		else  // i'm over this object
+        			{
+          			Move(2*direction, 4, direction, 0);
+        			}
+				}
+      		}
+    	}
+  	}
+}
+
+void CGObject::Move(int RelX, int RelY, int ForceX, int ForceY)
+{
+  if(CheckMaskAt(this, ColMask, PosX+RelX, PosY-RelY, -1) == NullObj)
+  {
+    PosX += RelX;  PosY -= RelY;  ApplyForce(ForceX, ForceY, 0);
+    PlayLocalSound(10, 0, 1.0, 1.0);
+  }
+  else
+  {
+    // cornered object
+  }
+}

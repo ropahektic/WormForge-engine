@@ -1,0 +1,15 @@
+CSoundFile* dancewiththedevil;
+ 
+void angels_sound_place::Init()
+{
+	dancewiththedevil       = new CSoundFile(GetAttachment("Dance With The Devil.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Angels of Death"))
+  {  
+             dancewiththedevil->Play(1.25, 0.0, false);
+  }
+  super;
+}

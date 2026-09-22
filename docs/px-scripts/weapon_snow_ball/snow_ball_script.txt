@@ -1,0 +1,92 @@
+require utils, sprite_curtis_455;
+
+CColMask* snowball_COLMASK;
+
+void snow_ball_script::InitGraphic(){}
+
+void snow_ball_script::Init(){}
+
+void snow_ball_script::FirstFrame()
+{
+     snowball_COLMASK = new CColMask(10,10,MakeRectMask(20,20));
+}
+
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+SType = false;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+ if(Weap->CheckName("Snow Ball"))
+ {
+    	CGObject *snowbo;
+        CMissile *snowbm;
+	snowbo = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+	     if(snowbo->ClType == OC_Missile)
+             {
+             snowbm = snowbo;
+             snowbm->SType = true;
+             }
+ }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(SType == true)
+   {
+              if(Type == M_FRAME)
+              {
+                      SnowBCollision(15.0);
+              }
+   }
+super;
+}
+
+void CMissile::SnowBCollision(float Speed)
+{
+	CGObject *snowbob;
+
+	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		snowbob = CGObject(Env->Objs.Objs[i]);
+		if(snowbob == this) continue;
+		if(snowbob == NullObj) continue;
+		if(GetCurrentWorm() != NullObj)
+		                    {
+		                    if(snowbob == GetCurrentWorm()) continue;
+		                    }
+
+
+		if(snowbob->ClType == OC_Worm)
+		{
+			if(snowball_COLMASK->Check(PosX, PosY, snowbob->ColMask, snowbob->PosX, snowbob->PosY))
+			{
+				float ForceX = snowbob->PosX - PosX;
+				float ForceY = snowbob->PosY - PosY;
+				float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+				if(dist > 0)
+				{
+					ForceX = 0.7*sqrt(Speed) * ForceX / dist;
+					ForceY = 0.7*sqrt(Speed) * ForceY / dist;
+
+					CMessageData msg;
+					msg.params[0]	= 0;
+					msg.fparams[1]	= PosX;
+					msg.fparams[2]	= PosY;
+					msg.fparams[3]	= ForceX;
+					msg.fparams[4]	= ForceY;
+					msg.params[5]	= 1;
+					msg.params[6]	= 0;
+
+					snowbob->Message(this, M_GUNEXP, 1032, &msg);
+				}
+			}
+		}
+	}
+}

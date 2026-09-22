@@ -1,0 +1,1659 @@
+require cweps_gfx, p_sprite_builder, utils;
+
+//----------------------SPB
+/*
+CSprite* sbpicp;
+CSprite* sbpicu;
+CSprite* sbpicd;
+CSprite* sbaimp;
+CSprite* sbaimu;
+CSprite* sbaimd;
+CSprite* whbaz_aim;
+*/
+//----------------------TRAILS
+CSprite* lglow_tr;
+CSprite* blood_tr;
+CSprite* smart_tr;
+CSprite* thmpn_tr;
+CSprite* thmpc_tr;
+CSprite* bumpb_tr;
+CSprite* magic_tr;
+CSprite* expla_tr;
+CSprite* winda_tr;
+CSprite* rbndr_tr;
+CSprite* fireb_tr;
+CSprite* stone_tr;
+CSprite* staff_tr;
+CSprite* asced_tr;
+CSprite* descd_tr;
+CSprite* bombb_tr;
+CSprite* swind_tr;
+//----------------------ZOOKS
+CSprite* grvlr_aim;
+CSprite* grvlr_bul;
+CSprite* grvla;
+CSprite* grvlb;
+CSprite* grvlc;
+CSprite* grvld;
+CSprite* hmort_bul;
+CSprite* ptrlr_bul;
+CSprite* blast_aim;
+CSprite* blast_bul;
+CSprite* pignc_aim;
+CSprite* pignc_bul;
+CSprite* smart_aim;
+CSprite* smart_bul;
+//----------------------GUNS
+CSprite* frplt_bul;
+//----------------------NADES
+CSprite* fraga_aim;
+CSprite* fragb_aim;
+CSprite* bskbl_aim;
+CSprite* bsebl_aim;
+CSprite* thump_aim;
+CSprite* bumpa_aim;
+CSprite* bumpb_aim;
+CSprite* ionba_aim;
+CSprite* ionbb_aim;
+CSprite* slama_aim;
+CSprite* slamb_aim;
+CSprite* grava_aim;
+CSprite* gravb_aim;
+CSprite* sgrva;
+CSprite* sgrvb;
+CSprite* sgrvc;
+CSprite* sgrvd;
+//----------------------BOWS
+CSprite* crbow_aim;
+CSprite* crbow_bul;
+CSprite* expla_aim;
+CSprite* expla_bul;
+CSprite* winda_aim;
+CSprite* winda_bul;
+CSprite* rebnd_aim;
+CSprite* homea_aim;
+CSprite* multi_aim;
+CSprite* multi_bul;
+CSprite* mltbc;
+CSprite* fireb_aim;
+CSprite* fireb_bul;
+CSprite* shadb_aim;
+CSprite* shadb_bul;
+CSprite* telea_aim;
+CSprite* telea_bul;
+//----------------------PRIMALS
+CSprite* snowb_aim;
+CSprite* sling_aim;
+CSprite* javln_aim;
+CSprite* javln_bul;
+CSprite* ninja_aim;
+CSprite* ninja_bul;
+CSprite* staff_aim;
+CSprite* staff_bul;
+//----------------------GADGETS
+CSprite* forbs_bul;
+CSprite* ether_aim;
+CSprite* ether_bul;
+CSprite* girdl_bul;
+CSprite* tdyna_aim;
+CSprite* tming_aim;
+CSprite* ascda_aim;
+CSprite* ascdb_aim;
+CSprite* dscda_aim;
+CSprite* dscdb_aim;
+CSprite* rolla_aim;
+CSprite* rollb_aim;
+//----------------------CRITTERS
+CSprite* skipr_aim;
+CSprite* bombb_aim;
+CSprite* pogos_aim;
+CSprite* btram_aim;
+CSprite* cchkn_aim;
+CSprite* chkna;
+CSprite* chknb;
+CSprite* drllc_aim;
+CSprite* sqwks_aim;
+CSprite* sqwka;
+CSprite* sqwkb;
+CSprite* sworm_aim;
+CSprite* swrma;
+CSprite* swrmb;
+
+void cwp_spb::InitGraphic()
+{
+CFile *f;
+//---------------------------------------------SPB
+/*
+f = GetAttachment("sbpicp.png");
+sbpicp = LoadSprite(f, 10, 0);
+f = GetAttachment("sbpicu.png");
+sbpicu = LoadSprite(f, 10, 0);
+f = GetAttachment("sbpicd.png");
+sbpicd = LoadSprite(f, 10, 0);
+f = GetAttachment("sbaimp.png");
+sbaimp = LoadSprite(f, 32, 0);
+f = GetAttachment("sbaimu.png");
+sbaimu = LoadSprite(f, 32, 0);
+f = GetAttachment("sbaimd.png");
+sbaimd = LoadSprite(f, 32, 0);
+f = GetAttachment("spb_whbaz.png");
+whbaz_aim = LoadSprite(f, 1, 0);
+*/
+//---------------------------------------------TRAILS
+f = GetAttachment("lglow.png");
+lglow_tr = LoadSprite(f, 1, 0);
+f = GetAttachment("blood.png");
+blood_tr = LoadSprite(f, 6, 0);
+f = GetAttachment("smrtbt.png");
+smart_tr = LoadSprite(f, 8, 0);
+f = GetAttachment("thmpnt.png");
+thmpn_tr = LoadSprite(f, 9, 0);
+f = GetAttachment("thmpnct.png");
+thmpc_tr = LoadSprite(f, 8, 0);
+f = GetAttachment("bumpt.png");
+bumpb_tr = LoadSprite(f, 6, 0);
+f = GetAttachment("slamt.png");
+magic_tr = LoadSprite(f, 6, 0);
+f = GetAttachment("explat.png");
+expla_tr = LoadSprite(f, 8, 0);
+f = GetAttachment("windat.png");
+winda_tr = LoadSprite(f, 8, 0);
+f = GetAttachment("rbndrt.png");
+rbndr_tr = LoadSprite(f, 8, 0);
+f = GetAttachment("firebt.png");
+fireb_tr = LoadSprite(f, 8, 0);
+f = GetAttachment("stonet.png");
+stone_tr = LoadSprite(f, 7, 0);
+f = GetAttachment("stafft.png");
+staff_tr = LoadSprite(f, 6, 0);
+f = GetAttachment("ascdt.png");
+asced_tr = LoadSprite(f, 4, 0);
+f = GetAttachment("dscdt.png");
+descd_tr = LoadSprite(f, 4, 0);
+f = GetAttachment("bombbt.png");
+bombb_tr = LoadSprite(f, 7, 0);
+f = GetAttachment("swindt.png");
+swind_tr = LoadSprite(f, 9, 0);
+//---------------------------------------------ZOOKS
+f = GetAttachment("spb_grvlr.png");
+grvlr_aim = LoadSprite(f, 8, 0);
+f = GetAttachment("grvlr.png");
+grvlr_bul = LoadSprite(f, 3, 0);
+f = GetAttachment("grvla.png");
+grvla = LoadSprite(f, 17, 0);
+f = GetAttachment("grvlb.png");
+grvlb = LoadSprite(f, 17, 0);
+f = GetAttachment("grvlc.png");
+grvlc = LoadSprite(f, 17, 0);
+f = GetAttachment("grvld.png");
+grvld = LoadSprite(f, 17, 0);
+f = GetAttachment("hmort.png");
+hmort_bul = LoadSprite(f, 2, 0);
+f = GetAttachment("ptrlr.png");
+ptrlr_bul = LoadSprite(f, 6, 0);
+f = GetAttachment("spb_blast.png");
+blast_aim = LoadSprite(f, 4, 0);
+f = GetAttachment("bworm.png");
+blast_bul = LoadSprite(f, 4, 0);
+f = GetAttachment("pignc.png");
+pignc_bul = LoadSprite(f, 4, 0);
+f = GetAttachment("spb_pignc.png");
+pignc_aim = LoadSprite(f, 4, 0);
+f = GetAttachment("spb_smart.png");
+smart_aim = LoadSprite(f, 8, 0);
+f = GetAttachment("smrtb.png");
+smart_bul = LoadSprite(f, 11, 0);
+//---------------------------------------------GUNS
+f = GetAttachment("frplt.png");
+frplt_bul = LoadSprite(f, 6, 0);
+//---------------------------------------------NADES
+f = GetAttachment("fraga.png");
+fraga_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("fragb.png");
+fragb_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("bskbl.png");
+bskbl_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("bsebl.png");
+bsebl_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("thmpn.png");
+thump_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("bumpa.png");
+bumpa_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("bumpb.png");
+bumpb_aim = LoadSprite(f, 12, 0);
+f = GetAttachment("ionba.png");
+ionba_aim = LoadSprite(f, 12, 0);
+f = GetAttachment("ionbb.png");
+ionbb_aim = LoadSprite(f, 12, 0);
+f = GetAttachment("slama.png");
+slama_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("slamb.png");
+slamb_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("grava.png");
+grava_aim = LoadSprite(f, 12, 0);
+f = GetAttachment("gravb.png");
+gravb_aim = LoadSprite(f, 12, 0);
+f = GetAttachment("sgrva.png");
+sgrva = LoadSprite(f, 12, 0);
+f = GetAttachment("sgrvb.png");
+sgrvb = LoadSprite(f, 1, 0);
+f = GetAttachment("sgrvc.png");
+sgrvc = LoadSprite(f, 1, 0);
+f = GetAttachment("sgrvd.png");
+sgrvd = LoadSprite(f, 1, 0);
+//---------------------------------------------BOWS
+f = GetAttachment("spb_crbow.png");
+crbow_aim = LoadSprite(f, 4, 0);
+f = GetAttachment("bolta.png");
+crbow_bul = LoadSprite(f, 6, 0);
+f = GetAttachment("spb_expla.png");
+expla_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("expla.png");
+expla_bul = LoadSprite(f, 1, 0);
+f = GetAttachment("spb_winda.png");
+winda_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("winda.png");
+winda_bul = LoadSprite(f, 6, 0);
+f = GetAttachment("spb_rebnd.png");
+rebnd_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("spb_homea.png");
+homea_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("spb_multi.png");
+multi_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("multi.png");
+multi_bul = LoadSprite(f, 12, 0);
+f = GetAttachment("multic.png");
+mltbc = LoadSprite(f, 32, 0);
+f = GetAttachment("spb_fireb.png");
+fireb_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("fireb.png");
+fireb_bul = LoadSprite(f, 6, 0);
+f = GetAttachment("spb_shadb.png");
+shadb_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("shadb.png");
+shadb_bul = LoadSprite(f, 6, 0);
+f = GetAttachment("spb_telea.png");
+telea_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("telea.png");
+telea_bul = LoadSprite(f, 8, 0);
+//---------------------------------------------PRIMALS
+f = GetAttachment("snowb.png");
+snowb_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("spb_sling.png");
+sling_aim = LoadSprite(f, 8, 0);
+f = GetAttachment("spb_javln.png");
+javln_aim = LoadSprite(f, 12, 0);
+f = GetAttachment("javla.png");
+javln_bul = LoadSprite(f, 12, 0);
+f = GetAttachment("spb_ninja.png");
+ninja_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("ninjaa.png");
+ninja_bul = LoadSprite(f, 6, 0);
+f = GetAttachment("spb_staff.png");
+staff_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("staff.png");
+staff_bul = LoadSprite(f, 10, 0);
+//---------------------------------------------GADGETS
+f = GetAttachment("forbs.png");
+forbs_bul = LoadSprite(f, 8, 0);
+f = GetAttachment("spb_ether.png");
+ether_aim = LoadSprite(f, 6, 0);
+f = GetAttachment("etherb.png");
+ether_bul = LoadSprite(f, 16, 0);
+f = GetAttachment("girdla.png");
+girdl_bul = LoadSprite(f, 8, 0);
+f = GetAttachment("tdyna.png");
+tdyna_aim = LoadSprite(f, 4, 0);
+f = GetAttachment("tming.png");
+tming_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("ascda.png");
+ascda_aim = LoadSprite(f, 10, 0);
+f = GetAttachment("ascdb.png");
+ascdb_aim = LoadSprite(f, 10, 0);
+f = GetAttachment("dscda.png");
+dscda_aim = LoadSprite(f, 10, 0);
+f = GetAttachment("dscdb.png");
+dscdb_aim = LoadSprite(f, 10, 0);
+f = GetAttachment("rolla.png");
+rolla_aim = LoadSprite(f, 12, 0);
+f = GetAttachment("rollb.png");
+rollb_aim = LoadSprite(f, 12, 0);
+//---------------------------------------------CRITTERS
+f = GetAttachment("skipr.png");
+skipr_aim = LoadSprite(f, 9, 0);
+f = GetAttachment("bombb.png");
+bombb_aim = LoadSprite(f, 15, 0);
+f = GetAttachment("spb_pogos.png");
+pogos_aim = LoadSprite(f, 1, 0);
+f = GetAttachment("btram.png");
+btram_aim = LoadSprite(f, 8, 0);
+f = GetAttachment("cchkn.png");
+cchkn_aim = LoadSprite(f, 4, 0);
+f = GetAttachment("cchkna.png");
+chkna = LoadSprite(f, 32, 1);
+f = GetAttachment("cchknb.png");
+chknb = LoadSprite(f, 32, 1);
+f = GetAttachment("drllc.png");
+drllc_aim = LoadSprite(f, 8, 0);
+f = GetAttachment("sqwks.png");
+sqwks_aim = LoadSprite(f, 4, 0);
+f = GetAttachment("sqwksa.png");
+sqwka = LoadSprite(f, 32, 1);
+f = GetAttachment("sqwksb.png");
+sqwkb = LoadSprite(f, 32, 1);
+f = GetAttachment("sworm.png");
+sworm_aim = LoadSprite(f, 15, 0);
+f = GetAttachment("sworma.png");
+swrma = LoadSprite(f, 32, 1);
+f = GetAttachment("swormb.png");
+swrmb = LoadSprite(f, 32, 1);
+//--------------------------------------------------
+//------------------------------------------OVERRIDE
+SetSpriteOverride(245, blood_tr);
+SetSpriteOverride(246, smart_tr);
+SetSpriteOverride(247, thmpn_tr);
+SetSpriteOverride(248, thmpc_tr);
+SetSpriteOverride(249, bumpb_tr);
+SetSpriteOverride(250, magic_tr);
+SetSpriteOverride(251, expla_tr);
+SetSpriteOverride(252, winda_tr);
+SetSpriteOverride(253, rbndr_tr);
+SetSpriteOverride(254, fireb_tr);
+SetSpriteOverride(255, stone_tr);
+SetSpriteOverride(256, staff_tr);
+SetSpriteOverride(257, asced_tr);
+SetSpriteOverride(258, descd_tr);
+SetSpriteOverride(259, bombb_tr);
+SetSpriteOverride(260, swind_tr);
+
+//SetSpriteOverride(445, sbpicp);
+//SetSpriteOverride(446, sbpicu);
+//SetSpriteOverride(447, sbpicd);
+
+SetSpriteOverride(451, grvla);
+SetSpriteOverride(452, grvlb);
+SetSpriteOverride(453, grvlc);
+SetSpriteOverride(454, grvld);
+SetSpriteOverride(455, sgrva);
+SetSpriteOverride(456, sgrvb);
+SetSpriteOverride(457, sgrvc);
+SetSpriteOverride(458, sgrvd);
+SetSpriteOverride(459, mltbc);
+SetSpriteOverride(460, chkna);
+SetSpriteOverride(461, chknb);
+SetSpriteOverride(462, sqwka);
+SetSpriteOverride(463, sqwkb);
+SetSpriteOverride(464, swrma);
+SetSpriteOverride(465, swrmb);
+
+//SetSpriteOverride(534, sbaimp);
+//SetSpriteOverride(535, sbaimu);
+//SetSpriteOverride(536, sbaimd);
+}
+
+//---------------------------SPRITE-BUILDER-------------------------------------
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+if (Type == M_FRAME) {
+if (gframe == 1) {
+
+local weapName1;   local weapName2;   local weapName3;
+local weapName4;   local weapName5;   local weapName6;
+local weapName7;   local weapName8;   local weapName9;
+local weapName10;  local weapName11;  local weapName12;
+local weapName13;  local weapName14;  local weapName15;
+local weapName16;  local weapName17;  local weapName18;
+local weapName19;  local weapName20;  local weapName21;
+local weapName22;  local weapName23;  local weapName24;
+local weapName25;  local weapName26;  local weapName27;
+local weapName28;  local weapName29;  local weapName30;
+local weapName31;  local weapName32;  local weapName33;
+local weapName34;  local weapName35;  local weapName36;
+local weapName37;  local weapName38;  local weapName39;
+local weapName40;  local weapName41;  local weapName42;
+local weapName43;  local weapName44;  local weapName45;
+local weapName46;  local weapName47;  local weapName48;
+local weapName49;  local weapName50;  local weapName51;
+local weapName52;  local weapName53;  local weapName54;
+local weapName55;  local weapName56;  local weapName57;
+local weapName58;  local weapName59;  local weapName60;
+local weapName61;  local weapName62;  local weapName63;
+local weapName64;  local weapName65;  local weapName66;
+local weapName67;  local weapName68;  local weapName69;
+local weapName70;  local weapName71;  local weapName72;
+
+//local weapName73;  local weapName74;  local weapName75;
+
+weapName1  = "Gravler";              weapName2  = "Gravler FD";
+weapName3  = "Gravler FD ";          weapName4  = "Blaster Worm";
+weapName5  = "Blaster Worm ";        weapName6  = "Pigeon Cannon";
+weapName7  = "Pigeon Cannon ";       weapName8  = "S.M.A.R.T Bomb";
+weapName9  = "S.M.A.R.T Bomb ";      weapName10 = "S.M.A.R.T.E.R Bomb";
+weapName11 = "S.M.A.R.T.E.R Bomb ";  weapName12 = "Frag Grenade";
+weapName13 = "Frag Grenade ";        weapName14 = "Cluster Frag";
+weapName15 = "Cluster Frag ";        weapName16 = "Basketball";
+weapName17 = "Basketball ";          weapName18 = "Baseball Bomb";
+weapName19 = "Thumper Nade";         weapName20 = "Bumper Bomb";
+weapName21 = "Super Bumper Bomb";    weapName22 = "Ion Bomb";
+weapName23 = "Super Ion Bomb";       weapName24 = "Magic Slammer";
+weapName25 = "Super Magic Slammer";  weapName26 = "Gravedigger";
+weapName27 = "Gravedigger ";         weapName28 = "Super Gravedigger";
+weapName29 = "Super Gravedigger ";   weapName30 = "Crossbow";
+weapName31 = "Crossbow ";            weapName32 = "Explosive Arrow";
+weapName33 = "Explosive Arrow ";     weapName34 = "Windy Arrow";
+weapName35 = "Windy Arrow ";         weapName36 = "Rebounder";
+weapName37 = "Rebounder ";           weapName38 = "Homing Arrow";
+weapName39 = "Homing Arrow ";        weapName40 = "Multi-Bolt";
+weapName41 = "Multi-Bolt ";          weapName42 = "Wildfire-Bolt";
+weapName43 = "Wildfire-Bolt ";       weapName44 = "Shadow-Bolt";
+weapName45 = "Shadow-Bolt ";         weapName46 = "Tele Arrow";
+weapName47 = "Tele Arrow ";          weapName48 = "Snow Ball";
+weapName49 = "SlingShot";            weapName50 = "Javelin";
+weapName51 = "Ninja Star";           weapName52 = "Staff of Jolting";
+weapName53 = "Ether Balloons";       weapName54 = "Thrown Dynamite";
+weapName55 = "Thrown Ming Vase";     weapName56 = "Ascender";
+weapName57 = "Descender";            weapName58 = "Super Ascender";
+weapName59 = "Super Descender";      weapName60 = "Remote Roller";
+weapName61 = "Remote Roller ";       weapName62 = "Super Remote Roller";
+weapName63 = "Super Remote Roller "; weapName64 = "Skipper";
+weapName65 = "Bomb-omb";             weapName66 = "Pogo Sheep";
+weapName67 = "Battering Ram";        weapName68 = "Crazy Chicken";
+weapName69 = "Super Crazy Chicken";  weapName70 = "Drilling Crew";
+weapName71 = "Squawks";              weapName72 = "Super Worm";
+
+//weapName73 = "Sheep Launcher";
+//weapName74 = "Burning Sheep Launcher";
+//weapName75 = "Magnetic Missile";
+
+local sprite1;   local sprite2;   local sprite3;
+local sprite4;   local sprite5;   local sprite6;
+local sprite7;   local sprite8;   local sprite9;
+local sprite10;  local sprite11;  local sprite12;
+local sprite13;  local sprite14;  local sprite15;
+local sprite16;  local sprite17;  local sprite18;
+local sprite19;  local sprite20;  local sprite21;
+local sprite22;  local sprite23;  local sprite24;
+local sprite25;  local sprite26;  local sprite27;
+local sprite28;  local sprite29;  local sprite30;
+local sprite31;  local sprite32;  local sprite33;
+local sprite34;  local sprite35;  local sprite36;
+local sprite37;  local sprite38;  local sprite39;
+local sprite40;  local sprite41;  local sprite42;
+local sprite43;  local sprite44;  local sprite45;
+local sprite46;  local sprite47;  local sprite48;
+//local sprite49;
+
+sprite1  = grvlr_aim->Index;  sprite2  = blast_aim->Index;  sprite3  = pignc_aim->Index;
+sprite4  = smart_aim->Index;  sprite5  = fraga_aim->Index;  sprite6  = fragb_aim->Index;
+sprite7  = bskbl_aim->Index;  sprite8  = bsebl_aim->Index;  sprite9  = thump_aim->Index;
+sprite10 = bumpa_aim->Index;  sprite11 = bumpb_aim->Index;  sprite12 = ionba_aim->Index;
+sprite13 = ionbb_aim->Index;  sprite14 = slama_aim->Index;  sprite15 = slamb_aim->Index;
+sprite16 = grava_aim->Index;  sprite17 = gravb_aim->Index;  sprite18 = crbow_aim->Index;
+sprite19 = expla_aim->Index;  sprite20 = winda_aim->Index;  sprite21 = rebnd_aim->Index;
+sprite22 = homea_aim->Index;  sprite23 = multi_aim->Index;  sprite24 = fireb_aim->Index;
+sprite25 = shadb_aim->Index;  sprite26 = telea_aim->Index;  sprite27 = snowb_aim->Index;
+sprite28 = sling_aim->Index;  sprite29 = javln_aim->Index;  sprite30 = ninja_aim->Index;
+sprite31 = staff_aim->Index;  sprite32 = ether_aim->Index;  sprite33 = tdyna_aim->Index;
+sprite34 = tming_aim->Index;  sprite35 = ascda_aim->Index;  sprite36 = dscda_aim->Index;
+sprite37 = ascdb_aim->Index;  sprite38 = dscdb_aim->Index;  sprite39 = rolla_aim->Index;
+sprite40 = rollb_aim->Index;  sprite41 = skipr_aim->Index;  sprite42 = bombb_aim->Index;
+sprite43 = pogos_aim->Index;  sprite44 = btram_aim->Index;  sprite45 = cchkn_aim->Index;
+sprite46 = drllc_aim->Index;  sprite47 = sqwks_aim->Index;  sprite48 = sworm_aim->Index;
+//sprite49 = whbaz_aim->Index;
+
+CWormAnimParams* Params1 = new CWormAnimParams;
+CWormAnimParams* Params2 = new CWormAnimParams;
+CWormAnimParams* Params3 = new CWormAnimParams;
+CWormAnimParams* Params4 = new CWormAnimParams;
+CWormAnimParams* Params5 = new CWormAnimParams;
+CWormAnimParams* Params6 = new CWormAnimParams;
+CWormAnimParams* Params7 = new CWormAnimParams;
+CWormAnimParams* Params8 = new CWormAnimParams;
+CWormAnimParams* Params9 = new CWormAnimParams;
+CWormAnimParams* Params10 = new CWormAnimParams;
+CWormAnimParams* Params11 = new CWormAnimParams;
+CWormAnimParams* Params12 = new CWormAnimParams;
+CWormAnimParams* Params13 = new CWormAnimParams;
+CWormAnimParams* Params14 = new CWormAnimParams;
+CWormAnimParams* Params15 = new CWormAnimParams;
+CWormAnimParams* Params16 = new CWormAnimParams;
+CWormAnimParams* Params17 = new CWormAnimParams;
+CWormAnimParams* Params18 = new CWormAnimParams;
+CWormAnimParams* Params19 = new CWormAnimParams;
+CWormAnimParams* Params20 = new CWormAnimParams;
+CWormAnimParams* Params21 = new CWormAnimParams;
+CWormAnimParams* Params22 = new CWormAnimParams;
+CWormAnimParams* Params23 = new CWormAnimParams;
+CWormAnimParams* Params24 = new CWormAnimParams;
+CWormAnimParams* Params25 = new CWormAnimParams;
+CWormAnimParams* Params26 = new CWormAnimParams;
+CWormAnimParams* Params27 = new CWormAnimParams;
+CWormAnimParams* Params28 = new CWormAnimParams;
+CWormAnimParams* Params29 = new CWormAnimParams;
+CWormAnimParams* Params30 = new CWormAnimParams;
+CWormAnimParams* Params31 = new CWormAnimParams;
+CWormAnimParams* Params32 = new CWormAnimParams;
+CWormAnimParams* Params33 = new CWormAnimParams;
+CWormAnimParams* Params34 = new CWormAnimParams;
+CWormAnimParams* Params35 = new CWormAnimParams;
+CWormAnimParams* Params36 = new CWormAnimParams;
+CWormAnimParams* Params37 = new CWormAnimParams;
+CWormAnimParams* Params38 = new CWormAnimParams;
+CWormAnimParams* Params39 = new CWormAnimParams;
+CWormAnimParams* Params40 = new CWormAnimParams;
+CWormAnimParams* Params41 = new CWormAnimParams;
+CWormAnimParams* Params42 = new CWormAnimParams;
+CWormAnimParams* Params43 = new CWormAnimParams;
+CWormAnimParams* Params44 = new CWormAnimParams;
+CWormAnimParams* Params45 = new CWormAnimParams;
+CWormAnimParams* Params46 = new CWormAnimParams;
+CWormAnimParams* Params47 = new CWormAnimParams;
+CWormAnimParams* Params48 = new CWormAnimParams;
+CWormAnimParams* Params49 = new CWormAnimParams;
+CWormAnimParams* Params50 = new CWormAnimParams;
+CWormAnimParams* Params51 = new CWormAnimParams;
+CWormAnimParams* Params52 = new CWormAnimParams;
+CWormAnimParams* Params53 = new CWormAnimParams;
+CWormAnimParams* Params54 = new CWormAnimParams;
+
+//-------------------------AIMING-ANIMATIONS------------------------------------
+//------GRAVLER-----------------------------------------------------------------
+Params1->draw_hand = false;
+Params1->weap_radial_rotation = 0.0;
+Params1->weap_rotation = 1.0;
+Params1->weap_radius = 0.0;
+Params1->animate = true;
+Params1->anim_speed = 1.00;
+//------BLASTER-WORM------------------------------------------------------------
+Params2->draw_hand = false;
+Params2->weap_radial_rotation = 0.0;
+Params2->weap_rotation = 1.0;
+Params2->weap_radius = 3.5;
+Params2->animate = true;
+Params2->anim_speed = 1.40;
+//------PIGEON-CANNON-----------------------------------------------------------
+Params3->draw_hand = false;
+Params3->weap_radial_rotation = 0.0;
+Params3->weap_rotation = 1.0;
+Params3->weap_radius = 3.5;
+Params3->animate = true;
+Params3->anim_speed = 1.80;
+//------S.M.A.R.T-BOMB----------------------------------------------------------
+Params4->draw_hand = false;
+Params4->weap_radial_rotation = 0.0;
+Params4->weap_rotation = 1.0;
+Params4->weap_radius = 0.0;
+Params4->animate = true;
+Params4->anim_speed = 1.20;
+//------FRAG-GRENADE------------------------------------------------------------
+Params5->hand_type = 1;
+Params5->hand_scale = 1.2;
+Params5->hand_radius = -9.5;
+Params5->hand_rotation = 0.0;
+Params5->hand_radial_rotation = 0.0;
+Params5->weap_radial_rotation = 0.0;
+Params5->weap_rotation = 0.5;
+Params5->weap_radius = -11.2;
+Params5->dont_rotate_with_angle = true;
+Params5->hand_ang_if_static = 0.4;
+Params5->ang_if_static = 0.0;
+
+Params6->hand_type = 1;
+Params6->hand_scale = 1.2;
+Params6->hand_radius = -9.5;
+Params6->hand_rotation = 0.0;
+Params6->hand_radial_rotation = 0.0;
+Params6->weap_radial_rotation = 0.0;
+Params6->weap_rotation = 0.5;
+Params6->weap_radius = -11.2;
+//------CLUSTER-FRAG------------------------------------------------------------
+Params7->hand_type = 1;
+Params7->hand_scale = 1.2;
+Params7->hand_radius = -9.5;
+Params7->hand_rotation = 0.0;
+Params7->hand_radial_rotation = 0.0;
+Params7->weap_radial_rotation = 0.0;
+Params7->weap_rotation = 0.5;
+Params7->weap_radius = -11.2;
+Params7->dont_rotate_with_angle = true;
+Params7->hand_ang_if_static = 0.4;
+Params7->ang_if_static = 0.0;
+
+Params8->hand_type = 1;
+Params8->hand_scale = 1.2;
+Params8->hand_radius = -9.5;
+Params8->hand_rotation = 0.0;
+Params8->hand_radial_rotation = 0.0;
+Params8->weap_radial_rotation = 0.0;
+Params8->weap_rotation = 0.5;
+Params8->weap_radius = -11.2;
+//------BASKETBALL--------------------------------------------------------------
+Params9->hand_type = 1;
+Params9->hand_scale = 1.2;
+Params9->hand_radius = -17.5;
+Params9->hand_rotation = 0.0;
+Params9->hand_radial_rotation = 0.0;
+Params9->weap_radial_rotation = 0.0;
+Params9->weap_rotation = 0.5;
+Params9->weap_radius = -14.5;
+Params9->dont_rotate_with_angle = true;
+Params9->hand_ang_if_static = 0.4;
+Params9->ang_if_static = 0.0;
+
+Params10->hand_type = 1;
+Params10->hand_scale = 1.2;
+Params10->hand_radius = -17.5;
+Params10->hand_rotation = 0.0;
+Params10->hand_radial_rotation = 0.0;
+Params10->weap_radial_rotation = 0.0;
+Params10->weap_rotation = 0.5;
+Params10->weap_radius = -14.5;
+//------BASEBALL-BOMB-----------------------------------------------------------
+Params11->hand_type = 1;
+Params11->hand_scale = 1.2;
+Params11->hand_radius = -11.5;
+Params11->hand_rotation = 0.0;
+Params11->hand_radial_rotation = 0.0;
+Params11->weap_radial_rotation = 0.0;
+Params11->weap_rotation = 0.5;
+Params11->weap_radius = -11.5;
+//------THUMPER-NADE------------------------------------------------------------
+Params12->hand_type = 1;
+Params12->hand_scale = 1.3;
+Params12->hand_radius = -14.0;
+Params12->hand_rotation = 0.0;
+Params12->hand_radial_rotation = 0.0;
+Params12->weap_radial_rotation = 0.0;
+Params12->weap_rotation = 0.5;
+Params12->weap_radius = -12.5;
+Params12->animate = true;
+Params12->anim_speed = 1.65;
+//------BUMPER-BOMB-------------------------------------------------------------
+Params13->hand_type = 1;
+Params13->hand_scale = 1.3;
+Params13->hand_radius = -16.8;
+Params13->hand_rotation = 0.0;
+Params13->hand_radial_rotation = 0.0;
+Params13->weap_radial_rotation = 0.0;
+Params13->weap_rotation = 0.5;
+Params13->weap_radius = -13.0;
+Params13->animate = true;
+Params13->anim_speed = 1.25;
+//------SUPER-BUMPER-BOMB-------------------------------------------------------
+Params14->hand_type = 1;
+Params14->hand_scale = 1.3;
+Params14->hand_radius = -19.0;
+Params14->hand_rotation = 0.0;
+Params14->hand_radial_rotation = 0.0;
+Params14->weap_radial_rotation = 0.0;
+Params14->weap_rotation = 0.5;
+Params14->weap_radius = -14.5;
+Params14->animate = true;
+Params14->anim_speed = 0.80;
+//------ION-BOMB----------------------------------------------------------------
+Params15->hand_type = 1;
+Params15->hand_scale = 1.3;
+Params15->hand_radius = -19.85;
+Params15->hand_rotation = 0.0;
+Params15->hand_radial_rotation = 0.0;
+Params15->weap_radial_rotation = 0.0;
+Params15->weap_rotation = 0.5;
+Params15->weap_radius = -14.5;
+Params15->animate = true;
+Params15->anim_speed = 1.10;
+//------SUPER-ION-BOMB----------------------------------------------------------
+Params16->hand_type = 1;
+Params16->hand_scale = 1.3;
+Params16->hand_radius = -19.85;
+Params16->hand_rotation = 0.0;
+Params16->hand_radial_rotation = 0.0;
+Params16->weap_radial_rotation = 0.0;
+Params16->weap_rotation = 0.5;
+Params16->weap_radius = -14.5;
+Params16->animate = true;
+Params16->anim_speed = 1.10;
+//------MAGIC-SLAMMER-----------------------------------------------------------
+Params17->hand_type = 1;
+Params17->hand_scale = 1.3;
+Params17->hand_radius = -20.5;
+Params17->hand_rotation = 0.0;
+Params17->hand_radial_rotation = 0.0;
+Params17->weap_radial_rotation = 0.0;
+Params17->weap_rotation = 0.5;
+Params17->weap_radius = -14.5;
+Params17->animate = true;
+Params17->anim_speed = 1.40;
+//------SUPER-MAGIC-SLAMMER-----------------------------------------------------
+Params18->hand_type = 1;
+Params18->hand_scale = 1.3;
+Params18->hand_radius = -21.0;
+Params18->hand_rotation = 0.0;
+Params18->hand_radial_rotation = 0.0;
+Params18->weap_radial_rotation = 0.0;
+Params18->weap_rotation = 0.5;
+Params18->weap_radius = -14.5;
+Params18->animate = true;
+Params18->anim_speed = 1.40;
+//------GRAVEDIGGER-------------------------------------------------------------
+Params19->hand_type = 1;
+Params19->hand_scale = 1.3;
+Params19->hand_radius = -22.0;
+Params19->hand_rotation = 0.0;
+Params19->hand_radial_rotation = 0.0;
+Params19->weap_radial_rotation = 0.0;
+Params19->weap_rotation = 0.5;
+Params19->weap_radius = -14.5;
+Params19->animate = true;
+Params19->anim_speed = 1.10;
+//------SUPER-GRAVEDIGGER-------------------------------------------------------
+Params20->hand_type = 1;
+Params20->hand_scale = 1.3;
+Params20->hand_radius = -22.0;
+Params20->hand_rotation = 0.0;
+Params20->hand_radial_rotation = 0.0;
+Params20->weap_radial_rotation = 0.0;
+Params20->weap_rotation = 0.5;
+Params20->weap_radius = -14.5;
+Params20->animate = true;
+Params20->anim_speed = 1.10;
+//------CROSSBOW----------------------------------------------------------------
+Params21->draw_hand = false;
+Params21->weap_radial_rotation = 0.0;
+Params21->weap_rotation = 1.0;
+Params21->weap_radius = 3.5;
+Params21->animate = true;
+Params21->anim_speed = 1.05;
+//------EXPLOSIVE-ARROW---------------------------------------------------------
+Params22->draw_hand = false;
+Params22->weap_radial_rotation = 0.0;
+Params22->weap_rotation = 1.0;
+Params22->weap_radius = 3.5;
+//------WINDY-ARROW-------------------------------------------------------------
+Params23->draw_hand = false;
+Params23->weap_radial_rotation = 0.0;
+Params23->weap_rotation = 1.0;
+Params23->weap_radius = 3.5;
+//------REBOUNDER---------------------------------------------------------------
+Params24->draw_hand = false;
+Params24->weap_radial_rotation = 0.0;
+Params24->weap_rotation = 1.0;
+Params24->weap_radius = 3.5;
+//------HOMING-ARROW------------------------------------------------------------
+Params25->draw_hand = false;
+Params25->weap_radial_rotation = 0.0;
+Params25->weap_rotation = 1.0;
+Params25->weap_radius = 3.5;
+//------MULTI-BOLT--------------------------------------------------------------
+Params26->draw_hand = false;
+Params26->weap_radial_rotation = 0.0;
+Params26->weap_rotation = 1.0;
+Params26->weap_radius = 3.5;
+//------WILDFIRE-BOLT-----------------------------------------------------------
+Params27->draw_hand = false;
+Params27->weap_radial_rotation = 0.0;
+Params27->weap_rotation = 1.0;
+Params27->weap_radius = 3.5;
+//------SHADOW-BOLT-------------------------------------------------------------
+Params28->draw_hand = false;
+Params28->weap_radial_rotation = 0.0;
+Params28->weap_rotation = 1.0;
+Params28->weap_radius = 3.5;
+//------TELE-ARROW--------------------------------------------------------------
+Params29->draw_hand = false;
+Params29->weap_radial_rotation = 0.0;
+Params29->weap_rotation = 1.0;
+Params29->weap_radius = 3.5;
+//------SNOW-BALL---------------------------------------------------------------
+Params30->hand_type = 1;
+Params30->hand_scale = 1.2;
+Params30->hand_radius = -9.9;
+Params30->hand_rotation = 0.0;
+Params30->hand_radial_rotation = 0.0;
+Params30->weap_radial_rotation = 0.0;
+Params30->weap_rotation = 0.5;
+Params30->weap_radius = -12.0;
+//------SLINGSHOT---------------------------------------------------------------
+Params31->draw_hand = false;
+Params31->weap_radial_rotation = 0.0;
+Params31->weap_rotation = 1.0;
+Params31->weap_radius = 3.5;
+Params31->animate = true;
+Params31->anim_speed = 1.10;
+//------JAVELIN-----------------------------------------------------------------
+Params32->draw_hand = false;
+Params32->weap_radial_rotation = 0.0;
+Params32->weap_rotation = 1.0;
+Params32->weap_radius = -11.8;
+Params32->animate = true;
+Params32->anim_speed = 1.15;
+//------NINJA-STAR--------------------------------------------------------------
+Params33->draw_hand = false;
+Params33->weap_radial_rotation = 0.0;
+Params33->weap_rotation = 1.0;
+Params33->weap_radius = -12.0;
+Params33->animate = true;
+Params33->anim_speed = 1.05;
+//------STAFF-OF-JOLTING--------------------------------------------------------
+Params34->draw_hand = false;
+Params34->weap_radial_rotation = 0.0;
+Params34->weap_rotation = 1.0;
+Params34->weap_radius = 3.5;
+Params34->animate = true;
+Params34->anim_speed = 1.15;
+//------ETHER-BALLOONS----------------------------------------------------------
+Params35->draw_hand = false;
+Params35->weap_radial_rotation = 0.0;
+Params35->weap_rotation = 1.0;
+Params35->weap_radius = -11.0;
+Params35->animate = true;
+Params35->anim_speed = 1.20;
+//------THROWN-DYNAMITE---------------------------------------------------------
+Params36->hand_type = 1;
+Params36->hand_scale = 1.2;
+Params36->hand_radius = -9.0;
+Params36->hand_rotation = 0.0;
+Params36->hand_radial_rotation = 0.0;
+Params36->weap_radial_rotation = 0.0;
+Params36->weap_rotation = 0.5;
+Params36->weap_radius = -11.2;
+Params36->animate = true;
+Params36->anim_speed = 1.70;
+//------THROWN-MING-VASE--------------------------------------------------------
+Params37->hand_type = 1;
+Params37->hand_scale = 1.2;
+Params37->hand_radius = -11.0;
+Params37->hand_rotation = 0.0;
+Params37->hand_radial_rotation = 0.0;
+Params37->weap_radial_rotation = 0.0;
+Params37->weap_rotation = 0.5;
+Params37->weap_radius = -11.2;
+//------ASCENDER----------------------------------------------------------------
+Params38->hand_type = 1;
+Params38->hand_scale = 1.2;
+Params38->hand_radius = -13.6;
+Params38->hand_rotation = 0.0;
+Params38->hand_radial_rotation = 0.0;
+Params38->weap_radial_rotation = 0.0;
+Params38->weap_rotation = 0.5;
+Params38->weap_radius = -11.5;
+Params38->animate = true;
+Params38->anim_speed = 1.25;
+//------DESCENDER---------------------------------------------------------------
+Params39->hand_type = 1;
+Params39->hand_scale = 1.2;
+Params39->hand_radius = -13.6;
+Params39->hand_rotation = 0.0;
+Params39->hand_radial_rotation = 0.0;
+Params39->weap_radial_rotation = 0.0;
+Params39->weap_rotation = 0.5;
+Params39->weap_radius = -11.5;
+Params39->animate = true;
+Params39->anim_speed = 1.25;
+//------SUPER-ASCENDER----------------------------------------------------------
+Params40->hand_type = 1;
+Params40->hand_scale = 1.2;
+Params40->hand_radius = -16.5;
+Params40->hand_rotation = 0.0;
+Params40->hand_radial_rotation = 0.0;
+Params40->weap_radial_rotation = 0.0;
+Params40->weap_rotation = 0.5;
+Params40->weap_radius = -11.5;
+Params40->animate = true;
+Params40->anim_speed = 1.25;
+//------SUPER-DESCENDER---------------------------------------------------------
+Params41->hand_type = 1;
+Params41->hand_scale = 1.2;
+Params41->hand_radius = -16.5;
+Params41->hand_rotation = 0.0;
+Params41->hand_radial_rotation = 0.0;
+Params41->weap_radial_rotation = 0.0;
+Params41->weap_rotation = 0.5;
+Params41->weap_radius = -11.5;
+Params41->animate = true;
+Params41->anim_speed = 1.25;
+//------REMOTE-ROLLER-----------------------------------------------------------
+Params42->hand_type = 1;
+Params42->hand_scale = 1.2;
+Params42->hand_radius = -14.1;
+Params42->hand_rotation = 0.0;
+Params42->hand_radial_rotation = 0.0;
+Params42->weap_radial_rotation = 0.0;
+Params42->weap_rotation = 0.5;
+Params42->weap_radius = -11.5;
+Params42->animate = true;
+Params42->anim_speed = 1.15;
+Params42->dont_rotate_with_angle = true;
+Params42->hand_ang_if_static = 0.4;
+Params42->ang_if_static = 0.0;
+
+Params43->hand_type = 1;
+Params43->hand_scale = 1.2;
+Params43->hand_radius = -14.1;
+Params43->hand_rotation = 0.0;
+Params43->hand_radial_rotation = 0.0;
+Params43->weap_radial_rotation = 0.0;
+Params43->weap_rotation = 0.5;
+Params43->weap_radius = -11.5;
+Params43->animate = true;
+Params43->anim_speed = 1.15;
+//------SUPER-REMOTE-ROLLER-----------------------------------------------------
+Params44->hand_type = 1;
+Params44->hand_scale = 1.15;
+Params44->hand_radius = -16.5;
+Params44->hand_rotation = 0.0;
+Params44->hand_radial_rotation = 0.0;
+Params44->weap_radial_rotation = 0.0;
+Params44->weap_rotation = 0.5;
+Params44->weap_radius = -11.5;
+Params44->animate = true;
+Params44->anim_speed = 1.2;
+Params44->dont_rotate_with_angle = true;
+Params44->hand_ang_if_static = 0.4;
+Params44->ang_if_static = 0.0;
+
+Params45->hand_type = 1;
+Params45->hand_scale = 1.15;
+Params45->hand_radius = -16.5;
+Params45->hand_rotation = 0.0;
+Params45->hand_radial_rotation = 0.0;
+Params45->weap_radial_rotation = 0.0;
+Params45->weap_rotation = 0.5;
+Params45->weap_radius = -11.5;
+Params45->animate = true;
+Params45->anim_speed = 1.2;
+//------SKIPPER-----------------------------------------------------------------
+Params46->hand_type = 1;
+Params46->hand_scale = 1.2;
+Params46->hand_radius = -9.5;
+Params46->hand_rotation = 0.0;
+Params46->hand_radial_rotation = 0.0;
+Params46->weap_radial_rotation = 0.0;
+Params46->weap_rotation = 0.5;
+Params46->weap_radius = -10.0;
+Params46->animate = true;
+Params46->anim_speed = 1.30;
+Params46->dont_rotate_with_angle = true;
+Params46->hand_ang_if_static = 0.48;
+Params46->ang_if_static = 0.0;
+//------BOMB-OMB----------------------------------------------------------------
+Params47->hand_type = 1;
+Params47->hand_scale = 1.2;
+Params47->hand_radius = -11.0;
+Params47->hand_rotation = 0.0;
+Params47->hand_radial_rotation = 0.0;
+Params47->weap_radial_rotation = 0.0;
+Params47->weap_rotation = 0.5;
+Params47->weap_radius = -11.0;
+Params47->animate = true;
+Params47->anim_speed = 0.93;
+Params47->dont_rotate_with_angle = true;
+Params47->hand_ang_if_static = 0.4;
+Params47->ang_if_static = 0.0;
+//------POGO-SHEEP--------------------------------------------------------------
+Params48->hand_type = 1;
+Params48->hand_scale = 1.2;
+Params48->hand_radius = -11.5;
+Params48->hand_rotation = 0.0;
+Params48->hand_radial_rotation = 0.0;
+Params48->weap_radial_rotation = 0.0;
+Params48->weap_rotation = 0.5;
+Params48->weap_radius = -11.0;
+Params48->dont_rotate_with_angle = true;
+Params48->hand_ang_if_static = 0.48;
+Params48->ang_if_static = 0.0;
+//------BATTERING-RAM-----------------------------------------------------------
+Params49->hand_type = 1;
+Params49->hand_scale = 1.2;
+Params49->hand_radius = -11.50;
+Params49->hand_rotation = 10.00;
+Params49->hand_radial_rotation = 0.0;
+Params49->weap_radial_rotation = 0.0;
+Params49->weap_rotation = 0.5;
+Params49->weap_radius = -11.0;
+Params49->animate = true;
+Params49->anim_speed = 1.40;
+Params49->dont_rotate_with_angle = true;
+Params49->hand_ang_if_static = 2.05;
+Params49->ang_if_static = 0.0;
+//------CRAZY-CHICKEN-----------------------------------------------------------
+Params50->hand_type = 1;
+Params50->hand_scale = 1.2;
+Params50->hand_radius = -13.2;
+Params50->hand_rotation = 0.0;
+Params50->hand_radial_rotation = 0.0;
+Params50->weap_radial_rotation = 0.0;
+Params50->weap_rotation = 0.5;
+Params50->weap_radius = -11.0;
+Params50->animate = true;
+Params50->anim_speed = 1.35;
+Params50->dont_rotate_with_angle = true;
+Params50->hand_ang_if_static = 0.4;
+Params50->ang_if_static = 0.0;
+//------DRILLING-CREW-----------------------------------------------------------
+Params51->hand_type = 1;
+Params51->hand_scale = 1.2;
+Params51->hand_radius = -9.0;
+Params51->hand_rotation = 0.0;
+Params51->hand_radial_rotation = 0.0;
+Params51->weap_radial_rotation = 0.0;
+Params51->weap_rotation = 0.5;
+Params51->weap_radius = -8.0;
+Params51->animate = true;
+Params51->anim_speed = 1.10;
+Params51->dont_rotate_with_angle = true;
+Params51->hand_ang_if_static = 0.48;
+Params51->ang_if_static = 0.0;
+//------SQUAWKS-----------------------------------------------------------------
+Params52->hand_type = 1;
+Params52->hand_scale = 1.2;
+Params52->hand_radius = -11.4;
+Params52->hand_rotation = 0.0;
+Params52->hand_radial_rotation = 0.0;
+Params52->weap_radial_rotation = 0.0;
+Params52->weap_rotation = 0.5;
+Params52->weap_radius = -11.5;
+Params52->animate = true;
+Params52->anim_speed = 1.30;
+Params52->dont_rotate_with_angle = true;
+Params52->hand_ang_if_static = 0.4;
+Params52->ang_if_static = 0.0;
+//------SUPER-WORM--------------------------------------------------------------
+Params53->hand_type = 1;
+Params53->hand_scale = 1.1;
+Params53->hand_radius = -9.0;
+Params53->hand_rotation = 0.0;
+Params53->hand_radial_rotation = 0.0;
+Params53->weap_radial_rotation = 0.0;
+Params53->weap_rotation = 0.5;
+Params53->weap_radius = -9.5;
+Params53->dont_rotate_with_angle = true;
+Params53->hand_ang_if_static = 0.48;
+Params53->ang_if_static = 0.0;
+//------WHITE-BAZOOKA-SPB-------------------------------------------------------
+Params54->draw_hand = false;
+Params54->weap_radial_rotation = 0.0;
+Params54->weap_rotation = 1.0;
+Params54->weap_radius = 0.0;
+//------------------------------------------------------------------------------
+local WA = new WormSprite(weapName1,  sprite1,  Params1);
+local WA = new WormSprite(weapName2,  sprite1,  Params1);
+local WA = new WormSprite(weapName3,  sprite1,  Params1);
+local WA = new WormSprite(weapName4,  sprite2,  Params2);
+local WA = new WormSprite(weapName5,  sprite2,  Params2);
+local WA = new WormSprite(weapName6,  sprite3,  Params3);
+local WA = new WormSprite(weapName7,  sprite3,  Params3);
+local WA = new WormSprite(weapName8,  sprite4,  Params4);
+local WA = new WormSprite(weapName9,  sprite4,  Params4);
+local WA = new WormSprite(weapName10, sprite4,  Params4);
+local WA = new WormSprite(weapName11, sprite4,  Params4);
+local WA = new WormSprite(weapName12, sprite5,  Params5);
+local WA = new WormSprite(weapName13, sprite5,  Params6);
+local WA = new WormSprite(weapName14, sprite6,  Params7);
+local WA = new WormSprite(weapName15, sprite6,  Params8);
+local WA = new WormSprite(weapName16, sprite7,  Params9);
+local WA = new WormSprite(weapName17, sprite7,  Params10);
+local WA = new WormSprite(weapName18, sprite8,  Params11);
+local WA = new WormSprite(weapName19, sprite9,  Params12);
+local WA = new WormSprite(weapName20, sprite10, Params13);
+local WA = new WormSprite(weapName21, sprite11, Params14);
+local WA = new WormSprite(weapName22, sprite12, Params15);
+local WA = new WormSprite(weapName23, sprite13, Params16);
+local WA = new WormSprite(weapName24, sprite14, Params17);
+local WA = new WormSprite(weapName25, sprite15, Params18);
+local WA = new WormSprite(weapName26, sprite16, Params19);
+local WA = new WormSprite(weapName27, sprite16, Params19);
+local WA = new WormSprite(weapName28, sprite17, Params20);
+local WA = new WormSprite(weapName29, sprite17, Params20);
+local WA = new WormSprite(weapName30, sprite18, Params21);
+local WA = new WormSprite(weapName31, sprite18, Params21);
+local WA = new WormSprite(weapName32, sprite19, Params22);
+local WA = new WormSprite(weapName33, sprite19, Params22);
+local WA = new WormSprite(weapName34, sprite20, Params23);
+local WA = new WormSprite(weapName35, sprite20, Params23);
+local WA = new WormSprite(weapName36, sprite21, Params24);
+local WA = new WormSprite(weapName37, sprite21, Params24);
+local WA = new WormSprite(weapName38, sprite22, Params25);
+local WA = new WormSprite(weapName39, sprite22, Params25);
+local WA = new WormSprite(weapName40, sprite23, Params26);
+local WA = new WormSprite(weapName41, sprite23, Params26);
+local WA = new WormSprite(weapName42, sprite24, Params27);
+local WA = new WormSprite(weapName43, sprite24, Params27);
+local WA = new WormSprite(weapName44, sprite25, Params28);
+local WA = new WormSprite(weapName45, sprite25, Params28);
+local WA = new WormSprite(weapName46, sprite26, Params29);
+local WA = new WormSprite(weapName47, sprite26, Params29);
+local WA = new WormSprite(weapName48, sprite27, Params30);
+local WA = new WormSprite(weapName49, sprite28, Params31);
+local WA = new WormSprite(weapName50, sprite29, Params32);
+local WA = new WormSprite(weapName51, sprite30, Params33);
+local WA = new WormSprite(weapName52, sprite31, Params34);
+local WA = new WormSprite(weapName53, sprite32, Params35);
+local WA = new WormSprite(weapName54, sprite33, Params36);
+local WA = new WormSprite(weapName55, sprite34, Params37);
+local WA = new WormSprite(weapName56, sprite35, Params38);
+local WA = new WormSprite(weapName57, sprite36, Params39);
+local WA = new WormSprite(weapName58, sprite37, Params40);
+local WA = new WormSprite(weapName59, sprite38, Params41);
+local WA = new WormSprite(weapName60, sprite39, Params42);
+local WA = new WormSprite(weapName61, sprite39, Params43);
+local WA = new WormSprite(weapName62, sprite40, Params44);
+local WA = new WormSprite(weapName63, sprite40, Params45);
+local WA = new WormSprite(weapName64, sprite41, Params46);
+local WA = new WormSprite(weapName65, sprite42, Params47);
+local WA = new WormSprite(weapName66, sprite43, Params48);
+local WA = new WormSprite(weapName67, sprite44, Params49);
+local WA = new WormSprite(weapName68, sprite45, Params50);
+local WA = new WormSprite(weapName69, sprite45, Params50);
+local WA = new WormSprite(weapName70, sprite46, Params51);
+local WA = new WormSprite(weapName71, sprite47, Params52);
+local WA = new WormSprite(weapName72, sprite48, Params53);
+
+//local WA = new WormSprite(weapName73, sprite49, Params54);
+//local WA = new WormSprite(weapName74, sprite49, Params54);
+//local WA = new WormSprite(weapName75, sprite49, Params54);
+}
+}
+}
+//-------------------------BULLET-ANIMATIONS------------------------------------
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+if (Type == M_FRAME){
+
+if (weap->CheckName("Gravler FD")
+||  weap->CheckName("Gravler FD ")){
+if (grvlr_anim) {
+local sprite = grvlr_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 4.00;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+grvlr_anim = false;
+}
+}
+if (weap->CheckName("Homing Mortar")
+||  weap->CheckName("Homing Mortar ")){
+if (homem_anim) {
+local sprite = hmort_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 4.00;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+homem_anim = false;
+}
+}
+if (weap->CheckName("Petrol Rocket")
+||  weap->CheckName("Petrol Rocket ")){
+if (ptrlr_anim) {
+local sprite = ptrlr_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.70;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+ptrlr_anim = false;
+}
+}
+if (weap->CheckName("Blaster Worm")
+||  weap->CheckName("Blaster Worm ")){
+if (blast_anim) {
+local sprite = blast_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.60;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+blast_anim = false;
+}
+}
+if (weap->CheckName("Pigeon Cannon")
+||  weap->CheckName("Pigeon Cannon ")){
+if (pignc_anim) {
+local sprite = pignc_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 2.50;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+pignc_anim = false;
+}
+}
+if (weap->CheckName("S.M.A.R.T Bomb")
+||  weap->CheckName("S.M.A.R.T Bomb ")
+||  weap->CheckName("S.M.A.R.T.E.R Bomb")
+||  weap->CheckName("S.M.A.R.T.E.R Bomb ")){
+if (smrtb_anim) {
+local sprite = smart_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.50;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+smrtb_anim = false;
+}
+}
+if (weap->CheckName("Frag Grenade")
+||  weap->CheckName("Frag Grenade ")){
+if (fraga_anim) {
+local sprite = fraga_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+fraga_anim = false;
+}
+}
+if (weap->CheckName("Cluster Frag")
+||  weap->CheckName("Cluster Frag ")){
+if (fragb_anim) {
+local sprite = fragb_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+fragb_anim = false;
+}
+}
+if (weap->CheckName("Basketball")
+||  weap->CheckName("Basketball ")){
+if (bskbl_anim) {
+local sprite = bskbl_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+bskbl_anim = false;
+}
+}
+if (weap->CheckName("Baseball Bomb")){
+if (bsebl_anim) {
+local sprite = bsebl_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+bsebl_anim = false;
+}
+}
+if (weap->CheckName("Thumper Nade")){
+if (thump_anim) {
+local sprite = thump_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.65;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+thump_anim = false;
+}
+}
+if (weap->CheckName("Bumper Bomb")){
+if (bumpa_anim) {
+local sprite = bumpa_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.10;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+bumpa_anim = false;
+}
+}
+if (weap->CheckName("Super Bumper Bomb")){
+if (bumpb_anim) {
+local sprite = bumpb_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 0.80;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+bumpb_anim = false;
+}
+}
+if (weap->CheckName("Magic Slammer")){
+if (slama_anim) {
+local sprite = slama_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.50;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+slama_anim = false;
+}
+}
+if (weap->CheckName("Super Magic Slammer")){
+if (slamb_anim) {
+local sprite = slamb_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.50;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+slamb_anim = false;
+}
+}
+if (weap->CheckName("Gravedigger")
+||  weap->CheckName("Gravedigger ")){
+if (grava_anim) {
+local sprite = grava_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.10;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+grava_anim = false;
+}
+}
+if (weap->CheckName("Super Gravedigger")
+||  weap->CheckName("Super Gravedigger ")){
+if (gravb_anim) {
+local sprite = gravb_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.10;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+gravb_anim = false;
+}
+}
+if (weap->CheckName("Crossbow")
+||  weap->CheckName("Crossbow ")){
+if (crbow_anim) {
+local sprite = crbow_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 2.00;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+crbow_anim = false;
+}
+}
+if (weap->CheckName("Explosive Arrow")
+||  weap->CheckName("Explosive Arrow ")){
+if (expla_anim) {
+local sprite = expla_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+expla_anim = false;
+}
+}
+if (weap->CheckName("Windy Arrow")
+||  weap->CheckName("Windy Arrow ")){
+if (winda_anim) {
+local sprite = winda_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.00;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+winda_anim = false;
+}
+}
+if (weap->CheckName("Rebounder")
+||  weap->CheckName("Rebounder ")){
+if (rebnd_anim) {
+local sprite = expla_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+rebnd_anim = false;
+}
+}
+if (weap->CheckName("Homing Arrow")
+||  weap->CheckName("Homing Arrow ")){
+if (homea_anim) {
+local sprite = expla_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+homea_anim = false;
+}
+}
+if (weap->CheckName("Multi-Bolt")
+||  weap->CheckName("Multi-Bolt ")){
+if (multi_anim) {
+local sprite = multi_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.40;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+multi_anim = false;
+}
+}
+if (weap->CheckName("Wildfire-Bolt")
+||  weap->CheckName("Wildfire-Bolt ")){
+if (fireb_anim) {
+local sprite = fireb_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.75;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+fireb_anim = false;
+}
+}
+if (weap->CheckName("Shadow-Bolt")
+||  weap->CheckName("Shadow-Bolt ")){
+if (shadb_anim) {
+local sprite = shadb_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.30;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+shadb_anim = false;
+}
+}
+if (weap->CheckName("Tele Arrow")
+||  weap->CheckName("Tele Arrow ")){
+if (telea_anim) {
+local sprite = telea_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.20;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+telea_anim = false;
+}
+}
+if (weap->CheckName("Snow Ball")){
+if (snowb_anim) {
+local sprite = snowb_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+snowb_anim = false;
+}
+}
+if (weap->CheckName("Javelin")){
+if (javln_anim) {
+local sprite = javln_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 2.25;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+javln_anim = false;
+}
+}
+if (weap->CheckName("Ninja Star")){
+if (ninja_anim) {
+local sprite = ninja_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 2.00;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+ninja_anim = false;
+}
+}
+if (weap->CheckName("Staff of Jolting")){
+if (staff_anim) {
+local sprite = staff_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.50;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+staff_anim = false;
+}
+}
+if (weap->CheckName("Fire Orbs")){
+if (forbs_anim) {
+local sprite = forbs_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 3.00;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+forbs_anim = false;
+}
+}
+if (weap->CheckName("Ether Balloons")){
+if (ether_anim) {
+local sprite = ether_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.20;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+ether_anim = false;
+}
+}
+if (weap->CheckName("Girder Launcher")){
+if (girdl_anim) {
+local sprite = girdl_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 2.50;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+girdl_anim = false;
+}
+}
+if (weap->CheckName("Thrown Dynamite")){
+if (tdyna_anim) {
+local sprite = tdyna_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.70;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+tdyna_anim = false;
+}
+}
+if (weap->CheckName("Thrown Ming Vase")){
+if (tming_anim) {
+local sprite = tming_aim->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+tming_anim = false;
+}
+}
+if (weap->CheckName("Fire Pellet")){
+if (frplt_anim) {
+local sprite = frplt_bul->Index;
+WeapSpriteParams* Params = new WeapSpriteParams;
+Params->animate = true;
+Params->anim_speed = 1.50;
+new WeapSprite(this, sprite, Params);
+weap->launch.anim.spriteIndex = 0;
+frplt_anim = false;
+}
+}
+}
+}
+//------------------------------------------------------------------------------
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+grvlr_anim = true;
+homem_anim = true;
+ptrlr_anim = true;
+blast_anim = true;
+pignc_anim = true;
+smrtb_anim = true;
+fraga_anim = true;
+fragb_anim = true;
+bskbl_anim = true;
+bsebl_anim = true;
+thump_anim = true;
+bumpa_anim = true;
+bumpb_anim = true;
+slama_anim = true;
+slamb_anim = true;
+grava_anim = true;
+gravb_anim = true;
+crbow_anim = true;
+expla_anim = true;
+winda_anim = true;
+rebnd_anim = true;
+homea_anim = true;
+multi_anim = true;
+fireb_anim = true;
+shadb_anim = true;
+telea_anim = true;
+snowb_anim = true;
+javln_anim = true;
+ninja_anim = true;
+staff_anim = true;
+forbs_anim = true;
+ether_anim = true;
+girdl_anim = true;
+tdyna_anim = true;
+tming_anim = true;
+frplt_anim = true;
+}
+
+//--------------------------NOT-USED-FIXES--------------------------------------
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+if(Type == M_FRAME) {
+
+if(CurWeapon->CheckName("Homing Mortar")
+|| CurWeapon->CheckName("Homing Mortar ")
+|| CurWeapon->CheckName("Cloud Buster")
+|| CurWeapon->CheckName("Stone Blaster")) {
+if (ObjState == WS_FIRECONT)
+{
+Anim->Reset();
+Anim->SetAnimEx(531, FireAngle);
+}
+}
+if(CurWeapon->CheckName("Gravler")
+|| CurWeapon->CheckName("Gravler FD")
+|| CurWeapon->CheckName("Gravler FD ")
+|| CurWeapon->CheckName("Blaster Worm")
+|| CurWeapon->CheckName("Blaster Worm ")
+|| CurWeapon->CheckName("Pigeon Cannon")
+|| CurWeapon->CheckName("Pigeon Cannon ")
+|| CurWeapon->CheckName("S.M.A.R.T Bomb")
+|| CurWeapon->CheckName("S.M.A.R.T Bomb ")
+|| CurWeapon->CheckName("S.M.A.R.T.E.R Bomb")
+|| CurWeapon->CheckName("S.M.A.R.T.E.R Bomb ")
+|| CurWeapon->CheckName("Crossbow")
+|| CurWeapon->CheckName("Crossbow ")
+|| CurWeapon->CheckName("Explosive Arrow")
+|| CurWeapon->CheckName("Explosive Arrow ")
+|| CurWeapon->CheckName("Windy Arrow")
+|| CurWeapon->CheckName("Windy Arrow ")
+|| CurWeapon->CheckName("Rebounder")
+|| CurWeapon->CheckName("Rebounder ")
+|| CurWeapon->CheckName("Homing Arrow")
+|| CurWeapon->CheckName("Homing Arrow ")
+|| CurWeapon->CheckName("Multi-Bolt")
+|| CurWeapon->CheckName("Multi-Bolt ")
+|| CurWeapon->CheckName("Wildfire-Bolt")
+|| CurWeapon->CheckName("Wildfire-Bolt ")
+|| CurWeapon->CheckName("Shadow-Bolt")
+|| CurWeapon->CheckName("Shadow-Bolt ")
+|| CurWeapon->CheckName("Tele Arrow")
+|| CurWeapon->CheckName("Tele Arrow ")
+|| CurWeapon->CheckName("SlingShot")
+|| CurWeapon->CheckName("Staff of Jolting")) {
+if (ObjState == WS_FIRECONT)
+{
+Anim->Reset();
+Anim->SetAnimEx(534, FireAngle);
+}
+}
+}
+super;
+}

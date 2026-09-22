@@ -1,0 +1,64 @@
+
+
+
+
+
+
+void ApplyMaskExt(int INsizex, int INsizey, int xoff, int yoff)
+	{
+    local size_x = INsizex;
+    local size_y = INsizey;
+
+    //Search for worms inside proximity to clouds (lets not plop worms standing on clouds!)
+
+    delete(WormsOnClouds); //hopefully no memory leak!
+    WormsOnClouds = new CObjList();
+
+    for (int j = 6; j >= 1; j-=1)
+		{
+        for (int i = 8; i >= 1; i-=1)
+        	{
+            local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+            if (Worm)
+            	{ //Standing on clouds ? TODO: Search for turrets | TODO: set xy under worm to 1 in generation so a new cloud appear under him.
+                if(Worm->PosX > (xoff - 20) && Worm->PosX < (xoff + (size_x * 17)) &&
+				   Worm->PosY > (yoff - 20) && Worm->PosY < (yoff + (size_y * 17)) )
+					{
+                    WormsOnClouds->Add(Worm);
+                    }
+                }
+            }
+        }
+
+    CWorm * TWrm;
+    for(int yi = 0; yi < size_y; yi++)
+    	{
+        for(int xi = 0; xi < size_x; xi++)
+        	{
+            local mpX = (xi*17) + xoff;
+            local mpY = (yi*17) + yoff;
+            local PosFree = true;
+
+            for(int ai = 0; ai<WormsOnClouds->Count; ai++)
+            	{
+                TWrm = WormsOnClouds->Objs[ai];
+
+                if( (abs(TWrm->PosX - mpX) < 18) && (abs(TWrm->PosY - (mpY-12)) < 18) )
+					{
+                    PosFree = false;
+                    break;
+                	}
+            	}
+            	
+            if(PosFree){GG->land->ApplyMask (4,mpX,mpY);}
+        	}
+    	}
+}
+
+void ClearCloudBridge(int INmapSY,int INmapSX)
+	{
+    if(INmapSY == 1504 && INmapSX == 2200){ApplyMaskExt(26,27,888,448);}
+
+	//TODO VALUES
+    if(INmapSY == 2000 && INmapSX == 2200){ApplyMaskExt(119,17,80,10);}
+}

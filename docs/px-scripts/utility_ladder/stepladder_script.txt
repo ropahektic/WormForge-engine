@@ -1,0 +1,350 @@
+
+require utils, wosc_lib;
+
+CStepladder : CGObject;
+CSoundFile* laddersnd;
+CSprite* LadderSprite;
+CSprite* hands; 
+CColMask* MASK_LADDER;
+
+void stepladder_script::InitGraphic() 
+{
+CFile* f;
+f = GetAttachment("stepladder.png"); LadderSprite = LoadSprite(f, 1, 0);
+f = GetAttachment("hands.png"); hands = LoadSprite(f, 12, 1);
+}
+
+void stepladder_script::Init()     
+{
+keySync->AddKey(16);  //Shift
+laddersnd = new CSoundFile(GetAttachment("ladder.wav"));
+}
+
+void stepladder_script::FirstFrame()
+{
+MASK_LADDER = new CColMask(0, -10, MakeRectMask(1, 1));
+}
+
+CStepladder::CStepladder(CObject* parent, fixed x, fixed y)
+{ 
+    super(parent, 17, 3); //9 is oildrum 2 is mine, who wants to test other ones (not me)
+
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+    
+    IsMaterial = true; 
+    GravityFactor = 1.0;
+    ColGroup    = 6191;     //236670
+    ColMask = MASK_LADDER;
+    ClType = EObjectClass(88); //70&88
+    DumpingA = 0.3;
+    DumpingB = 0.3;   
+    DumpingC = 0.3; 
+    SpX      = 0.0;
+    SpY      = 0.0;    
+    
+    Height = 120;
+    Width = 30;
+    TeamIndex = 0;
+    WormIndex = 0;
+    ladderTeam = -1;
+    
+    breakable = true;
+    health = 30;
+    ExpDamage = 25;
+
+	//ladderamount = 0;
+	//maxladders = 2;
+}
+
+bool CStepladder::ApplyDamage(int dmg)
+{
+   if (breakable == false) return false;
+   health -= dmg;
+   if (health <= 0)
+   {      
+      DoExplosion(PosX,PosY, 100, ExpDamage, 0, 0);      
+      
+      for (local i = 1; i < Env->Objs.Count; i++)
+      {
+      local wm = CWorm(Env->Objs.Objs[i]);
+      if (wm == NullObj) continue;
+      if (wm->ClType != OC_Worm) continue;
+      wm->UsingLadder = false;
+      }
+      
+      Free(true);
+      return true;      
+   }
+   return false;  
+}
+
+void CStepladder::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)            
+{
+    if (breakable && (health <= 0)) return;
+    if(Type == M_DRAWQUEUE)
+     	{
+     	int r; int g; int b;
+     	GetTeamColorRGB(GetTeamColor(ladderTeam)+1, &r, &g, &b);
+     	if (r < 128) r = 128;
+     	if (g < 128) g = 128;
+     	if (b < 128) b = 128;
+     
+     	SetColorMod(RGB(r, g, b), 0);
+     	local spr = LadderSprite->Index;
+     	AddSprite(23,PosX,PosY-50,1,spr,0.0);
+     	ClearColorMod();
+     	}
+     
+    if (breakable)
+     	{
+       	if (Type == M_EXPLOSION)
+       		{
+        	local dx = MData->fparams[1] - PosX;
+        	local dy = MData->fparams[2] - PosY;
+        
+        	local dist = dx*dx + dy*dy;
+        	local dmgcoef = 1 - dist / (MData->params[4] * MData->params[4] * 4);
+        	if (dmgcoef > 0)
+           		{
+           		if (ApplyDamage(dmgcoef * MData->params[4])) return;
+           		}
+       		}
+
+     	if (Type == M_GUNEXP)
+     		{
+        	if (sender is CArrow)
+        		{
+           		if (CArrow(sender)->TeamIndex == ladderTeam)
+           			{
+             		return;
+           			}
+        		}
+        	if (ApplyDamage(MData->params[5])) return;
+     		}
+     
+     	if(Type == M_FRAME)
+     		{
+      		if(PosY > GS->LevelSY+100)
+      			{
+      			DoExplosion(PosX,PosY, 100, ExpDamage, 0, 0);
+      			Destroy();
+      			}
+     		}
+   		}
+  
+super;
+} 
+
+void CStepladder::Collide ( CGObject *obj, int type ) 
+{
+super;
+if(type == 3 && SpX > 0){SpX = SpX - 0.1;}
+if(type == 3 && SpX < 0){SpX = SpX + 0.1;}
+}   
+
+void CStepladder::Reflect ( CGObject *obj, int type )
+{
+super;
+} 
+
+void CStepladder::Destroy()
+{      
+      Free(true); return;
+}    
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+UsingLadder = false;
+MovingOnLadderH = false; //horizontal
+MovingOnLadderV = false; //vertical
+
+hands_frame      = 0.0;
+hands_max_frame  = 60; 
+hands_initial_tick = 0;
+hands_spd_factor = float(1 / hands_max_frame);
+
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+	if(Weap->CheckName("Siege ladder") == true)  //Stepladder
+    	{
+        vol = CalculateSoundVolume(PosX,PosY);
+     	pan = CalculateSoundPan(PosX,PosY);
+        laddersnd->Play(vol, pan, false);
+        
+        for(local i = 1; i < Env->Objs.Count; i+=1)
+            {
+            local obj = Env->Objs.Objs[i];
+            if(obj == NullObj) continue;
+            if(obj->ClType == EObjectClass(88))
+            	{
+                CStepladder* lastladder;
+                lastladder = obj;
+                if(lastladder->ladderTeam == WormTeam && lastladder->WormIndex == WormNumber)
+                	{
+                    PlayLocalSound(21, 1.0, 1.0, 1.0);
+                    lastladder->Destroy();                                  
+                    }
+                }
+            }
+
+		ladder = new CStepladder(Root->GetObject(25, 0), 0, 0);
+        ladder->PosX = PosX + 20 * TurnSide;
+        ladder->PosY = PosY - 30;
+        ladder->ladderTeam = WormTeam;
+        ladder->WormIndex = WormNumber;   
+        return;                  
+        }
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {                              
+             hands_frame = (GS->Tick - hands_initial_tick) % hands_max_frame;
+             
+             for(local i = 1; i < Env->Objs.Count; i+=1)
+             {
+             local obj = Env->Objs.Objs[i];
+                  if(obj == NullObj) continue;                  
+                  if(obj->ClType == EObjectClass(88))
+                  {
+                     CStepladder* someladder;
+                     someladder = obj;
+                     if(PosX <= someladder->PosX + someladder->Width/2 && PosX >= someladder->PosX - someladder->Width/2 && PosY <= someladder->PosY + 10 && PosY >= someladder->PosY - someladder->Height)
+                     {
+						  if(ObjState != WS_ROPING)
+						    {
+                            UsingLadder = true;                                    //ladder detection
+                            break;
+                            }
+                     }                     
+                     else
+                     {
+                          UsingLadder = false;                         
+                     }
+                     
+                  }
+             }
+                          
+             if (UsingLadder == true && (ObjState == WS_SLIDING || ObjState == WS_IDLE || ObjState == WS_AIMING
+             || ObjState == WS_JUMPPREPARE || ObjState == WS_FIRECONT || ObjState == WS_FIRED || ObjState == WS_SETPOWER
+             || ObjState == WS_REPEATFIRE || ObjState == WS_TELEPORTING))                //Workaround for no state for baxe
+             
+             {
+               GravityFactor = 0.0;                           //applying zero grav
+               if(MovingOnLadderH == false){SpX = 0;}
+               if(MovingOnLadderV == false){SpY = 0;}                                                
+             }             
+             else
+             {
+             GravityFactor = 1.0;
+             }                                                      
+        }
+               
+///////////////////////////////////////////////////////////////////         
+      local w = GetCurrentWorm();
+      
+      
+      if(w != NullObj)
+      {
+       if(w == this)
+       {    
+            if(ObjState == WS_SETPOWER || ObjState == WS_FIRECONT || ObjState == WS_FIRED || ObjState == WS_SETPOWER || ObjState == WS_REPEATFIRE) return super;
+                            
+            if(Type == M_PUP && UsingLadder == true && SpY > -2)                  //ladder controls
+            {
+            if (keySync->KeyPressed(16))
+                {
+            	w->FireAngle = w->FireAngle + 0.0010;
+            	}
+			else
+			    {
+			    if(ObjState != WS_SLIDING){SetState(WS_SLIDING);}
+            	SpY = SpY - 0.2;
+			    
+			    }
+            }
+         
+            if(Type == M_PDOWN && UsingLadder == true && SpY < 2)
+            {
+            if (keySync->KeyPressed(16))
+                {
+            	w->FireAngle = w->FireAngle - 0.0010;
+				}
+			else
+			    {
+			    if(ObjState != WS_SLIDING){SetState(WS_SLIDING);}
+            	SpY = SpY + 0.05;
+			    
+			    }
+            }
+         
+            if(Type == M_PLEFT && UsingLadder == true && SpX > -2)
+            {
+            if(ObjState != WS_SLIDING){SetState(WS_SLIDING);}
+            SpX = SpX - 0.02;            
+            TurnSide = -1;
+            }
+         
+            if(Type == M_PRIGHT && UsingLadder == true && SpX < 2)
+            {
+            if(ObjState != WS_SLIDING){SetState(WS_SLIDING);}
+            SpX = SpX + 0.02;
+            TurnSide = 1;
+            }
+            
+            if(UsingLadder == true)
+            {
+               if(Type == M_PRIGHT || Type == M_PLEFT){MovingOnLadderH = true;}
+               else{if(Type == M_FRAME){MovingOnLadderH = false;}}
+               
+               if(Type == M_PUP || Type == M_PDOWN){MovingOnLadderV = true;}
+               else{if(Type == M_FRAME){MovingOnLadderV = false;}}
+            }       
+      }
+    }  
+super;
+}
+
+
+void CWorm::DrawWormHands()
+{
+local w = GetCurrentWorm();
+if (w == NullObj) return;
+
+if(isInvisible)
+	{
+    local c = GetTeamColor(WormTeam);
+    if((GG->machColors[GetLocalMachine()] & (1 << c)) != 0)
+        {
+        SetColorMod(ARGB(100, 0, 0, 0), (1 | 4));
+        }
+	}
+	
+AddSpriteEx(8, PosX + (2 * TurnSide), PosY, hands->Index + 262144 * -Sign(-TurnSide - 1), hands_frame * hands_spd_factor, 0, 0.8);
+
+if(isInvisible)
+	{
+    local c = GetTeamColor(WormTeam);
+    if((GG->machColors[GetLocalMachine()] & (1 << c)) != 0)
+        {
+        ClearColorMod();
+        }
+	}
+}
+
+override void CWorm::RenderWorm()
+{
+if (UsingLadder == true && ObjState == WS_SLIDING)
+	{
+	DrawWormHands();
+	}
+super;
+}

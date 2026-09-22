@@ -1,0 +1,28 @@
+require utils, weapon_keeper_bee;
+
+override COilDrum::COilDrum(CObject* Parent, fixed X, fixed Y, bool Snap)
+{
+    bee = false;  
+    DidSpawnBee = false;
+      FreeMe = false;
+    shouldIBecomeBee = RandomInt(0 , 5);   
+    
+    if (shouldIBecomeBee > 4 )
+    {   
+      bee = true; 
+    }
+    
+    super;  
+}
+
+override void COilDrum::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{  
+ super;     
+ if (Type == M_FRAME) if (FreeMe) Free(true);
+ if (Type == M_FRAME && bee && !DidSpawnBee)   
+  {    
+      DidSpawnBee = true;  
+      createBee(PosX, PosY, 0, NullObj);
+      FreeMe = true;
+  }
+} 

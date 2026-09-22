@@ -1,0 +1,52 @@
+require p_sprite_builder;
+
+CSprite* gravity_gun_aiming;
+CSprite* gravity_gun_aiming2;
+CSprite* gravity_gun_aiming2_ghost;
+CSprite* gravity_gun_aiming_s;
+CSprite* gravity_gun_aiming2_s;
+CSprite* gravity_gun_aiming2_s_ghost;        
+WormSprite* GG_WS;                                             
+//CSprite* gravity_gun_bullet;                                               
+                                                                                
+
+void gravity_gun_animations::InitGraphic()                                 
+{   CFile* f;                                                                   
+    f = GetAttachment("gravity_gun_aiming.png");                            
+    gravity_gun_aiming = LoadSprite(f, 1, 1);
+    f = GetAttachment("gravity_gun_aiming2.png");                            
+    gravity_gun_aiming2 = LoadSprite(f, 1, 1);
+    f = GetAttachment("gravity_gun_aiming2_ghost.png");                            
+    gravity_gun_aiming2_ghost = LoadSprite(f, 1, 1);
+    f = GetAttachment("gravity_gun_aiming_s.png");                            
+    gravity_gun_aiming_s = LoadSprite(f, 1, 1);
+    f = GetAttachment("gravity_gun_aiming2_s.png");                            
+    gravity_gun_aiming2_s = LoadSprite(f, 1, 1); 
+    f = GetAttachment("gravity_gun_aiming2_s_ghost.png");                            
+    gravity_gun_aiming2_s_ghost = LoadSprite(f, 1, 1);                                                   
+}                                                                       
+                                                                        
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Gravity Gun";                                             
+     sprite = gravity_gun_aiming->Index;                                  
+     Params->hand_radius = -6.0;                                                 
+     Params->hand_rotation = 0.5;                                           
+     Params->hand_radial_rotation = 0.9;
+     Params->weap_radial_rotation = 0.0;     
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = 0.0;
+     Params->hand_type = 1;    
+     Params->hand_scale = 0.8;                                       
+//     Params->zplane = 10.0;          // this is def value;                             
+//     Params->scale = 1.0;           // this better dont change. 1.0 is default value.                            
+                                                  
+     GG_WS = new WormSprite(weapName, sprite, Params);
+    }                                                                            
+  }                                                                              
+}                                                                                

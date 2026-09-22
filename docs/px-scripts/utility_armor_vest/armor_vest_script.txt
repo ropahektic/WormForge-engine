@@ -1,0 +1,81 @@
+require utils;
+
+CSprite* AInfoSpr;
+CSoundFile* armor_equip;
+
+void armor_vest_script::Init()
+{
+armor_equip = new CSoundFile(GetAttachment("equip.wav"));
+}
+
+void armor_vest_script::InitGraphic() 
+{
+   CFile *Armor_Info_Sprite; 
+   Armor_Info_Sprite = GetAttachment("Armor Info.png");	
+   AInfoSpr = LoadSprite(Armor_Info_Sprite, 1, 0);
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Light Armor Vest"))
+  {  
+     Armor = 0.75; // -25% dmg                       
+     Damage = 0;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     armor_equip->Play(vol, pan, false);
+     beginHP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+  }
+  
+  if(Weap->CheckName("Medium Armor Vest"))
+  {  
+     Armor = 0.5; // -50% dmg
+     Damage = 0;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     armor_equip->Play(vol, pan, false);
+     beginHP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+  } 
+  
+  if(Weap->CheckName("Heavy Armor Vest"))
+  {  
+     Armor = 0.25; // -75% dmg
+     Damage = 0;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     armor_equip->Play(vol, pan, false);
+     beginHP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+  }
+  
+  super;
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+   if(Type == M_FRAME && Armor != 0 && beginHP != GS->Info.GetWormHealth(WormTeam, WormNumber) && GotDamage == 0 && Damage != 0 && int(beginHP-Damage*Armor) > 0)
+   {
+      GS->Info.SetWormHealth(WormTeam, WormNumber, int(beginHP-Damage*Armor)); 
+      beginHP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+           
+      Damage = 0;
+   }
+        
+   if(Type == M_FRAME && GotDamage != 0)
+   {
+      Damage = GotDamage;
+   } 
+	
+   if(Type == M_DRAWQUEUE && Armor != 0)
+   {
+      AddSprite(10, PosX+20, PosY-20, 0, AInfoSpr->Index, 0.5);
+   }
+   
+   if(Type == M_TURNBEGIN || Type == M_SETWEAPON || Type == M_SETTARGET ||
+      Type == M_SETDELAY || Type == M_SETDELAYB || Type == M_SETBOUNCE ||
+      Type == M_AFTERSHOOT || Type == M_TURNEND)
+   {
+      beginHP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+   }
+                
+   super;
+}

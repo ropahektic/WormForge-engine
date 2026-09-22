@@ -1,0 +1,36 @@
+//List of sprites
+CSprite* ufo;
+CSprite* energyballa;
+CSprite* energyballb;
+CSoundFile* thexfiles;
+
+void alien_invasion_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("Ufo.png"); 
+   ufo = LoadSprite(f, 1, 0);
+   f = GetAttachment("Energy Ball A.png"); 
+   energyballa = LoadSprite(f, 1, 0);
+   f = GetAttachment("Energy Ball B.png"); 
+   energyballb = LoadSprite(f, 1, 0);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(701, ufo);
+   SetSpriteOverride(702, energyballa);
+   SetSpriteOverride(703, energyballb);
+}
+
+void alien_invasion_script::Init()
+{
+	thexfiles       = new CSoundFile(GetAttachment("The X-Files.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Alien Invasion"))
+  {
+             thexfiles->Play(1.0, 0.0, false);
+  }
+  super;
+}

@@ -1,0 +1,115 @@
+require utils;
+
+CBuilding : CGObject;
+
+void buildings::InitGraphic(){}
+
+void buildings::Init(){}
+
+void buildings::FirstFrame(){}
+
+CBuilding::CBuilding(CObject* parent, float x, float y)
+{
+    CGOBJECT_LAYER_OVERRIDE = 17;
+    CGOBJECT_MASKINDEX_OVERRIDE = 9;
+    super(parent, x, y);
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+
+    IsMaterial  = true;
+    GravityFactor = 0;
+    ColGroup    = 236670;
+    ClType = EObjectClass(79);
+    DumpingA = 0.3;
+    DumpingB = 0.3;
+    DumpingC = 1.0;
+    SpX         = 0.0;
+    SpY         = 0.0;
+
+    Health = 15;
+    Team = 0;
+
+    HasSprite = false;
+    AnimPhase = 0.0;
+    AnimPhaseSpeed = 0.0;
+    Direction = 0;
+    AnimBool = false;
+
+    ClassType = "Null";
+}
+
+
+void CBuilding::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+//basic - death, falling, animphase
+AnimPhaseProcess();
+Destroy();
+   if (Type == M_FRAME)
+   {
+      if(SpX != 0.0)SpX = 0.0;
+      if(SpY != 0.0)SpY = 0.0;
+   }
+
+  if(Type == M_GUNEXP || Type == M_EXPLOSION)
+  {
+  return;
+  }
+
+super;
+}
+
+
+void CBuilding::Collide ( CGObject *obj, int type )
+{
+super;
+}
+
+void CBuilding::Reflect ( CGObject *obj, int type )
+{
+super;
+if(type == 2 || type == 4)obj->SpX = -1 * obj->SpX;
+if(type == 1 || type == 3)
+	{
+    if(obj->ClType == OC_Missile)
+    	{
+        obj->SpY = -1 * obj->SpY;
+        }
+ 	}
+}
+
+override void CMissile::Collide(CGObject* Obj,int type)
+{
+ if(Obj->ClType == EObjectClass(79))
+ {
+ return;
+ }
+ super;
+}
+
+void CBuilding::AnimPhaseProcess()
+{
+     if(AnimPhase < 1.0)
+     {
+     AnimPhase = AnimPhase + AnimPhaseSpeed;
+     }
+
+     if(AnimPhase > 0.99)
+     {
+       AnimPhase = 0.0;
+     }
+}
+
+void CBuilding::Destroy()
+{
+      if (Health < 1) //Destroying
+      {
+      Free(true); return;
+      }
+
+      if(PosY > GS->LevelSY)
+      {
+      Health = 0;
+      }
+}

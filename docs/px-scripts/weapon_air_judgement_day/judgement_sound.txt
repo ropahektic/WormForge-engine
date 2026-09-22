@@ -1,0 +1,25 @@
+CSoundFile* requiem;
+CSoundFile* ndorma;
+CSoundFile* missathing; 
+CSoundFile* jurassic;
+ 
+void judgement_sound::Init()
+{
+	requiem       = new CSoundFile(GetAttachment("Requiem For A Dream.wav"));
+	ndorma       = new CSoundFile(GetAttachment("Nessun Dorma.wav"));
+	missathing       = new CSoundFile(GetAttachment("Don't want to miss a thing.wav"));
+	jurassic       = new CSoundFile(GetAttachment("Jurassic Park theme.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Judgement Day"))
+  {  
+            local i = RandomInt(1,4);
+	     	if      (i == 1) ndorma->Play(1.75, 0.0, false);
+            else if (i == 2) missathing->Play(1.50, 0.0, false);
+            else if (i == 3) jurassic->Play(2.00, 0.0, false);
+			else if (i == 4) requiem->Play(2.0, 0.0, false);
+  }
+  super;
+}

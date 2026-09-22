@@ -1,0 +1,37 @@
+require utils;
+
+bool say_welcome;
+CSoundFile* portals_welcome;
+
+void portal_hello_script::FirstFrame()
+{
+    say_welcome = true;
+}
+
+void portal_hello_script::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("portal_welcome.wav");
+    portals_welcome = new CSoundFile(f);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   local w = GetCurrentWorm();
+   if (Type == M_FRAME)
+   {
+     if (w != NullObj)
+     {
+       if (say_welcome)
+       {
+         if(GS->Tick > 10)
+         {  
+           portals_welcome->Play( 1.0, 1.0, false);
+           Root->ShowTeamMessage( 1, "Hello. Welcome to the Aperture Science enrichment center", 1);
+           say_welcome = false;
+         }
+       }
+     }
+   }
+   super;
+}

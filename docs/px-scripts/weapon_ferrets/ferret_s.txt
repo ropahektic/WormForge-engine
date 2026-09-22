@@ -1,0 +1,607 @@
+//- Ferrets v1.0 17/09/2016
+//- -------------------------------------------------------------------------------------
+//- The ferrets remain in contact with the ground at all times. If they walk off a ledge,
+//- they will simply follow the terrain in stead of falling. They will explode as soon as
+//- they come into contact with a Worm or an Oil Barrel. -worms.wikia.com
+//- -------------------------------------------------------------------------------------
+//- made by rafa``2
+//-
+//- Contour Tracing Algorithms 
+//- www.imageprocessingplace.com/downloads_V3/root_downloads/tutorials/contour_tracing_Abeer_George_Ghuneim/index.html
+
+require utils, utils_steps, p_sprite_builder;
+
+#FERRETS
+
+
+
+CSprite * ferret_spr; 
+CSoundFile * ferret_snd;
+
+enum frt_dir = (FRT_UP = 1, FRT_RIGHT = 2, FRT_DOWN = 4, FRT_LEFT = 8);
+
+void ferret_s::InitGraphic()
+{   
+    ferret_spr = LoadSprite(GetAttachment("ferret_bright.png"), 10, 1);
+}
+
+void ferret_s::FirstFrame()
+{                 
+    ferret_snd = new CSoundFile(GetAttachment("ferret_snd.wav"));  
+} 
+
+void frt_pixel::frt_pixel(int x, int y)
+{
+     frt_x = x;
+     frt_y = y;
+}
+
+CFerret : CMissile
+CFerret::CFerret(int turnside, frt_dir ldir, CWeaponLaunch *launch, CShootDesc* Desc, CObjList * list, int id)
+{
+
+	frt_maxdist     = 3;
+    frt_maxfails    = 4;
+    frt_actualfails = 0;
+    frt_calcrot     = 0;
+    frt_gravity     = 0;
+    frt_maxoper     = 12;
+    frt_framesdam   = 60;
+    frt_pixrotat    = 6;
+    frt_sprfrmdiv   = 12;
+    frt_maxfrtalw   = 10;
+    frt_sprframe    = 0.0;
+    frt_sprangle    = 0.0;
+    frt_sprzplane   = 5.1;
+    frt_sprscale    = 0.95;
+    frt_planted     = false;
+    frt_trace       = false;
+    frt_firsttrace  = true;
+    frt_exectrace   = false;
+    frt_explode     = false;
+    frt_ownercol    = false;
+    frt_dead        = false;
+    frt_id          = id;          
+    frt_actualist   = list;
+    frt_turnside    = turnside;
+    frt_lookingat   = ldir;
+    frt_lookingatbk = frt_lookingat;
+    frt_actualoper  = frt_maxoper;
+    frt_dist        = frt_maxdist;
+    frt_actualpixel = frt_pixel(NullObj);
+    frt_originpixel = frt_pixel(NullObj);
+    frt_prevpixel   = frt_pixel(NullObj);
+    frt_lastpixel   = frt_pixel(NullObj);
+    frt_rotspriteto = frt_pixel(NullObj);
+    frt_sndobj      = CSound(NullObj);    
+    frt_contour     = new CObjList();
+    
+    Desc->Worm      = 0;
+    super(Root->GetObject(25,0), launch, Desc);
+
+    Layer           = LAYER_OTHERWEAPON;
+    MaskIndex       = CMASK_OTHERWEAPON;
+    ClType          = OC_Missile;
+    ActionType      = 3;
+    version         = 1.0;
+} 
+
+void CFerret::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     super;
+     
+     if(Type == M_DRAWQUEUE)
+     { 
+         AddSpriteEx( frt_sprzplane, PosX, PosY, ferret_spr->Index + 262144 * -Sign(frt_turnside - 1), frt_sprframe, frt_sprangle, frt_sprscale);
+     }
+     else if(Type == M_FRAME)
+     { 
+         if(frt_dead)
+         {
+              frt_explosion();
+              Free(true);
+         } 
+         
+         if(!frt_planted)
+         {
+             frt_firstcollision();
+         }
+         else 
+         { 
+            GravityFactor = frt_gravity;
+            IsStatic = true;
+         }
+         
+         frt_checkactualferrets();
+         
+         frt_checksink();
+         
+         if(frt_explode)
+         {
+            frt_explosion();
+         }
+         
+         if(frt_trace)
+         {
+              frt_square_tracing(frt_prevpixel);
+         }
+            
+         if(frt_exectrace)
+         {    
+              if(frt_perform_trace())
+              {
+                   frt_perform_trace();
+              }
+         }
+         
+         frt_framesdam--;
+          
+     }
+     else if(Type == M_EXPLOSION)
+     {
+          if(this == CFerret(sender) && !frt_dead)
+          {     
+               frt_stopsound();
+          }
+     }     
+}      
+
+bool CFerret::frt_perform_trace()
+{
+    if(frt_dead || frt_contour == NullObj) 
+         return false;
+    
+    if(frt_contour->Count <= 0 && frt_lastpixel != NullObj)
+    {
+         frt_exectrace = false;
+         frt_trace = true;
+         PosX = frt_lastpixel->frt_x;
+         PosY = frt_lastpixel->frt_y;
+         return false;                                         
+    }
+    
+    frt_pixel * pixel = frt_contour->GetObject(0);
+         
+    if(pixel == NullObj) 
+          return false;
+    
+    PosX = pixel->frt_x;
+    PosY = pixel->frt_y;        
+    
+    frt_checkinteract(pixel);
+    
+    frt_calc_rotation(frt_rotspriteto, pixel);
+    
+    frt_lastpixel->frt_x = PosX;
+    frt_lastpixel->frt_y = PosY;
+    
+    if(frt_contour->Remove(pixel))
+    {
+         pixel = frt_pixel(NullObj);                          
+         frt_contour->Compact();
+    }
+    
+    return true;
+}
+
+void CFerret::frt_calc_rotation(frt_pixel * prev, frt_pixel * actual)
+{
+     if(frt_dead) return; 
+     
+     if(prev == NullObj || actual == NullObj)
+     {
+          return;
+     }
+     
+     frt_calcrot++;
+     
+     if(frt_calcrot >= frt_pixrotat)
+     {
+          frt_calcrot = 0;
+          TrgY = actual->frt_y - prev->frt_y ;
+          TrgX = actual->frt_x - prev->frt_x;
+          frt_sprangle = atan2(TrgX, -TrgY) - MATH_HALF_PI * frt_turnside;
+          frt_rotspriteto->frt_x = PosX;
+          frt_rotspriteto->frt_y = PosY;
+     }
+     
+     frt_sprframe = float((gframe % (frt_sprfrmdiv + 1)) / frt_sprfrmdiv);
+}
+       
+void CFerret::frt_checkinteract(frt_pixel * pixel)
+{
+     if(frt_dead || pixel == NullObj)
+          return;
+              
+     CGObject * obj = Env->CheckCollisionEx(this, pixel->frt_x, pixel->frt_y, ColMask, 4+8+16+32+64+1024+131072);
+    
+     if((obj != NullObj) && (obj->ClType == OC_Worm || obj is CMine || obj->ClType == OC_OilDrum || obj->ClType == OC_Missile))
+     {
+        if(obj is CWorm)
+        {
+             if(frt_framesdam > 0 && obj == GetCurrentWorm())
+             {
+                  return;
+             }
+               
+             CWorm * wvictim = CWorm(obj);
+             wvictim->SpY = -5.0;
+             wvictim->SpX = frt_turnside * 1.0; //0.4;
+             frt_explode = true;
+             frt_exectrace = false;
+             frt_trace = false;
+        }
+        else if(obj is COilDrum)           
+        {
+               frt_explode = true;
+               frt_exectrace = false;
+               frt_trace = false;
+        }
+        else if(obj is CMine)
+        { 
+             CMine * mine = CMine(obj);
+             mine->SpX = 1.0 * frt_turnside;
+             mine->SpY = -7.0;
+        
+        }
+     }     
+}              
+void CFerret::frt_firstcollision()
+{
+      if(frt_dead) return;
+      
+      local x = PosX;
+      local y = PosY + frt_dist;
+             
+      CGObject * obj = Env->CheckCollisionEx(this, x, y, ColMask, 2);
+             
+      if(obj != NullObj && obj->ClType == OC_Landscape)
+      {
+           frt_originpixel = new frt_pixel(x, y);
+           frt_actualpixel = new frt_pixel(frt_originpixel->frt_x, frt_originpixel->frt_y);
+           frt_prevpixel   = new frt_pixel(frt_originpixel->frt_x, frt_originpixel->frt_y);
+           frt_lastpixel   = new frt_pixel(frt_originpixel->frt_x, frt_originpixel->frt_y);
+           frt_rotspriteto = new frt_pixel(frt_originpixel->frt_x, frt_originpixel->frt_y);
+           
+           frt_planted = true;
+           frt_trace = true;
+           
+           frt_startsound();
+      }
+      
+      local p = new frt_pixel(PosX, PosY);
+      frt_checkinteract(p);
+      p = frt_pixel(NullObj);
+}
+
+void CFerret::frt_square_tracing(frt_pixel * prevpixel)
+{
+       if(frt_dead || prevpixel == NullObj) return;
+       
+       frt_actualpixel->frt_x = prevpixel->frt_x;
+       frt_actualpixel->frt_y = prevpixel->frt_y;
+       frt_lookingat = frt_lookingatbk;
+       
+       while(true)
+       {         
+            PosX = frt_lastpixel->frt_x;
+            PosY = frt_lastpixel->frt_y;
+         
+            if(frt_actualoper <= 0)
+            {
+                 frt_trace = false;
+                 frt_exectrace = true;
+                 frt_actualfails = 0;
+                 frt_actualoper = frt_maxoper;
+                 break;
+            }
+            
+            if(frt_actualfails >= frt_maxfails)
+            {
+                 frt_trace = false;
+                 frt_exectrace = false;
+                 frt_explode = true;
+                 frt_actualfails = 0;
+                 break;
+            }
+            
+            if(frt_checkcollision(frt_actualpixel))
+            {
+                if(!isEqual(frt_prevpixel, frt_actualpixel))
+                {
+                     frt_lookingatbk = frt_lookingat;
+                     frt_prevpixel->frt_x = frt_actualpixel->frt_x;
+                     frt_prevpixel->frt_y = frt_actualpixel->frt_y;   
+                     frt_contour->Add(new frt_pixel(frt_actualpixel->frt_x, frt_actualpixel->frt_y));                    
+                }
+                
+                if(frt_turnside < 0 )
+                {
+                    frt_moveto(FRT_RIGHT);
+                }
+                else
+                {
+                    frt_moveto(FRT_LEFT); 
+                }
+            }
+            else
+            {
+                if(frt_turnside < 0)
+                {
+                    frt_moveto(FRT_LEFT);
+                }
+                else
+                {
+                    frt_moveto(FRT_RIGHT); 
+                }
+                
+            }
+            
+            frt_actualoper--;
+       }
+}
+void CFerret::frt_checksink()
+{
+     if(frt_dead) return;
+     
+     if(PosY >= Env->Water - frt_maxdist)
+     {
+          frt_explode = true;
+     }
+}
+
+void CFerret::OnSink()
+{
+    super;
+}
+
+void CFerret::frt_explosion()
+{
+     if(frt_dead) return;
+     
+     frt_stopsound();
+     ExplodeAt(PosX, PosY);
+     frt_exectrace = false;
+     frt_trace = false;  
+     frt_explode = false;
+     frt_dead = true;
+     frt_originpixel = NullObj;
+     frt_actualpixel = NullObj;
+     frt_prevpixel   = NullObj;
+     frt_lastpixel   = NullObj;
+     frt_rotspriteto = NullObj;
+     frt_actualist   = NullObj;
+     frt_contour     = NullObj;
+}
+
+void CFerret::frt_checkactualferrets()
+{
+    if(frt_dead || frt_actualist == NullObj || frt_actualist->Count == 0)
+    {
+         return;
+    }
+    else if(frt_actualist->Count >= frt_maxfrtalw)
+    { 
+         CFerret * ferret = CFerret(frt_actualist->GetObject(0));
+    
+         if(ferret != CFerret(NullObj) && frt_actualist->Remove(ferret))
+         {
+             ferret->frt_stopsound();
+             ferret->Free(true);
+         }
+    }
+}
+
+bool CFerret::frt_checkcollision(frt_pixel * actual)
+{
+     if(frt_dead || actual == NullObj) 
+         return false;
+     
+     local x = PosX;
+     local y = PosY;
+     PosX = 0;
+     PosY = 0;
+     local obj = Env->CheckCollisionEx(this, actual->frt_x, actual->frt_y, ColMask, 2);
+     PosX = x;
+     PosY = y;
+     
+     if(obj == NullObj)
+     {
+          frt_actualfails++;
+          return false;
+     }
+     else if(obj->ClType == OC_Landscape)
+     { 
+          frt_actualfails = 0;
+          return true;
+     }
+}
+
+void CFerret::frt_moveto(frt_dir ldir)
+{
+     if(frt_dead) return; 
+     
+     local x = frt_actualpixel->frt_x;
+     local y = frt_actualpixel->frt_y;
+     
+     if(frt_lookingat == FRT_DOWN)         //0001 0010 0100 1000
+     {                                     // up right down left
+          if(ldir == FRT_LEFT)
+          {                                        
+               x = x + frt_dist;                   
+               frt_lookingat = FRT_RIGHT;    // 0010 = 0100 + 1000   
+          }
+          else if(ldir == FRT_RIGHT)               
+          {                                        
+               x = x - frt_dist;                   
+               frt_lookingat = FRT_LEFT;     // 1000 = 0100 + 0010
+          }
+          else if(ldir == FRT_UP)
+          {
+               y = y + frt_dist;
+               frt_lookingat = FRT_DOWN;    // 0010 = 0010 + 0001
+          }
+          else if(ldir == FRT_DOWN)
+          {
+               y = y - frt_dist;
+               frt_lookingat = FRT_UP;      // 0001 = 0010 + 0010
+          }
+     }
+     else if(frt_lookingat == FRT_UP)
+     {
+          if(ldir == FRT_LEFT)
+          {
+               x = x - frt_dist;
+               frt_lookingat = FRT_LEFT;
+          }
+          else if(ldir == FRT_RIGHT)
+          {
+               x = x + frt_dist;
+               frt_lookingat = FRT_RIGHT;
+          }
+          else if(ldir == FRT_UP)
+          {
+               y = y - frt_dist;
+               frt_lookingat = FRT_UP;
+          }
+          else if(ldir == FRT_DOWN)
+          {
+               y = y + frt_dist;
+               frt_lookingat = FRT_DOWN;
+          }
+     }
+     else if(frt_lookingat == FRT_LEFT)
+     {
+          if(ldir == FRT_LEFT)
+          {
+               y = y + frt_dist;
+               frt_lookingat = FRT_DOWN;
+          }
+          else if(ldir == FRT_RIGHT)
+          {
+               y = y - frt_dist;
+               frt_lookingat = FRT_UP;
+          }
+          else if(ldir == FRT_UP)
+          {
+               x = x - frt_dist;
+               frt_lookingat = FRT_LEFT;
+          }
+          else if(ldir == FRT_DOWN)
+          {
+               x = x + frt_dist;
+               frt_lookingat = FRT_RIGHT;
+          }
+     }
+     else if(frt_lookingat == FRT_RIGHT)
+     {
+          if(ldir == FRT_LEFT)
+          {
+               y = y - frt_dist;
+               frt_lookingat = FRT_UP;
+          }
+          else if(ldir == FRT_RIGHT)
+          {
+               y = y + frt_dist;
+               frt_lookingat = FRT_DOWN;
+          }
+          else if(ldir == FRT_UP)
+          {
+               x = x + frt_dist;
+               frt_lookingat = FRT_RIGHT;
+          }
+          else if(ldir == FRT_DOWN)
+          {
+               x = x - frt_dist;
+               frt_lookingat = FRT_LEFT;
+          }
+     }
+     
+     frt_actualpixel->frt_x = x;
+     frt_actualpixel->frt_y = y;
+}
+
+bool CFerret::isEqual(frt_pixel * previous, frt_pixel * actual)
+{
+    if(frt_dead || actual == NullObj || previous == NullObj) 
+         return false;
+    
+    if(actual->frt_x == previous->frt_x && actual->frt_y == previous->frt_y)
+         return true;
+    else
+         return false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+     if(Weap->CheckName("Ferret"))
+     {
+           CObjList * frt_list = new CObjList();
+           
+           for(int k = 0; k < Env->Objs.Count; k++)
+           {
+               local obj = Env->Objs.Objs[k];
+               
+               if(obj is CFerret)
+               {
+                    frt_list->Add(CFerret(obj));  
+               }
+           }
+           new CFerret(TurnSide, FRT_DOWN, &Weap->launch, Desc, frt_list, gframe);
+     }
+     else super;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{ 
+    super;
+                                                                           
+    if (Type == M_FRAME) 
+    {                                              
+        if (gframe == 1)
+        {                                                          
+            local weapName; 
+            local sprite;
+            
+            CWormAnimParams* Params = new CWormAnimParams;
+            weapName = "Ferret";               
+            sprite = ferret_spr->Index;
+                                     
+            Params->hand_radius = -8.0;                                                 
+            Params->hand_rotation = 0.0;
+            Params->hand_radial_rotation = -0.13;
+            Params->weap_radial_rotation = 0.22;     
+            Params->weap_rotation = 0.5;
+            Params->weap_radius = -9.0;
+            Params->hand_type = 2;
+            Params->hand_scale = 1.0;
+            Params->dont_rotate_with_angle = true;
+            Params->ang_if_static = 0.0;
+            Params->hand_ang_if_static = 0.45;
+            
+            new WormSprite(weapName, sprite, Params);
+        }                              
+    }                              
+}
+
+void CFerret::frt_startsound()
+{
+    if(frt_sndobj == CSound(NullObj))
+    {
+        frt_sndobj = ferret_snd->Play(0.6, 0.0, false);
+    }
+}
+
+void CFerret::frt_stopsound() 
+{   
+    if(frt_sndobj != CSound(NullObj) && frt_sndobj->isAlive() == true)
+    {
+        frt_sndobj->Stop();
+        frt_sndobj = CSound(NullObj);
+    }
+}
+
+bool CFerret::IsMoving()
+{
+    return false;
+}

@@ -1,0 +1,531 @@
+
+// CHECK FERRET.
+//20:59:32 StepS: note that hex values are fucked in px
+//20:59:38 StepS: instead of 0x it uses the pascal $
+require utils, utils_hack;
+
+CCamSync* camSync;
+int mapSizeX; //init to 0. First frame value is set.
+int mapSizeY; //init to 0. First frame value is set.
+int mapWaterLvl;
+int JobFrame;
+int nFrame;
+int nDelay;
+int doonce;
+bool TryReleaseRope;
+bool ReleaseRopeNow;
+bool funtimeActive;
+int funFrame;
+AimInterpreter : CObject; 
+AimInterpreter * AIpointer;
+
+void MouseAim::InitGraphic()
+{
+}
+
+void MouseAim::Init()
+{
+	camSync = new CCamSync(RegisterPXMessage());
+	doonce = 0;
+	mapSizeX = 0;
+	mapSizeY = 0;
+	mapWaterLvl = 0;
+	JobFrame = 0;
+	nFrame = 0;
+	MagicOff = 0;
+	allowSpace = 0;
+	TryReleaseRope = false;
+	ReleaseRopeNow = false;
+	funtimeActive = false;
+	funFrame = 0;
+}
+
+void MouseAim::FirstFrame()
+{
+	mapSizeX = GS->LevelSX;
+	mapSizeY = GS->LevelSY;
+	mapWaterLvl = Env->Water;
+
+	AIpointer = new AimInterpreter(Root);
+	//Hack_SetAwesome(true); //broken graphcis
+	Hack_SetRopeGrowthSpeed(1310720 * 3);
+	Hack_SetMagic(false); //weird
+	// Hack_SetComeOnThen(true);  //nothing?
+   //	 Hack_SetRopeGrowthSpeed($140000);
+   //	 Hack_SetSuperSheepSpeed(4);
+   //	 WriteMemoryBool(Hack_NiceRoundEnd_addr, true);
+//		for (int i = 6; i >= 1; i-=1)
+//		{
+//			for (int j = 8; j >= 1; j-=1)
+//			{
+//				local FTWorm = CWorm(Root->GetObject(2, 16 * i + j));
+//				if(FTWorm != NullObj){
+//					FTWorm->PosX = 300;
+//					FTWorm->PosY = 9800;
+//				}
+//			}
+//		}
+	}
+
+CCamSync::CCamSync(int MType)
+{
+	msgType = MType;
+	camPosX = 0;
+	camPosY = 0;
+	SyncedCX = 0;
+	SyncedCY = 0;
+	MKL = 0;
+	MKR = 0;
+	MKw = 0;
+	MKa = 0;
+	MKs = 0;
+	MKd = 0;
+	MKf = 0;
+};
+
+void CCamSync::ProcessInput() {
+	//This function is running from current playing computer, which seems to be the deciding host.
+	GG->queue2->AddPXMessage(msgType, 0, GS->ActCameraX);
+	GG->queue2->AddPXMessage(msgType, 1, GS->ActCameraY);
+	if (WApp->MK == 1){  // left pressed
+		GG->queue2->AddPXMessage(msgType, 2, 0);
+	}
+	if (WApp->MK == 0){  // right pressed
+		GG->queue2->AddPXMessage(msgType, 2, 1);
+	}
+	if (IsKeyPressed(87)) { // w pressed
+		GG->queue2->AddPXMessage(msgType, 2, 2);
+	}
+	if (IsKeyPressed(65)) { // a pressed
+		GG->queue2->AddPXMessage(msgType, 2, 3);
+	}
+	if (IsKeyPressed(83)) { // s pressed
+		GG->queue2->AddPXMessage(msgType, 2, 4);
+	}
+	if (IsKeyPressed(68)) { // d pressed
+		GG->queue2->AddPXMessage(msgType, 2, 5);
+	}
+	if (IsKeyPressed(70)) { // f pressed
+		GG->queue2->AddPXMessage(msgType, 2, 6);
+	}
+}
+
+void CCamSync::OnMessage(CMessageData* MData)
+{
+	if (MData->GetParameter(0) == msgType)
+	{
+		local MParam = MData->GetParameter(1);
+		local Mval = MData->GetParameter(2);
+		if (MParam == 0) {
+			SyncedCX = Mval;
+		}
+		if (MParam == 1) {
+			SyncedCY = Mval;
+		}
+		if (MParam == 2) {
+			if (Mval == 0) {
+				MKL = 1;
+			}
+			if (Mval == 1) {
+				MKR = 1;
+			}
+			if (Mval == 2) {
+				MKw = 1;
+			}
+			if (Mval == 3) {
+				MKa = 1;
+			}
+			if (Mval == 4) {
+				MKs = 1;
+			}
+			if (Mval == 5) {
+				MKd = 1;
+			}
+			if (Mval == 6) {
+				MKf = 1;
+			}
+		}
+	}
+}
+
+void CCamSync::OnFrame() {
+	MKL = 0;
+	MKR = 0;
+	MKw = 0;
+	MKa = 0;
+	MKs = 0;
+	MKd = 0;
+	MKf = 0;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if (Type == M_INPUT)
+	{
+		camSync->ProcessInput();
+	}
+	if (Type == M_PXMESSAGE)
+	{
+		camSync->OnMessage(MData);
+	}
+	super;
+	if (Type == M_FRAME)
+	{
+		camSync->OnFrame();
+	}
+};
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc) {
+	if (CurrentTurn != 0) {
+		Weap->EndsTurn = false;
+	}
+	super;
+}
+
+override void CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	CamX = 0;
+	CamY = 0;
+	CurrentTurn = 0;
+	super;
+}
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+	local CurrWorm = GetCurrentWorm();
+	if (CurrWorm != NullObj) {
+		CurrWorm->SpY = 5.0;
+	}
+	funFrame = 500;
+	JobFrame = 1;
+	super;
+}
+override void CTurnGame::FinishTurn(int reason)
+{
+	local CurrWorm = GetCurrentWorm();
+	if (CurrWorm != NullObj) {
+		CurrWorm->CurrentTurn = CurrWorm->CurrentTurn + 1;
+	}
+	super;
+}
+
+int MKLprevious;
+float aimNVX;
+float aimNVY;
+float aimNVL; // aim length, power?
+int aimPX;
+int aimPY;
+int allowSpace;
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData) {
+	CMessageData msgspace;
+	msgspace.params[0] = WormTeam;
+	CMessageData msgselect;
+	msgselect.params[0] = WormTeam;
+	msgselect.params[1] = WormNumber;
+	msgselect.params[2] = 37; // Ninja Rope
+	msgselect.params[3] = 0;
+	bool isCurrentWorm = false;
+	local CurrWorm = GetCurrentWorm();
+	isCurrentWorm = (CurrWorm != NullObj && CurrWorm == this);
+	if (isCurrentWorm == true && CurrentTurn > 0) {
+		if ((Type == M_SPACE || Type == M_SPACERLS) && (allowSpace == 0)){
+			Type = M_FRAME;
+		}
+		if ((Type == M_PLEFT || Type == M_PRIGHT || Type == M_PDOWN || Type == M_PUP) && MagicOff == 1) {
+			Type = M_FRAME;
+			TurnSide = aimTurnSide;
+		}
+
+		if (Type == M_FRAME)
+		{
+			//if (isCurrentWorm) { GG->WriteToChat(8, ItoA(funFrame), false); }
+			if (ObjState == int(112) || ObjState == int(126)) {
+				SetState(WS_AFTERROPE);
+			}
+			if (ObjState == int(128)) {
+				SetState(EObjState(127));
+			}
+			KnockedOut = 0;
+			CalcAimNormal(camSync->SyncedCX, camSync->SyncedCY, PosX, PosY);
+			if (JobFrame > 0 && JobFrame < 10) {
+				JobFrame++;
+			}
+			//FLYING2 = sit-fly, parachute when overspeed, FLYING = normal fly, no control. POWERFLY = projectile, no control.
+			if (ObjState == WS_POWERFLY || ObjState == WS_FLYING || ObjState == WS_FLYING2) {
+				//SetState(WS_FLYING2);
+				SetState(EObjState(127));
+			}
+			if (JobFrame == 2 && MagicOff == 1) {
+				allowSpace = 1;
+			}
+			if (JobFrame == 3 && MagicOff == 1) {
+				SetState(WS_AIMING);
+				FireAngle = aimAng;
+				TurnSide = aimTurnSide;
+				msgselect.params[2] = 37; // Ninja Rope
+				Message(NullObj, M_SETWEAPON, 1032, &msgselect);
+				Message(NullObj, M_SPACE, 1032, &msgspace);
+			}
+			if (JobFrame == 4 && MagicOff == 1) {
+				MagicOff = 0;
+				JobFrame = 0;
+				allowSpace = 0;
+				Hack_SetMagic(false);
+			}
+			if (JobFrame == 10) {
+				JobFrame = 0;
+				if (doonce == 0) {
+					//ActivateJetPack();
+					doonce = 1;
+				}
+			}
+			if (ReleaseRopeNow == true) {
+				ReleaseRopeNow = false;
+				SetState(EObjState(115));
+			}
+			if (TryReleaseRope == true) {
+				if (ObjState != int(123)){
+					TryReleaseRope = true;
+				}
+				else {
+					ReleaseRopeNow = true;
+					TryReleaseRope = false;
+				}
+			}
+			//BUG: release while rope is out does not release rope!
+			if (MKLprevious == 1 && camSync->MKL == 0) { // LMK release
+				if (ObjState != int(123)){
+					TryReleaseRope = true;
+				}
+				else {
+					SetState(EObjState(115));
+				}
+				nDelay = 1;
+			}
+			if (nDelay == 10) { //Delay before allowed to fire instantly with mouse click
+				nFrame = 0;
+			}
+			if (MKLprevious == 0 && camSync->MKL == 1) { // LMK press begin 
+				TryReleaseRope = false;
+				ReleaseRopeNow = false;
+				ShootNinja();
+			}
+			if (nDelay > 0) {
+				nDelay = nDelay + 1;
+			}
+
+			funFrame = funFrame + 1;
+			if (funFrame == 80) {
+				funtimeActive = false;
+			}
+			if (funFrame == 501) {
+				funFrame = 500;
+			}
+			if (camSync->MKf == 1) {
+				if (funFrame == 500) {
+					funtimeActive = true;
+					funFrame = 0;
+				}
+			}
+			if (funFrame % 6 == 0 && funtimeActive == true) {
+				PlaySound(44, 10, 0.5, 0.9);
+				CShootDesc SDesc;
+				zero(&SDesc);
+				SDesc.Team = WormTeam;
+				SDesc.X = PosX + (aimNVX * 30);
+				SDesc.Y = PosY + (aimNVY * 30);
+				SDesc.Worm = WormNumber;
+				SDesc.AddX = PosX;
+				SDesc.AddY = PosY;
+				SDesc.SpX = SpX + (aimNVX * 6.0);
+				SDesc.SpY = SpY + (aimNVY * 6.0);
+				SDesc.Delay = 0;
+				local zook = GetWeaponByName("Bazooka");
+				zook->launch.explosion.damage = 50;
+				zook->launch.explosion.pushPower= 100;
+				local weapon = new CMissile(Root->GetObject(25, 0), &zook->launch, &SDesc);
+			}
+			if ((funFrame == 1 || funFrame == 10 || funFrame == 20 || funFrame == 30) && funtimeActive == true) {
+				CShootDesc SDesc;
+				zero(&SDesc);
+				CMineParams MParams;
+				zero(&MParams);
+				SDesc.Team = WormTeam;
+				SDesc.X = PosX;
+				SDesc.Y = PosY;
+				SDesc.SpX = 0;
+				SDesc.SpY = 0;
+				MParams.Radius = 110;
+				MParams.Prefuse = 2000;
+				MParams.Fuse = 75;
+				MParams.Flags = 4 + 8 + 16 + 32;
+				MParams.Bias = 100;
+				MParams.Damage = 148;  // default 48
+				MParams.BlastPower = 200;
+				local mine = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);           
+			}
+			if (camSync->MKL == 1) {
+				///	if (JobFrame == 0) {
+				///		msgselect.params[2] = 39; // Parachute
+				///		Message(NullObj, M_SETWEAPON, 1032, &msgselect);
+				///	}
+
+				/// Trace line to cursor and explode at hit
+				///	if (nFrame % 7 == 0) {
+				///		local hitX = 0;
+				///		local hitY = 0;
+				///		local hit1 = TraceLine(this, PosX, PosY, PosX + (aimNVX * 2000), PosY + (aimNVY * 2000), -1, &hitX, &hitY);
+				///		if (hit1 != NullObj)
+				///		{
+				///			local distX = abs(PosX - hitX);
+				///			local distY = abs(PosY - hitY);
+				///			DoExplosion(hitX, hitY, 10, 10, 0, 1);
+				///		}
+				///	}
+				///nFrame = nFrame + 1;
+			}
+			if (camSync->MKL == 1) {
+				MKLprevious = 1;
+			}
+			else {
+				MKLprevious = 0;
+			}
+			if ((ObjState != WS_AFTERROPE && ObjState != WS_ROPING) || ObjState == int(115) || ObjState == int(123)) {
+				if (ObjState == int(123)) {
+					SpX = SpX + ((aimNVX) * 0.25);
+					SpY = SpY + ((aimNVY) * 0.25);
+				}
+				else {
+					local hitX = 0;
+					local hitY = 0;
+					local hit1 = TraceLine(this, PosX, PosY, PosX, PosY + 1000, -1, &hitX, &hitY);
+					if (hit1 != NullObj)
+					{
+						local distY = abs(PosY - hitY);
+						if (distY > 12.0 + SpY) {
+							SpX = SpX + ((aimNVX) * 0.2);
+							SpY = SpY + ((aimNVY) * 0.2);
+						}
+						else {
+							if (SpY > 1.0) {
+								if (SpY > 5.0) {
+									SpY = (abs(SpY) * -1) * 0.5;
+								}
+								else {
+									SpY = abs(SpY) * -1;
+								}
+							}
+							else {
+								SpY = (abs(SpY) * -1) - 1.0;
+							}
+							PosY = PosY - 1;
+						}
+					}
+					else {
+						SpX = SpX + ((aimNVX) * 0.15);
+						SpY = SpY + ((aimNVY) * 0.25);
+					}
+				}
+			}
+			if (CurrWorm->ObjState == WS_JETPACK) {
+				JetFuel = 65536;
+			}
+
+			local obj1 = CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber));
+			if (camSync->MKw == 1) { //Question: Does a M_PLEFT transform in to a M_FRAME inside super; ?
+				obj1->Message(NullObj, M_PUP, 1032, &msgspace);
+			}
+			if (camSync->MKa == 1) { 
+				 obj1->Message(NullObj, M_PLEFT, 1032, &msgspace);
+			}
+			if (camSync->MKs == 1) { 
+				 obj1->Message(NullObj, M_PDOWN, 1032, &msgspace);
+			}
+			if (camSync->MKd == 1) { 
+				 obj1->Message(NullObj, M_PRIGHT, 1032, &msgspace);
+			}
+		}
+
+		if (Type == M_DRAWQUEUE) {
+			if (Root->CurTeam != 0 && Root->CurWorm != 0) {
+				AddSpriteEx(16, aimPX, aimPY, 2, sin(GS->Tick / 35), 0.0, 0.75);
+				//if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(WormTeam))) {
+				AddSpriteEx(16, camSync->SyncedCX, camSync->SyncedCY, 93, sin(GS->Tick / 35), 0.0, 0.5);
+				//}
+			}
+			//AddSprite(16, aimPX, aimPY,0,2,sin((GS->Tick/55)));
+		}
+
+		super;
+
+		if (Type == M_FRAME) {
+			if ((ObjState == EObjState(112) || ObjState == EObjState(126)) && ObjState != WS_AFTERROPE) {
+				ObjState = EObjState(115);
+			}
+			KnockedOut = 0;
+			//GS->CameraX = aimPX + (SpX * 5.7);
+			//GS->CameraY = aimPY + (SpY * 5.7);
+		}
+	}
+	else {
+		super;
+	}
+}
+//Calculate normalized vector for mouse aim from current worm
+void CalcAimNormal(int apx, int apy, int wpx, int wpy) {
+	float dx = float(apx - wpx);
+	float dy = float(apy - wpy);
+	float dl =  sqrt(dx * dx + dy * dy);
+	if (dl > 0.00001) {
+		aimNVX = dx / dl;
+		aimNVY = dy / dl;
+	}
+	aimNVL = dl;
+	aimPX = wpx + (aimNVX * 70);
+	aimPY = wpy + (aimNVY * 70);
+}
+
+int MagicOff;
+float aimAng;
+int aimTurnSide;
+void CWorm::ShootNinja(){
+	local ang = 1.0 - (((aimNVY + 1.0) / 2.0)) ;
+    aimAng = ang;
+	if(aimNVX < 0){
+		aimTurnSide = -1;
+	}else{
+		aimTurnSide = 1;	
+	}
+	Hack_SetMagic(true);
+	JobFrame = 1;
+	MagicOff = 1;
+}
+
+void CWorm::ActivateJetPack(){
+	CMessageData msgselect;
+	msgselect.params[0] = WormTeam;
+	msgselect.params[1] = WormNumber;
+	msgselect.params[2] = 62; // Jet Pack
+	msgselect.params[3] = 0;
+	Message(NullObj, M_SETWEAPON, 1032, &msgselect);
+	CMessageData msgspace;
+	msgspace.params[0] = WormTeam;
+	Message(NullObj, M_SPACE, 1032, &msgspace); 
+}
+
+//Aim Interpreter is not in use yet
+AimInterpreter::AimInterpreter(CObject* parent)
+{
+	super(parent, GS);
+	col = 8; //maybe needed?
+}
+void AimInterpreter::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if (Type == M_FRAME)
+	{
+
+	}
+	if (Type == M_DRAWQUEUE)
+	{
+
+	}
+}

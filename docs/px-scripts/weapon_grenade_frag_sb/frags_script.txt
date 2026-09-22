@@ -1,0 +1,97 @@
+require utils, p_sprite_builder, sprite_curtis_259, sprite_curtis_261;
+
+CSprite* frag_aiming;
+CSprite* cfrag_aiming;
+    
+void frags_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("frag.png");
+    frag_aiming = LoadSprite(f, 1, 0);
+    f = GetAttachment("cfrag.png");
+    cfrag_aiming = LoadSprite(f, 1, 0);
+}
+
+//---------------------------------FRAG GRENADE (CROSSHAIR)-------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Frag Grenade";
+     sprite = frag_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -9.5;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.2;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Frag Grenade")) {
+         if (fragb_anim) {
+              local sprite = frag_aiming->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              fragb_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  fragb_anim = true;
+}
+
+//---------------------------------CLUSTER FRAG (CROSSHAIR)-------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Cluster Frag";
+     sprite = cfrag_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -9.5;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.2;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Cluster Frag")) {
+         if (cfragb_anim) {
+              local sprite = cfrag_aiming->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              cfragb_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  cfragb_anim = true;
+}

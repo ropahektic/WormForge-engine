@@ -1,0 +1,100 @@
+require utils, p_sprite_builder;
+
+CSprite* gravler_aiming;
+CSprite* gravler_bullet;
+CSprite* gravlerd;
+CSprite* gravlerda;
+CSprite* gravlerdb;
+CSprite* gravlerdc;
+
+void gravler_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("spb_gravler.png");
+    gravler_aiming = LoadSprite(f, 8, 0);
+    f = GetAttachment("gravlerds.png");
+    gravler_bullet = LoadSprite(f, 3, 0);
+    f = GetAttachment("gravlerd.png");
+    gravlerd = LoadSprite(f, 17, 0);
+    f = GetAttachment("gravlerda.png");
+    gravlerda = LoadSprite(f, 17, 0);
+    f = GetAttachment("gravlerdb.png");
+    gravlerdb = LoadSprite(f, 17, 0);
+    f = GetAttachment("gravlerdc.png");
+    gravlerdc = LoadSprite(f, 17, 0);
+    
+    SetSpriteOverride(245, gravlerd);
+    SetSpriteOverride(246, gravlerda);
+    SetSpriteOverride(247, gravlerdb);
+    SetSpriteOverride(248, gravlerdc);
+}
+
+//---------------------------------GRAVLER------------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Gravler";
+     sprite = gravler_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 1.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 0.0;
+     Params->animate = true;
+     Params->anim_speed = 1.00;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+//---------------------------------GRAVLER (FAST DIG)-------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Gravler FD";
+     sprite = gravler_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 1.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 0.0;
+     Params->animate = true;
+     Params->anim_speed = 1.00;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Gravler FD")) {
+         if (gravlera_anim) {
+              local sprite = gravler_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 4.00;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              gravlera_anim = false;
+         }
+     }
+  }
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  gravlera_anim = true;
+}

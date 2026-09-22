@@ -1,0 +1,12 @@
+CSprite* bombb_tr;
+
+void sprite_461::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("bombbt.png");
+    bombb_tr = LoadSprite(f, 7, 0);
+    //f = GetAttachment("bombbt_old.png");
+    //bombbt = LoadSprite(f, 7, 0);
+
+    SetSpriteOverride(461, bombb_tr);
+}

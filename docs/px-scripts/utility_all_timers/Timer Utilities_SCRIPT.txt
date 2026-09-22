@@ -1,0 +1,46 @@
+bool can2x;
+bool infinited;
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_TURNBEGIN)
+    {
+        can2x = true;
+        if (Timer == 65535000) infinited = true;
+        else infinited = false;
+    }
+    
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (!infinited)
+    {
+        if (Weap->CheckName("15 Seconds"))
+        {
+            Root->Timer += 15000;                      
+        }
+    
+        
+        else if (Weap->CheckName("25 Seconds"))
+        {
+            Root->Timer += 25000;                      
+        }
+    
+        else if (Weap->CheckName("Double Turn Time") && can2x)
+        {
+            Root->Timer = Root->Timer * 2;
+            can2x = true;                      
+        }
+        
+        else if (Weap->CheckName("Infinite Time"))
+        {
+            Root->Timer = 65535000;
+            infinited = true;
+        }
+        
+    }
+ 
+super; 
+}

@@ -1,0 +1,32 @@
+// Diving Script by PyroMan
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+local w = GetCurrentWorm();
+  if (w != NullObj)
+  {
+    local rem;
+    if (swimsuit && PosY < Env->Water && w->SpY > 8.0 && w->SpY < 18.0 && w->ObjState != WS_POWERFLY && w->ObjState != WS_ROPING && w->ObjState != WS_AFTERROPE && w->ObjState != WS_PARACHUTE)
+    {
+      int hitx1;
+      int hity1;
+      local hit1 = CGObject(TraceLine(this, PosX, PosY, PosX, Env->Water, -1, &hitx1, &hity1));
+      if (hit1 == NullObj)
+      {
+         if (rem == 1) w->SetState(WS_JUMP);
+         else if (rem == 2) w->SetState(WS_FLYING2);
+         else if (rem == 3) w->SetState(WS_AFTERROPE);
+         else if (rem == 4) w->SetState(WS_SLIDING);
+         else w->SetState(WS_IDLE);
+      }
+    }
+    else if (swimsuit && PosY < Env->Water && w->SpY < 8.0)
+    {
+       if (w->ObjState == WS_JUMP) rem = 1;
+       else if (w->ObjState == WS_FLYING2) rem = 2;
+       else if (w->ObjState == WS_AFTERROPE) rem = 3;
+       else if (w->ObjState == WS_SLIDING) rem = 4;
+    }
+  }
+super;
+}

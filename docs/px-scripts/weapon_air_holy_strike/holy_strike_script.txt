@@ -1,0 +1,16 @@
+//List of sprites
+
+CSprite* holyplane;
+
+void holy_strike_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+
+   f = GetAttachment("holyplane.png"); 
+   holyplane = LoadSprite(f, 1, 0);
+   
+   //Let's override the sprites!
+   
+   SetSpriteOverride(706, holyplane);
+}

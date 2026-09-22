@@ -1,0 +1,13 @@
+//List of sprites
+CSprite* bananaplane;
+
+void banana_express_sprites::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("banana plane.png"); 
+   bananaplane = LoadSprite(f, 1, 0);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(704, bananaplane);
+}

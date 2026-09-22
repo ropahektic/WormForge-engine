@@ -1,0 +1,28 @@
+//List of sprites
+CSprite* bdrone;
+CSoundFile* dronefly;
+
+void battle_drone_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("Drone.png"); 
+   bdrone = LoadSprite(f, 4, 1);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(705, bdrone);
+}
+
+void battle_drone_script::Init()
+{
+	dronefly       = new CSoundFile(GetAttachment("Drone Flying.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Battle Drone"))
+  {
+             dronefly->Play(0.8, 0.0, false);
+  }
+  super;
+}

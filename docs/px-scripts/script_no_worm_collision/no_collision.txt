@@ -1,0 +1,7 @@
+require utils;
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    ColGroup = ColGroup - 4;
+}

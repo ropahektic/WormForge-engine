@@ -1,0 +1,75 @@
+//script by StepS
+
+require utils;
+
+CColMask* col_wrm;
+
+void cpl_col_wrm::Init(){}
+
+void cpl_col_wrm::FirstFrame()
+{
+col_wrm = new CColMask(20,20,MakeCircleMask(20));
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+Cwrm = true;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Cwrm == true)
+	{
+	if(Type == M_FRAME){WRMCol(15.0);}
+	}
+super;
+}
+
+void CWorm::WRMCol(float Speed)
+{
+CGObject *plwrmob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+	plwrmob = CGObject(Env->Objs.Objs[i]);
+	if(plwrmob == this) continue;
+	if(plwrmob == NullObj) continue;
+	if(GetCurrentWorm() != NullObj)
+		{
+		if(plwrmob == GetCurrentWorm()) continue;
+		}
+
+	if(plwrmob->ClType == OC_Worm
+	|| plwrmob->ClType == OC_Mine
+	|| plwrmob->ClType == EObjectClass(70)
+	|| plwrmob->ClType == EObjectClass(71)
+	|| plwrmob->ClType == EObjectClass(73)
+	|| plwrmob->ClType == EObjectClass(74))
+		{
+		if(col_wrm->Check(PosX, PosY, plwrmob->ColMask, plwrmob->PosX, plwrmob->PosY))
+			{
+			float ForceX = plwrmob->PosX - PosX;
+			float ForceY = plwrmob->PosY - PosY;
+			float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+			if(dist > 0)
+				{
+				ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+				ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+
+				CMessageData msg;
+				msg.params[0]	= 0;
+				msg.fparams[1]	= PosX;
+				msg.fparams[2]	= PosY;
+				msg.fparams[3]	= ForceX;
+				msg.fparams[4]	= ForceY;
+				msg.params[5]	= 0;
+				msg.params[6]	= 0;
+
+				plwrmob->Message(this, M_GUNEXP, 1032, &msg);
+				}
+			}
+		}
+	}
+}

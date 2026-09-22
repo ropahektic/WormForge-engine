@@ -1,0 +1,72 @@
+
+CSprite* health_zone_aiming;                                                 
+CSprite* health_zone_bullet;                                                 
+
+WormSprite* healthZoneWS;
+                                                                                 
+void health_zone_anim::InitGraphic() {
+    CFile* f;                                                                    
+    f = GetAttachment("health_zone_aiming.png");                             
+    health_zone_aiming = LoadSprite(f, 1, 0);                                
+    f = GetAttachment("health_zone_bullet.png");                                          
+    health_zone_bullet = LoadSprite(f, 1, 0);                                
+}                                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Health Zone";                                               
+     sprite = health_zone_aiming->Index;                                                                                              
+     Params->hand_rotation = 0.5;
+     Params->fix_flip_rotation = true;
+     Params->hand_radius = 4.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->hand_type = 3;
+     Params->weap_radius = 0.0;
+     Params->hand_scale = 0.8;                                                                                            
+                                                   
+     healthZoneWS = new WormSprite(weapName, sprite, Params);
+    }                                                                           
+  }                                                                             
+}                                                                            
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;                                                                          
+  if (Type == M_FRAME){                                                          
+     if (weap->CheckName("Health Zone")) {                                
+         if (health_zone_anim2) {                                              
+            local sprite = health_zone_bullet->Index;                      
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);              
+            weap->launch.anim.spriteIndex = 0;
+            health_zone_anim2 = false;                                         
+         } 
+     }                                                                                                                                                                                                                          
+  }                                                                             
+}                                                                                
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           
+  health_zone_anim2 = true;                                                    
+}                                                                                
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("Health Zone")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER) {
+            local spriteZ;
+            local sizeZ;
+            if (HealthPlus) { spriteZ = 108; sizeZ = 1.0; }
+            else { spriteZ = 119; sizeZ = 1.5; } // 106
+//DoParticleEffects( sprite, RelX, RelY, lifeTime, animSpeed, veloMin, veloMax, startAlpha, endAlpha, windFactor, startSize, endSize, angleMin, angleMax, randomMotion, grav);
+            DoAnimParticleEffects( spriteZ, 7, -15, -5, 20, 0.02, -3.0, -7.0, 150, 30, 0, 0.5*sizeZ, 0.2*sizeZ, 0.0, 2.31, 0.0, -1.5);
+            }
+        }
+    }
+super;
+}

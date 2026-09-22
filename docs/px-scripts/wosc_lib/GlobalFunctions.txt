@@ -1,0 +1,32 @@
+require utils;
+
+void CWorm::SelectWeapon(CWeapon* Weap)
+{
+  if(Weap == NullObj)
+    return;
+
+  CurWeapon = Weap;  WeaponN = Weap->GetWeaponIndex();
+}
+
+void CWorm::FireWeapon(CWeapon* Weap, float X, float Y, float SpeedX, float SpeedY, float TargetX, float TargetY, int Delay, float Power, float Angle)
+{
+  if(Weap == NullObj)
+    return;
+    
+  local lastWeap = CurWeapon;  local lastAngle = FireAngle;
+
+  CShootDesc sdesc;
+  zero(&sdesc);
+  sdesc.Team = WormTeam;  sdesc.Worm = WormNumber;
+  sdesc.X = X;  sdesc.Y = Y;
+  sdesc.SpX = SpeedX;  sdesc.SpY = SpeedY;
+  sdesc.AddX = TargetX;  sdesc.AddY = TargetY;
+  sdesc.Delay = Delay;
+  FirePower = Power;  FireAngle = Angle;
+  SelectX = TargetX*65536;  SelectY = TargetY*65536;
+  
+  SelectWeapon(Weap);
+  FireFinal(Weap, &sdesc);
+
+  SelectWeapon(lastWeap);  FireAngle = lastAngle; 
+}

@@ -1,0 +1,60 @@
+require p_sprite_builder;
+
+CSprite* shard_aiming;
+CSprite* shard_bullet;
+
+void shard_anim::InitGraphic()
+{   CFile* f;
+    f = GetAttachment("shard_aiming.png");
+    shard_aiming = LoadSprite(f, 1, 0);   
+    f = GetAttachment("shard_bullet.png");
+    shard_bullet = LoadSprite(f, 20, 1);  
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Crystal Shard";                              
+     sprite = shard_aiming->Index;                            
+     Params->hand_radius = 13.0;
+     Params->hand_rotation = -0.6;    
+     Params->hand_radial_rotation = -0.9;
+     Params->weap_radial_rotation = 1.0;
+     Params->weap_rotation = 0.45;
+     Params->weap_radius = 8.0;
+     Params->hand_type = 2;
+	 Params->dont_rotate_with_angle = true;     
+	 Params->ang_if_static = -0.1;              
+	 Params->hand_ang_if_static = 0.4;          
+     Params->hand_scale = 0.8;               
+//     Params->zplane = 10.0;       
+//     Params->scale = 1.0;         
+
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){    
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Crystal Shard")) {                       
+         if (shard_anim2) {                                        
+              local sprite = shard_bullet->Index;                  
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;              
+              new WeapSprite(this, sprite, Params);              
+              weap->launch.anim.spriteIndex = 0;
+              shard_anim2 = false;                                 
+         }                                                                     
+     }                                                                                                                                                     
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  shard_anim2 = true;                                                  
+}                                                                      

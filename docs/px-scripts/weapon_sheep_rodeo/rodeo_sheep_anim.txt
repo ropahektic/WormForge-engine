@@ -1,0 +1,57 @@
+CSprite* rodeo_sheep_aiming;
+CSprite* rodeo_sheep_bullet;
+
+void rodeo_sheep_anim::InitGraphic() {
+    CFile* f;
+    f = GetAttachment("rodeo_sheep_aiming.png");
+    rodeo_sheep_aiming = LoadSprite(f, 1, 0);
+    f = GetAttachment("rodeo_sheep_bullet.png");
+    rodeo_sheep_bullet = LoadSprite(f, 8, 0);
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Rodeo Sheep";
+     sprite = rodeo_sheep_aiming->Index;
+     Params->hand_radius = 12.0;
+     Params->hand_radial_rotation = -0.95;
+     Params->weap_rotation =  0.4;
+     Params->weap_radius = 12.0;
+     Params->hand_type = 1;
+     Params->dont_rotate_with_angle = true;
+     Params->ang_if_static = -0.1;
+     Params->hand_ang_if_static = 0.4;
+     Params->scale = 0.8;
+
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Rodeo Sheep")) {
+         if (rodeo_sheep_anim2) {
+            local sprite = rodeo_sheep_bullet->Index;
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            Params->animate = true;
+            Params->rotation = 0.5;
+//            Params->hideWorm = true;
+            local wa = new WeapSprite(this, sprite, Params);
+//            wa->type = 5;
+            weap->launch.anim.spriteIndex = 0;
+            rodeo_sheep_anim2 = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  rodeo_sheep_anim2 = true;
+}

@@ -1,0 +1,22 @@
+require utils, weapon_tazer;
+
+void tazer2::FirstFrame()
+{
+//   super;
+   TazerLifeTime = 40;
+   TazerLifeTimeAfterHit = 25; 
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   super;
+   local w = GetCurrentWorm();
+   if (w != NullObj)
+   {
+      if (w->CurWeapon->CheckName("Electric Charge"))
+      {
+         TazerCanFire = true;
+      }
+   }
+}

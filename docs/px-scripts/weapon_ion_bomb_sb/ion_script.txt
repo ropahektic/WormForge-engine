@@ -1,0 +1,63 @@
+require utils, p_sprite_builder;
+
+CSprite* ionb_aiming;
+CSprite* sionb_aiming;
+
+void ion_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("ionb.png");
+    ionb_aiming = LoadSprite(f, 12, 0);
+    f = GetAttachment("sionb.png");
+    sionb_aiming = LoadSprite(f, 12, 0);
+}
+
+//---------------------------------ION BOMB-----------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Ion Bomb";
+     sprite = ionb_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.3;
+     Params->hand_radius = -19.85;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -14.5;
+     Params->animate = true;
+     Params->anim_speed = 1.10;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+//---------------------------------SUPER ION BOMB-----------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Super Ion Bomb";
+     sprite = sionb_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.3;
+     Params->hand_radius = -19.85;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -14.5;
+     Params->animate = true;
+     Params->anim_speed = 1.10;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

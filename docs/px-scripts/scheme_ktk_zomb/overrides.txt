@@ -1,0 +1,20 @@
+CBitmap1* king_mask;
+
+void overrides::InitGraphic()
+{
+king_mask = new CBitmap1(512, 512);
+}
+
+
+override CKtkControl::CKtkControl(CEditorObject* EObj, int index)
+{
+super;
+king_mask->Rect(0,0,EObj->GetInt("KingZone"),EObj->GetInt2("KingZone"),1);
+GG->land->ApplyCustomMask(king_mask, KingX1, KingY1, CM_CLEAR);
+
+DestructionArea = -1;
+AttackersLost = false;
+}
+
+override void CKtkControl::DrawKingHealth()
+{}

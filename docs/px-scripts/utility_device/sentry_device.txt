@@ -1,0 +1,219 @@
+require utils;
+
+CSentry : CDevice;
+
+CSprite* SentryShotSprite;
+PxBulletDesc* DSentryBulletDesc;
+CSoundFile* SentryF;
+CSoundFile* SentryP;
+int SentryStartTimer;
+
+
+void sentry_device::FirstFrame()
+{
+    DSentryBulletDesc = new PxBulletDesc;
+    SentryStartTimer = 0;
+	CFile *f;
+	f = GetAttachment("shotgunfire.wav");	SentryF = new CSoundFile(f);
+	f = GetAttachment("turret_ping.wav");	SentryP = new CSoundFile(f);
+}
+
+
+void sentry_device::InitGraphic()
+{
+    local spr5       = GetAttachment("shot.png");
+    SentryShotSprite     = LoadSprite(spr5, 1, 0);
+}
+
+
+
+CSentry::CSentry(CObject* parent, fixed x, fixed y)
+{
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+
+    ColMask = new CColMask(14,12,MakeRectMask(28,24));
+
+    LockedOn = false;
+    FiringDelay = 60;
+    Firing = false;
+    FiringAfterDelay = 0;
+
+    FireAngle = 0.0;
+
+    SentryTimer = 10;
+}
+
+void CSentry::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)            // Root->GetObject(2, 16 * Team + Number);
+{
+   super;
+   if (Type == M_DRAWQUEUE)
+   {
+      SentryDraw();
+   }
+
+   if (Type == M_FRAME)
+   {
+      if(SentryStartTimer == 0){SentryThink();}
+
+      if(SpX != 0){SpX = 0;}
+      if(LockedOn == true)
+      {
+      AnimBool = true;
+      }
+      else
+      {
+      AnimBool = false;
+      }
+   }
+}
+
+
+void CSentry::SentryDraw()
+{
+    if(Firing == true)
+    {
+    local dirindex = 0;          //262144
+    if(Direction == -1){dirindex = 262144;}
+    local sprshot = SentryShotSprite->Index + dirindex;
+    AddSprite(4,PosX+20*Direction,PosY-8,1,sprshot,0.0);
+    }
+}
+
+
+void CSentry::SentryThink()
+{
+     if(LockedOn == false && FiringDelay != 60) FiringDelay = 60;
+
+     if(Firing == true && FiringAfterDelay < 1) Firing = false;
+     if(Firing == true && FiringAfterDelay > 0) FiringAfterDelay = FiringAfterDelay - 1;
+
+   if((SentryTimer < 1 && LockedOn == false) || LockedOn == true)
+   {
+     if(GetCurrentWorm() != NullObj)
+     {
+           SentryTimer = 10;
+           DirCheck();
+           int hitx;
+           int hity;
+           local flags = 2+4+8+16+32;
+           local obj = GetCurrentWorm();
+           CWorm *hitObject = TraceLine(this, PosX, PosY, obj->PosX, obj->PosY, flags, &hitx, &hity);
+           if(hitObject != NullObj)
+           {
+                if(hitObject->ClType == OC_Worm)
+			    {
+			             local worm = CWorm(hitObject);
+			             if(GetTeamNumber(worm->WormTeam) != Team && worm == GetCurrentWorm())
+                                     {
+                                              if(LockedOn == false){LockedOn = true; SentryP->Play(1.0,0.0,false);}
+                                              if(LockedOn == true)
+                                              {
+                                                          if(FiringDelay > 0) FiringDelay = FiringDelay - 1;
+                                                          if(FiringDelay < 1)
+                                                          {
+                                                          SentryFire();
+                                                          Firing = true;
+                                                          FiringAfterDelay = 30;
+                                                          FiringDelay = 60;
+                                                          }
+                                              }
+                                     }
+                                     else
+                                     {if(LockedOn == true)LockedOn = false;}
+                               }
+                               else
+                               {if(LockedOn == true)LockedOn = false;}
+           }
+           else
+           {if(LockedOn == true)LockedOn = false;}
+     }
+     else
+     {if(LockedOn == true)LockedOn = false;}
+   }
+   else
+   {
+   SentryTimer = SentryTimer - 1;
+   }
+}
+
+
+void CSentry::SentryFire()
+{
+     if(GetCurrentWorm() != NullObj)
+     {
+     SentryF->Play(1.0,0.0,false);
+
+     local obj = GetCurrentWorm();
+     GetFireAngle(obj->PosX, obj->PosY);
+     CShootDesc SDesc;
+     zero(&SDesc);
+
+     SDesc.Team = 0;
+
+     float dx = sin(FireAngle*3.14)*Direction;    //3.14 - pi
+     float dy = cos(FireAngle*3.14);
+     float AlmPosX = int(PosX+1*dx);
+     float AlmPosY = int(PosY+1*dy);
+
+     SDesc.X = AlmPosX;
+     SDesc.Y = AlmPosY;
+     SDesc.SpX = obj->PosX-PosX;
+     SDesc.SpY = obj->PosY-PosY;
+
+     DSentryBulletDesc->Damage = 25;
+     DSentryBulletDesc->Push = 3;
+     DSentryBulletDesc->Count = 1;
+     DSentryBulletDesc->Spread = 0.1;
+
+     FireBullets(this, &SDesc, DSentryBulletDesc);
+     }
+}
+
+
+void CSentry::GetFireAngle(int TrgPosX, int TrgPosY)
+{
+ local TrgY = TrgPosY - PosY;
+ local TrgX = TrgPosX - PosX;
+         float angle = atan2(abs(TrgX), -TrgY);
+         angle = 1 - angle /  3.14;
+         Direction = Sign(TrgX);
+         FireAngle = angle;
+}
+
+
+void CSentry::DirCheck()
+{
+     local worm = GetCurrentWorm();
+     if(GetTeamNumber(worm->WormTeam) != Team)
+     {
+           if(PosX < worm->PosX){Direction = 1;}
+           else{Direction = -1;}
+     }
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+super;
+      SentryStartTimer = 1;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+      if(Type == M_FRAME)
+      {
+              if(this == GetCurrentWorm())
+              {
+                      if(SentryStartTimer > 0 && SentryStartTimer < 45)
+                      {
+                      SentryStartTimer = SentryStartTimer + 1;
+                      }
+                      if(SentryStartTimer >= 45)
+                      {
+                      SentryStartTimer = 0;
+                      }
+              }
+      }
+}

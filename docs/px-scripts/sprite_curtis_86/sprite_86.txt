@@ -1,0 +1,12 @@
+CSprite* strikeplane;
+
+void sprite_86::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("splane.png");
+    strikeplane = LoadSprite(f, 4, 1);
+    //f = GetAttachment("splane_old.png");
+    //splane = LoadSprite(f, 8, 1);
+
+    SetSpriteOverride(86, strikeplane);
+}

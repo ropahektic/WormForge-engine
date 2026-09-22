@@ -1,0 +1,20 @@
+//List of sprites
+
+CSprite* fartsheep1;
+CSprite* fartsheep2;
+
+void fart_sheep_sprite::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+
+   f = GetAttachment("frsheep1.png"); 
+   fartsheep1 = LoadSprite(f, 32, 1);
+   f = GetAttachment("frsheep2.png"); 
+   fartsheep2 = LoadSprite(f, 32, 1);
+   
+   //Let's override the sprites!
+   
+   SetSpriteOverride(722, fartsheep1);
+   SetSpriteOverride(723, fartsheep2);
+}

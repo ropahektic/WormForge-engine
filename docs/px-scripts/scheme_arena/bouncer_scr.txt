@@ -1,0 +1,115 @@
+void CAttacker::BouncerMovement()
+{
+
+   if(DistBetweenObjs2(Base, this) > 250 && DistBetweenObjs(CurrentChallenger, this) > 350)//resetting to hovering state
+           {
+           MovingX = false; MovingY = false;
+           } 
+           
+           
+           if(DistBetweenObjs(CurrentChallenger, this) < 25)    //worm in proximity zone!
+           {
+           Explode(this);
+           }
+            
+           if(DistBetweenObjs2(Base, this) < 25)    //base in proximity zone!
+           {
+           Explode(CurrentChallenger);
+           } 
+           
+           if (MovingX == false && MovingY == false)//Hovering state
+           {
+           if(FloatDirection == 1){SpX = -1;}
+           if(FloatDirection == 2){SpY = -1;}
+           if(FloatDirection == 3){SpX = 1;}
+           if(FloatDirection == 4){SpY = 1;} 
+           }
+           
+           //Bouncing state
+           if(BounceDir == 1){SpX = -BounceSpeed;}
+           if(BounceDir == 2){SpY = -BounceSpeed;}
+           if(BounceDir == 3){SpX = BounceSpeed;}
+           if(BounceDir == 4){SpY = BounceSpeed;} 
+           
+           int hitx1;
+           int hity1;
+           local hit1 = CObject(NullObj);
+           if(BounceDir == 1)hit1 = CObject(TraceLine(this, PosX, PosY, PosX - 15, PosY, 2, &hitx1, &hity1));
+           if(BounceDir == 2)hit1 = CObject(TraceLine(this, PosX, PosY, PosX, PosY - 15, 2, &hitx1, &hity1));
+           if(BounceDir == 3)hit1 = CObject(TraceLine(this, PosX, PosY, PosX + 15, PosY, 2, &hitx1, &hity1));
+           if(BounceDir == 4)hit1 = CObject(TraceLine(this, PosX, PosY, PosX, PosY + 15, 2, &hitx1, &hity1));         
+                 if(hit1 != NullObj)
+                 { 
+			if(hit1->ClType == OC_Landscape){ChangeBounceDir();} 
+                 }
+                 
+           if(DistBetweenObjs2(Base, this) < 250 && DistBetweenObjs(CurrentChallenger, this) > 350)    //attack the base!
+           {
+           BounceMove(NullObj, Base);              
+           }
+
+           if(DistBetweenObjs(CurrentChallenger, this) < 350)
+           {
+           BounceMove(CurrentChallenger, NullObj);              
+           }   
+}
+
+void CAttacker::ChangeBounceDir()
+{
+ if(BounceDir == 1 || BounceDir == 2){BounceDir = BounceDir + 2; return;}
+ if(BounceDir == 3 || BounceDir == 4){BounceDir = BounceDir - 2; return;} 
+}
+
+
+void CAttacker::BounceMove(CGObject* obj1, CBasePoint* obj2)
+{
+ if(obj1 != NullObj)
+ {
+         if(BounceDir != 1 && BounceDir != 3)
+         { 
+            if(PosX == obj1->PosX){MovingX = false; SpX = 0;}
+            if(PosX != obj1->PosX)
+                    {
+                    MovingX = true;
+                            if(PosX > obj1->PosX){SpX = -MoveSpeed;}
+                            if(PosX < obj1->PosX){SpX = MoveSpeed;}
+                    }
+         }
+         
+         if(BounceDir != 2 && BounceDir != 4)
+         {                              
+            if(PosY == obj1->PosY){MovingY = false; SpY = 0;}
+            if(PosY != obj1->PosY)
+                    {
+                    MovingY = true;
+                            if(PosY > obj1->PosY){SpY = -MoveSpeed;}
+                            if(PosY < obj1->PosY){SpY = MoveSpeed;}
+                    }
+         }
+ }
+ 
+ if(obj2 != NullObj)
+ {
+         if(BounceDir != 1 || BounceDir != 3)
+         { 
+            if(PosX == obj2->PosX){MovingX = false; SpX = 0;} 
+            if(PosX != obj2->PosX)
+                    {
+                    MovingX = true;
+                            if(PosX > obj2->PosX){SpX = -MoveSpeed;}
+                            if(PosX < obj2->PosX){SpX = MoveSpeed;}
+                    }
+         }
+                    
+         if(BounceDir != 2 || BounceDir != 4)
+         {                          
+            if(PosY == obj2->PosY){MovingY = false; SpY = 0;}
+            if(PosY != obj2->PosY)
+                    {
+                    MovingY = true;
+                            if(PosY > obj2->PosY){SpY = -MoveSpeed;}
+                            if(PosY < obj2->PosY){SpY = MoveSpeed;}
+                    }
+         }
+ }                 
+}

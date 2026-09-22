@@ -1,0 +1,26 @@
+
+float srandom_p()
+{
+  int n = GS->GetRandom() % 10000;
+  res = n / 10000.0;
+  return res;
+};
+
+float srandom_b()
+{
+  int n = GS->GetRandom() % 10000;
+  res = n / 5000.0 - 1.0;
+  return res;
+};
+
+int RandomInt(int min, int max)
+{
+	return (GS->GetRandom()%(max - min + 1)) + min;
+}
+
+float RandomFloat(float min, float max)
+{
+	int n = (GS->GetRandom()%10000);
+	float s = min + ((max - min) * n) / 10000.0;
+	return s;
+}

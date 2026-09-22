@@ -1,0 +1,152 @@
+require weapon_gun_sniper_rifle_sb;
+
+void CWorm::AimScript()     //ffinal
+{
+     AimingMode = true;
+     AimPosX = PosX;
+     AimPosY = PosY;
+}
+
+void CWorm::AimingProcess()      //msg  - frame
+{
+   if(AimTimer < 1)
+   {
+     AimTimer = 10;
+     int hitx;
+     int hity;
+     local flags = 2+4+8+16+32;
+     CWorm *hitObject = TraceLine(this, PosX, PosY, TrgX, TrgY, flags, &hitx, &hity);
+           if(hitObject != NullObj)
+           {
+           if(hitObject->ClType == OC_Worm)
+			{
+			local worm = CWorm(hitObject);
+			if(GetTeamNumber(worm->WormTeam) != GetTeamNumber(WormTeam))
+			                  {
+			                  GG->land->MakeHole(4, hitx, hity);  //4 - size of hole
+			                  CMessageData msg;
+			                  float fraction = 1.0;
+			                  float force = fraction * 3;     //3 - pushpower
+
+			                  float dx = hitObject->PosX - hitx;
+			                  float dy = hitObject->PosY - hity;
+			                  float dsqr = dx*dx+dy*dy;
+
+			                  float fX;
+			                  float fY;
+
+			                  if(dsqr == 0){fX = DirX; fY = DirY;}
+                              else
+			                      {
+			                      float d = sqrt(dsqr);
+	                              fX = dx/d;
+			                      fY = dy/d;
+			                      }
+                              msg.params[0] = 3;
+			                  msg.fparams[1] = hitx;
+			                  msg.fparams[2] = hity;
+			                  msg.fparams[3] = force * fX;
+			                  msg.fparams[4] = force * fY;
+			                  msg.params[5]	= 40-(sqrt(worm->SpX*worm->SpX)+sqrt(worm->SpY*worm->SpY));
+			                  msg.params[6]	= WormTeam;
+			                  snipfiring->Play(1.0, 1.0, false);
+			                  hitObject->Message(this, M_GUNEXP, 1032, &msg);
+			                  TurnAimModeOff();
+			                  }
+			}
+           }
+   }
+   else
+   {AimTimer = AimTimer - 1;}
+}
+
+override void CSpriteAnim::SetAnimEx(int sindex, fixed frame)
+{
+	 // Make sure the game has actually started (otherwise GetCurrentWorm would crash the game due to Root not existing)
+	if(GS->Tick >= 1)
+	{
+		// If we belong to the current worm
+		CWorm *w = GetCurrentWorm();
+		if(w != NullObj && w->Anim == this)
+		{
+			if(w->CurWeapon->CheckName("Aim on reaction"))
+			{
+                                if(sindex == 543 || sindex == 544 || sindex == 545)
+                                {
+                                w->AimAnimIndex = sindex;
+                                }
+			}
+		}
+	}
+
+	super;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if(Type == M_FRAME)
+    	{
+        if(AimingMode == true)
+       		{
+       		AimingProcess();
+       		DrawAiming();
+       		if(PosX != AimPosX || PosY != AimPosY) TurnAimModeOff();
+       		}
+
+        if(CurWeapon->CheckName("Aim on reaction"))
+            {
+            AimAnimFrame = FireAngle;
+            }
+
+        if(GotDamage != 0 && AimingMode == true) TurnAimModeOff();
+      	}
+
+    if(Type == M_ENTER || Type == M_BACKSPACE)
+      	{
+        if(AimingMode == true) {return;}
+      	}
+super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+ super;
+ if(Weap->CheckName("Sniper Rifle "))
+ {
+     if(AimingMode == true)
+     {
+      AimingMode = false;
+     }
+ }
+}
+
+
+void CWorm::TurnAimModeOff()
+{
+AimingMode = false;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+AimTimer = 10; //for optimization purposes..
+
+AimingMode = false;
+AimPosX = 0;
+AimPosY = 0;
+TrgX = 0;
+TrgY = 0;
+DirX = 0.0;
+DirY = 0.0;
+AimAnimFrame = 0.0;
+AimAnimIndex = 543;
+}
+
+
+void CWorm::DrawAiming()
+{
+     Anim->Reset();
+     Anim->SetAnimEx(AimAnimIndex, AimAnimFrame);
+}

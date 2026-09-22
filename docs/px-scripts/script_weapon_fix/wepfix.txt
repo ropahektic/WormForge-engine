@@ -1,0 +1,14 @@
+require utils;
+
+//some weps spawn fix 
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Javelin") || Weap->CheckName("SuperGravedigger") || Weap->CheckName("Pillager"))
+    {
+        CWorm * w = GetCurrentWorm();
+		Desc->X = Desc->X + 15 * cos(MATH_PI * (w->FireAngle) - MATH_HALF_PI) * w->TurnSide;          
+        Desc->Y = Desc->Y - 15 * sin(MATH_PI * (w->FireAngle) - MATH_HALF_PI);
+    }     
+    super;
+}
+

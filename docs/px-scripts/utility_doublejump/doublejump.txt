@@ -1,0 +1,55 @@
+require utils;
+
+void doublejump::Init()
+{
+        keySync->AddKey(8); // Backspace
+        keySync->AddKey(13); // Enter
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	CWorm *ActWorm = GetCurrentWorm();
+	if(ActWorm == NullObj) {Doublejump = false; Jwact = false; Jlaunch = false;}
+        
+    if(Type == M_FRAME)
+    	{
+        if(ActWorm != NullObj && Doublejump == true)
+            {
+            if(ActWorm->CurWeapon->CheckName("Jump") && ActWorm->ObjState == WS_FIRED)
+                {
+                Jlaunch = true;
+                }
+            if(ActWorm->ObjState == WS_JUMP || Jlaunch == true)
+                {
+                if(keySync->KeyPressedNow(13) || keySync->KeyPressedNow(8))
+                    {
+					ActWorm->ObjState = WS_JUMPPREPARE; Doublejump = false;
+					}
+				}
+            }
+
+		if(ActWorm != NullObj && Jwact == true && Doublejump == false)
+            {
+            if(ActWorm->ObjState == WS_IDLE) Doublejump = true; Jlaunch = false;
+			}
+        }
+super;  
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+if(Weap->CheckName("Double Jump"))
+ 	{
+ 	if(Doublejump == false && Jwact == false)
+ 		{
+		ShowMessage("Double Jump: ON");
+  		Doublejump = true; Jwact = true; super; return;
+		}
+ 	if(Jwact == true)
+ 		{
+		ShowMessage("Double Jump: OFF");
+  		Doublejump = false; Jwact = false; super; return;
+		}
+ 	}
+super;
+}

@@ -1,0 +1,93 @@
+require utils, utils_steps;
+
+void supertele_script::FirstFrame()
+{
+}                                                                  
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    CWorm* w = GetCurrentWorm();
+    
+    if (Type == M_FRAME)
+    {
+        local SelX = SelectX/65536;
+        local SelY = SelectY/65536;
+     
+        if (w != NullObj)
+        {
+            if(w->CurWeapon->CheckName("Super Tele"))
+                {
+                if (GS->IsCavern)
+                    {
+                    //if (GS->landSelectY < 18){GS->landSelectY = 19;}
+                    if (SelY < 19){SelY = 19;}
+                    }
+                }
+
+			if (teleallow)
+            {
+                teleallow = false;
+
+                w->SetState(WS_TELEPORTING);
+                
+                PlaySound(67,0,0,1.0);
+                ttick = gframe;
+                teleporthim = true;
+                
+                if(w->CurWeapon != NullObj)
+                {
+                     GS->Info.Stores[w->WormTeam - 1].Count[w->CurWeapon->GetWeaponIndex() + 2]--;
+                }
+            } 
+        }
+        
+        if (gframe == ttick + 50 && teleporthim && w != NullObj)
+        {
+            w->PosX = SelX;
+            w->PosY = SelY;
+            GG->land->ApplyMask(4,SelX,SelY);
+            GG->land->ApplyMask(4,SelX,SelY-10);
+            GG->land->ApplyMask(4,SelX,SelY-22);
+            teleporthim = false;
+        }
+    }
+
+    if (Type == M_SETTARGET && ObjState != WS_JUMP)
+    {
+        if (CurWeapon->CheckName("Super Tele"))
+        {
+            PlaySound(68,0,0,1.0);
+			//teleallow = true;
+        }
+    }
+
+super;                               
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+     if (Weap->CheckName("Super Tele")) 
+     {
+		teleallow = true;
+     }
+     
+     else super;
+}
+
+override void CGObject::PlayLocalSound(int SIndex,int Unk,fixed Volume,fixed Pan)
+{
+     CWorm* w = GetCurrentWorm();
+     
+     if (w != NullObj)
+     {
+         if (w->CurWeapon->CheckName("Super Tele") && (SIndex == 149 || SIndex == 164 || SIndex == 203 || SIndex == 218 || SIndex == 257 || SIndex == 272 || SIndex == 311 || SIndex == 326 || SIndex == 365 || SIndex == 380 || SIndex == 419 || SIndex == 434))
+         { 
+         SIndex = 68;  
+         }
+     
+         else super;
+     }
+     
+     else super;
+     
+}

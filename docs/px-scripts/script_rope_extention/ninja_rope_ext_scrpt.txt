@@ -1,0 +1,18 @@
+require utils;
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+local w = GetCurrentWorm();
+if (w != NullObj)
+  	{
+    if (w->CurWeapon->CheckName("Ninja Rope") || w->CurWeapon->CheckName("Rongee"))
+    	{
+        if(w->ObjState == WS_FLYING || w->ObjState == WS_FLYING2 || w->ObjState == WS_POWERFLY)
+        	{
+      		w->CanFire = true;
+      		w->SetState(WS_IDLE);
+      		}
+    	}
+  	}
+}

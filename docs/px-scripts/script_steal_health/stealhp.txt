@@ -1,0 +1,64 @@
+require utils;
+int wont;
+int wonn;
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    CWorm* cw = GetCurrentWorm();
+    
+    if (Type == M_FRAME)
+    {
+        if (cw != NullObj)
+        {
+            if (GS->Info.GetWormHealth(cw->WormTeam, cw->WormNumber) == 0)
+            {
+                wont = 0;
+                wonn = 0;
+            }
+            
+            else
+            {
+                wont = cw->WormTeam;
+                wonn = cw->WormNumber;
+            }
+        }
+        
+        if (this != cw)
+        {
+            if (GotDamage > 0 && !wsunk && !wdamaged)
+            {
+                mydamg = GotDamage;
+                myhealth = GS->Info.GetWormHealth(WormTeam, WormNumber) + GotDamage;
+                wdamaged = true;
+            }
+            
+            if (wdamaged)
+            {
+            
+                if (GotDamage != mydamg && GotDamage != 0)
+                {
+                    mydamg = GotDamage;
+                }
+            
+                if (ObjState == WS_SINKING)
+                {
+                    if (mydamg > myhealth) mydamg = myhealth;
+                    if (wont != 0 && wonn != 0) GS->Info.SetWormHealth(wont, wonn, GS->Info.GetWormHealth(wont, wonn) + mydamg);
+                    mydamg = 0;
+                    wsunk = true;
+                    wdamaged = false;
+                }
+                
+                if (GotDamage == 0)
+                {
+                    if (mydamg > myhealth) mydamg = myhealth;
+                    if (wont != 0 && wonn != 0) GS->Info.SetWormHealth(wont, wonn, GS->Info.GetWormHealth(wont, wonn) + mydamg);
+                    mydamg = 0;
+                    wdamaged = false;
+                }
+            }
+        }
+    }
+    
+    super;
+}

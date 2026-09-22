@@ -1,0 +1,136 @@
+// Script by STEPS, improved by 0rang3
+// The improvement makes a friendly mine as a separate CMine, allowing normal behaviour for other mines.
+
+require utils;
+
+FriendlyMine : CMine;
+
+FriendlyMine::FriendlyMine(CObject* Parent, CMineParams* Params, CShootDesc* Desc, bool Snap, int Unk)
+{
+  if (Desc->Team >= 1)
+  {
+    Params->Radius = 1;
+    
+    if(Params->Fuse >= 0)
+      {
+      local AddFuse = GS->GetRandom() % 12 * 125;
+      Params->Fuse = 3000;               //750 + AddFuse;
+      }
+    else Params->Fuse = 0 - Params->Fuse;
+  };
+  super;
+};
+
+void FriendlyMine::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+  if (Type != M_FRAME || InitParams.Radius != 1 || ClType != OC_Mine) 
+  {
+     super;
+     return;
+  };
+  if (Active != 0 || Prefuse > 0) 
+  {
+     super;
+     return;
+  };
+  for (local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if (obj == NullObj) continue;
+    if (obj->ClType != OC_Worm) continue;
+    local worm = CWorm(obj);
+    if (GetTeamColor(ShootData.Team) == GetTeamColor(worm->WormTeam)) continue;
+    if (DistBetweenObjs(obj, this) < 40)
+    {
+      if(worm->ObjState != WS_FROZEN)
+        {      
+        Active = 1;
+        nPulses = Fuse / 250;
+        PlayLocalSound(88, 5, 1.0, 1.0);
+        break;
+        }
+    } 
+  }
+  super;
+}
+
+void FriendlyMine::Render()
+{
+  if (InitParams.Radius == -1) return;
+  if (InitParams.Radius == 1)
+  {
+    local Color = GetTeamColor(ShootData.Team);
+    if (Color == 0)
+    {
+      SetColorMod(RGB(180, 0, 0), 4); //4 - diffuse color goes to smooth addition
+    }
+    else if (Color == 1)
+    {
+      SetColorMod(RGB(0, 0, 180), 4);
+    }
+    else if (Color == 2)
+    {
+      SetColorMod(RGB(0, 180, 0), 4);
+    }     
+    else if (Color == 3)
+    {
+      SetColorMod(RGB(120, 120, 0), 4);
+    }
+    else if (Color == 4)
+    {
+      SetColorMod(RGB(120, 0, 120), 4);
+    }
+    else if (Color == 5)
+    {
+      SetColorMod(RGB(0, 120, 120), 4);
+    }
+  };
+  super;
+  ClearColorMod();
+};
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+CWorm *w = GetCurrentWorm();
+
+     if (w != NullObj)
+     {
+        if (Weap->CheckName("Friendly Mine"))
+        {       
+        local team = w->WormTeam;
+                
+        local ang = (1 - FireAngle) * 3.14159;
+        if (TurnSide < 0) ang = 6.28318 - ang;
+                
+        CShootDesc SDesc;
+		zero(&SDesc);
+		
+		float ForceInit = FirePower * 20.0;
+		
+		SDesc.SpX = SpX + sin(ang) * ForceInit;
+		SDesc.SpY = SpY - cos(ang) * ForceInit;
+		SDesc.X = w->PosX;
+		SDesc.Y = w->PosY;
+		SDesc.Team = team;
+		
+		CMineParams MParams;
+		zero(&MParams);
+		
+		MParams.Prefuse = 2000;
+		MParams.Flags = 60;
+		MParams.Bias = 50;
+		MParams.Damage = 50;
+        MParams.BlastPower = 100;
+		MParams.Fuse = 3000;
+	    MParams.Radius = 48;
+		
+		local fm = new FriendlyMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);		
+	
+        fm->DumpingA = 0.3;
+        fm->DumpingB = 0.4;
+        fm->DumpingC = 0.5;
+        }	
+	else super;
+     }     
+     else super;        
+}

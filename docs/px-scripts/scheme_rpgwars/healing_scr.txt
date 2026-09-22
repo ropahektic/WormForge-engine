@@ -1,0 +1,30 @@
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+  if(weap->CheckName("Healing Spell") == true)
+  {
+           CGObject *obj;
+     	   for(int i = 0; i < Env->Objs.Count; i += 1)
+	   {
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == NullObj) continue;
+		if(obj->IsMaterial == false) continue;
+			if(obj->ClType == OC_Worm)
+			{
+				local worm = CWorm(obj);
+                                if(PosX > worm->PosX-25 && PosX < worm->PosX+25 && PosY > worm->PosY-25 && PosY < worm->PosY+25)
+                                {
+                                worm->Heal(40);
+                                super;
+                                return;
+                                }
+			}
+           }
+  }
+   super;
+}
+
+void CWorm::Heal(int amount)
+{
+GS->Info.SetWormHealth(WormTeam, WormNumber, GS->Info.GetWormHealth(WormTeam, WormNumber)+amount);
+  //maxhealth here
+}

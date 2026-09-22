@@ -1,0 +1,35 @@
+//List of sprites
+CSprite* crshairr;
+CSprite* crshairb;
+CSprite* crshairg;
+CSprite* crshairy;
+CSprite* crshairp;
+CSprite* crshairc;
+
+void crosshair_change::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("crshairr.png");
+   crshairr = LoadSprite(f, 32, 0);
+   f = GetAttachment("crshairb.png");
+   crshairb = LoadSprite(f, 32, 0);   
+   f = GetAttachment("crshairg.png");
+   crshairg = LoadSprite(f, 32, 0);   
+   f = GetAttachment("crshairy.png");
+   crshairy = LoadSprite(f, 32, 0);   
+   f = GetAttachment("crshairp.png");
+   crshairp = LoadSprite(f, 32, 0);   
+   f = GetAttachment("crshairc.png");
+   crshairc = LoadSprite(f, 32, 0);
+   
+  
+   //Let's override the sprites!
+   SetSpriteOverride(2, crshairr);
+   SetSpriteOverride(3, crshairb);
+   SetSpriteOverride(4, crshairg);
+   SetSpriteOverride(5, crshairy);
+   SetSpriteOverride(6, crshairp);
+   SetSpriteOverride(7, crshairc);
+   
+}

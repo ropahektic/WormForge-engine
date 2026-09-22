@@ -1,0 +1,117 @@
+//special thanks to Zed for help
+
+require utils;
+
+CSprite* flySprite;
+CSprite* flybackSprite;
+CSprite* flybackupSprite;
+CSprite* flybackdownSprite;
+
+CSoundFile* wingsflap;
+
+void wingscript::InitGraphic()    
+{
+	CFile *f;
+	f = GetAttachment("wflyspr.png");	flySprite = LoadSprite(f, 10, 1); 
+	f = GetAttachment("wflybak.png");	flybackSprite = LoadSprite(f, 6, 24);
+	f = GetAttachment("wflybaku.png");	flybackupSprite = LoadSprite(f, 6, 24);
+	f = GetAttachment("wflybakd.png");	flybackdownSprite = LoadSprite(f, 6, 24);
+}
+
+void wingscript::Init()
+{
+	wingsflap = new CSoundFile(GetAttachment("wings_flap.wav"));
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+FlyingMode = false;
+FlyAnimationPhase = 0.0;
+FlyAnimSpeed = 0.01;
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+         
+	           if(ObjState != WS_PARACHUTE && FlyingMode)
+	           {
+                       GravityFactor = 1;
+                       FlyingMode = false;  
+                   }
+                   
+         }
+                   if (ObjState == WS_PARACHUTE)
+                   {
+                       if (FlyingMode)
+                       {
+                           if (PressedRight) {TurnSide = 1;}
+                           else if (PressedLeft) {TurnSide = -1;}
+                       }  
+                   }
+                         
+              if(FlyingMode == false && FlyAnimationPhase != 0.0) {FlyAnimationPhase = 0.0;}
+              if(FlyingMode == true && FlyAnimationPhase < 1.0){ FlyAnimationPhase = FlyAnimationPhase + FlyAnimSpeed;} 
+              else {FlyAnimationPhase = 0.0;}  
+
+         if(Type == M_DRAWQUEUE)
+         {
+                 if(FlyingMode == true)
+                 {
+                     local spr1 = flySprite->Index;
+                 if(TurnSide == -1)
+                 {AddSprite(5,PosX,PosY,0,spr1,FlyAnimationPhase);}
+                 else
+                 {AddSprite(5,PosX,PosY,0,spr1+262144,FlyAnimationPhase );}
+                 }
+         }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+
+ if(Weap->CheckName("Wings"))
+ {
+     YoFlyingMode = false;
+     FlyingMode = true;
+     GravityFactor = 0;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     wingsflap->Play(vol, pan, false);
+ }
+ 
+super; 
+
+}
+
+override void CWorm::RenderWorm()
+{
+         if(FlyingMode == false)         
+         {
+             super;
+         }
+}
+
+override void CSpriteAnim::SetAnimEx(int sindex, fixed frame)   //mostly taken from the end of hang-glider script
+{
+	if(GS->Tick >= 1)
+	{
+		CWorm *w = GetCurrentWorm();
+		if(w != NullObj && w->Anim == this)
+		{
+			if(sindex == 289)
+			{
+			   if(w->FlyingMode == true)
+			   {
+				super(flybackSprite->Index, frame);
+				return;
+			   }
+			}
+		}
+	}
+	
+	super;
+}

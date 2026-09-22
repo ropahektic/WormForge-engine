@@ -1,0 +1,19 @@
+// script by PyroMan
+require utils, utils_steps;
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+        if (GetFreeWormIndex(WormTeam) < 9 && GetFreeWormIndex(WormTeam) > 0 && gframe < 10)
+        {
+            local newWorm = RessurectWorm(GetFreeWormIndex(WormTeam), WormTeam, PosX, PosY);
+            local hp = GS->Info.GetWormHealth( WormTeam, 1);
+            GS->Info.SetWormHealth(WormTeam, newWorm->WormNumber, hp);
+            local name = MakeNumberString("Worm ", newWorm->WormNumber, "");
+            newWorm->SetName(name);
+        }
+    }
+}

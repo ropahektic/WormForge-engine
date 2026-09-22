@@ -1,0 +1,85 @@
+//  SCRIPT BY PYROMAN (p_super_sheep_control.pxl)
+
+require utils;
+
+CColMask*FSMask;
+
+void cwp_shp::Init()
+{
+keySync->AddKey(49);
+keySync->AddKey(50);
+keySync->AddKey(51);
+keySync->AddKey(52);
+keySync->AddKey(53);
+keySync->AddKey(16);
+keySync->AddKey(17);
+keySync->AddKey(38);
+keySync->AddKey(40);
+FSMask = new CColMask(3, 3, MakeCircleMask(6));
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+FSSpeed = 0.0;
+FSCheck = false;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+{
+if(weap->CheckName("Super Crazy Chicken")
+|| weap->CheckName("Squawks")
+|| weap->CheckName("Super Worm"))
+{
+if (IsFlying)
+{
+if(keySync->KeyPressed(16)
+|| keySync->KeyPressed(17)
+|| keySync->KeyPressed(38)
+|| keySync->KeyPressed(40))
+{
+//------------------------------------------------------------------------------
+if (weap->CheckName("Super Crazy Chicken"))
+{
+if (keySync->KeyPressed(16) || keySync->KeyPressed(38)) FSSpeed = 0.30;
+if (keySync->KeyPressed(17) || keySync->KeyPressed(40)) FSSpeed = -0.30;
+}
+//------------------------------------------------------------------------------
+if (weap->CheckName("Squawks"))
+{
+if (keySync->KeyPressed(16) || keySync->KeyPressed(38)) FSSpeed = 0.30;   
+if (keySync->KeyPressed(17) || keySync->KeyPressed(40)) FSSpeed = -0.60;  
+}
+//------------------------------------------------------------------------------
+if (weap->CheckName("Super Worm"))
+{
+if (keySync->KeyPressed(16) || keySync->KeyPressed(38)) FSSpeed = 0.60;  
+if (keySync->KeyPressed(17) || keySync->KeyPressed(40)) FSSpeed = -0.80; 
+}
+//------------------------------------------------------------------------------
+}
+else FSSpeed = 0.0;
+
+local hit1 = CheckMaskAt(Root, FSMask, PosX+SpX*0.8, PosY+SpY*0.8, -1);
+if (hit1 != NullObj && hit1->ClType == OC_Landscape)
+{
+if (FSCheck)
+{
+FSCheck = false;
+}
+PosX = PosX+SpX*(-0.05);
+PosY = PosY+SpY*(-0.05);
+}
+else
+{
+FSCheck = false;
+PosX = PosX+SpX*FSSpeed;
+PosY = PosY+SpY*FSSpeed;
+}
+}
+}
+}
+super;
+}

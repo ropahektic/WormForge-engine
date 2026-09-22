@@ -1,0 +1,112 @@
+
+CKeySync* keySync;
+
+void sync_script::Init()
+{
+   keySync = new CKeySync(RegisterPXMessage());
+};
+
+CKeySync::CKeySync(int MType)
+{
+   msgType = MType;
+   kSync = new bool[256];
+   kStates = new bool[256];
+   kRStates = new bool[256];
+   kPStates = new bool[256];
+   
+   for (local i = 0; i < 256; i+=1)
+   {
+     kSync[i] = false;
+     kStates[i] = false;  
+     kRStates[i] = false;
+     kPStates[i] = false;
+   };
+};
+
+//adds key for syncronization
+void CKeySync::AddKey(int kIndex)
+{
+   if (kIndex >= 0 && kIndex < 256) kSync[kIndex] = true;
+};
+
+//is key still pressed
+bool CKeySync::KeyPressed(int kIndex)
+{
+   return kRStates[kIndex];
+};
+
+//is key JUST pressed
+bool CKeySync::KeyPressedNow(int kIndex)
+{
+   return kPStates[kIndex];
+};
+
+void CKeySync::ProcessInput()
+{
+   for (local i = 0; i < 256; i++)
+   {
+      if (kSync[i] == false) continue;
+      local kpr = IsKeyPressed(i);
+      if (kpr != kStates[i])
+      {
+        if (kpr)
+        {
+          GG->queue2->AddPXMessage( msgType, i, 1);
+        } else {                            
+          GG->queue2->AddPXMessage( msgType, i, 0);
+        }
+        kStates[i] = kpr;
+      }
+   }
+}
+
+void CKeySync::OnMessage(CMessageData* MData)
+{
+  if (MData->GetParameter(0) == msgType)
+  {
+    local ki = MData->GetParameter(1);
+    local kp = MData->GetParameter(2);         
+    if (kp)
+    {
+      if (kRStates[ki] == false) kPStates[ki] = true;
+      kRStates[ki] = true;
+    } else {
+      kRStates[ki] = false; 
+    }
+  }
+}
+
+void CKeySync::OnFrame()
+{       
+   for (local i = 0; i < 256; i++)
+   {
+      kPStates[i] = false;
+   }
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_INPUT)
+   {                 
+      keySync->ProcessInput();
+   }
+   if (Type == M_PXMESSAGE)
+   {
+      keySync->OnMessage(MData);
+   }
+   super;  
+   if (Type == M_FRAME)
+   {
+      keySync->OnFrame();
+   }
+};
+
+override void CTurnGame::SetCurrentTeam(int Team)    // Button lock & desync fix
+{
+super;
+   
+   for (local i = 0; i < 256; i+=1)
+   {
+        keySync->kRStates[i] = false;
+   };
+}

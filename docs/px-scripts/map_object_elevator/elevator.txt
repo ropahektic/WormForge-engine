@@ -1,0 +1,128 @@
+$editor
+ $object ElevatorSP
+  $origin -13 -15
+  $image "edelev.png"
+  $func SpawnElevator
+  $radius 17
+  $param TargetPointY int 1
+  $param ElevatorNumber int 1
+ $object_end
+$end
+
+require utils;
+
+CElevator : CBuilding;
+CColMask* MASK_ELCHECKMASK;
+
+CBitmap1* MakeElevatorMask()
+{
+msk = new CBitmap1(67, 18);
+for (int i = 0; i < 19; i+=1){msk->HLine(0, 67, i, 1);}
+return msk;
+}
+
+void elevator::FirstFrame()
+{
+MASK_ELCHECKMASK = new CColMask(34,9,MakeElevatorMask());
+}
+
+void elevator::InitGraphic(){}
+
+CElevator::CElevator(CObject* parent, fixed x, fixed y)
+{
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+    Number = 0;
+    moving = false;
+    Point1Y = 0; //lower pos
+    Point2Y = 0; //upper pos
+    speed = 4;
+    MoveDirection = -1; //both elevators should spawn at bottom
+
+    ColMask = new CColMask(34,9,MakeElevatorMask());
+}
+
+void CElevator::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)            // Root->GetObject(2, 16 * Team + Number);
+{
+super;
+if(Type == M_FRAME){MovingProcess();}
+}
+
+void CElevator::WormProcess()
+{
+if(GetCurrentWorm() != NullObj)
+    {
+    CGObject *obj;
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+		{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(obj->IsMaterial == false) continue;
+
+		if(MASK_ELCHECKMASK->Check(PosX, PosY-8, obj->ColMask, obj->PosX, obj->PosY))
+			{
+			if(obj->ClType == OC_Missile || obj->ClType == OC_Mine || obj->ClType == OC_Worm)
+				{
+                obj->PosY = PosY-18;
+				}
+			}
+		}
+    }
+}
+
+void CElevator::Move()
+{
+if(moving == false){moving = true;}
+}
+
+void CElevator::MovingProcess()
+{
+if(moving == true)
+	{
+    if(MoveDirection == -1)
+    	{
+        if(PosY < Point2Y)
+        	{
+        	moving = false;
+        	MoveDirection = 1;
+        	}
+        else
+        	{
+        	PosY = PosY + (MoveDirection*speed);
+        	WormProcess();
+        	}
+    	}
+    else
+    	{
+        if(PosY > Point1Y)
+        	{
+        	moving = false;
+        	MoveDirection = -1;
+        	}
+        else
+        	{
+        	PosY = PosY + (MoveDirection*speed);
+        	WormProcess();
+        	}
+    	}
+ 	}
+}
+
+void SpawnElevator(CEditorObject* obj)
+{
+  x = obj->PosX;
+  y = obj->PosY;
+  TP = obj->GetInt("TargetPointY");
+  GotNumber = obj->GetInt("ElevatorNumber");
+
+  Elevator = new CElevator(Root->GetObject(25, 0), 0, 0);
+  Elevator->PosX = x;
+  Elevator->PosY = y;
+  Elevator->Point2Y = TP;
+  Elevator->Point1Y = Elevator->PosY-2;
+  Elevator->Number = GotNumber;
+  Elevator->GravityFactor = 0;
+  Elevator->ClassType = "Elevator";
+}

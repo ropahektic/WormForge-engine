@@ -1,0 +1,246 @@
+require utils;
+
+CPainterGUI : CObject;
+bool GUION;
+string enabled;
+string curbrushstate;
+string bcolor;
+string cameralock;
+string crtype;
+string mousestate;
+string bspeed; 
+
+CPainterGUI::CPainterGUI(CObject* parent)
+{
+     super(parent, GS);
+     PGUI = MakeBitmap(315,300);
+}
+
+void CPainterGUI::ProcessOutput()
+{
+      if (GS->Tick > 0)
+        {
+            if (ShowPointer)  {enabled = "Enabled";}
+            if (!ShowPointer) {enabled = "Disabled";}
+        
+            if (!Firebleeding && !Minepissing && !Farting && !Oildrumming && !Crateraining && !Exploding && !Painting && !Erasing && !Indypainting && !Supererasing && !Ultraerasing && !Spraying && !Indyspraying)
+            {curbrushstate = "None";}
+            
+            if (Firebleeding) {curbrushstate = "Flaming";}
+            if (Minepissing)  {curbrushstate = "Mining";}
+            if (Farting)      {curbrushstate = "Farting";}
+            if (Oildrumming)  {curbrushstate = "Oil drumming";}
+            if (Crateraining) {curbrushstate = "Crating";}
+            if (Exploding)    {curbrushstate = "Exploding";}
+            if (Painting)     {curbrushstate = "Painting";}
+            if (Indypainting) {curbrushstate = "Indy Painting";}
+            if (Spraying)     {curbrushstate = "Spraying";}
+            if (Indyspraying) {curbrushstate = "Indy Spraying";}
+            if (Erasing)      {curbrushstate = "Erasing";}
+            if (Supererasing) {curbrushstate = "Super Erasing";}
+            if (Ultraerasing) {curbrushstate = "Ultra Erasing";}
+            if (Doingshit)    {curbrushstate = "Doing shit";}
+        
+            if (brushcolor == RGB(128,0,0))     {bcolor = "Maroon";}              
+            if (brushcolor == RGB(255,0,0))     {bcolor = "Red";}
+            if (brushcolor == RGB(0,255,0))     {bcolor = "Green";}                                               
+            if (brushcolor == RGB(0,0,255))     {bcolor = "Blue";}             
+            if (brushcolor == RGB(255,255,0))   {bcolor = "Yellow";}         
+            if (brushcolor == RGB(0,255,255))   {bcolor = "Cyan";}          
+            if (brushcolor == RGB(255,0,255))   {bcolor = "Magenta";}           
+            if (brushcolor == RGB(0,128,0))     {bcolor = "Dark Green";}       
+            if (brushcolor == RGB(255,128,0))   {bcolor = "Orange";}          
+            if (brushcolor == RGB(128,128,128)) {bcolor = "Grey";}            
+            if (brushcolor == RGB(255,255,255)) {bcolor = "White";}          
+            if (brushcolor == RGB(128,0,128))   {bcolor = "Purple";}        
+            if (brushcolor == RGB(0,0,128))     {bcolor = "Dark Blue";}         
+            if (brushcolor == teamRGB)          {bcolor = "Team Color";}        
+        
+            if (Camlock && ShowPointer)    {cameralock = "Enabled";}
+            if (!Camlock)                  {cameralock = "Disabled";}
+            if (Camlock && !ShowPointer)    {cameralock = "Enabled*";}
+            
+            
+            if (Mousactiv)  {mousestate = "Enabled";}
+            if (!Mousactiv) {mousestate = "Disabled";}
+        
+            if (cratetype == CT_WEAPON)  {crtype = "Weapon";}
+            if (cratetype == CT_UTILITY) {crtype = "Utility";}
+            if (cratetype == CT_MWEAPON) {crtype = "Donor Card";}
+            if (cratetype == CT_HEALTH)  {crtype = "Health";}
+            if (cratetype == CT_TIMED)   {crtype = "Target";}
+        
+            if (Mousactiv)  {bspeed = "Mouse";}
+            if (!Mousactiv) {bspeed = ItoA(Brushspeed);}
+        
+            local sz1 = MakeNumberString("",bsz,"×");
+            local sz2 = MakeNumberString("",bsz,"");
+        
+            local a = 0;
+            local b = 0;
+            local col = RGB(114, 130, 251);
+            
+                   PGUI->HLine(0, PGUI->SX - 1, 0, col);
+                   PGUI->HLine(0, PGUI->SX - 1, PGUI->SY - 1, col);
+                   PGUI->HLine(0, PGUI->SX - 1, 20, col);
+                   
+                   
+                   PGUI->VLine(PGUI->SX - 1, 0, PGUI->SY - 1, col);
+                   PGUI->VLine(0, 0, PGUI->SY - 1, col);
+                   
+                   PGUI->Rect(1, 1, PGUI->SX - 1, PGUI->SY - 1, ARGB(225, 0, 0, 0)))
+
+                   
+                   GS->Disp->DrawText(10, PGUI, PGUI->SX/2 -40, 10, "Painter GUI", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 30, "Painter state", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 210, 30, enabled, &a, &b);
+                   
+                   if (ShowPointer)
+                   {
+                   GS->Disp->DrawText(16, PGUI, 10, 50, "Camera lock", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 70, "Mouse brush", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 90, "Brush speed", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 110, "Brush size", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 130, "Brush color", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 150, "Mine fuse", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 170, "Crate type", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 190, "Current action", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 210, "Brush X pos.", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 10, 230, "Brush Y pos.", &a, &b);
+                   
+                   
+                   GS->Disp->DrawText(16, PGUI, 210, 50, cameralock, &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 210, 70, mousestate, &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 210, 90, bspeed, &a, &b);           
+                   GS->Disp->DrawText(16, PGUI, 210, 110, StrCon(sz1,sz2), &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 210, 130, bcolor, &a, &b);
+                   
+                   if (!Minerandom)
+                   {GS->Disp->DrawText(16, PGUI, 210, 150, MakeNumberString("",minefuse/1000," sec"), &a, &b);}
+                   
+                   if (Minerandom)
+                   {GS->Disp->DrawText(16, PGUI, 210, 150, "Random", &a, &b);}
+                   
+                   GS->Disp->DrawText(16, PGUI, 210, 170, crtype, &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 210, 190, curbrushstate, &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 210, 210, ItoA(SpecialX), &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 210, 230, ItoA(SpecialY), &a, &b); 
+                   }
+                   
+                   if (!ShowPointer)
+                   {
+                   GS->Disp->DrawText(16, PGUI, 10, 50, "Camera lock", &a, &b);
+                   GS->Disp->DrawText(16, PGUI, 210, 50, cameralock, &a, &b);
+                   GS->Disp->DrawText(17, PGUI, 90, 130, "Painter is off.", &a, &b);
+                   
+                       if (Camlock)
+                       {
+                       GS->Disp->DrawText(8, PGUI, 5, PGUI->SY - 20, "* Painter must be enabled for the camera lock to be active.", &a, &b);
+                       }
+                   }
+        }
+}
+
+void gui::FirstFrame()
+{
+ new CPainterGUI(Root);
+ GUION = false;
+}
+
+void CPainterGUI::Enable()
+{
+ if(IsKeyPressed(93) && GUIEnabled && !pressed) 
+   { 
+      GUION = false; 
+      pressed = true; 
+   } 
+ 
+ if(!IsKeyPressed(93) && GUIEnabled  && pressed) 
+   { 
+      GUIEnabled = false; 
+      pressed = false; 
+   } 
+ 
+ if(IsKeyPressed(93) && !GUIEnabled && !pressed) 
+   { 
+      GUION = true; 
+      pressed = true; 
+   } 
+ 
+ if(!IsKeyPressed(93) && !GUIEnabled && pressed) 
+   { 
+      GUIEnabled = true; 
+      pressed = false; 
+   } 
+   
+ if(IsKeyPressed(12) && GUIEnabled2 && !pressed2) 
+   { 
+      GUION = false; 
+      pressed2 = true; 
+   } 
+ 
+ if(!IsKeyPressed(12) && GUIEnabled2  && pressed2) 
+   { 
+      GUIEnabled2 = false; 
+      pressed2 = false; 
+   } 
+ 
+ if(IsKeyPressed(12) && !GUIEnabled2 && !pressed2) 
+   { 
+      GUION = true; 
+      pressed2 = true; 
+   } 
+ 
+ if(!IsKeyPressed(12) && !GUIEnabled2 && pressed2) 
+   { 
+      GUIEnabled2 = true; 
+      pressed2 = false; 
+   }
+
+ if(IsKeyPressed(101) && GUIEnabled3 && !pressed3) 
+   { 
+      GUION = false; 
+      pressed3 = true; 
+   } 
+ 
+ if(!IsKeyPressed(101) && GUIEnabled3 && pressed3) 
+   { 
+      GUIEnabled3 = false; 
+      pressed3 = false; 
+   } 
+ 
+ if(IsKeyPressed(101) && !GUIEnabled3 && !pressed3) 
+   { 
+      GUION = true; 
+      pressed3 = true; 
+   } 
+ 
+ if(!IsKeyPressed(101) && !GUIEnabled3 && pressed3) 
+   { 
+      GUIEnabled3 = true; 
+      pressed3 = false; 
+   }
+
+// if(IsKeyPressed(93))
+ //  {
+ //     GUION = !GUION;
+ //  }          
+}
+
+void CPainterGUI::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+
+ if (Type == M_FRAME)
+    {
+    Enable();     
+    ProcessOutput();   
+    }
+    
+ if (Type == M_DRAWQUEUE)
+    {
+     if (GUION)
+     {
+      AddInterfaceBitmap(0, (-GS->Disp->xRes / 2) + PGUI->SX / 2,-60,PGUI,315,300,0);
+     }
+    }
+}

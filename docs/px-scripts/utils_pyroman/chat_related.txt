@@ -1,0 +1,31 @@
+bool GameChatOpened;
+
+void chat_related::Init()
+{
+    keySync->AddKey(33);    // PgUp
+    keySync->AddKey(34);    // PgDn
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+        if (keySync->KeyPressedNow(34))
+        {
+            GameChatOpened = true;
+        } else
+        if (keySync->KeyPressedNow(33))
+        {
+            GameChatOpened = false;
+        }
+        if (CurrentWorm != NullObj)
+        {
+            // chat auto-closes if arrow keys pressed
+            if (CurrentWorm->PressedUp != 0 || CurrentWorm->PressedDown != 0 || CurrentWorm->PressedLeft != 0 || CurrentWorm->PressedRight != 0)
+            {
+                GameChatOpened = false;
+            } 
+        }
+    }
+}

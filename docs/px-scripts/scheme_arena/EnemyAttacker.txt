@@ -1,0 +1,142 @@
+require utils;
+
+
+CAttacker : CGObject;
+
+CSprite* MineSprite;
+CSprite* BouncerSprite;
+CSprite* RiflerSprite;
+CSprite* AwesomerSprite;
+CSprite* crossSprite;
+CSoundFile* DestroySound;
+
+
+void EnemyAttacker::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("bustconcrete1.wav");	DestroySound = new CSoundFile(f);	
+}
+
+
+void EnemyAttacker::InitGraphic()
+{
+    local spr       = GetAttachment("mine1.png"); 
+    MineSprite     = LoadSprite(spr, 1, 0);                 
+    local spr1       = GetAttachment("bouncer.png"); 
+    BouncerSprite     = LoadSprite(spr1, 1, 0);   
+    local spr2       = GetAttachment("minerifle.png"); 
+    RiflerSprite     = LoadSprite(spr2, 1, 0);  
+    local spr3       = GetAttachment("boss.png"); 
+    AwesomerSprite     = LoadSprite(spr3, 1, 0);
+    local spr4       = GetAttachment("graycross.png"); 
+    crossSprite     = LoadSprite(spr4, 32, 0);      
+} 
+
+
+
+CAttacker::CAttacker(CObject* parent, fixed x, fixed y)
+{    
+    
+    super(parent, 17, 9);
+    PosX          = x;
+    PosY          = y; 
+
+    IsMaterial  = true; 
+    ColGroup    = 4423679;
+    SpX         = 0.0;
+    SpY         = 0.0;    
+    ClType      = EObjectClass(70);   //935
+    ColMask = new CColMask(7,4,MakeRectMask(14,8)); 
+    
+    AType = 0;
+    MType = 1;
+    Health = 5;
+    MovingX = false;   
+    MovingY = false;
+    GravityFactor = 0;
+    FloatDirection = 1; //default - left
+    MoveSpeed = 0;
+    
+    //bouncer pars
+    BounceDir = 0;
+    BounceSpeed = 3;
+    
+    //rifler pars
+    ShootTimer = 180;
+    ShootDelay = 60;
+    MissileType = 1;
+    
+    //boss pars
+    CrosshairTimer = 0;
+    CrosshairAnimOn = false;
+    CrosshairAnimCol = 1;
+}
+
+void CAttacker::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)            // Root->GetObject(2, 16 * Team + Number);
+{      
+   local spr1 = MineSprite->Index;
+   local spr2 = BouncerSprite->Index;           
+   local spr3 = RiflerSprite->Index;
+   local spr4 = AwesomerSprite->Index;
+   local spr5 = crossSprite->Index;
+
+
+   if (Type == M_DRAWQUEUE && Health > 0)   //anim 
+   {
+   if(AType == 1)AddSprite(5,PosX,PosY,1,spr1,0.0);           //mine
+   if(AType == 2)AddSpriteEx(5,PosX,PosY,spr1,0.0,0,1.2);
+   if(AType == 3)
+            {
+            SetColorMod(RGB(170,0,0),4);
+            AddSpriteEx(5,PosX,PosY,spr1,0.0,0,1.6);    //big red mine
+            ClearColorMod();  
+            }
+   if(AType == 4)AddSprite(5,PosX,PosY,1,spr2,0.0);      //bouncer  
+   if(AType == 5)AddSprite(5,PosX,PosY,1,spr3,0.0);      //sniperz 
+   if(AType == 6)AddSprite(5,PosX,PosY,1,spr4,0.0);      //boss
+   if(CurrentChallenger != NullObj)
+                        {
+                        SetColorMod(RGB(CrosshairAnimCol,0,0),4); 
+                        if(CrosshairAnimOn == true)AddSprite(5,CurrentChallenger->PosX,CurrentChallenger->PosY,1,spr5,0.0);
+                        ClearColorMod();
+                        }        
+   }
+
+   if(Type == M_EXPLOSION)  //exp damage handling
+   {
+   TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]);
+   }
+   if(Type == M_GUNEXP)   //gunexp dmg handling
+   {                                                    
+   TakeDamage(MData->params[5]);
+   }     
+
+   
+   if (Type == M_FRAME) 
+   {   
+    if (Health < 1) //Destroying
+    {
+    MobNum = MobNum - 1;
+           if(MobNum < 1 && DestroyEnemies == true)MobNum = 0; DestroyEnemies = false; 
+    DestroySound->Play(1.5, 0.0, false); 
+    Free(true); 
+    return;
+    } 
+   
+    if (DestroyEnemies == true)//Reset after challenger got hit
+    {
+    Health = 0;      
+    }
+    
+   }
+   
+//////////////////////////////AI MAKING DECISIONS HERE !111 ////////////////////
+   if(Type == M_FRAME && CurrentChallenger != NullObj && Base != NullObj)
+   {
+   if(MType == 2)BouncerMovement();   
+   if(MType == 1)StandartMovement();
+   if(MType == 3)RiflerMovement();
+   if(MType == 4)BossMovement();    
+   }
+}
+                                           

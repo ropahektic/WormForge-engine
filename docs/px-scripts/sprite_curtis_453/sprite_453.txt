@@ -1,0 +1,12 @@
+CSprite* shadowb_tr;
+
+void sprite_453::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("shadowbt.png");
+    shadowb_tr = LoadSprite(f, 8, 0);
+    //f = GetAttachment("shadowbt_old.png");
+    //shadowbt = LoadSprite(f, 13, 0);
+
+    SetSpriteOverride(453, shadowb_tr);
+}

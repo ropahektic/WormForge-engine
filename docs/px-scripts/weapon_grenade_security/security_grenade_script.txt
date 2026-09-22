@@ -1,0 +1,151 @@
+// By PyroMan.
+
+require utils, utils_steps, utils_pyroman, p_animation, pxparticles, p_sprite_builder;
+
+CAnimationParams* ArrowAnimationParams;
+//CSprite* sg_cluster;
+
+void security_grenade_script::FirstFrame()
+{
+	ArrowAnimationParams = new CAnimationParams;
+}
+
+void security_grenade_script::Init(){}
+
+/*
+void security_grenade_script::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("sg_cluster.png");
+    sg_cluster = LoadSprite(f, 1, 0);
+}
+*/
+
+void CMissile::DoArrows(int x, int y, int spX, int spY, int dmg, int grav, int WTeam, int WNumber, bool noStick)
+{
+    CShootDesc SDesc;
+    zero(&SDesc);
+    SDesc.Team = WTeam;
+    SDesc.Worm = WNumber;
+    SDesc.X = x;
+    SDesc.Y = y;                     
+    SDesc.SpX = spX;
+    SDesc.SpY = spY;
+    local arrow = new CArrow(Root->GetObject(25, 0), &dmg, &SDesc);
+    if (CGObject(arrow)->IsValid())
+    {
+      arrow->GravityFactor = grav;                  
+      arrow->DontStick = noStick;
+      ArrowAnimationParams->useObj = true;
+      ArrowAnimationParams->turns = 1;
+      ArrowAnimationParams->sprite = 0; //123 or 126
+      ArrowAnimationParams->scale = 1.5;
+      ArrowAnimationParams->speed = 20;
+      ArrowAnimationParams->duration = 1;
+      ArrowAnimationParams->ZPlane = 5;
+      ArrowAnimationParams->once = true;
+      ArrowAnimationParams->backwards = true;
+      new CAnimation(Root, x, y, arrow, ArrowAnimationParams);  
+    }
+}   
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    super;
+    if (weap->CheckName("Security Grenade"))
+    {
+        local radius = 60;
+        local dmg = 25;
+        local push = 50;
+        Root->DoExplosion( x, y - radius, push, dmg, 0, ClWT);
+        Root->DoExplosion( x + radius * 2/3, y - radius * 2/3, push, dmg, 0, ClWT);
+        Root->DoExplosion( x + radius, y, push, dmg, 0, ClWT);
+        Root->DoExplosion( x + radius * 2/3, y + radius * 2/3, push, dmg, 0, ClWT);
+        Root->DoExplosion( x, y + radius, push, dmg, 0, ClWT);
+        Root->DoExplosion( x - radius * 2/3, y + radius * 2/3, push, dmg, 0, ClWT);
+        Root->DoExplosion( x - radius, y, push, dmg, 0, ClWT);
+        Root->DoExplosion( x - radius * 2/3, y - radius * 2/3, push, dmg, 0, ClWT);
+    }
+    if (weap->CheckName("Ninja Bomb"))
+    {
+        local dmg = 15;
+        local grav = 1.0;
+        local noStick = false;
+        local radius = 25;
+        local powa_x = 8;
+        local powa_y = 8;
+        local py = y - 5;
+//       circle 1      
+        ClWT = 0;
+        CLWN = 0;
+        DoArrows(x, py - radius, powa_x/3, -powa_y, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x - radius * 2/3, py - radius * 2/3, -powa_x/3, -powa_y, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x + radius *2/3, py - radius * 2/3, powa_x, -powa_y, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x + radius, py, powa_x*2, 0, dmg, 0.0, ClWT, ClWN, false);
+        DoArrows(x + radius *2/3, py + radius * 2/3, powa_x, powa_y, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x, py + radius, 0, powa_y, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x - radius *2/3, py + radius * 2/3, -powa_x, powa_y, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x - radius, py, -powa_x*2, 0, dmg, 0.0, ClWT, ClWN, false);
+        DoArrows(x - radius *2/3, py - radius * 2/3, -powa_x, -powa_y, dmg, grav, ClWT, ClWN, noStick);
+//        circle 2; 
+        local radius = 50;
+        local powa2 = 10;
+        local powa3 = 16;
+        DoArrows(x + radius *2/3, py - radius * 2/3, powa3, -powa2, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x + radius *2/3, py + radius * 2/3, powa3, powa2, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x - radius *2/3, py + radius * 2/3, -powa3, powa2, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x - radius *2/3, py - radius * 2/3, -powa3, -powa2, dmg, grav, ClWT, ClWN, noStick);        
+//        circle 3; 
+        local radius = 75;
+        local powa2 = 16;
+        local powa3 = 10;
+        DoArrows(x + radius *2/3, py - radius * 2/3, powa3, -powa2, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x + radius *2/3, py + radius * 2/3, powa3, powa2, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x - radius *2/3, py + radius * 2/3, -powa3, powa2, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x - radius *2/3, py - radius * 2/3, -powa3, -powa2, dmg, grav, ClWT, ClWN, noStick);        
+//        circle 4; 
+        local radius = 75;
+        local powa2 = 4;
+        local powa3 = 16;
+        DoArrows(x + radius *2/3, py - radius * 2/3, powa3, -powa2, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x + radius *2/3, py + radius * 2/3, powa3, powa2, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x - radius *2/3, py + radius * 2/3, -powa3, powa2, dmg, grav, ClWT, ClWN, noStick);
+        DoArrows(x - radius *2/3, py - radius * 2/3, -powa3, -powa2, dmg, grav, ClWT, ClWN, noStick);        
+    }
+}
+
+
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Ninja Bomb"))
+        {
+            if (not_too_much_particles) do_sprite_trail_effects(46, PosX, PosY);
+        }
+        if (weap->CheckName("Security Grenade"))
+        {
+            if (not_too_much_particles) do_sprite_trail_effects(54, PosX, PosY);
+        }
+    }                                    
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Security Grenade"))
+    {
+        ClWT = WormTeam;
+        ClWN = WormNumber;
+        CheckParticlesNumber();
+    }
+    if (Weap->CheckName("Ninja Bomb"))
+    {
+        ClWT = WormTeam;
+        ClWN = WormNumber;
+        CheckParticlesNumber();
+    }
+    super;
+}

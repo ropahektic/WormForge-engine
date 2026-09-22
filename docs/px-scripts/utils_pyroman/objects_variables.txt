@@ -1,0 +1,12 @@
+require utils, utils_steps, p_animation, pxparticles, weapon_tazer;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+   hideWorm = false;
+   Invisible = false;
+   FastWalking = false;
+   animatedWorm = false;    
+   animColor = ARGB(255, 255, 255, 255); 
+   WAP = new CWormAnimationParams;    
+   super;
+}

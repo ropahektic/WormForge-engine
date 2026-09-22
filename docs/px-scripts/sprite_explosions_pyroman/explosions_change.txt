@@ -1,0 +1,75 @@
+CSprite* exp_circle100;
+CSprite* exp_circle50;
+CSprite* exp_circle25;
+
+CSprite* exp_ring100;
+CSprite* exp_ring50;
+CSprite* exp_ring25;
+
+CSprite* light_smklt25;
+CSprite* light_smklt50;
+CSprite* light_smklt75;
+CSprite* light_smklt100;
+
+CSprite* light_smkdrk20;
+CSprite* light_smkdrk30;
+CSprite* light_smkdrk40;
+
+CSprite* blob1;
+
+
+void explosions_change::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("explosion_8_100.png");
+   exp_circle100 = LoadSprite(f, 10, 0);
+   SetSpriteOverride(603, exp_circle100);
+   SetSpriteOverride(602, exp_circle100);
+   f = GetAttachment("explosion_8_50.png");
+   exp_circle50 = LoadSprite(f, 10, 0);
+   SetSpriteOverride(601, exp_circle50);
+   f = GetAttachment("explosion_8_25.png");
+   exp_circle25 = LoadSprite(f, 10, 0);
+   SetSpriteOverride(600, exp_circle25);
+   SetSpriteOverride(79, exp_circle25);
+   
+   f = GetAttachment("ring2_100.png");
+   exp_ring100 = LoadSprite(f, 18, 0);
+   SetSpriteOverride(607, exp_ring100);
+   SetSpriteOverride(606, exp_ring100);
+   f = GetAttachment("ring2_50.png");
+   exp_ring50 = LoadSprite(f, 18, 0);
+   SetSpriteOverride(605, exp_ring50);
+   f = GetAttachment("ring2_25.png");
+   exp_ring25 = LoadSprite(f, 18, 0);
+   SetSpriteOverride(604, exp_ring25);
+   
+   f = GetAttachment("smklt25.png");
+   light_smklt25 = LoadSprite(f, 56, 0);
+   SetSpriteOverride(609, light_smklt25);
+   f = GetAttachment("smklt50.png");
+   light_smklt50 = LoadSprite(f, 56, 0);
+   SetSpriteOverride(610, light_smklt50);
+   f = GetAttachment("smklt75.png");
+   light_smklt75 = LoadSprite(f, 56, 0);
+   SetSpriteOverride(611, light_smklt75);
+   f = GetAttachment("smklt100.png");
+   light_smklt100 = LoadSprite(f, 56, 0);
+   SetSpriteOverride(612, light_smklt100);
+   
+   f = GetAttachment("smkdrk20.png");
+   light_smkdrk20 = LoadSprite(f, 56, 0);
+   SetSpriteOverride(613, light_smkdrk20);
+   f = GetAttachment("smkdrk30.png");
+   light_smkdrk30 = LoadSprite(f, 56, 0);
+   SetSpriteOverride(614, light_smkdrk30);
+   f = GetAttachment("smkdrk40.png");
+   light_smkdrk40 = LoadSprite(f, 56, 0);
+   SetSpriteOverride(615, light_smkdrk40);
+   
+   
+   f = GetAttachment("blob1.png");
+   blob1 = LoadSprite(f, 16, 0);
+   SetSpriteOverride(619, blob1);
+   
+}

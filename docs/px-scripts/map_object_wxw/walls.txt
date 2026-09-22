@@ -1,0 +1,214 @@
+                                                        
+require utils;
+
+// Global var for wall reseting
+bool wall_reset;
+int WAmount;
+int TotalWalls;
+
+// editor object for walls
+$editor
+ $object Wall
+  $origin -13 -109
+  $image "wall2size.png"
+  $func SpawnWall
+  $radius 50
+  $param wtype int 3
+ $object_end
+$end
+
+CWall : CGObject;
+
+CSprite* RedWall1;
+CSprite* GreenWall1;
+CSprite* RedWall2Left;
+CSprite* GreenWall2Left;
+CSprite* RedWall2Right;
+CSprite* GreenWall2Right;
+
+
+CSoundFile* WTouchSound;
+
+void walls::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("touchsound.wav");	WTouchSound = new CSoundFile(f);
+	
+for (local i = 1; i < Env->Objs.Count; i++)
+    {
+    local wall = CWall(Env->Objs.Objs[i]);
+    if (wall is CWall)
+        {
+		WAmount++;
+		TotalWalls = WAmount;
+        }
+	}
+}
+
+// Loads attachment into sprites
+void walls::InitGraphic()
+{
+    local R1     = GetAttachment("wall1.png");		RedWall1 = LoadSprite(R1, 1, 0);
+    local G1     = GetAttachment("green1.png");		GreenWall2 = LoadSprite(G1, 1, 0);
+    local R2L     = GetAttachment("wall2l.png");	RedWall2Left = LoadSprite(R2L, 1, 0);
+    local G2L     = GetAttachment("green2l.png");	GreenWall2Left = LoadSprite(G2L, 1, 0);
+    local R2R     = GetAttachment("wall2r.png");	RedWall2Right = LoadSprite(R2R, 1, 0);
+    local G2R     = GetAttachment("green2r.png");	GreenWall2Right = LoadSprite(G2R, 1, 0);
+}
+
+CWall::CWall(CObject* parent, fixed x, fixed y)
+{    
+    super(parent, 17, 9);
+     
+    PosX          = x;
+    PosY          = y; 
+    
+    R1Sprite      = RedWall1;
+    G1Sprite      = GreenWall1;
+    R2LeftSprite      = RedWall2Left;
+    G2LeftSprite      = GreenWall2Left; 
+    R2RightSprite      = RedWall2Right;
+    G2RightSprite      = GreenWall2Right; 
+                    
+    
+    IsMaterial    = true;
+    Touched       = false;
+    SpX         = 0.0;
+    SpY         = 0.0;
+    GravityFactor = 0;
+    SpeedDivider = 32767;
+    ClType        = EObjectClass(935);
+    ColGroup      = 4423679;
+    Mask_Size = 200; 
+    Mask_Offset = 105;
+    
+    MasksDone = false;
+
+	// DumpingC = 0.4;
+    
+}    
+    // function for map editor to build walls
+void SpawnWall(CEditorObject* obj)
+{
+  local x = obj->PosX;
+  local y = obj->PosY;  
+  local p = new CWall(Root->GetObject(25, 0), x, y);
+  p->WType = obj->GetInt("wtype");        
+}
+
+void CWall::Place()
+{
+  // sprites are drawn here
+if (WType == 1)
+	{
+    spr1 = R1Sprite->Index;
+    spr2 = G1Sprite->Index;
+    }
+if (WType == 2)
+	{
+    spr1 = R2LeftSprite->Index;
+    spr2 = G2LeftSprite->Index;
+    }
+if (WType == 3)
+	{
+    spr1 = R2RightSprite->Index;
+    spr2 = G2RightSprite->Index;        
+	}
+
+if (Touched == false || wall_reset == true)
+	{
+    AddSpriteEx (20,PosX,PosY,spr1,0.0,0.0,1.0);                        
+    }
+if (Touched == true && wall_reset == false)
+	{
+    AddSpriteEx (20,PosX,PosY,spr2,0.0,0.0,1.0);                       
+    }   
+}                                                     
+        
+
+void CWall::MakeColMask()
+{   
+if (WType == 1)
+	{
+    Mask_Size = 150; 
+    Mask_Offset = 80;    
+    ColMask = new CColMask(13,Mask_Offset,MakeRectMask(24,Mask_Size));
+    MasksDone = true; 
+    }
+    
+if (WType == 2 || WType == 3)
+	{
+    Mask_Size = 200; 
+    Mask_Offset = 105;
+    ColMask = new CColMask(13,Mask_Offset,MakeRectMask(30,Mask_Size));
+    MasksDone = true; 
+    }    
+else
+    ColMask = new CColMask(13,Mask_Offset,MakeRectMask(30,Mask_Size));
+    MasksDone = true;    
+     
+}    
+
+void CWall::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if (Type == M_FRAME)
+	 	{
+        if (wall_reset == true)
+			{
+            Touched = false;
+           	if (MasksDone != true)
+				{
+                MakeColMask();
+               	}
+           	}
+     	}
+        
+        // Add Sprites
+   	if (Type == M_DRAWQUEUE)
+   		{
+     	Place();
+   		}
+}
+
+override CGObject* CEnv::CheckCollisionEx(CGObject* obj,fixed x,fixed y,CColMask* mask,int colflags)
+{
+CGObject* ret = super;
+if (ret is CWall)
+  	{
+    if (obj is CWorm && obj->ObjState != WS_IDLE)
+    	{
+        local worm = GetCurrentWorm();
+        if (obj == worm)
+			{
+          	local p = CWall(ret);
+          	if (p->Touched == false)
+				{
+          		p->Touched = true;
+   	  			WTouchSound->Play(1.0, 0.0, false);
+          		wall_reset = false;
+          		
+          		//GG->WriteToChat(4, "WallTouched", false);
+          		if(WAmount != 0) WAmount = WAmount - 1;
+          		//GG->WriteToChat(5, "WAmount", false);
+          		//GG->WriteToChat(5, ItoA(WAmount), false);
+          		}
+      		}
+    	}
+  	}
+  return ret;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_TURNBEGIN)
+		{
+     	if (wall_reset == false) wall_reset = true; WAmount = TotalWalls;
+		//GG->WriteToChat(1, "TurnBegin", false);
+		//GG->WriteToChat(2, "WAmount", false);
+     	//GG->WriteToChat(2, ItoA(WAmount), false);
+     	//GG->WriteToChat(3, "TotalWalls", false);
+     	//GG->WriteToChat(3, ItoA(TotalWalls), false);
+    	}
+}     

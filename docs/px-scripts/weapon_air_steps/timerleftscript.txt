@@ -1,0 +1,67 @@
+string timeleft;
+
+CTimerLeft : CObject;
+
+CTimerLeft::CTimerLeft(CObject* parent)
+{
+     super(parent, GS);
+     TLEFT = MakeBitmap(50,50);
+}
+
+void CTimerLeft::ProcessOutput()
+{
+  if (GS->Tick > 0)
+  {
+    local a = 0;                                       
+    local b = 0;
+    local col = teamRGB;
+            
+    TLEFT->HLine(0, TLEFT->SX - 1, 0, col);
+    TLEFT->HLine(0, TLEFT->SX - 1, TLEFT->SY - 1, col);
+    TLEFT->HLine(0, TLEFT->SX - 1, 20, col);
+                   
+                   
+    TLEFT->VLine(TLEFT->SX - 1, 0, TLEFT->SY - 1, col);
+    TLEFT->VLine(0, 0, TLEFT->SY - 1, col);
+                   
+    TLEFT->Rect(1, 1, TLEFT->SX - 1, TLEFT->SY - 1, ARGB(254, 0, 0, 0)))
+
+    if (gframe < rutick + 50*1) timeleft = "5";
+    else if (gframe > rutick + 50*1 && gframe < rutick + 50*2) timeleft = "4";
+    else if (gframe > rutick + 50*2 && gframe < rutick + 50*3) timeleft = "3";
+    else if (gframe > rutick + 50*3 && gframe < rutick + 50*4) timeleft = "2";
+    else if (gframe > rutick + 50*4 && gframe < rutick + 50*5) timeleft = "1";
+    else if (gframe >= rutick + 50*5) timeleft = "0";
+                   
+    GS->Disp->DrawText(25, TLEFT, 18, 10, timeleft, &a, &b);
+  }     
+}
+
+void timerleftscript::FirstFrame()
+{
+ new CTimerLeft(Root);
+ timeleft = "0";
+}
+
+void CTimerLeft::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ CWorm* w = GetCurrentWorm();
+    
+ if (Type == M_FRAME)
+ {
+        ProcessOutput();
+        
+        if (w != NullObj)
+        {
+            teamRGB = GetTeamColorRGB(GetWormColor(w));
+        }   
+ }
+    
+ if (Type == M_DRAWQUEUE)
+    {
+     if (Randomgeddon)
+     {
+      AddInterfaceBitmap(0, 0,0,TLEFT,50,50,0);
+     }
+    }
+}            

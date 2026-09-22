@@ -1,0 +1,17 @@
+CSoundFile* timeadd;
+ 
+void timeadd_sound::Init()
+{
+	timeadd       = new CSoundFile(GetAttachment("Adding Time.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("15 Seconds") || Weap->CheckName("25 Seconds") || Weap->CheckName("35 Seconds") || Weap->CheckName("Double Turn Time") || Weap->CheckName("Infinite Time"))
+  {  
+    vol = CalculateSoundVolume(PosX,PosY);
+    pan = CalculateSoundPan(PosX,PosY);
+	timeadd->Play(vol, pan, false);
+  }
+  super;
+}

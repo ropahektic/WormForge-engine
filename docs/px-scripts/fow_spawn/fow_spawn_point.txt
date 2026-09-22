@@ -1,0 +1,111 @@
+
+require utils;
+
+$editor
+ 
+ $object SpawnPoint
+  $origin -13 -15
+  $image "edworm.png"
+  $func DoSpawnPoint
+  $radius 17
+  $param FromWorm int 1
+  $param ToWorm int 8
+  $param OffsetPerWorm int 1
+  $param Team int 1;
+ $object_end
+    
+$end
+
+void DoSpawnPoint(CEditorObject* obj)
+{
+  	x = obj->PosX;
+  	y = obj->PosY;
+  	offx = obj->GetInt("OffsetPerWorm");
+  	fw = obj->GetInt("FromWorm");
+  	tw = obj->GetInt("ToWorm");
+  	team = obj->GetInt("Team");
+  
+    if (fw < 1) fw = 1; if (fw > 8) fw = 8;
+  	if (tw < 1) tw = 1; if (tw > 8) tw = 8;
+  	if (team < 0) team = 0; if (team > 6) team = 6;
+  	if (tw < fw) return;
+  	generateTColorInd();
+  
+  	if(GetTeamColor(1) > GetTeamColor(2))
+	  	{
+		if(team == 1)		//left side
+		    {
+      		for (j = 6; j >= 1; j-=1)
+      			{
+        		for (i = tw; i >= fw; i-=1)
+        			{
+          			if (team == 0 || (g_tColorInd[GetTeamColor(j)]) == (team + 1))
+          				{
+            			local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+            			if (Worm)
+            				{
+              				Worm->PosX = x;
+              				Worm->PosY = y;
+              				Worm->TeamSide = team;
+              				x += offx;
+            				}
+          				}
+        			}
+      			}
+      		}
+		else			//Right side
+	  	    {
+        	for (j = 6; j >= 1; j-=1)
+          		{
+            	for (i = tw; i >= fw; i-=1)
+            		{
+              		if (team == 0 || (g_tColorInd[GetTeamColor(j)]) == (team - 1))
+              			{
+                		local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+                		if (Worm)
+                			{
+                  			Worm->PosX = x;
+                  			Worm->PosY = y;
+                  			Worm->TeamSide = team;
+                  			x += offx;
+                			}
+              			}
+            		}
+          		}
+      		}
+      	}
+	else
+		{
+      	for (j = 6; j >= 1; j-=1)
+      		{
+        	for (i = tw; i >= fw; i-=1)
+        		{
+          		if (team == 0 || (g_tColorInd[GetTeamColor(j)]) == team)
+          			{
+            		local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+            		if (Worm)
+            			{
+              			Worm->PosX = x;
+              			Worm->PosY = y;
+              			Worm->TeamSide = team;
+              			x += offx;
+            			}
+          			}
+        		}
+      		}
+  		}
+  		
+	for (i = 0; i < Env->Objs.Count; i+=1)
+   		{
+     	ob = CGObject(Env->Objs.Objs[i]);
+     	if (ob)
+     		{
+      		if (ob is CMine || ob is COilDrum)
+      			{
+       			dx = ob->PosX - obj->PosX;
+       			dy = ob->PosY - obj->PosY;
+       			if (dx * dx + dy * dy < 10000){ob->Free(true);}
+      			}
+     		}
+   		}
+}

@@ -1,0 +1,990 @@
+
+require utils, pxparticles;
+
+#WEAPON_BOWLINGBALL
+
+CColMask* MASK_CIRCLE;
+CSprite* bowlingballSprite;
+CSprite* bowlingballsparkSprite;
+CSprite* bowlingballglowSprite;
+
+void bowlingball::FirstFrame()
+{
+	MASK_CIRCLE = new CColMask(16, 16, MakeCircleMask(16));
+}
+
+// Loading resources
+void bowlingball::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("bowling.png");			bowlingballSprite = LoadSprite(f, 1, 0);
+	f = GetAttachment("bowlingspark.png");		bowlingballsparkSprite = LoadSprite(f, 10, 0);
+	f = GetAttachment("lightning_glow.png");	bowlingballglowSprite = LoadSprite(f, 1, 0);
+}
+
+CBowlingBall : CMine;
+
+CBowlingBall::CBowlingBall(CObject* Parent, CShootDesc* Desc)
+{
+	CMineParams MParams;
+	zero(&MParams);
+	MParams.Prefuse = 0;
+	MParams.Radius = 0;
+	MParams.Fuse = 70;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Damage = 0;
+	MParams.BlastPower = 0;
+	
+	SetLayerOverride(LAYER_OILDRUM);
+	
+	super(Parent, &MParams, Desc, false, 0);
+	
+	//Layer = LAYER_OILDRUM;
+	ColGroup = CMASK_SKIMMING;
+	
+	//BounceColMask = MASK_CIRCLE_SMALL;
+	//BounceColMask2 = ColMask;
+	BounceColMask = ColMask;
+	BounceColMask2 = MASK_PIXEL;
+	ColMask = MASK_CIRCLE;
+	
+	// How much the physics object should bounce when colliding
+	PhysBounciness = 0.03;
+	// How much speed should be decreased when colliding
+	PhysFriction = 0.02;
+	// How much acceleration should be added on the X and Y axis
+	PhysInertiaX = 0.8;
+	PhysInertiaY = 0.4;
+	
+	// The object will be put into "low speed" state when its speed goes below this value for a long time
+	LowSpeedThreshold = 4.0;
+	// How many frames the physics object should hold a low speed to be put into "low speed" state
+	TimeForLowSpeed = 100;
+	
+	// Regular physics parameters will be replaced by those ones when in "low speed" state
+	LowSpeedBounciness = 0.03;
+	LowSpeedFriction = 0.03;
+	LowSpeedInertiaX = 0.0;
+	LowSpeedInertiaY = 0.0;
+	
+	// Special physics parameters applied when the ball is in "electrified" state
+	ZappedBounciness = 0.03;
+	ZappedFriction = -0.05;
+	ZappedInertiaX = 0.8;
+	ZappedInertiaY = 0.4;
+	
+	SleepDistanceThreshold = 2;
+	SleepSamplePeriod = 80;
+	
+	// Multiplier for incoming force from guns and melee
+	GunForceMultiplier = 0.7;
+	// Multiplier for incoming force from explosions
+	ExplosionForceMultiplier = 1.0;
+	
+	// The minimum velocity for the ball to start emitting flame effects after being thrown by an explosion
+	SpeedFlamesStartThreshold = 12.0;
+	// If the ball goes below this speed for such an amount of time, it will stop emitting flames
+	SpeedFlamesStopThreshold = 5.0;
+	SpeedFlamesStopDuration = 100;
+	SpeedFlamesStopTimer = 100;
+	SpeedFlames = false;
+	ThrownByExplosionTimeout = 20;
+	ThrownByExplosionTimer = 0;
+	ThrownByExplosion = false;
+	
+	DefaultColGroup =	CMASK_TERRAIN | CMASK_WORM_ON_TERRAIN | CMASK_WORM_FROZEN |
+						CMASK_CRATE | CMASK_DONORCARD | CMASK_OILDRUM;
+	
+	NoWormsColGroup =	CMASK_TERRAIN | CMASK_CRATE | CMASK_DONORCARD | CMASK_OILDRUM;
+	
+	DamageableColGroup =	CMASK_WORM_ON_TERRAIN | CMASK_WORM_USING_WEAPON | CMASK_WORM_IN_MIDAIR |
+							CMASK_WORM_ON_ROPE | CMASK_WORM_FROZEN | CMASK_MINE |
+							CMASK_CRATE | CMASK_DONORCARD | CMASK_OILDRUM;
+	
+	NextDie = GS->Tick + 500;
+	Wtfboom = false;
+	
+	LastSpX = SpX;
+	LastSpY = SpY;
+	LastPosX = PosX;
+	LastPosY = PosY;
+	RealSpX = 0.0;
+	RealSpY = 0.0;
+	
+	Rotation = 0.0;
+	SpinMultiplierX = 0.06;
+	SpinMultiplierY = 0.02;
+	MaxSpinSpeed = 0.6;
+	
+	MinPushSpeed = 4.0;
+	MinDamageSpeed = 4.0;
+	MaxDamageSpeed = 15.0;
+	DamageForceMultiplier = 0.7;
+	MinDamage = 5.0;
+	MaxDamage = 60.0;
+	
+	Res = new CTraceRes;
+	First = true;
+	EnteredSolid = false;
+	
+	LastRecordPosX = PosX;
+	LastRecordPosY = PosY;
+	SleepSampleTimer = 200;
+	LowSpeedTimer = 200;
+	IsAsleep = false;
+	IsLowSpeed = false;
+	
+	//float r = GS->GetRandom()%1000;
+	ZPlane = 5;
+	ShakeAmplitude = 0.0;
+	ShakeFadeRate = 0.2;
+	//ZPlane = ZPlane + (r * 0.001);
+	
+	NextRecalcZPlane = 0;
+	ClType = EObjectClass(71);
+	
+	SparkAnimSpeed = 0.02;
+	SparkPauseDuration = 0.4;
+	SparkCycle = 0.0;
+	SparkCycleDuration = 1.0 + SparkPauseDuration;
+	
+	ZapTurnsRemaining = 0;
+	GlowSize = 0.0;
+}
+
+void CBowlingBall::Free(bool b)
+{
+	delete Res;
+	super;
+}
+
+void CBowlingBall::Collide(CGObject* Obj, int type)
+{
+}
+
+void CBowlingBall::Zap(int zaptype)
+{
+	float mul;
+	
+	if(zaptype == 0)
+	{
+		ZapTurnsRemaining = 1;
+		mul = 1.0;
+	}
+	else
+	{
+		mul = 0.8;
+	}
+	
+	Wake();
+	
+	float ang = RandomFloat(-0.1, 0.1);
+	float speed = RandomFloat(5.0, 10.0);
+	SpX = sin(ang) * speed * mul;
+	SpY = -cos(ang) * speed * mul;
+}
+
+void CBowlingBall::DoAnimation()
+{
+	if(ZapTurnsRemaining > 0)
+	{
+		SparkCycle = SparkCycle + SparkAnimSpeed;
+		if(SparkCycle > SparkCycleDuration) SparkCycle = SparkCycle - SparkCycleDuration;
+	}
+}
+void CBowlingBall::UpdateZPlane()
+{
+	// Recalculate Z plane periodically to make sure objects are drawn properly when overlapping each other
+	if(NextRecalcZPlane <= 0)
+	{
+		local matches = 0;
+		
+		for(local i = 1; i < Env->Objs.Count; i+=1)
+		{
+			local obj = Env->Objs.Objs[i];
+			
+			if(obj == NullObj) continue;
+			if(obj == this) continue;
+			if(obj->ClType == EObjectClass(71))
+			{
+				local ball = CBowlingBall(obj);
+						
+				float dX = ball->PosX - PosX;
+				float dY = ball->PosY - PosY;
+				float r2 = dX*dX + dY*dY;
+					
+				if(r2 < 900.0)
+				{
+					if(ball->ZPlane == ZPlane)
+					{
+						ball->ZPlane = ball->ZPlane + 1;
+					}
+					matches = matches + 1;
+				}
+			}
+		}
+		
+		if(matches == 0)	ZPlane = 5;
+		
+		NextRecalcZPlane = 200;
+	}
+	else
+	{
+		NextRecalcZPlane = NextRecalcZPlane - 1;
+	}
+}
+
+void CBowlingBall::UpdateRotation()
+{
+	float abs_speedX = RealSpX;
+	float abs_speedY = RealSpY;
+	
+	if(abs_speedX < 0) abs_speedX = 0-abs_speedX;
+	if(abs_speedY < 0) abs_speedY = 0-abs_speedY;
+	
+	float rot = SpinMultiplierX * abs_speedX + SpinMultiplierY * abs_speedY;
+	
+	if(rot > MaxSpinSpeed) rot = MaxSpinSpeed;
+	if(RealSpX<0) rot = 0-rot;
+	
+	ApplyRotation(rot);
+}
+
+void CBowlingBall::ApplyRotation(float r)
+{
+	Rotation += r;
+	while(Rotation > 3.141593)		Rotation -= 6.283186;
+	while(Rotation <= 0 - 3.141593)	Rotation += 6.283186;
+}
+
+void CBowlingBall::TakeExplosionDamage(fixed x, fixed y, int dmg)
+{
+	if(dmg == 0) return;
+	
+	float fdmg = dmg;
+	float dx = PosX - x;
+	float dy = PosY - y;
+	
+	float distsqr = dx*dx + dy*dy;
+	float fdmgsqr = fdmg*fdmg*1.25*1.25;
+	
+	fdmg = (1.0-distsqr/fdmgsqr) * fdmg;
+	dmg = fdmg;
+	
+	if(dmg > 0) TakeDamage(0, dmg);
+}
+
+void CBowlingBall::TakeDamage(int type, int dmg)
+{
+	//if(type == 10)
+	//{
+	//	fixed fdmg = dmg;
+	//	fdmg = Health * fdmg / 100.0;
+	//	dmg = fdmg;
+	//}
+	
+	//Health -= dmg;
+	Wake();
+}
+
+void CBowlingBall::Sleep()
+{
+	if(IsAsleep) return;
+	IsAsleep = true;
+	IsLowSpeed = false;
+	//IsMaterial = true;
+	SleepX = PosX;
+	SleepY = PosY;
+	SpeedDivider = 1000;
+	SpeedDividerB = 1000;
+	SpX = 0.0;
+	SpY = 0.0;
+	GravityFactor = 0.0;
+	Stopped = 1;
+	InMidAir = 0;
+	ThrownByExplosion = false;
+	SpeedFlames = false;
+}
+
+void CBowlingBall::Wake()
+{
+	if(IsAsleep == false && IsLowSpeed == false) return;
+	IsAsleep = false;
+	IsLowSpeed = false;
+	//IsMaterial = false;
+	SleepX = 0;
+	SleepY = 0;
+	SpeedDivider = 1;
+	SpeedDividerB = 1;
+	GravityFactor = 1.0;
+	Stopped = 0;
+	InMidAir = 1;
+	SleepSampleTimer = 200;
+	LowSpeedTimer = 200;
+}
+
+void CBowlingBall::Render()
+{
+	bool hascolormod = false;
+	
+	if(Sinking)
+	{
+		hascolormod = true;
+		SetColorMod(RGB(90, 90, 240), 6);
+	}
+	
+	//else if(IsAsleep)
+	//{
+	//	hascolormod = true;
+	//	SetColorMod(RGB(0, 255, 0), 6);
+	//}
+	//else if(IsLowSpeed)
+	//{
+	//	hascolormod = true;
+	//	SetColorMod(RGB(255, 180, 0), 6);
+	//}
+	
+	AddSpriteEx(ZPlane+0.01, PosX, PosY, bowlingballSprite->Index, 0, Rotation, 1);
+	
+	if(hascolormod) ClearColorMod();
+	
+	if(Sinking == false && ZapTurnsRemaining > 0)
+	{
+		CQuad q;
+		int j;
+	
+		// Glow effect
+		FillSpriteQuad(&q, bowlingballglowSprite->Index, 0, 0);
+		TransformQuad(&q, 0, GlowSize, GlowSize, PosX, PosY);
+		q.blend = 1;
+		for(j=0 ; j<4 ; j+=1) q.v[j].color = RGB(80,110,128);
+		
+		for(j=0 ; j<3 ; j+=1)
+			AddSpriteQ(ZPlane+0.02, &q, bowlingballglowSprite->Index, 0, 64);
+		
+		if(SparkCycle <= 1.0)
+		{
+			// Spark effect
+			FillSpriteQuad(&q, bowlingballsparkSprite->Index, 0, 0);
+			TransformQuad(&q, Rotation, 1, 1, PosX, PosY);
+			q.blend = 1;
+			for(j=0 ; j<4 ; j+=1) q.v[j].color = RGB(255,255,255);
+			AddSpriteQ(ZPlane, &q, bowlingballsparkSprite->Index, SparkCycle, 64);
+		}
+	}
+	
+	if(EnteredSolid)
+	{
+		AddSpriteEx(9, PosX, PosY, 2, 0, 0, 1);
+	}
+}
+
+void CBowlingBall::ProcessBallOnBallCollision(float Speed)
+{
+	CGObject *obj;
+	
+	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		
+		
+		if(obj->ClType == ClType)
+		{
+			if(ColMask->Check(PosX, PosY, obj->ColMask, obj->PosX, obj->PosY))
+			{
+				float ForceX = obj->PosX - PosX;
+				float ForceY = obj->PosY - PosY;
+				float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+				
+				if(dist > 0)
+				{
+					ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+					ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+					
+					CMessageData msg;
+					msg.params[0]	= 0;
+					msg.fparams[1]	= PosX;
+					msg.fparams[2]	= PosY;
+					msg.fparams[3]	= ForceX;
+					msg.fparams[4]	= ForceY;
+					msg.params[5]	= 1;
+					msg.params[6]	= 0;
+					
+					obj->Message(this, M_GUNEXP, 1032, &msg);
+				}
+			}
+		}
+	}
+}
+
+void CBowlingBall::ProcessBallOnOtherCollision(float Speed)
+{
+	CGObject *obj;
+	float dmg = Speed;
+	
+	if(dmg>MaxDamageSpeed) dmg = MaxDamageSpeed;
+	dmg = MinDamage + (MaxDamage - MinDamage) * (dmg - MinDamageSpeed) / (MaxDamageSpeed - MinDamageSpeed);
+	
+	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(obj->IsMaterial == false) continue;
+		
+		if(ColMask->Check(PosX, PosY, obj->ColMask, obj->PosX, obj->PosY))
+		{
+			float damage = 0;
+			
+			if(obj->ClType == OC_Worm)
+			{
+				local worm = CWorm(obj);
+				
+				if(worm->DamageRecoverTime <= 0)
+				{
+					if(obj->ObjState == WS_IDLE)			damage = dmg;
+					if(obj->ObjState == WS_SLIDING)			damage = dmg;
+					if(obj->ObjState == WS_WALKING)			damage = dmg;
+					if(obj->ObjState == WS_AIMING)			damage = dmg;
+					if(obj->ObjState == WS_FIRED)			damage = dmg;
+					if(obj->ObjState == WS_FIRECONT)		damage = dmg;
+					if(obj->ObjState == WS_DRILLING)		damage = dmg;
+					if(obj->ObjState == WS_CONTROL_WEAPON)	damage = dmg;
+					if(obj->ObjState == WS_SETPOWER)		damage = dmg;
+					if(obj->ObjState == WS_JUMPPREPARE)		damage = dmg;
+					if(obj->ObjState == WS_FROZEN)			damage = dmg;
+					if(obj->ObjState == WS_POWERFLY)		damage = dmg;
+					if(obj->ObjState == WS_FLYING)			damage = dmg;
+					if(obj->ObjState == WS_FLYING2)			damage = dmg;
+					if(obj->ObjState == WS_FLYING2)			damage = dmg;
+					if(obj->ObjState == WS_JETPACK)			damage = dmg;
+					if(obj->ObjState == WS_PARACHUTE)		damage = dmg;
+					if(obj->ObjState == WS_JUMP)			damage = dmg;
+					if(obj->ObjState == WS_ROPING)			damage = dmg;
+					if(obj->ObjState == WS_BUNGEE)			damage = dmg;
+					
+					worm->DamageRecoverTime = 12;
+				}
+			}
+			else if(obj->ClType == OC_Mine)
+			{
+				damage = dmg;
+			}
+			else if((obj->Layer == LAYER_MINE || obj->Layer == LAYER_OILDRUM) && obj->ClType != ClType)
+			{
+				damage = dmg;
+			}
+			else if(obj is CMagnet)
+			{
+				damage = dmg;
+			}
+			else if(obj->ClType == EObjectClass(73))
+			{
+				damage = dmg;
+			}
+			else if(obj->ClType == OC_OilDrum)
+			{
+				damage = 100;
+			}
+			else if(obj->ClType == OC_Crate)
+			{
+				damage = 100;
+			}
+			
+			if(damage > 0)
+			{
+				float ForceX = RealSpX;
+				float ForceY = RealSpY;
+				float ForceXAbs = ForceX;
+				bool crushed = false;
+				
+				if(ForceX < 0) ForceXAbs = 0-ForceXAbs;
+				
+				if(obj->ClType == OC_Worm)
+				{
+					bool crushable = false;
+					if(obj->ObjState == WS_IDLE)			crushable = true;
+					if(obj->ObjState == WS_WALKING)			crushable = true;
+					if(obj->ObjState == WS_AIMING)			crushable = true;
+					if(obj->ObjState == WS_FIRED)			crushable = true;
+					if(obj->ObjState == WS_FIRECONT)		crushable = true;
+					if(obj->ObjState == WS_CONTROL_WEAPON)	crushable = true;
+					if(obj->ObjState == WS_SETPOWER)		crushable = true;
+					if(obj->ObjState == WS_JUMPPREPARE)		crushable = true;
+					
+					if(crushable && ForceY > MinDamageSpeed)
+					{
+						if(ForceXAbs / ForceY < 0.2)
+						{
+							ForceX = 0;
+							ForceY = 10;
+							crushed = true;
+						}
+					}
+				}
+				
+				if(crushed==false)
+				{
+					if(ForceY < 0)
+					{
+						ForceY = ForceY - ForceXAbs;
+					}
+					else
+					{
+						ForceY = ForceY - 2*ForceXAbs;
+					}
+					ForceX = ForceX * DamageForceMultiplier;
+					ForceY = ForceY * DamageForceMultiplier;
+				}
+				
+				CMessageData msg;
+				msg.params[0]	= 0;
+				msg.fparams[1]	= PosX;
+				msg.fparams[2]	= PosY;
+				msg.fparams[3]	= ForceX;
+				msg.fparams[4]	= ForceY;
+				msg.params[5]	= damage;
+				msg.params[6]	= 0;
+				
+				obj->Message(this, M_GUNEXP, 1032, &msg);
+				
+				local p = new PxParticle(81, PosX, PosY);
+				p->SetLifeTime(15);
+				p->SetVelocity(0,0);
+				p->SetStartAlpha(255);
+				p->SetEndAlpha(255);
+				
+				if(crushed)
+				{
+					PlayLocalSound(33, 5, 1.0, 1.0);
+				}
+				else
+				{
+					PlayLocalSound(101, 5, 1.0, 1.0);
+				}
+			}
+		}
+	}
+}
+
+void CBowlingBall::PhysicsThink()
+{
+	if(IsAsleep)
+	{
+		PosX = SleepX;
+		PosY = SleepY;
+		RealSpX = 0.0;
+		RealSpY = 0.0;
+		SpX = 0.0;
+		SpY = 0.0;
+		Stopped = 1;
+		InMidAir = 0;
+	}
+	else
+	{
+		float Speed = sqrt(RealSpX*RealSpX + RealSpY*RealSpY);
+		
+		fixed SpX2 = SpX;
+		fixed SpY2 = SpY + Env->Gravity;
+		
+		float bounciness;
+		float friction;
+		float inertiaX;
+		float inertiaY;
+		
+		if(IsLowSpeed)
+		{
+			bounciness = LowSpeedBounciness;
+			friction = LowSpeedFriction;
+			inertiaX = LowSpeedInertiaX;
+			inertiaY = LowSpeedInertiaY;
+		}
+		else if(ZapTurnsRemaining > 0)
+		{
+			bounciness = ZappedBounciness;
+			friction = ZappedFriction;
+			inertiaX = ZappedInertiaX;
+			inertiaY = ZappedInertiaY;
+		}
+		else
+		{
+			bounciness = PhysBounciness;
+			friction = PhysFriction;
+			inertiaX = PhysInertiaX;
+			inertiaY = PhysInertiaY;
+		}
+		
+		if(SpX2 == 0)
+		{
+			if(SpY2 == 0)
+			{
+				SpY2 = SpY + 0.1;
+			}
+		}
+		
+		// Collision detection
+		if(Speed > MinDamageSpeed)
+		{
+			// Enough speed for knocking stuff out of the way, ignore worms
+			TraceMaskEx(this, BounceColMask, PosX, PosY, PosX + SpX2, PosY + SpY2, NoWormsColGroup, Res);
+		}
+		else
+		{
+			// Regular traces, takes anything solid into consideration
+			TraceMaskEx(this, BounceColMask, PosX, PosY, PosX + SpX2, PosY + SpY2, DefaultColGroup, Res);
+		}
+		if(Res->StartsSolid)
+		{
+			TraceMaskEx(this, BounceColMask, PosX, PosY, PosX + SpX2, PosY + SpY2, NoWormsColGroup, Res);
+			if(Res->StartsSolid)
+			{
+				// The object is stuck inside something solid, try to unblock it
+				TraceMaskEx(this, BounceColMask, PosX, PosY, PosX - 8 * SpX2, PosY - 8 * SpY2, NoWormsColGroup, Res);
+				TraceMaskEx(this, BounceColMask, Res->LeftSolidX, Res->LeftSolidY, Res->LeftSolidX + 8 * SpX2, Res->LeftSolidY + 8 * SpY2, NoWormsColGroup, Res);
+			}
+		}
+		
+		// Couldn't unblock it :(
+		if(Res->StartsSolid)
+		{
+			TraceMaskEx(this, BounceColMask2, PosX, PosY, PosX - 8 * SpX2, PosY - 8 * SpY2, NoWormsColGroup, Res);
+			TraceMaskEx(this, BounceColMask2, Res->LeftSolidX, Res->LeftSolidY, Res->LeftSolidX + 8 * SpX2, Res->LeftSolidY + 8 * SpY2, NoWormsColGroup, Res);
+			if(Res->StartsSolid)
+			{
+				//EnteredSolid = true;
+				//SpY = SpY - 4.0;
+				Sleep();
+			}
+		}
+		
+		// Collision processing
+		if(Res->Hit)
+		{
+			First = false;
+			// Calculating tangent and normal initial forces
+			float SpT = (SpX2 * Res->TangentX) + (SpY2 * Res->TangentY);
+			float SpN = (SpX2 * Res->NormalX ) + (SpY2 * Res->NormalY );
+			
+			// Move the object 1 pixel away from the collision point
+			PosX = Res->PreHitX;
+			PosY = Res->PreHitY;
+			
+			// Calculating bounciness and friction forces
+			float ForceX = 0 - SpN * Res->NormalX * (bounciness + 1.0) - SpT * Res->TangentX * friction;
+			float ForceY = 0 - SpN * Res->NormalY * (bounciness + 1.0) - SpT * Res->TangentY * friction;
+			
+			// Calculating work of the resulting force relative to the current speed
+			float W = (ForceX * SpX2) + (ForceY * SpY2);
+			if(W < -10.0)
+			{
+				// Negative work, the object has been brutally stopped, shake the screen to give more intensity to the impact
+				float shake = 0 - W;
+				if(shake > 50.0) shake = 50.0;
+				shake = shake * 0.1;
+				if(shake > ShakeAmplitude)
+				{
+					GS->ShakeX = GS->ShakeX + (shake - ShakeAmplitude);
+					GS->ShakeY = GS->ShakeY + (shake - ShakeAmplitude);
+					ShakeAmplitude = shake;
+				}
+			}
+			
+			SpX = SpX + ForceX;
+			SpY = SpY + ForceY;
+			
+			float sp = Speed;
+			if(sp > 1.5)
+			{
+				for(int i=0 ; i<4 ; i+=1)
+				{
+					local p = new PxParticle(80, PosX, PosY);
+					p->SetLifeTime(30);
+					p->SetRandomVelocity(sp*0.5, sp*1.2);
+					p->SetAirResistance(0.5);
+					p->SetStartAlpha(255);
+					p->SetEndAlpha(255);
+				}
+			}
+		}
+		
+		SpX = SpX + inertiaX * (SpX - LastSpX);
+		SpY = SpY + inertiaY * (SpY - LastSpY);
+		RealSpX = PosX - LastPosX;
+		RealSpY = PosY - LastPosY;
+		
+		// Should solve an issue where the object keeps rolling on a perfectly horizontal surface,
+		// even though friction should prevent it from doing so
+		if(IsLowSpeed)
+		{
+			if(RealSpY > -1.0)
+			{
+				if(RealSpY < 1.0)
+				{
+					if(SpX > -1.0)
+					{
+						if(SpX < 0.0) SpX = 0;
+					}
+				}
+			}
+		}
+		
+		LastPosX = PosX;
+		LastPosY = PosY;
+		LastSpX = SpX;
+		LastSpY = SpY;
+		
+		if(ThrownByExplosion)
+		{
+			if(SpeedFlames)
+			{
+				if(Speed < SpeedFlamesStopThreshold)
+				{
+					SpeedFlamesStopTimer = SpeedFlamesStopTimer - 1;
+					if(SpeedFlamesStopTimer <= 0)
+					{
+						SpeedFlames = false;
+					}
+				}
+				else
+				{
+					SpeedFlamesStopTimer = SpeedFlamesStopDuration;
+				}
+			}
+			else
+			{
+				if(Speed > SpeedFlamesStartThreshold)
+				{
+					SpeedFlamesStopTimer = SpeedFlamesStopDuration;
+					SpeedFlames = true;
+				}
+				ThrownByExplosionTimer = ThrownByExplosionTimer - 1;
+				if(ThrownByExplosionTimer <= 0)
+				{
+					ThrownByExplosion = false;
+				}
+			}
+		}
+		if(Speed > MinPushSpeed)
+		{
+			ProcessBallOnBallCollision(Speed);
+		}
+		
+		if(Speed > MinDamageSpeed)
+		{
+			ProcessBallOnOtherCollision(Speed);
+		}
+		if(Speed < LowSpeedThreshold)
+		{
+			LowSpeedTimer = LowSpeedTimer - 1;
+			if(LowSpeedTimer <= 0)
+			{
+				//local p = new PxParticle(81, PosX, PosY);
+				//p->SetLifeTime(30);
+				//p->SetVelocity(0,0);
+				//p->SetStartAlpha(255);
+				//p->SetEndAlpha(255);
+				IsLowSpeed = true;
+				LowSpeedTimer = TimeForLowSpeed;
+			}
+		}
+		else
+		{
+			LowSpeedTimer = TimeForLowSpeed;
+			IsLowSpeed = false;
+		}
+		
+		SleepSampleTimer = SleepSampleTimer - 1;
+		if(SleepSampleTimer <= 0)
+		{
+				//local p = new PxParticle(79, PosX, PosY);
+				//p->SetLifeTime(30);
+				//p->SetVelocity(0,0);
+				//p->SetStartAlpha(255);
+				//p->SetEndAlpha(255);
+				
+			float dx = PosX - LastRecordPosX;
+			float dy = PosY - LastRecordPosY;
+			float dist = sqrt(dx*dx+dy*dy);
+			
+			if(dist < SleepDistanceThreshold) Sleep();
+			
+			SleepSampleTimer = SleepSamplePeriod;
+			LastRecordPosX = PosX;
+			LastRecordPosY = PosY;
+		}
+	}
+}
+
+void CBowlingBall::DoTrailEffects()
+{
+	local p0 = PxParticle(NullObj);
+	float s0;
+	float s1;
+	
+	if(IsAsleep == false && IsLowSpeed == false)
+	{
+		// Regular trail
+		p0 = new PxParticle(bowlingballglowSprite->Index, PosX, PosY);
+		p0->SetBlendMode(1);
+		p0->SetStartColor(45,10,4);
+		p0->SetEndColor(0,0,0);
+		p0->SetLifeTime(15);
+		p0->SetRandomVelocity(0, 0);
+		p0->SetAirResistance(0);
+		p0->SetAlpha(255);
+		p0->SetStartSize(0.3,0.3);
+		p0->SetEndSize(0.35,0.35);
+	}
+	
+	// Electrified ball
+	GlowSize = RandomFloat(0.3, 0.4);
+	if(ZapTurnsRemaining > 0 && (IsAsleep == false))
+	{
+		//s0 = RandomFloat(0.2,0.3);
+		//s1 = RandomFloat(0.4,0.5);
+			
+		p0 = new PxParticle(bowlingballglowSprite->Index, PosX, PosY);
+		p0->SetBlendMode(1);
+		p0->SetStartColor(80,110,128);
+		p0->SetEndColor(0,0,0);
+		p0->SetLifeTime(30);
+		p0->SetRandomVelocity(0, 0.3);
+		p0->SetAirResistance(0.0);
+		p0->SetAlpha(255);
+		p0->SetStartSize(0.3,0.3);
+		p0->SetEndSize(0.5,0.5);
+	}
+	// Fire trail when the ball is thrown by an explosion
+	else if(ThrownByExplosion && (IsAsleep == false))
+	{
+		if(SpeedFlames)
+		{
+			s0 = RandomFloat(0.2, 0.3);
+			s1 = RandomFloat(0.1, 0.2);
+			
+			p0 = new PxParticle(bowlingballglowSprite->Index, PosX, PosY);
+			p0->SetBlendMode(1);
+			p0->SetStartColor(160,RandomInt(30,160),10);
+			p0->SetEndColor(0,0,0);
+			p0->SetLifeTime(20);
+			p0->SetRandomVelocity(0, 0.3);
+			p0->SetAirResistance(0);
+			p0->SetAlpha(255);
+			p0->SetStartSize(s0,s0);
+			p0->SetEndSize(s1,s1);
+		}
+	}
+}
+
+void CBowlingBall::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Wtfboom) return;
+	
+	if(Type == M_EXPLOSION)
+	{
+		TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]);
+		ThrownByExplosion = true;
+		ThrownByExplosionTimer = ThrownByExplosionTimeout;
+		float force = MData->params[3];
+		force = force * ExplosionForceMultiplier;
+		MData->params[3] = force;
+	}
+	if(Type == M_GUNEXP)
+	{
+		TakeDamage(MData->params[0], MData->params[5]);
+		MData->params[3] = MData->params[3] * GunForceMultiplier;
+		MData->params[4] = MData->params[4] * GunForceMultiplier;
+	}
+	
+	if(Type==M_FRAME)
+	{
+		if(ShakeAmplitude > 0)
+		{
+			ShakeAmplitude = ShakeAmplitude - ShakeFadeRate;	if(ShakeAmplitude < 0) ShakeAmplitude = 0;
+			GS->ShakeX = GS->ShakeX - ShakeFadeRate;			if(GS->ShakeX < 0) GS->ShakeX = 0;
+			GS->ShakeY = GS->ShakeY - ShakeFadeRate;			if(GS->ShakeY < 0) GS->ShakeY = 0;
+		}
+		
+		if(Sinking==false)
+		{
+			DoAnimation();
+			UpdateRotation();
+			PhysicsThink();
+			DoTrailEffects();
+		}
+	}
+	
+	if(Type==M_DRAWQUEUE)
+	{
+		Render();
+		return;
+	}
+	
+	super;
+	
+	if(Type == M_FRAME)
+	{
+		if(Wtfboom) Free(true);
+	}
+}
+
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	super;
+	DamageRecoverTime = 0;
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		if(DamageRecoverTime > 0) DamageRecoverTime = DamageRecoverTime - 1;
+	}
+	
+	super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Bowling Ball"))
+	{
+		CShootDesc SDesc;
+		zero(&SDesc);
+
+		local BaseForceX = 0.4;
+		local BaseForceY = 0.8;
+		
+		SDesc.Team = WormTeam;
+		SDesc.X = PosX;                    
+		SDesc.Y = PosY;                       
+		SDesc.SpX = (0.5 * SpX) + TurnSide * BaseForceX;
+		SDesc.SpY = (0.5 * SpY) - BaseForceY;
+		
+		DamageRecoverTime = 50;
+		new CBowlingBall(GetObject(25, 0), &SDesc);
+	}
+	else if(Weap->CheckName("Earth Quake"))
+	{
+		CGObject *obj;
+		CBowlingBall *ball;
+		for(int i = 0; i < Env->Objs.Count; i += 1)
+		{
+			obj = CGObject(Env->Objs.Objs[i]);
+			if(obj == NullObj) continue;
+			
+			if(obj->ClType == EObjectClass(71))
+			{
+				ball = CBowlingBall(obj);
+				ball->Wake();
+			}
+		}
+		super;
+	}
+	else
+	{
+		super;
+	}
+}

@@ -1,0 +1,10 @@
+// These fireworks are copied from Pyroman's New Age RR
+//
+// Original Naming:
+//
+// Cluster Bomb - Firework
+// Banana Bomb - Firework1
+// Earth Quake - Firework3
+// Holy Hand-Grenade - Firework4
+// Sheep Launcher - Firework6
+//

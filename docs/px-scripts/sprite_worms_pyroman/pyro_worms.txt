@@ -1,0 +1,58 @@
+// this script changes jetpack, uzi, blowtorch, water bubbles and dragonball sprites
+
+CSprite* wjetflmd;
+CSprite* wjetflmb;
+
+CSprite* uzihit;
+CSprite* uzihit_bub;
+CSprite* uzihit3;
+
+CSprite* wbloww;
+CSprite* wblowu;
+CSprite* wblowd;
+
+CSprite* bubble3;
+CSprite* fireball;
+
+void pyro_worms::InitGraphic()
+{
+   CFile *f;
+   
+   f = GetAttachment("wjetflmd.png");
+   wjetflmd = LoadSprite(f, 6, 0);
+   SetSpriteOverride(172, wjetflmd);
+   f = GetAttachment("wjetflmb.png");
+   wjetflmb = LoadSprite(f, 6, 0);
+   SetSpriteOverride(171, wjetflmb);   
+   
+   f = GetAttachment("uzihit.png");
+   uzihit_bub = LoadSprite(f, 40, 0);
+   SetSpriteOverride(625, uzihit_bub);
+   SetSpriteOverride(626, uzihit_bub);   
+   f = GetAttachment("uzihit2.png");
+   uzihit = LoadSprite(f, 8, 0);
+   SetSpriteOverride(114, uzihit);
+   SetSpriteOverride(116, uzihit);
+   SetSpriteOverride(507, uzihit);   
+   f = GetAttachment("uzihit3.png");
+   uzihit3 = LoadSprite(f, 40, 0);
+   SetSpriteOverride(131, uzihit3);
+   
+   f = GetAttachment("wbloww.png");
+   wbloww = LoadSprite(f, 15, 1);
+   SetSpriteOverride(140, wbloww);
+   f = GetAttachment("wblowu.png");
+   wblowu = LoadSprite(f, 15, 1);
+   SetSpriteOverride(141, wblowu);
+   f = GetAttachment("wblowd.png");
+   wblowd = LoadSprite(f, 15, 1);
+   SetSpriteOverride(142, wblowd);
+   
+   f = GetAttachment("bubbles1.png");
+   bubble3 = LoadSprite(f, 28, 0);
+   SetSpriteOverride(623, bubble3);
+   SetSpriteOverride(624, bubble3);
+   f = GetAttachment("fireball.png");
+   fireball = LoadSprite(f, 8, 1);
+   SetSpriteOverride(83, fireball);
+}

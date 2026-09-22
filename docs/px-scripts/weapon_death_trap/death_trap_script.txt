@@ -1,0 +1,19 @@
+//List of sprites
+CSprite* dtskull;
+CSoundFile* hsouls;
+
+void death_trap_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("Death Trap Skull.png"); 
+   dtskull = LoadSprite(f, 0, 1);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(718, dtskull);
+}
+
+void death_trap_script::Init()
+{
+	hsouls  = new CSoundFile(GetAttachment("Haunted Souls.wav"));
+}

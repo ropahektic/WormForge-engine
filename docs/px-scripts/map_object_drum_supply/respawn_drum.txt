@@ -1,0 +1,55 @@
+require utils;
+
+$editor
+ $object OilDrumSupply
+  $origin -13 -17
+  $image "edrespdrum.png"
+  $autoname OilDrum
+  $func SpawnRespDrum
+  $param RespawnTime int 0
+  $radius 19
+ $object_end
+ 
+$end
+
+COilDrumSupply : CObject;
+
+
+COilDrumSupply::COilDrumSupply(CEditorObject* obj)
+{
+  super(Root, GS);
+  PosX = obj->PosX; 
+  PosY = obj->PosY;
+  respawnTime = obj->GetInt("RespawnTime");
+  timer = respawnTime;
+  spawnedrum = COilDrum(NullObj);
+  Spawn();
+};
+
+bool COilDrumSupply::Spawn()
+{
+  ndrum = new COilDrum(Root->GetObject(25, 0), PosX, PosY, true);
+//  ndrum->paparentSpawner = this;
+  timer = respawnTime;
+//  return ndrum; 
+};
+
+void COilDrumSupply::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_TURNEND)
+   {
+     if (spawnedrum == NullObj)
+     {
+       if (timer <= 0)
+       {
+         Spawn();
+       } else
+       timer--;
+     } else timer = respawnTime;
+   }
+}
+
+void SpawnRespDrum(CEditorObject* obj)
+{
+  ds = new COilDrumSupply(obj);
+};

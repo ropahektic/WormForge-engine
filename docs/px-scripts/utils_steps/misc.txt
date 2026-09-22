@@ -1,0 +1,101 @@
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    DoRm = false;
+    super;
+}
+
+void FinishRound()
+{
+        for (local i = 1; i < Env->Objs.Count; i++)
+        {
+            local foundObj = CGObject(Env->Objs.Objs[i]);
+            local wrm = CWorm(foundObj);
+            if (wrm is CWorm)
+            {
+                wrm->DoRm = true;
+                wrm->PosY = Env->Water + 2000;
+            }
+        }
+        
+        CMessageData *loldata = new CMessageData;
+        loldata->params[0] = 1;
+        Root->Message(Root, M_TURNBEGIN,4,loldata);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool Turnfinishing;
+
+void FinishTurnEx()
+{
+    Turnfinishing = true;
+    CMessageData *loldata = new CMessageData;
+    loldata->params[0] = 1;
+    Root->Message(Root->GetObject(25, 0),M_SKIPTURN,4,loldata);         
+}
+
+override void CObject::PlaySound(int SIndex,int UnkB,fixed UnkC,fixed Pan)
+{                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+     if (Turnfinishing && (SIndex == 136 || SIndex == 190 || SIndex == 244 || SIndex == 298 || SIndex == 352 || SIndex == 406))
+     {
+         SIndex = 666;
+         Turnfinishing = false;  
+     }
+     
+     else super;
+     
+}
+////////////////////////////////////////////////////////////////////////////////
+
+int modulei(int i)
+{
+    if (i < 0) return i*(-1);
+    else if (i >= 0) return i;
+}
+
+float modulef(float f)
+{
+    if (f < 0) return f*(-1);
+    else if (f >= 0) return f;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ShowMessage2(string part1, string part2)                             {ShowMessage(StrCon(part1,part2));}
+void ShowMessage3(string part1, string part2, string part3)               {ShowMessage(StrCon(StrCon(part1,part2),part3));}
+void ShowMessage4(string part1, string part2, string part3, string part4) {ShowMessage2(StrCon(part1,part2),StrCon(part3,part4));}
+
+////////////
+
+void CObject::ShowTeamMessage2(int fontColor,string part1,string part2,int team)              {ShowTeamMessage(fontColor,StrCon(part1,part2),team);}
+void CObject::ShowTeamMessage3(int fontColor,string part1,string part2,string part3,int team) {ShowTeamMessage(fontColor,StrCon(StrCon(part1,part2),part3),team);}
+
+////////////
+
+void CObject::CurTeamMessage(string msg)                              {ShowTeamMessage(Root->GetCurColor(),msg,Root->CurTeam);}
+void CObject::CurTeamMessage2(string part1,string part2)              {ShowTeamMessage(Root->GetCurColor(),StrCon(part1,part2),Root->CurTeam);}                                                      
+void CObject::CurTeamMessage3(string part1,string part2,string part3) {ShowTeamMessage(Root->GetCurColor(),StrCon(StrCon(part1,part2),part3),Root->CurTeam);}
+
+////////////////////////////////////////////////////////////////////////////////
+
+string StrCon3(string s1, string s2, string s3)                                                        {return StrCon(StrCon(s1,s2),s3);}
+string StrCon4(string s1, string s2, string s3, string s4)                                             {return StrCon(StrCon(s1,s2),StrCon(s3,s4));}
+string StrCon5(string s1, string s2, string s3, string s4, string s5, string s6)                       {return StrCon(StrCon(StrCon(s1,s2),StrCon(s3,s4)),s5);}
+string StrCon6(string s1, string s2, string s3, string s4, string s5, string s6)                       {return StrCon(StrCon(StrCon(s1,s2),StrCon(s3,s4)),StrCon(s5,s6));}
+string StrCon7(string s1, string s2, string s3, string s4, string s5, string s6, string s7)            {return StrCon(StrCon(StrCon(s1,s2),StrCon(s3,s4)),StrCon(StrCon(s5,s6),s7));}
+string StrCon8(string s1, string s2, string s3, string s4, string s5, string s6, string s7, string s8) {return StrCon(StrCon(StrCon(s1,s2),StrCon(s3,s4)),StrCon(StrCon(s5,s6),StrCon(s7,s8)));}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int CTurnGame::GetCurColor()
+{
+    local i = 1;
+    CWorm* w = GetCurrentWorm();
+    
+    if (w != NullObj)
+    {
+        i = w->LabelColor;
+    }
+    
+    return i; 
+}

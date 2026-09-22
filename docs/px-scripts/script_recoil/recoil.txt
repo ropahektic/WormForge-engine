@@ -1,0 +1,17 @@
+require utils;
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+local recoil = 3.0;
+if (TurnSide == 1)
+  	{
+    SpX += recoil * cos((0.5 + FireAngle) * MATH_PI);
+    SpY += recoil * -sin((0.5 + FireAngle) * MATH_PI);
+  	}
+else if (TurnSide == -1)
+  	{
+    SpX += recoil * cos((0.5 - FireAngle) * MATH_PI);
+    SpY += recoil * -sin((0.5 - FireAngle) * MATH_PI);
+  	}
+}

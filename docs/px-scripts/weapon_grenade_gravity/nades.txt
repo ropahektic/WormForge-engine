@@ -1,0 +1,33 @@
+require utils;
+
+WindNade : CMissile;
+GravityNade : CMissile;
+
+override void CWorm:: OnSink() { return; }
+
+WindNade::WindNade(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+WindFactor = 1;
+}
+
+GravityNade::GravityNade(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+GravityFactor = 2;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if (Weap->CheckName("GravNade"))
+	{
+	new GravityNade(Root->GetObject(25, 0),&Weap->launch, Desc);
+	return;
+	}
+if (Weap->CheckName("WindNade"))
+	{
+	new WindNade(Root->GetObject(25, 0),&Weap->launch, Desc);
+	return;
+	}
+super;
+}

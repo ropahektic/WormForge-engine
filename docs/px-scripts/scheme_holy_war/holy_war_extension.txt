@@ -1,0 +1,115 @@
+require utils, utils_steps;
+
+int hw_turn_counter;
+int hw_actual_loops;
+int hw_numOfTeamColors;
+bool GPInformer;
+bool GRDInformer;
+
+CSprite* hwlogo;
+
+void holy_war_extension::FirstFrame()
+{
+    hw_turn_counter = 0;
+    
+    hw_numOfTeamColors = 0;
+    local n = 1;
+    for(n=1; n<7; n++){if(Root->NextColor[n] > 0){hw_numOfTeamColors++;}}
+
+	GG->WriteToChat(GG->curFont+3," ---------------------------------------------- H O L Y  W A R ---------------------------------------------- ",false);
+    GG->WriteToChat(GG->curFont+6,"    - You get +1 HHG each turn, and you can stockpile your unused ones",false);
+    GG->WriteToChat(GG->curFont+6,"    - All weapons except the Holy Hand-Grenade end turn",false);
+    GG->WriteToChat(GG->curFont+6,"    - After 4 loops of teams Girder Packs are removed",false);
+    GG->WriteToChat(GG->curFont+6,"    - After 6 loops of teams 1 Girder is given each turn",false);
+    GG->WriteToChat(GG->curFont  ,"    - After 8 loops there is chance of a random earthquake, make your worms safe!",false);
+    GG->WriteToChat(GG->curFont+3," ------------------------------------------- N O  B L O C K I N G -------------------------------------------",false);
+
+    //Background img
+	CFile *f;
+	f = GetAttachment("holy_war_logo.png");		hwlogo = LoadSprite(f, 1, 0);
+}
+
+void holy_war_extension::Init()
+{
+GPInformer = true;
+GRDInformer = true;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_TURNEND)
+	{
+	hw_turn_counter = hw_turn_counter + 1;
+	}
+super;
+}
+ 
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+local w = GetCurrentWorm();
+
+if (Type == M_FRAME && gframe == 1)
+	{
+    local hhg = GetWeaponByName("Holy Hand-Grenade");
+    GS->Info.SetWeaponEx(WormTeam, hhg->GetWeaponIndex(), hhg->GetPageIndex(), 0);
+    GS->Info.SetWeaponDelay(WormTeam, hhg->GetWeaponIndex(), hhg->GetPageIndex(), 1 );
+	}
+ 
+if (w != NullObj)
+ 	{
+ 	local hw_team_number = GetTeamNumber(w->WormTeam);
+	hw_actual_loops = hw_turn_counter / hw_numOfTeamColors;
+	hw_font_color = GetTeamColor(w->WormTeam) + 1;
+	
+ 	local hhg = GetWeaponByName("Holy Hand-Grenade");
+    local gp = GetWeaponByName("Girder Starter-Pack");
+    local grd = GetWeaponByName("Girder");
+            
+    if(Type == M_TURNEND)
+        {
+        GS->Info.AddWeaponEx(hw_team_number, hhg->GetWeaponIndex(), hhg->GetPageIndex(), 1);
+        GS->Info.SetWeaponDelay(hw_team_number, hhg->GetWeaponIndex(), hhg->GetPageIndex(), 0 );
+		}
+		
+    if(Type == M_TURNEND && hw_actual_loops == 4)
+        {
+        GS->Info.SetWeaponDelay(hw_team_number, gp->GetWeaponIndex(), gp->GetPageIndex(), -1 );
+        if(GPInformer == true)
+            {
+            GG->WriteToChat(GG->curFont,"    - No more Girder Packs from now on!",false);
+            GPInformer = false;
+            }
+		}
+		
+    if(Type == M_TURNEND && hw_actual_loops > 6)
+        {
+        GS->Info.AddWeaponEx(hw_team_number, grd->GetWeaponIndex(), grd->GetPageIndex(), 1);
+        if(GRDInformer == true)
+            {
+            GG->WriteToChat(GG->curFont,"    - You are given one Girder each turn now!",false);
+            GRDInformer = false;
+            }
+		}
+	}
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_DRAWQUEUE)
+	{
+    local levX = GS->LevelSX;
+    local levY = GS->LevelSY;
+    SetColorMod(RGB(100, 100, 100), 0);
+	AddSpriteEx(25,levX / 2,levY / 2, hwlogo->Index,1.0,0.0,1.0);
+	ClearColorMod();
+	}
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    local TeamNumber = GetTeamNumber(WormTeam);
+    if(Weap->CheckName("Teleport")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 2);}
+super;
+}

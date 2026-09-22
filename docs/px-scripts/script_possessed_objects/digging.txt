@@ -1,0 +1,50 @@
+void CMine::Digging()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+      if(this != obj)
+      {
+           if(obj->ClType == OC_Missile || obj->ClType == OC_DragonBall || obj->ClType == OC_Arrow || obj->ClType == OC_Flame || obj->ClType == OC_Fire || obj->ClType == OC_Crate)
+           {
+           DigAwayCheck(obj);             
+           }
+      }
+  }
+}
+
+void CMine::DigAwayCheck(CGObject *obje)
+{
+     if(DistBetweenObjs(this, obje) <= 250)
+     {
+           GG->land->ApplyMask(1, PosX+3, PosY+5);
+
+     }
+}
+
+void COilDrum::Digging()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+      if(this != obj)
+      {
+           if(obj->ClType == OC_Missile || obj->ClType == OC_DragonBall || obj->ClType == OC_Arrow || obj->ClType == OC_Flame || obj->ClType == OC_Fire || obj->ClType == OC_Crate)
+           {
+           DigAwayCheck(obj);             
+           }
+      }
+  }
+}
+
+void COilDrum::DigAwayCheck(CGObject *obje)
+{
+     if(DistBetweenObjs(this, obje) <= 250)
+     {
+           GG->land->ApplyMask(1, PosX, PosY+10);
+           GG->land->ApplyMask(1, PosX+5, PosY+10);
+           GG->land->ApplyMask(1, PosX-5, PosY+10);
+     }
+}

@@ -1,0 +1,26 @@
+CWorm* CurentW;
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_TURNBEGIN)
+	{
+    CurentW = this;
+    }
+
+if(Type == M_FRAME)
+	{
+    if(GS->Info.GetWormHealth(WormTeam, WormNumber) == 0 && dead == false)
+		{
+        dead = true;
+        if(CurentW != this && CurentW != NullObj && CurentW->dead != true && CurentW->WormTeam != WormTeam)
+			{
+            GS->Info.SetWormHealth(CurentW->WormTeam, CurentW->WormNumber, CurentW->TargHealth + 30);
+            CurentW->ShowHealthChgLbl + 30;    //mc: Life after each opponent worm kill, doesn't work if turn is ended
+
+            SpawnUtilityCrate();
+            SpawnNikolaWeapon();               //mc: 1 weapon and 1 utility crate after a worm kill. Codes for generating these crates can be found in "CratesSpawnScript"
+            }
+        }
+    }
+super;
+}

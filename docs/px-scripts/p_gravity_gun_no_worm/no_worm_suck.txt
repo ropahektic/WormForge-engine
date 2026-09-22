@@ -1,0 +1,145 @@
+require utils, p_gravity_gun;
+
+//tweak no worms gravity gun by rafa2
+override void CWorm::SuckObject()
+{
+     GG_calculate_angle();
+
+    float endX = PosX + GG_ang_x * gg_throw_distance*3;
+    float endY = PosY + GG_ang_y * gg_throw_distance*3;
+
+    int hitX; int hitY;
+    CGObject *hitObject = TraceLine(this, PosX, PosY, endX, endY, 2+4+8+16+32+64+128+256+512+1024+2048+4096+8192+16384+32768+65536+131072+262144+524288, &hitX, &hitY);
+
+    if(hitObject != NullObj)
+    {
+                        for(i = 1; i < Env->Objs.Count; i += 1)
+            {
+                obj = CGObject(Env->Objs.Objs[i]);
+                if(obj == NullObj) continue;
+                if(obj->ClType == OC_Landscape) continue;
+                if(obj->ClType == OC_Worm) continue;
+
+                if (obj == hitObject)
+                {
+                    gg_prev_px = obj->PosX - obj->SpX;       // !
+                    gg_prev_py = obj->PosY - obj->SpY;
+                    local hit = CheckMaskAt(obj, obj->ColMask, hitX, hitY, 2); // checking landscape collision only
+
+                                        float dx = PosX - hitX;
+                    float dy = PosY - hitY;
+                    float dsqr = dx*dx+dy*dy;
+
+                    if (#WEAPON_BOWLINGBALL)
+                                        {
+                                            if (obj is CBowlingBall)
+                                            {
+                                            CBowlingBall* m = CBowlingBall(obj);
+                                            m->Wake();
+                                            m->SpX = 0.0;
+                                            m->SpY = 0.0;
+                                            }
+                                        }
+                    local g = obj->GravityFactor;
+                    obj->GravityFactor = 0.0;
+
+                                        local dist = sqrt(dsqr);
+                    if (dist <= (gg_stop_radius + 0.5))
+                    {
+                        gg_play_if_pickup = true;
+                        gg_active_holder = true;
+                                                gg_hold = true;
+                                                ggun_used = false;
+                        holded_obj = obj;
+                        gg_just_opened_holder = true;
+                    } else
+                    if (dist <= gg_throw_distance/2)
+                    {
+                        if (hit == NullObj)
+                        {
+                            obj->PosX = hitX+GG_ang_x*obj->MaskIndex;
+                            obj->PosY = hitY+GG_ang_y*obj->MaskIndex;
+                        }
+                                                obj->SpX    = -GG_ang_x * gg_suck_speed*2.5;
+                        obj->SpY    = -GG_ang_y * gg_suck_speed*2.5;
+                        if (gg_play_if_pickup)
+                        {
+                            gg_pickup_s->Play( 1.0, 1.0, false);
+                                                    gg_play_if_pickup = false;
+                        }
+                                                gg_active_holder = true;
+                    }
+                                         else
+                                        {
+                        gg_play_if_pickup = true;
+                        if (hit == NullObj)
+                        {
+                            obj->PosX = hitX+GG_ang_x*obj->MaskIndex;
+                            obj->PosY = hitY+GG_ang_y*obj->MaskIndex;
+                        }
+                                                obj->SpX    = -GG_ang_x * gg_suck_speed;
+                        obj->SpY    = -GG_ang_y * gg_suck_speed;
+                        gg_active_holder = false;
+                    }
+
+                    if (obj->PosX == gg_prev_px && obj->PosY == gg_prev_py)
+                    {
+                        if (hit == NullObj)
+                        {
+                            obj->PosX = hitX+GG_ang_x*obj->MaskIndex;
+                            obj->PosY = hitY+GG_ang_y*obj->MaskIndex;
+                        }
+                                                obj->SpY += RandomFloat(-5.0, 0.0);
+                        obj->SpX += RandomFloat(-5.0, 5.0);
+                    }
+
+                    obj->GravityFactor = g;
+                    return;
+
+                                }
+            }
+    }
+}
+
+override void CWorm::CheckPossibleSuck()
+{
+//    local w = GetCurrentWorm();
+//    if (w == NullObj || w != this) return;
+    GG_calculate_angle();
+
+    float endX = PosX + GG_ang_x * gg_throw_distance*3;
+    float endY = PosY + GG_ang_y * gg_throw_distance*3;
+
+    int hitX; int hitY;
+    CGObject *hitObject = TraceLine(this, PosX, PosY, endX, endY, 2+4+8+16+32+64+128+256+512+1024+2048+4096+8192+16384+32768+65536+131072+262144+524288, &hitX, &hitY);
+
+    if(hitObject != NullObj)
+    {
+                        for(i = 1; i < Env->Objs.Count; i += 1)
+            {
+                obj = CGObject(Env->Objs.Objs[i]);
+                if(obj == NullObj) continue;
+                if(obj->ClType == OC_Landscape) continue;
+                if(obj->ClType == OC_Worm) continue;
+
+                if (obj == hitObject)
+                {
+
+                    gg_active_holder = true;
+                    if (gg_play_if_possible)
+                                        {
+                                           gg_possible_hit_s->Play(1.0, 1.0, false);
+                                           gg_play_if_possible = false;
+                                        }
+                    return;
+
+                                }
+            }
+            gg_active_holder = false;
+            gg_play_if_possible = true;
+    } else
+        {
+           gg_active_holder = false;
+           gg_play_if_possible = true;
+        }
+}

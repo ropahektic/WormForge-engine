@@ -1,0 +1,14 @@
+   CSprite* mineon;
+   CSprite* mineoff;
+
+   void mines_cake::InitGraphic()
+{
+   CFile *f;
+   
+   f = GetAttachment("mineon.png");
+   mineon = LoadSprite(f, 32, 1);
+   SetSpriteOverride(45, mineon);
+   f = GetAttachment("mineoff.png");
+   mineoff = LoadSprite(f, 32, 1);
+   SetSpriteOverride(47, mineoff);
+}

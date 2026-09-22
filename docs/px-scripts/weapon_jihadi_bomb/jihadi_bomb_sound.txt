@@ -1,0 +1,38 @@
+require utils;
+
+CSoundFile* alhamdulillah;
+CSoundFile* subhanallah;
+CSoundFile* allahuakbar1;
+CSoundFile* allahuakbar2;
+CSoundFile* allahuakbar3;
+CSoundFile* allahuakbar4;
+CSoundFile* allahuakbar5;
+ 
+void jihadi_bomb_sound::Init()
+{
+	alhamdulillah       = new CSoundFile(GetAttachment("Alhamdulillah.wav"));
+	subhanallah       = new CSoundFile(GetAttachment("Subhanallah.wav"));	
+    allahuakbar1       = new CSoundFile(GetAttachment("Allahu Akbar 1.wav"));
+	allahuakbar2       = new CSoundFile(GetAttachment("Allahu Akbar 2.wav"));
+	allahuakbar3       = new CSoundFile(GetAttachment("Allahu Akbar 3.wav"));
+	allahuakbar4       = new CSoundFile(GetAttachment("Allahu Akbar 4.wav"));
+	allahuakbar5       = new CSoundFile(GetAttachment("Allahu Akbar 5.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Jihadi-Bomb"))
+  {  
+            local i = RandomInt(1,2);
+	    if      (i == 1) alhamdulillah->Play(1.85, 0.0, false);
+            else if (i == 2) subhanallah->Play(1.85, 0.0, false);
+            
+            local i = RandomInt(1,5);
+	    if      (i == 1) allahuakbar1->Play(1.75, 0.0, false);
+            else if (i == 2) allahuakbar2->Play(1.75, 0.0, false);
+            else if (i == 3) allahuakbar3->Play(1.75, 0.0, false);
+            else if (i == 4) allahuakbar4->Play(1.75, 0.0, false);
+            else if (i == 5) allahuakbar5->Play(1.75, 0.0, false);
+  }
+  super;
+}

@@ -1,0 +1,12 @@
+CSprite* jolt_tr;
+
+void sprite_458::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("joltt.png");
+    jolt_tr = LoadSprite(f, 6, 0);
+    //f = GetAttachment("joltt.png");
+    //joltt = LoadSprite(f, 19, 0);
+
+    SetSpriteOverride(458, jolt_tr);
+}

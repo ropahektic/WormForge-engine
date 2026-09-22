@@ -1,0 +1,12 @@
+require utils, fow_spawn, fow_magicmole, weapon_sentry_gun, fow_mole_fort_light;
+
+//Remove bottom pixels on map (prevents holes generation)
+
+void map_cutter::FirstFrame()
+{
+local nmasks = int(GS->LevelSX / 19) + 1;
+for(int m = 0; m < nmasks; m++)
+	{
+    GG->land->ApplyMask (4,m * 19,GS->LevelSY + 2);
+    }
+}

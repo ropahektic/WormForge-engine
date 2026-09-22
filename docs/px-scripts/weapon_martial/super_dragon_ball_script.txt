@@ -1,0 +1,35 @@
+require utils, utils_steps;
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_SPACE)
+    {
+        if (CurWeapon->CheckName("Super Dragon Ball") && ObjState != WS_ROPING && ObjState != WS_JETPACK && ObjState != WS_BUNGEE && ObjState != WS_PARACHUTE)
+        {
+            if      (TurnSide > 0) {TurnSide =  2;}
+            else if (TurnSide < 0) {TurnSide = -2;}
+        }
+    }
+
+    if (Type == M_FRAME)
+    {
+        if (CurWeapon->CheckName("Super Dragon Ball") && ObjState == WS_FIRED)
+        {
+            if      (TurnSide > 0) {TurnSide =  2;}
+            else if (TurnSide < 0) {TurnSide = -2;}
+
+            supdragball = true;
+        }
+
+        else supdragball = false;
+
+        if (ObjState == WS_IDLE || ObjState == WS_ROPING || ObjState == WS_JETPACK || ObjState == WS_BUNGEE || ObjState == WS_PARACHUTE)
+        {
+            if      (TurnSide ==  2) TurnSide =  1;
+            else if (TurnSide == -2) TurnSide = -1;
+        }
+    }
+
+
+super;
+}

@@ -1,0 +1,240 @@
+require utils;
+
+bool teams_surrendered[6]; 
+
+bool isTeamAlive(int team_number)
+{
+     if(Root->GetObject(TI_Team, team_number + 1) == NullObj) 
+     {
+          return false;
+     }
+     
+     if(teams_surrendered[team_number] == true)
+     {
+          return false;
+     }
+     
+     for(local i = 0; i <= 7; i++)
+     {
+          if(GS->Info.Teams[team_number].Worms[i].Health != 0) 
+          {
+               return true;
+          }
+     }
+     
+     return false;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{
+     if(type == M_SURRENDER)
+     {
+          teamSurrendered(getWormTeam(Current_Worm, 0));     
+     }
+     
+     super;
+}
+
+void teamSurrendered(int team_number)
+{
+     teams_surrendered[team_number] = true;
+} 
+
+// gets the team number belonging to the given team color, using the preferred indexing (zero-based or one-based)
+int getTeamNumber(int team_color, int start_index)
+{
+     for(int i = 1; i < Env->Objs.Count; i++)
+     {
+          local obj = Env->Objs.Objs[i];
+               
+          if(obj == NullObj)
+          {
+               continue;
+          }
+               
+          if((obj is CWorm) == false)
+          { 
+               continue;
+          }
+               
+          CWorm* worm = CWorm(obj);
+          
+          if(worm == NullObj) 
+          {
+               continue;
+          } 
+          
+          if(getWormColor(worm, start_index) == team_color)
+          {
+               return getWormTeam(worm, start_index);
+          }
+     } 
+     
+     return -1;   
+}
+
+// gets the team color belonging to the given team number, using the preferred indexing (zero-based or one-based)
+int getTeamColor(int team_number, int start_index)
+{
+     for(int i = 1; i < Env->Objs.Count; i++)
+     {
+          local obj = Env->Objs.Objs[i];
+               
+          if(obj == NullObj)
+          {
+               continue;
+          }
+               
+          if((obj is CWorm) == false)
+          { 
+               continue;
+          }
+               
+          CWorm* worm = CWorm(obj);
+          
+          if(worm == NullObj) 
+          {
+               continue;
+          } 
+          
+          if(getWormTeam(worm, start_index) == team_number)
+          {
+               return getWormColor(worm, start_index);
+          }
+     } 
+     
+     return -1;   
+}
+
+// gets the RGB values for the given team color, in the chosen color scheme (light or dark)
+int getTeamColorRGB(int team_color, bool standard_colors)
+{
+     int red;
+     int green;
+     int blue;
+     
+     if(standard_colors == true)
+     {
+          getLightTeamColorRGB(team_color, &red, &green, &blue);     
+     }
+     else
+     {
+          getDarkTeamColorRGB(team_color, &red, &green, &blue);     
+     }
+     
+     return RGB(red, green, blue);
+}
+
+// gets the light team color RGB values (standard colors)
+void getLightTeamColorRGB(int team_color, int* red, int* green, int* blue)
+{
+     if(team_color == 1)
+     {       
+          *red = 255; 
+          *green = 128;
+          *blue = 128;
+     } 
+     else if(team_color == 2)
+     {                 
+          *red = 128; 
+          *green = 128;
+          *blue = 255;  
+     } 
+     else if(team_color == 3)
+     {          
+          *red = 128; 
+          *green = 255;
+          *blue = 128; 
+     } 
+     else if(team_color == 4)
+     {  
+          *red = 255; 
+          *green = 255;
+          *blue = 128;  
+     } 
+     else if(team_color == 5)
+     {  
+          *red = 255; 
+          *green = 128;
+          *blue = 255;  
+     } 
+     else if(team_color == 6)
+     {  
+          *red = 128; 
+          *green = 255;
+          *blue = 255;  
+     } 
+     else 
+     {
+          *red = 255; 
+          *green = 255;
+          *blue = 255;      
+     }
+}
+
+// gets the dark team color RGB values (non-standard colors)
+void getDarkTeamColorRGB(int team_color, int* red, int* green, int* blue)
+{
+     if(team_color == 1)
+     {       
+          *red = 254; 
+          *green = 127;
+          *blue = 126;
+     } 
+     else if(team_color == 2)
+     {                 
+          *red = 0; 
+          *green = 149;
+          *blue = 252;  
+     } 
+     else if(team_color == 3)
+     {          
+          *red = 0; 
+          *green = 208;
+          *blue = 0; 
+     } 
+     else if(team_color == 4)
+     {  
+          *red = 252; 
+          *green = 254;
+          *blue = 64;  
+     } 
+     else if(team_color == 5)
+     {  
+          *red = 230; 
+          *green = 0;
+          *blue = 232;  
+     } 
+     else if(team_color == 6)
+     {  
+          *red = 78; 
+          *green = 255;
+          *blue = 252;  
+     } 
+     else 
+     {
+          *red = 255; 
+          *green = 255;
+          *blue = 255;      
+     }
+}
+
+// shows a message to the given team, a given number of times and in the given color
+void showTeamMessage(string message, int message_repetitions, int team_number, int text_color)                             
+{
+     CWorm* Worm_Class;
+     
+     for(local i = 1; i <= message_repetitions; i++)
+     {     
+          Worm_Class->ShowTeamMessage(text_color, message, team_number);
+     }
+}
+
+// shows a message that all teams can see, a given number of times
+void showMessage(string message, int message_repetitions)                             
+{
+     for(local i = 1; i <= message_repetitions; i++)
+     {
+          ShowMessage(message);
+     }
+}

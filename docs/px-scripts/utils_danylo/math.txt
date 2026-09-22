@@ -1,0 +1,18 @@
+
+int dist(CGObject* ObA, CGObject* ObB)
+{
+  int dx = ObA->PosX - ObB->PosX;
+  int dy = ObA->PosY - ObB->PosY;
+  int r = sqrt(dx * dx + dy * dy);
+  return r;
+} 
+
+float abs(float f) {
+  if (f < 0) return -f;
+  else return f;
+}
+
+// random value in range
+float random(float a, float b) {
+  return a + random()*(b-a);
+}

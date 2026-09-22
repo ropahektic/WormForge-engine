@@ -1,0 +1,37 @@
+require utils;
+
+//$editor
+// $object JumpPad
+//  $origin -45 5
+//  $image "jumppad.png"
+//  $func MakeJumpPad
+//  $radius 45;
+// $object_end
+//$end
+
+CHoverPad : CDevice;
+
+
+void hover_pad_scr::FirstFrame(){}
+
+void hover_pad_scr::InitGraphic(){}
+
+CHoverPad::CHoverPad(CObject* parent, fixed x, fixed y)
+{
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+
+    GravityFactor = 0;
+    ColMask = new CColMask(22,8,MakeRectMask(44,16));
+}
+
+void CHoverPad::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)            // Root->GetObject(2, 16 * Team + Number);
+{
+   super;
+   if (Type == M_FRAME)
+   {
+      if(SpX != 0)SpX = 0;
+      if(SpY != 0)SpY = 0;
+   }
+}

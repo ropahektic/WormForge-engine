@@ -1,0 +1,58 @@
+require utils;
+
+bool swat;
+bool swatsd;
+int swat_control;
+
+
+void swat_enabler::Init()
+{
+  swat = true;
+  swatsd = true;
+}
+
+
+// swat
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+
+  if(Type == M_FRAME && this == GetCurrentWorm())
+  {
+    if(swat_control == 1) swat_control = 2;
+  }
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(Type == M_SETTEAM && swat)
+  {
+    if(!SuddenDeath || swatsd)
+    {
+      local w = GetCurrentWorm();
+      if(w != NullObj && w->Sinking == 0) swat_control = 1;
+    }
+  }
+  super;
+}
+
+override void CTeam::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{ 
+  if(Type == M_SETTEAM && swat_control == 1)
+  {
+    return;
+  }
+  
+  super;
+  
+  if(Type == M_FRAME && swat_control == 2)  
+  {
+    swat_control = 0;
+
+    if(DisableControl || !CanSelectWeapons || !Active) return;
+    local n = GetNextWorm();
+    SetCurrentWorm( n);
+
+    Root->CurWorm = n; 
+  }
+}

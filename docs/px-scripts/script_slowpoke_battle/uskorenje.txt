@@ -1,0 +1,45 @@
+
+int timenn;
+float tcax;
+float tcay;
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+
+    if (Type == M_FRAME)
+    {
+         timenn = timenn + 1;
+         
+         if (timenn >= 2)
+         {
+             GS->ActCameraX = tcax;
+             GS->ActCameraY = tcay;
+             timenn = 0;
+             return;
+         }       
+         
+         tcax = GS->ActCameraX;
+         tcay = GS->ActCameraY;
+         
+         super;
+         return;
+    }
+    
+super;
+}
+     
+override void CEnv::PhysicsTick()
+{
+    if (timenn >= 1)
+    {
+         GS->Tick -= 1;
+         return;
+    }     
+        
+    super;
+}
+
+void CDSound::FirstFrame()
+{
+    SetPitch(3,1);
+}

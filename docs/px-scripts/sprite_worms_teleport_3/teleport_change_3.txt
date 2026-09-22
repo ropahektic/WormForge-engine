@@ -1,0 +1,22 @@
+CSprite* tele_wteldsv;
+CSprite* tele_wteldsvu;
+CSprite* tele_wteldsvd;
+
+
+void teleport_change_3::InitGraphic()
+{
+   CFile *f;
+   
+   f = GetAttachment("tele_worm_wteldsv.png");
+   tele_wteldsv = LoadSprite(f, 15, 0);
+   SetSpriteOverride(424, tele_wteldsv);
+   
+   f = GetAttachment("tele_worm_wteldsvu.png");
+   tele_wteldsvu = LoadSprite(f, 15, 0);
+   SetSpriteOverride(425, tele_wteldsv);
+   
+   f = GetAttachment("tele_worm_wteldsvu.png");
+   tele_wteldsvd = LoadSprite(f, 15, 0);
+   SetSpriteOverride(426, tele_wteldsv);
+   
+}

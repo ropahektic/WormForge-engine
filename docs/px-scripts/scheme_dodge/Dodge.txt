@@ -1,0 +1,677 @@
+require utils, sound_dodge;
+
+bool DodgeStarted;
+int CurWave;
+int Timer;
+int AddTimer;
+int RareTimer;
+bool Boos;
+bool LastWave;
+bool BossKilled;
+int AnimTimer;
+int FinalAnim;
+int FinalT;
+
+int PosX1;    //Attack zone
+int PosY1;
+int PosY2;
+
+int mtp;
+int swch;
+int swchdir; 
+
+int DestroyPosX;
+
+CSoundFile* music2;
+CSprite* SrvSprite; 
+CSprite* FinSprite; 
+
+void Dodge::InitGraphic()     //func that will run on GraphicInit. Usually used to load sprites.
+{
+    local spr5       = GetAttachment("survive.png");          
+    SrvSprite     = LoadSprite(spr5, 1, 0);  
+    
+    local spr6       = GetAttachment("fin.png");        
+    FinSprite     = LoadSprite(spr6, 1, 0);  
+}
+
+void Dodge::Init()     //func that will run on init. Usually used to load non-sprite objects, like sounds.
+{
+}
+
+void Dodge::FirstFrame()
+{
+DodgeStarted = false;
+CurWave = 0;
+Timer = 0;
+AddTimer = 0;
+RareTimer = 0;
+FinalT = 0;
+
+PosX1 = 1880;
+PosY1 = 316;
+PosY2 = 675;
+DestroyPosX = 1148;
+mtp = 100;
+swch = 0;
+swchdir = 1; //-1 up +1 down
+Boos = false;
+LastWave = false;
+BossKilled = false;
+AnimTimer = 0;
+FinalAnim = 0;
+
+	CFile *f;
+	f = GetAttachment("waterflame_8bitclouds.wav");	music2 = new CSoundFile(f);	
+}
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+WormWave = 1;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+      if(Weap->CheckName("Jet Pack"))
+      {
+       if(DodgeStarted == false)
+       {
+       DodgeStarted = true;
+       CurWave = WormWave; 
+       PosX = 1520;        
+       PosY = 640;
+       }
+      }
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+      if(Type == M_FRAME)
+      {
+              if(GetCurrentWorm() != NullObj)
+              {
+                  if(GetCurrentWorm() == this && DodgeStarted == true && GotDamage != 0)
+                  {
+                  local str = MakeNumberString("Wave: ", CurWave,"");
+                  local str2 = MakeNumberString(" ,Overall Frames: ", Timer+((CurWave-1)*600),"");
+                  GG->WriteToChat( 1, StrCon(str, str2), false);
+                  PosX = 865;              
+                  PosY = 525;
+                  DodgeStarted = false;
+                  WormWave = CurWave;
+                  if(WormWave > 23){ WormWave = 23;}
+                  CurWave = 0;
+                  Timer = 0;
+                  AddTimer = 0;
+                  RareTimer = 0;
+                  mtp = 100;
+                  swch = 0;
+                  swchdir = 1; //-1 up +1 down
+                  Boos = false;
+                  LastWave = false;
+                  BossKilled = false;
+                  }
+                  
+                  if(JetFuel < 100){JetFuel = 255;}
+              }
+      }
+}
+
+
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+      if(Type == M_FRAME && DodgeStarted == true)
+      {
+      Timer = Timer + 1;
+      if(Timer > 600 && CurWave != 24){CurWave = CurWave + 1; Timer = 0; AddTimer = 0; RareTimer = 0;} // 10 seconds each wave
+      local half =PosY2-(PosY2-PosY1)/2;
+              if(CurWave == 1)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(PosY1,half), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half,PosY2), -2, "Bazooka");
+                  }
+              }
+              
+              if(CurWave == 2)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2), -3, "Bazooka");
+                  ShootZook(PosX1, RandomInt(PosY1,half), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half,PosY2), -2, "Bazooka");
+                  }
+              }
+              
+              if(CurWave == 3)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(PosY1,half), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half,PosY2), -2, "Bazooka");
+                  //SpeedRandomizer wave
+                  }
+              }
+              
+              if(CurWave == 4)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  Timer = Timer + 1;
+                        if(Timer < 20)
+                        {
+                        ShowMessage("Don't be happy, this part was easy.");
+                        ShowMessage("Don't be happy, this part was easy.");
+                        ShowMessage("Don't be happy, this part was easy.");
+                        }
+                  //EmptyWave
+                  }
+              }
+              
+              if(CurWave == 5)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2), -4, "Rocket");
+                  ShootZook(PosX1, RandomInt(PosY1,half), -4, "Rocket");
+                  ShootZook(PosX1, RandomInt(half,PosY2), -4, "Rocket");
+                  }
+              }
+              
+              if(CurWave == 6)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2), -4, "Rocket");
+                  ShootZook(PosX1, RandomInt(PosY1,half), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half,PosY2), -2, "Bazooka");
+                  }
+              }
+              
+              if(CurWave == 7)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -4, "Rocket");
+                  ShootZook(PosX1, RandomInt(PosY1,half-4), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half-4,PosY2-4), -2, "Bazooka");
+                  ShootZook(PosX1, PosY2, -2, "Sheep");
+                  }
+              }
+              
+              if(CurWave == 8)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2), -4, "Rocket");
+                  ShootZook(PosX1, RandomInt(PosY1,half), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half,PosY2), -2, "Bazooka");
+                                                     if(RareTimer < Timer - 32)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     ShootZook(PosX1, PosY2, -2, "Sheep");
+                                                     }
+                  //SuperSheeps
+                  }
+              }
+              
+              if(CurWave == 9)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  Timer = Timer + 1;
+                        if(Timer < 20)
+                        {
+                        ShowMessage("Ok, now i'm playing seriously!");
+                        ShowMessage("Ok, now i'm playing seriously!");
+                        ShowMessage("Ok, now i'm playing seriously!");
+                        }
+                  //EmptyWave
+                  }
+              }
+              
+              if(CurWave == 10)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -4, "Rocket");
+                  ShootZook(PosX1, RandomInt(PosY1,half-4), -2, "Mortar");
+                  ShootZook(PosX1, RandomInt(half-4,PosY2-4), -2, "Mortar");
+                  ShootZook(PosX1, PosY2, -2, "Sheep");
+                  }
+              }
+              
+              if(CurWave == 11)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -2, "Mortar");
+                  ShootZook(PosX1, RandomInt(PosY1,half-4), -2, "Mortar");
+                  ShootZook(PosX1, RandomInt(half-4,PosY2-4), -2, "Mortar");
+                  ShootZook(PosX1, PosY2, -2, "Sheep");
+                  }
+              }
+              
+              if(CurWave == 12)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -2, "Mortar");
+                  ShootZook(PosX1, PosY2, -2, "Sheep");
+                                                     if(RareTimer < Timer - 32)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -2, "Bullet");
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 13)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -2, "Mortar");
+                  ShootZook(PosX1, PosY2, -2, "Sheep");
+                                                     if(RareTimer < Timer - 32)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -2, "Bullet");
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -2, "Bullet");
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 14)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  Timer = Timer + 1;
+                        if(Timer < 20)
+                        {
+                        ShowMessage("Prepare to die!");
+                        ShowMessage("Prepare to die!");
+                        ShowMessage("Prepare to die!");
+                        }
+                  //EmptyWave
+                  }
+              }
+              
+              if(CurWave == 15)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,half-4), -4, "Rocket");
+                  ShootZook(PosX1, RandomInt(half-4,PosY2-4), -4, "Rocket");
+                  ShootZook(PosX1, PosY2, -2, "Sheep");
+                                                     if(RareTimer < Timer - 32)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -5, "Plane");
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -5, "Plane");
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 16)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,half-4), -4, "Rocket");
+                  ShootZook(PosX1, RandomInt(half-4,PosY2-4), -4, "Rocket");
+                  ShootZook(PosX1, PosY2, -2, "Sheep");
+                                                     if(RareTimer < Timer - 32)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -5, "Plane");
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -5, "Plane");
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2-4), -2, "Bullet");
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 17)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,half - mtp + swch), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,PosY2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(PosY1,half - mtp + swch), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,PosY2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(PosY1,half - mtp + swch), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,PosY2), -2, "Bazooka");
+                  
+                                                     if(RareTimer < Timer - 32)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     if(mtp > 30){mtp = mtp - 5;}
+                                                     local s = swch + RandomInt(-40, 40);
+                                                     if(half - mtp + s < PosY1){s = PosY1 - (half - mtp) + 1;}
+                                                     if(half + mtp + s > PosY2){s = PosY2 - (half + mtp) - 1;}
+                                                     swch = s;
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 18)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  ShootZook(PosX1, RandomInt(PosY1,half - mtp + swch), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,PosY2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(PosY1,half - mtp + swch), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,PosY2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(PosY1,half - mtp + swch), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,PosY2), -2, "Bazooka");
+                  
+                                                     if(RareTimer < Timer - 32)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     if(mtp > 35){mtp = mtp - 5;}
+                                                     local s = swch + RandomInt(-40, 40);
+                                                     if(half - mtp + s < PosY1){s = PosY1 - (half - mtp) + 1;}
+                                                     if(half + mtp + s > PosY2){s = PosY2 - (half + mtp) - 1;}
+                                                     swch = s;
+                                                     
+                                                     ShootZook(PosX1, PosY2, -2, "Sheep");
+                                                     //supersheeps
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 19)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  
+                  local qtr1 = PosY1 + ((half - mtp + swch) - PosY1)/2;
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  local qtr2 = PosY2 - (PosY2 - (half + mtp + swch))/2;
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+                  
+                                                     if(RareTimer < Timer - 32)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     if(mtp > 35){mtp = mtp - 5;}
+                                                     local s = swch + 40*swchdir;
+                                                     if(half - mtp + s < PosY1){s = PosY1 - (half - mtp) + 1; swchdir = 1;}
+                                                     if(half + mtp + s > PosY2){s = PosY2 - (half + mtp) - 1; swchdir = -1;}
+                                                     swch = s;
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 20)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  local qtr1 = PosY1 + ((half - mtp + swch) - PosY1)/2;
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  local qtr2 = PosY2 - (PosY2 - (half + mtp + swch))/2;
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+                  
+                                                     if(RareTimer < Timer - 22)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     if(mtp > 35){mtp = mtp - 5;}
+                                                     local s = swch + 40*swchdir;
+                                                     if(half - mtp + s < PosY1){s = PosY1 - (half - mtp) + 1; swchdir = 1;}
+                                                     if(half + mtp + s > PosY2){s = PosY2 - (half + mtp) - 1; swchdir = -1;}
+                                                     swch = s;
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 21)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  local qtr1 = PosY1 + ((half - mtp + swch) - PosY1)/2;
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  local qtr2 = PosY2 - (PosY2 - (half + mtp + swch))/2;
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+                  
+                                                     if(RareTimer < Timer - 22)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     if(mtp > 35){mtp = mtp - 5;}
+                                                     local s = swch + 40*swchdir;
+                                                     if(half - mtp + s < PosY1){s = PosY1 - (half - mtp) + 1; swchdir = 1;}
+                                                     if(half + mtp + s > PosY2){s = PosY2 - (half + mtp) - 1; swchdir = -1;}
+                                                     swch = s;
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 22)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  local qtr1 = PosY1 + ((half - mtp + swch) - PosY1)/2;
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  local qtr2 = PosY2 - (PosY2 - (half + mtp + swch))/2;
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(PosY1,qtr1), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr1,half - mtp + swch), -2, "Bazooka");
+                  
+                  ShootZook(PosX1, RandomInt(half + mtp + swch,qtr2), -2, "Bazooka");
+                  ShootZook(PosX1, RandomInt(qtr2,PosY2), -2, "Bazooka");
+                  
+                                                     if(RareTimer < Timer - 22)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     if(mtp < 100){mtp = mtp + 5;}
+                                                     if(half+swch != half)
+                                                     {
+                                                     swch = (half-(half+swch))/2;
+                                                     if(swch < half+10 && swch > half-10){swch = half-(half+swch);}
+                                                     }
+                                                      if(Timer > 250){ShootZook(PosX1, half, -2, "Bullet");}
+                                                     }
+                  }
+              }
+              
+              if(CurWave == 23)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  Timer = Timer + 1;
+                  AnimTimer = 1;
+                        if(Timer < 20)
+                        {
+                        ShowMessage("You've gone too far!");
+                        ShowMessage("You've gone too far!");
+                        ShowMessage("You've gone too far!");
+                        }
+                        if(Boos == false)
+                        {
+                        Boos = true;
+                        ShootZook(PosX1, PosY2-5, 0, "Boss");
+                        }
+                  }
+              }
+              
+              if(CurWave == 24)
+              {
+                  if(AddTimer < Timer - 14)
+                  {
+                  AddTimer = Timer;
+                  AnimTimer = 0;
+                           if(LastWave == false)
+                           {
+                           LastWave = true;
+                           ShootZook(1150,PosY2-5, 0.5, "Bazooka");
+                           }
+                  //ShootZook(PosX1, RandomInt(PosY1,PosY2), -2, "Mortar");  Well if someone beats this, ill add this line <3
+                  ShootZook(PosX1, RandomInt(PosY1,half), -2, "Mortar");
+                  ShootZook(PosX1, RandomInt(half,PosY2), -2, "Mortar");
+                                                     if(RareTimer < Timer - 32)
+                                                     {
+                                                     RareTimer = Timer;
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2), -4, "Bullet");
+                                                     ShootZook(PosX1, RandomInt(PosY1,PosY2), -4, "Rocket");
+                                                     }
+                  }
+              }
+      }
+}
+
+void ShootZook(float px, float py, float sp, string wepname)
+{
+  CShootDesc sdesc;
+  zero(&sdesc);
+  sdesc.X = px;    
+  sdesc.Y = py;  
+  sdesc.SpX = sp;         
+  sdesc.SpY = 0;  
+  local ldata;
+  ldata = GetWeaponByName(wepname); 
+  local msl = new CMissile(Root->GetObject(25, 0), &ldata->launch, &sdesc);
+  msl->GravityFactor = 0;
+                     if(StrCmp(wepname, "Sheep"))
+                     {
+                     msl->Side = -1;
+                               if(CurWave == 8 || CurWave == 18)
+                               {
+                               msl->SuperSheep = true;
+                               }
+                     }
+                     
+                     if(StrCmp(wepname, "SuperSheep"))
+                     {
+                     msl->SpY = -2;
+                     return;
+                     }
+                     
+                     if(StrCmp(wepname, "Mortar"))
+                     {
+                     msl->Random = true;
+                     }
+                     
+                     if(StrCmp(wepname, "Bullet"))
+                     {
+                     msl->Special = true;
+                     }
+                     
+                     if(StrCmp(wepname, "Plane"))
+                     {
+                     msl->Plane = true;
+                     }
+                     
+                     if(StrCmp(wepname, "SRocket"))
+                     {
+                     msl->SpY = 2;
+                     return;
+                     }
+                     
+                     if(StrCmp(wepname, "Bazooka") && LastWave == true)
+                     {
+                     msl->BossKilling = true;
+                     }
+  msl->SpY = 0;       
+}
+
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+ if(Type == M_DRAWQUEUE && AnimTimer == 1)
+ {
+ local spr = SrvSprite->Index;
+ AddSprite(5,1527,500,1,spr,0.0);
+ }
+ 
+ if(Type == M_DRAWQUEUE && FinalAnim == 1)
+ {
+ local spr = FinSprite->Index;
+ AddSprite(5,1527,500,1,spr,0.0);
+ }
+}

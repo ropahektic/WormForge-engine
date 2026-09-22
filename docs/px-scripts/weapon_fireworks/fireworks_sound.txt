@@ -1,0 +1,34 @@
+require utils;
+
+CSoundFile* whistle1;
+CSoundFile* whistle2;
+CSoundFile* whistle3;
+CSoundFile* whistle4;
+CSoundFile* whistle5;
+
+void fireworks_sound::Init()
+{
+	whistle1 = new CSoundFile(GetAttachment("whistle1.wav"));
+	whistle2 = new CSoundFile(GetAttachment("whistle2.wav"));
+	whistle3 = new CSoundFile(GetAttachment("whistle3.wav"));
+	whistle4 = new CSoundFile(GetAttachment("whistle4.wav"));
+	whistle5 = new CSoundFile(GetAttachment("whistle5.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+ 	if(Weap->CheckName("Firework 1") ||
+	   Weap->CheckName("Firework 2") ||
+	   Weap->CheckName("Firework 3") ||
+	   Weap->CheckName("Firework 4") ||
+	   Weap->CheckName("Firework 5"))
+ 	{
+		local i = RandomInt(1,5);
+	    if      (i == 1) whistle1->Play(1.5, 0.0, false);
+        else if (i == 2) whistle1->Play(1.5, 0.0, false);
+        else if (i == 3) whistle1->Play(1.5, 0.0, false);
+        else if (i == 4) whistle1->Play(1.5, 0.0, false);
+        else if (i == 5) whistle1->Play(1.5, 0.0, false);
+ 	}
+}

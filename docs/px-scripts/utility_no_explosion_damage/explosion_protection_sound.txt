@@ -1,0 +1,17 @@
+CSoundFile* explosionprotectionsound;
+ 
+void explosion_protection_sound::Init()
+{
+	explosionprotectionsound       = new CSoundFile(GetAttachment("explosion_protection.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("No Explosion Damage"))
+  {
+  vol = CalculateSoundVolume(PosX,PosY);
+  pan = CalculateSoundPan(PosX,PosY);
+  explosionprotectionsound->Play(vol, pan, false);
+  }
+  super;
+}

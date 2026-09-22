@@ -1,0 +1,7 @@
+require utils, weapon_underwater_bomb;
+
+void underwaterbombs15::FirstFrame() // name of the script
+{
+    for(int j = 1; j <= 15; j++) //underwaterbomb spawn
+         new CWaterbomb(0, RandomInt(0, GS->LevelSX),RandomInt(Env->Water+30, Env->Water +180), 1);
+}

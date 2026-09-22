@@ -1,0 +1,24 @@
+CSprite* arrowd;
+CSprite* arrows;
+
+void arrows_replace::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("arrowd.png");
+   arrowd = LoadSprite(f, 30, -1);
+   f = GetAttachment("arrows.png");
+   arrows = LoadSprite(f, 30, -1);
+   
+   SetSpriteOverride(20, arrowd);
+   SetSpriteOverride(21, arrowd);
+   SetSpriteOverride(22, arrowd);
+   SetSpriteOverride(23, arrowd);
+   SetSpriteOverride(24, arrowd);
+   SetSpriteOverride(25, arrowd);
+   SetSpriteOverride(26, arrows);
+   SetSpriteOverride(27, arrows);
+   SetSpriteOverride(28, arrows);
+   SetSpriteOverride(29, arrows);
+   SetSpriteOverride(30, arrows);
+   SetSpriteOverride(31, arrows);
+}

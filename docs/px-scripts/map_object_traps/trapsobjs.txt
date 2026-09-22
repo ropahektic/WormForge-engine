@@ -1,0 +1,568 @@
+require utils, particles, map_object_respawn;
+
+#TRAPS
+
+$editor
+ $object Trap
+  $origin -15 -15
+  $image "edtrap.png"
+  $func SpawnTrap
+  $radius 17
+  $param Type enum 5 Bazooka Grenades Mortar HomingMissile Mine
+  $param Angle angle 180
+  $param Force int 8
+  $param Spread int 15
+  $param Delay int 4
+  $param ShootDelay int 8
+  $param GrenadeTimer int 1000
+  $param ProximityZone objectt Zone
+  $param IsBadSphere bool false
+  $param EndAngle angle 180
+  $param nAngles int 10
+  
+  $param MineSensorRadius int 48    
+  $param MineDamage int 50     
+  $param MineFuse int 1000
+  $param MineRemoveOnTurn bool true    
+  $param MineDestroyTimer int 200
+  
+ $object_end   
+ 
+ $object Zone
+  $origin -15 -15
+  $image "edzone.png"
+  $radius 17
+  $autoname Zone
+  $func SpawnZone
+  $param Size area 50 50
+  $param ActiveWormOnly bool true
+ $object_end
+ 
+ $object GameControl
+  $origin -15 -15
+  $image "edgcontrol.png"
+  $radius 17
+  $func SpawnGControl
+  $param NoWind bool false
+  $param NoWaiting bool false
+  $param ForceHealth int 0
+  $param EnableRespawn bool false
+  $param RespawnDelay int 0
+  $param Lifes int 1
+  $param MaxHealth int 0
+ $object_end
+ 
+ $object WormSupply
+  $origin -13 -15
+  $image "edworm.png"
+  $radius 17
+  $func SpawnWormSupply   
+  $param ProximityZone objectt Zone
+  $param OffsetXPerWorm int 16;
+ $object_end
+ 
+ $object WormCheckpoint
+  $origin -13 -15
+  $image "edworm.png"
+  $radius 17
+  $func SpawnWormCheckpoint   
+  $param ProximityZone objectt Zone
+  $param Order int 1
+ $object_end
+ 
+$end
+
+CFilter* gTrapParent;
+bool gNoWaiting;
+
+void trapsobjs::InitSMap()
+{  //50 is a random number. Don't look for meaning of life here.
+  filter = new CFilter(Root, 50);
+  filter->ForbidAll();
+  filter->Allow(M_FRAME);
+  filter->Allow(M_DRAWQUEUE);  
+  
+  gTrapParent = filter;
+  
+  gControl = CEGameControl(NullObj);
+};
+
+CTrap : CObject;
+CZone : CObject;
+CEGameControl : CObject;
+CWormSupply : CObject;    
+CWormCheckpoint : CObject;
+
+CWormCheckpoint* gCheckpoints[48];
+fixed gStartPosX[48];
+fixed gStartPosY[48];
+string gWormNames[48];
+int gAliveWorms[9];
+CEGameControl* gControl;  
+
+        
+CSoundFile* checkpointPassSound;
+
+void trapsobjs::InitGraphic()
+{	
+  local f = GetAttachment("checkpass1.wav");		
+  checkpointPassSound = new CSoundFile(f);
+}
+
+CZone* SearchForZone(string ZName)
+{
+  for (local i = 0; i < gTrapParent->Childs.Count; i += 1)
+  {
+    local obj = CZone(gTrapParent->Childs.Objs[i]);
+    if (obj is CZone)
+    {
+      if (StrCmp(obj->zone_name, ZName))
+      {
+        return obj;
+      };
+    };
+  };  
+  return NullObj;
+};
+
+CZone::CZone(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  pr_x1 = aobj->PosX;
+  pr_x2 = aobj->PosX + aobj->GetInt("Size");
+  pr_y1 = aobj->PosY;
+  pr_y2 = aobj->PosY + aobj->GetInt2("Size");  
+  AcitveWormOnly = aobj->GetBool("ActiveWormOnly");
+  
+  active = false;
+  activator = CGObject(NullObj);
+  timer = 0;
+  zone_name = StrSave(aobj->GetName());
+};
+
+void CZone::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  timer += 1; 
+  if (timer % 5) return;        //performance
+  
+  active = false;
+  
+  if (AcitveWormOnly)
+  {
+    local obj = GetCurrentWorm();
+    if (obj == NullObj) return;
+    if (pr_x1 < obj->PosX && pr_x2 > obj->PosX)
+    {
+      if (pr_y1 < obj->PosY && pr_y2 > obj->PosY)
+      {
+        active = true;
+        activator = obj;
+      };
+    };    
+    return;
+  };
+  
+  for (local i = 1; i < Env->Objs.Count; i += 1)
+  {
+    local obj = CWorm(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    if (obj->ClType != OC_Worm) continue; 
+    
+    if (pr_x1 < obj->PosX && pr_x2 > obj->PosX)
+    {
+      if (pr_y1 < obj->PosY && pr_y2 > obj->PosY)
+      {
+        active = true;
+        activator = obj;
+        break;
+      };
+    };
+  };
+};
+
+CTrap::CTrap(CEditorObject* aobj)
+{
+  super(gTrapParent, GS);
+  zone = CZone(NullObj);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+  Angle = aobj->GetAngle("Angle");  
+  EndAngle = aobj->GetAngle("EndAngle");  
+  
+  Force = aobj->GetInt("Force");
+  Spread = aobj->GetInt("Spread");
+  Delay = aobj->GetInt("Delay");
+                                  
+  MineSensorRadius = aobj->GetInt("MineSensorRadius");
+  MineDamage = aobj->GetInt("MineDamage");
+  MineFuse = aobj->GetInt("MineFuse");      
+  MineRemoveOnTurn = aobj->GetBool("MineRemoveOnTurn");    
+  MineDestroyTimer = aobj->GetInt("MineDestroyTimer");
+  
+  ShootDelay = aobj->GetInt("ShootDelay");
+  ZoneName = StrSave(aobj->GetString("ProximityZone"));
+  gTimer = aobj->GetInt("GrenadeTimer");
+  isBadSphere = aobj->GetBool("IsBadSphere");  
+  nAngles = aobj->GetInt("nAngles");
+  curAngle = 0;
+  
+  if (StrCmp(aobj->GetString("Type"), "Bazooka"))
+  {
+    Type = 1;
+  };
+  if (StrCmp(aobj->GetString("Type"), "Grenades"))
+  {
+    Type = 2;
+  };
+  if (StrCmp(aobj->GetString("Type"), "Mortar"))
+  {
+    Type = 3;
+  };
+  if (StrCmp(aobj->GetString("Type"), "HomingMissile"))
+  {
+    Type = 4;
+  };   
+  if (StrCmp(aobj->GetString("Type"), "Mine"))
+  {
+    Type = 5;
+  };
+  timer = 0;
+  timer2 = 0;
+  timerToDisable = 60;
+  active = false;
+};
+
+CMissile* Missile_HTarget;
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+   alwaysHomeTarget = Missile_HTarget;
+   Missile_HTarget = CGObject(NullObj);
+   super;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+   {
+     if (alwaysHomeTarget != NullObj)
+     {
+       if (GS->GetRandom() % 5 == 2)
+       {
+         initdesc.AddX = alwaysHomeTarget->PosX; 
+         initdesc.AddY = alwaysHomeTarget->PosY;
+       }
+     }
+   }
+   super;
+}
+  
+void CTrap::Shoot()
+{
+  CShootDesc sdesc;
+  zero(&sdesc);
+  
+  sdesc.X = PosX;
+  sdesc.Y = PosY;
+  
+  local fSpread = (Spread / 180.0) * 3.141;
+  
+  local da = Angle + srandom_b() * fSpread;
+  if (isBadSphere)
+  {
+    local daa = (EndAngle - Angle) / nAngles;
+    da = daa * curAngle + Angle;
+    
+    sdesc.X += Spread * sin(da);
+    sdesc.Y -= Spread * cos(da);    
+    
+    curAngle += 1;
+    if (curAngle > nAngles) curAngle = 0;
+  };
+  
+  local dx = sin(da) * (Force + srandom_b() * Force * 0.1);
+  local dy = -cos(da) * (Force + srandom_b() * Force * 0.1);
+  
+  sdesc.SpX = dx;
+  sdesc.SpY = dy;
+  sdesc.Delay = gTimer;
+  
+  local ldata;
+  
+  if (Type == 5)
+  {      
+    CMineParams MParams;
+    MParams.Prefuse = 0;
+    MParams.Flags = 60;
+    MParams.Bias = 0;
+    MParams.Damage = MineDamage;
+    MParams.BlastPower = 100;
+    MParams.Fuse = MineFuse; //20 frames
+    MParams.Radius = MineSensorRadius; 
+    MParams.Unknown = 0;
+    
+    local Mine = new CMine(Root->GetObject(25, 0), &MParams, &sdesc, false, 0);  
+    Mine->autoTurnDestruct = MineRemoveOnTurn;
+    Mine->autoDestroyTimer = MineDestroyTimer;
+    return;
+  }
+  
+  if (Type == 1)
+    ldata = GetWeaponByName("Bazooka");
+  if (Type == 2)                                        
+    ldata = GetWeaponByName("Grenade");   
+  if (Type == 3)                                        
+    ldata = GetWeaponByName("Mortar");
+  if (Type == 4)     
+  {                                   
+    ldata = GetWeaponByName("Homing Missile");
+    sdesc.AddX = zone->activator->PosX;   
+    sdesc.AddY = zone->activator->PosY;
+  };
+        
+  if (ldata == NullObj) return;
+  
+  if (Type == 4) Missile_HTarget = zone->activator;
+  local missile = new CMissile(Root->GetObject(25, 0), &ldata->launch, &sdesc);
+};
+  
+void CTrap::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  
+  if (Root->IsTimerActive() == false)
+  {
+    if (timerToDisable <= 0)
+    {
+      return;
+    } else { 
+      timerToDisable -= 1;
+    };
+  } else {
+    timerToDisable = 60;
+  };
+  if (zone == NullObj)
+  {
+    zone = SearchForZone(ZoneName);
+    return;
+  };
+  
+  if (active == false)                           //the following code is complex
+  {                                              //because it supports pre-delay,
+    if (zone->active)                            //shooting delay, and post-delay
+    {                                            //lol.
+      timer += 1;
+      if (timer >= ShootDelay) 
+      {
+        active = true;
+        curAngle = 0;
+//        ShowMessage("I M ACTIVATED ASDASDASD!");
+        timer2 = 0;
+      };
+    } else {
+      timer = 0;
+    };
+  } else {
+    if (timer2 > Delay)
+    {
+      timer2 = 0;
+      Shoot();
+    } else {
+      timer2 += 1;
+    };
+    
+    if (zone->active == false)
+    {
+      timer -= 1;
+      if (timer <= 0)
+      {
+        active = false;
+        timer = 0;
+        timer2 = 0;
+      };
+    };
+  };
+};
+
+CEGameControl::CEGameControl(CEditorObject* aobj)
+{
+  gControl = this;
+  super(gTrapParent, GS);
+  noWind = aobj->GetBool("NoWind");   
+  gNoWaiting = aobj->GetBool("NoWaiting");    
+  Health = aobj->GetInt("ForceHealth"); 
+  MaxHealth = aobj->GetInt("MaxHealth");
+  if (Health > 0)
+  {
+    for (local i = 1; i <= 6; i+=1)
+    {
+      for (local j = 1; j <= 8; j+=1)
+      {
+        if (Root->GetObject(2, j + i * 16))
+        {
+          GS->Info.SetWormHealth(i, j, Health);
+        };
+      };
+    };  
+  };      
+  
+  if (Root->GetObject(2, 1 + 16))
+  {
+     WormsHealth = GS->Info.GetWormHealth(1, 1);
+  };
+  
+  for (local i = 0; i < 48; i += 1) gCheckpoints[i] = NullObj;    
+  
+  respawn = aobj->GetBool("EnableRespawn");
+  nlifes = aobj->GetInt("Lifes");           
+  rDelay = aobj->GetInt("RespawnDelay");
+  
+  if (respawn)
+  {
+    rControl->Enable(rDelay);
+  }
+  cInitialized = false;               
+};
+
+void CEGameControl::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  if (noWind)
+  {
+    Env->Wind = 0;
+  };
+  
+  if (cInitialized == false)
+  {    
+    for (local j = 1; j <= 6; j += 1)
+    {
+      gAliveWorms[j] = 0;
+      for (local i = 1; i <= 8; i += 1)
+      {
+        local objWorm = CWorm(Root->GetObject(2, i + j * 16));
+        if (objWorm)
+        { 
+          local wIndex = i + j * 8 - 9;
+          gStartPosX[wIndex] = objWorm->PosX;
+          gStartPosY[wIndex] = objWorm->PosY;
+          rControl->SetRespawnPosition(i, j, objWorm->PosX, objWorm->PosY);
+          gWormNames[wIndex] = objWorm->GetName();
+          gAliveWorms[j] += 1;
+        };
+      };
+    };       
+    cInitialized = true;
+  };
+};
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (gControl== NullObj) return super;
+    if(gControl->MaxHealth == 0) return super;
+    if(Type == M_FRAME)
+    {
+        local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+        if (HP > gControl->MaxHealth) 
+            GS->Info.SetWormHealth(WormTeam, WormNumber, gControl->MaxHealth);
+    }
+    super;
+}
+
+CWormSupply::CWormSupply(CEditorObject* obj)
+{             
+  super(gTrapParent, GS);
+  ZoneName = StrSave(obj->GetString("ProximityZone"));
+  zone = CZone(NullObj);
+  PosX = obj->PosX;
+  PosY = obj->PosY;
+  offX = obj->GetInt("OffsetXPerWorm");
+  TeamsDone = new bool[6]; //it's only working way..
+  for (local i = 0; i < 6; i+=1) TeamsDone[i] = false;
+};
+
+void CWormSupply::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  if (zone == NullObj)
+  {
+    zone = SearchForZone(ZoneName);
+    return;
+  };
+  if (zone->active == false) return;
+  
+  local worm = CWorm(zone->activator);
+  if (worm is CWorm)
+  {
+    local tindex = worm->WormTeam;
+    if (TeamsDone[tindex]) return;
+    local windex = GetFreeWormIndex(tindex);
+    if (windex <= 0) return; 
+    ShowMessage("You've got new worm!");
+    local newWorm = RessurectWorm(windex, tindex, PosX, PosY);
+    TeamsDone[tindex] = true;
+    PosX += offX;
+  };
+};
+
+CWormCheckpoint::CWormCheckpoint(CEditorObject* obj)
+{
+  super(gTrapParent, GS);
+  ZoneName = StrSave(obj->GetString("ProximityZone"));
+  zone = CZone(NullObj);
+  PosX = obj->PosX;
+  PosY = obj->PosY;
+  order = obj->GetInt("Order");
+};
+
+void CWormCheckpoint::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type != M_FRAME) return;
+  if (zone == NullObj)
+  {
+    zone = SearchForZone(ZoneName);
+    return;
+  };
+  if (zone->active == false) return;
+  local wormObj = CWorm(zone->activator);
+  if (wormObj is CWorm)
+  {
+    local wIndex = wormObj->WormTeam * 8 + wormObj->WormNumber;
+    if (wIndex > 48) return;
+    if (wIndex < 0) return;    
+        
+    if (gCheckpoints[wIndex] == NullObj || gCheckpoints[wIndex]->order < order)
+    {
+      if (gCheckpoints[wIndex] != NullObj)
+      {
+       checkpointPassSound->Play(1, 0, false);     
+       ShowMessage("Checkpoint!");
+      }
+      gCheckpoints[wIndex] = this;
+      rControl->SetRespawnPosition(wormObj->WormNumber, wormObj->WormTeam, PosX - 5, PosY - 15);
+    }
+  }
+}
+
+
+void SpawnTrap(CEditorObject* obj)
+{
+  trap = new CTrap(obj);
+};
+void SpawnZone(CEditorObject* obj)
+{
+  zone = new CZone(obj);
+};
+void SpawnGControl(CEditorObject* obj)
+{
+  gc = new CEGameControl(obj);
+};
+void SpawnWormSupply(CEditorObject* obj)
+{
+  gc = new CWormSupply(obj);
+};
+void SpawnWormCheckpoint(CEditorObject* obj)
+{
+  gc = new CWormCheckpoint(obj);
+};

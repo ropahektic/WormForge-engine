@@ -1,0 +1,85 @@
+require Utils;
+         
+CBitmap32* GUI;
+//CBitmap32* GUI2;
+CInterfaceHandler : CObject;
+string speedx;
+string speedy;
+
+
+void Interface::InitGraphic()
+{ 
+ LI  = GetAttachment("nterface.png");
+ GUI = LoadImage(LI);
+ //GUI2 = LoadImage(LI);
+}
+
+CInterfaceHandler::CInterfaceHandler()
+{
+    super(Root, GS);  
+    GUIn = GUI;
+    //GUIn2 = GUI2;
+}
+
+void CInterfaceHandler::ListNDraw()
+{
+               int a;
+               int b;
+
+                          GUIn->Rect( 0, 0, 360, 380, 0);
+                          //GG->WriteToChat( 1, "PUNCH!!!!!!", false); 
+                         //GUIn2->Rect( 0, 0, 180, 380, 0);
+                                                                                                                   
+                                            // Text Desctiptions                          
+                          //DrawText(int fnt,CBitmap* bitmap,int x,int y,string txt,int* outX,int* outY)
+                          
+                          GS->Disp->DrawText(4, GUIn, 10, 15, "Name:", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 30, "Cost:", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 45, "Amount bought:", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 60, "Credits left:", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 75, "Use arrow keys to navigate menu.", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 90, "Use enter to buy weapons.", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 105, "Use space to finish.", &a, &b);
+                                               
+                                                // Integer Parametres                                                   
+                                                    
+                          GS->Disp->DrawText(8, GUIn, 50, 15, WeaponN[Selection], &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 50, 30, ItoA(WeaponC[Selection]), &a, &b);  
+                          GS->Disp->DrawText(8, GUIn, 90, 45, ItoA(WeaponA[Selection]), &a, &b); 
+                          GS->Disp->DrawText(8, GUIn, 80, 60, ItoA(Cash[GetCurrentWorm()->WormTeam-1]), &a, &b);                                              
+}
+
+
+
+
+
+void Interface::FirstFrame()
+{
+ new CInterfaceHandler();
+}
+
+
+
+void CInterfaceHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(GetCurrentWorm() != NullObj)
+  {
+                    if (Type == M_FRAME)
+                    {
+                    ListNDraw();
+                    }
+                    if (Type == M_DRAWQUEUE)
+                    {
+                      if(DoIKnowHim(GetCurrentWorm()) == true)
+                      {
+                       if (PlayerBought[GetCurrentWorm()->WormTeam-1] == false)
+                       {
+                       //AddSprite(5,GS->CameraX,GS->CameraY,0,spr1, 0.0);
+                       AddInterfaceBitmap(1,270,0,GUIn,360,380,1);
+                       //AddInterfaceBitmap(1,0,0,GUIn,180,380,1);
+                       //AddInterfaceBitmap(1,-470,-60,GUIn2,0,0,180,380,1);
+                       }
+                      }
+                    }
+   }
+}

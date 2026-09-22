@@ -1,0 +1,18 @@
+
+override void CWorm::RenderWorm()
+{
+         if(Zombie == true)
+         {
+         SetColorMod(RGB(0, 180, 0), 4);
+                            if(FirePunchTimer == 0 && StopFirePunchTimer == 0)
+                            { 
+                            super;
+                            }
+         ClearColorMod();
+         return;
+         }
+         else
+         {
+         super;
+         }
+}

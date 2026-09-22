@@ -1,0 +1,836 @@
+$editor
+ $object LemmingSettings
+  $origin 0 0
+  $image "lemmings.png"
+  $func SpawnLemmingSettings
+  $autoname LemSrc
+  $param Team int 1
+ $object_end
+$end
+
+
+override void CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+    TeamSide = 0; // 1 left, 2 right
+    JobFrame = 0;
+    super;
+}
+
+void SpawnLemmingSettings(CEditorObject* obj) //MED editor invisible lantern
+{
+            local lt = new CLemming(Root->GetObject(25, 0),obj->PosX,obj->PosY);
+            lt->owningTeam = obj->GetInt("Team");
+            BigMoleArr[MoleArrAt] = lt;
+            MoleArrAt = MoleArrAt + 1;
+
+}
+
+CLemming::CLemming(CObject* parent, fixed x, fixed y)
+{
+    super(parent, 30, 9);
+
+    PosX          = x;
+    PosY          = y;
+    IsMaterial  = true;
+    ColGroup    = 2;
+    SpX         = 0.0;
+    SpY         = 0.0;
+    GravityFactor  = 1.0;
+    ClType      = EObjectClass(776);   //935 //70
+    ColMask = new CColMask(10,10,MakeCircleMask(10));
+    owningTeam = 0;
+
+    StateM = 0;
+    GetNextState = true;
+
+    PosHistoryX = 0;
+    PosHistoryY = 0;
+    StandingStill = 0;
+    WalkingDir = 0;
+
+    WaitTimer = 0;
+
+    WormsIsClose = false;
+    EnemyIsClose = false;
+
+    RandomHundo = 0;
+
+    Fr = 0;
+
+    //size stuff
+    WantSize = 10;
+    AtSize = 10;
+    StartGrowingNow = false;
+
+    TurnAroundNow = false;
+
+    CurrRota = 0.0;
+
+    WaitInEffect = false;
+
+    OnFire = false;
+    OnFireFrame = 0;
+
+    RNGn = 0;
+    RNGnA = 0;
+    RNGnB = 0;
+}
+
+void CLemming::LookForFire()
+{
+	local Obje = Env->CheckCollision( this, PosX, PosY );
+    if(Obje != NullObj)
+		{
+        if(Obje->ClType == OC_SeaBubble || Obje->ClType == OC_Smoke || Obje->ClType == OC_Gas)
+			{
+            OnFire = true;
+            if(Fr < 9000) {OnFireFrame = Fr;}
+			else {Fr = 0; OnFireFrame = 0;}
+        	}
+    	}
+}
+
+void CLemming::IsNotMoving()
+{
+    if(PosX == PosHistoryX && PosY == PosHistoryY) {StandingStill = true;}
+		
+    PosHistoryX = PosX;
+    PosHistoryY = PosY;
+}
+
+
+
+void CLemming::PickRandomDir()
+{
+    if(RandomHundo > 50) {WalkingDir = 0;}
+	else {WalkingDir = 1;}
+}
+
+
+
+override void CCrate::CCrate(CObject* Parent,CCrateDesc* desc,EDropType type)
+{
+    molePickup = false;
+    RNGn = 0;
+    RNGnA = 0;
+    RNGnB = 0;
+    FixedWeapon = 0;
+    super;
+}
+
+void RefreshTeamWeapon(int windex)
+{
+    if(windex == 37)
+		{
+        local PlayingWorm = GetCurrentWorm();
+        GS->Info.AddWeapon(PlayingWorm->WormTeam,37, 2);
+        return;
+    	}
+    local wepz = GS->GetWeaponByIndex(1, windex);
+    
+    /*
+    //Bug from hell. This fixes it but i cant explain why. Weapons now go to right team.
+    if(GetTeamColor(1) == GetTeamColor(2)){
+        for(int m = 2; m <= 6; m++){
+            if( GetTeamColor(m) != GetTeamColor(m + 1)){
+                if(GetTeamColor(m) > GetTeamColor(m + 1)){
+                    invertTmz = true;
+                }
+                break;
+            }
+
+        }
+    }
+
+    if(invertTmz){
+        GS->Info.SetWeaponEx(2,windex,wepz->GetPageIndex(), (WepAmountL[windex]) );
+        GS->Info.SetWeaponEx(1,windex,wepz->GetPageIndex(), (WepAmountR[windex]) );
+    }else{
+        GS->Info.SetWeaponEx(1,windex,wepz->GetPageIndex(), (WepAmountL[windex]) );
+        GS->Info.SetWeaponEx(2,windex,wepz->GetPageIndex(), (WepAmountR[windex]) );
+    }
+    */
+        GS->Info.SetWeaponEx(1,windex,wepz->GetPageIndex(), (WepAmountL[windex]) );
+        GS->Info.SetWeaponEx(2,windex,wepz->GetPageIndex(), (WepAmountR[windex]) );
+
+}
+
+void SetWeaponFixed(int teamSide, int windex, int amountz)
+{
+    //used for nulling picked up crate weapons
+    local wepz = GS->GetWeaponByIndex(1, windex);
+    if(windex == 37){return;}
+    local inPage = wepz->GetPageIndex();
+
+    if(teamSide == 1)
+		{
+        GS->Info.SetWeaponEx(1,windex,inPage, amountz);
+        }
+	else
+		{
+        GS->Info.SetWeaponEx(2,windex,inPage, amountz);
+        }
+    //Always set to 0
+    //select worm
+
+    wepz = GS->GetWeaponByIndex(1, 59);
+    inPage = wepz->GetPageIndex();
+    GS->Info.SetWeaponEx(1,59,inPage, 0);
+    GS->Info.SetWeaponEx(2,59,inPage, 0);
+    //Todo earthquake is what ID?
+}
+
+override void CCrate::Free(bool FreeMem)
+{
+	if(FixedWeapon != 0){JetCrateAlive = false; SpawnJetCrate = 0;}
+
+	if(molePickup == false)
+		{
+        if(desc.type == CT_UTILITY)
+        	{
+            local ps = "found 1x DMG*2";
+            local PlayingWorm = GetCurrentWorm();
+            if(PlayingWorm == NullObj){super; return;}
+
+            SuppressAllMsg = false;
+            PlayingWorm->ShowTeamMessage(15, ps, PlayingWorm->WormTeam);
+            SuppressAllMsg = true;
+
+            //Remove all fast walks and give X2 dmg maybe enough to fix this buggy utility crates
+            //local TwormT = PlayingWorm->WormTeam;
+            //local wep = GS->GetWeaponByIndex(1, 64);
+            //GS->Info.SetWeaponEx(TwormT,64,wep->GetPageIndex(), 0); //fast walk 0 "fix" - should not be needed anymroe
+
+            //GS->Info.AddWeapon(PlayingWorm->WormTeam,65, 1); //Add DMG*2
+            local Tside = PlayingWorm->TeamSide;
+
+              if(Tside == 1) {WepAmountL[65] += 1;}
+              else {WepAmountR[65] += 1;}
+              RefreshTeamWeapon(65);
+
+            super;
+			return;
+        }
+        
+        if((desc.type == CT_WEAPON || desc.type == CT_MWEAPON) && desc.weapon > 100)
+        {
+            if(FixedWeapon == 0) {local wep = GS->GetWeaponByIndex(1, desc.weapon-100);}
+            else {local wep = GS->GetWeaponByIndex(1, 27);}
+
+            if(wep != NullObj)
+            	{
+                //remove weapon
+
+                local PlayingWorm = GetCurrentWorm();
+                if(PlayingWorm == NullObj){super; return;}
+
+                if(Root->CurTeam == 0 || Root->CurWorm == 0){super; return;} //Trying to fix dissapearing weapons (function wont fire if in between turns)
+
+                local Tside = 1;
+                local Wamount = 0;
+                local windex = wep->GetWeaponIndex();
+                if(windex < 0 || windex > 80){super; return;}
+                if(PlayingWorm->TeamSide == 1){Wamount = WepAmountL[windex];}
+				else {Wamount = WepAmountR[windex]; Tside = 2;}
+				
+                Wamount = Wamount - desc.amount;
+                if(Wamount < 0){Wamount = 0;}
+
+                //remove real crate weapon
+                //GS->Info.SetWeaponEx(PlayingWorm->WormTeam,windex,wep->GetPageIndex(), Wamount);
+                SetWeaponFixed(Tside, windex, Wamount);
+
+                //Add new weapon
+                RNGn = GS->GetRandom() % 100;
+                RNGnA = GS->GetRandom();
+                RNGnB = GS->GetRandom() % 100;
+                local wepindex = 1;
+                if(FixedWeapon == 0){wepindex = GenerateWeaponID(RNGn, RNGnA, RNGnB);}
+				else
+					{
+                    if(FixedWeapon > 0 && FixedWeapon < 80){wepindex = FixedWeapon;}
+					else{wepindex = GenerateWeaponID(RNGn, RNGnA, RNGnB);}
+                 	}
+
+				local WepAmount = 1;
+                PlayLocalSound(124, 3, 1, 1); //collect.wav
+
+				local ps = "something weird";
+            	if(wepindex == 1){ps = "Bazooka";   WepAmount = 4;}
+            	if(wepindex == 2){ps = "Homing Missile";  WepAmount = 4;}
+            	if(wepindex == 3){ps = "Lantern";}
+            	if(wepindex == 4){ps = "Homing Pigeon";   WepAmount = 2;}
+            	if(wepindex == 5){ps = "Sheep Launcher"; WepAmount = 2;}
+
+	            if(wepindex == 6){ps = "Grenade";  WepAmount = 4;}
+    	        if(wepindex == 7){ps = "Cluster Bomb";}
+        	    if(wepindex == 8){ps = "Banana Bomb";}
+            	if(wepindex == 9){ps = "Battle Axe";}
+            	if(wepindex == 11){ps = "Shotgun"; WepAmount = 3;}
+            
+	            if(wepindex == 12){ps = "Gruesome Grenade";} //
+    	        if(wepindex == 13){ps = "Sentry Gun";}
+        	    if(wepindex == 14){ps = "Minigun"; WepAmount = 2;}
+            	if(wepindex == 15){ps = "Longbow";}
+            	if(wepindex == 16){ps = "Fire Punch";}
+            
+	            if(wepindex == 17){ps = "Electromagnet";}
+    	        if(wepindex == 18){ps = "Kamikaze";}
+        	    if(wepindex == 19){ps = "Suicide Bomber";}
+	            if(wepindex == 20){ps = "Prod";}
+	            if(wepindex == 21){ps = "Dynamite"; WepAmount = 2;}
+            
+    	        if(wepindex == 22){ps = "Mine";}
+        	    if(wepindex == 23){ps = "Sheep"; WepAmount = 2;}
+	            if(wepindex == 24){ps = "Tele Arrow";}
+	            if(wepindex == 25){ps = "Aqua Sheep";}
+	            if(wepindex == 26){ps = "Mole Bomb";}
+            
+	            if(wepindex == 27){ps = "Air Strike"; WepAmount = 2;}
+	            if(wepindex == 28){ps = "Napalm Strike"; WepAmount = 2;}
+	            if(wepindex == 29){ps = "Far Sight";} //Mine Strike is now Far Sight
+	            if(wepindex == 30){ps = "Mine Strike";}
+	            if(wepindex == 31){ps = "Super Mole Bomb"; WepAmount = 2;}
+	            
+            	if(wepindex == 32){ps = "BlowTorch";}
+	            if(wepindex == 33){ps = "Drill";}
+	            if(wepindex == 34){ps = "Girder";}
+	            if(wepindex == 35){ps = "Baseball Bat";}
+	            if(wepindex == 36){ps = "Girder Starter Pack";}
+	            
+            	if(wepindex == 37){ps = "Ninja Rope"; WepAmount = 2;}
+	            if(wepindex == 38){ps = "Bungee";}
+    	        if(wepindex == 39){ps = "Parachute";}
+        	    if(wepindex == 40){ps = "Teleport";}
+            	if(wepindex == 41){ps = "Scales of Justice";}
+            	
+	            if(wepindex == 42){ps = "Roller Strike";}
+	            if(wepindex == 43){ps = "Holy Hand-Grenade";}
+	            if(wepindex == 44){ps = "Flame Thrower";}
+	            if(wepindex == 45){ps = "Salvation Army";}
+	            if(wepindex == 46){ps = "MB Bomb";}
+	            
+            	if(wepindex == 47){ps = "Petrol Bomb";}
+            	if(wepindex == 48){ps = "Skunk";}
+            	if(wepindex == 49){ps = "Priceless Ming Vase";}
+            	if(wepindex == 50){ps = "French Sheep Strike";}
+            	if(wepindex == 51){ps = "Randomgeddon";}
+            	
+            	if(wepindex == 52){ps = "Mad Cow";  WepAmount = 2;}
+            	if(wepindex == 53){ps = "Old Woman";}
+            	if(wepindex == 54){ps = "Concrete Donkey";}
+            	if(wepindex == 55){ps = "Fire Bolt";}
+            	if(wepindex == 56){ps = "Armageddon";}
+            	
+            	if(wepindex == 57){ps = "Skip Go";}
+            	if(wepindex == 58){ps = "Surrender";}
+            	if(wepindex == 59){ps = "Select Worm";}
+            	if(wepindex == 60){ps = "Explosive Arrow";}
+            	if(wepindex == 61){ps = "Patsy Magic Bullet";}
+            	if(wepindex == 62){ps = "Jet Pack";}
+            	if(wepindex == 63){ps = "Low Gravity"; }
+            	if(wepindex == 64){ps = "Fast Walk";}
+            	if(wepindex == 65){ps = "Damage x2";}
+            	if(wepindex == 66){ps = "Crate Spy";}
+            	if(wepindex == 70){ps = "Crate Shower";}
+
+            //GS->Info.AddWeapon(PlayingWorm->WormTeam,wepindex, WepAmount);
+            //Count weapon
+            if(PlayingWorm->TeamSide == 1){
+                  WepAmountL[wepindex] = WepAmountL[wepindex] + WepAmount;
+              }else{
+                  WepAmountR[wepindex] = WepAmountR[wepindex] + WepAmount;
+              }
+            RefreshTeamWeapon(wepindex);
+
+            ps = StrCon("x ", ps);
+            ps = StrCon(ItoA(WepAmount), ps);
+
+
+            SuppressAllMsg = false;
+            PlayingWorm->ShowTeamMessage(15, ps, PlayingWorm->WormTeam);
+            SuppressAllMsg = true;
+
+             }
+        }
+
+    }
+
+
+    super;
+}
+
+
+
+override void CObject::ShowTeamMessage(int fontColor,string msg,int team)
+{
+    if( SuppressAllMsg == false)
+		{
+        super;
+    	}
+	else
+		{
+        lastSupressedMsg = msg;
+        lastSupressedMsgColor = fontColor;
+        lastSupressedMsgTeam = team;
+        //not used anymore
+    	}
+}
+
+
+void CLemming::CheckAllObj(){
+  //Iteration through every object, excluding landscape:
+
+  if(Root->CurTeam == 0 && Root->CurWorm == 0){return;}
+
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+    if(obj->ClType == OC_Crate){
+        tmpCratep = obj;
+
+        local xx = tmpCratep->PosX;
+        local yy = tmpCratep->PosY;
+
+        if(     (abs(xx - PosX) < 45)   && (abs(yy - PosY) < 45)){
+           // CCrate(obj)->desc.highlight = true;
+
+///   tmpCratep->GenerateContent(); ROLLING CUSTOM FUNCTION INSTEAD
+
+           // GG->WriteToChat(11, ItoA(tmpCratep->desc.weapon), false);
+           // GG->WriteToChat(11, ItoA(tmpCratep->desc.amount), false);
+
+           local foundworm = false;
+           local firstwormTeam = 0;
+           //Find first worms in team
+           for (j = 6; j >= 1; j-=1)
+                      {
+                        if(foundworm == true){break;}
+                        for (i = 8; i >= 1; i-=1)
+                        {
+
+                            local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+                            if (Worm)
+                            {
+                                if(Worm->TeamSide == owningTeam){
+                                    foundworm = true;
+                                    firstwormTeam = Worm->WormTeam;
+                                    break;
+                                }
+
+                            };
+
+                        };
+
+                      };
+
+           if(foundworm == false){return;}
+           //Worm* currWormy = GetCurrentWorm();
+          // local PlayingWorm = CWorm(Root->GetObject(2, 16 * Root->CurTeam + Root->CurWorm));
+           local PlayingWorm = GetCurrentWorm();
+           if(PlayingWorm == NullObj){return;}
+           local PlayingTeamSide = PlayingWorm->TeamSide;
+           if(PlayingTeamSide != owningTeam){return;}
+
+           if(Root->CurTeam != firstwormTeam){}
+
+
+
+           //CT_WEAPON CT_MWEAPON
+           //local wep = GS->GetWeaponByIndex(1, tmpCratep->desc.weapon-100);
+           //tmpWeapy = GS->GetWeaponByIndex(1, tmpCratep->desc.weapon-100);
+           //local wepindex = wep->GetWeaponIndex();
+           local ps = "Something weird happened! ERROR";
+           if(tmpCratep->desc.type == CT_UTILITY)
+           {
+                ps = "Mole found DMG*2";
+                SuppressAllMsg = false;
+                PlayingWorm->ShowTeamMessage(15, ps, PlayingWorm->WormTeam);
+                SuppressAllMsg = true;
+
+              //GS->Info.AddWeapon(firstwormTeam,65, 1);
+
+              if(PlayingWorm->TeamSide == 1){
+                  WepAmountL[65] += 1;
+              }else{
+                  WepAmountR[65] += 1;
+              }
+              RefreshTeamWeapon(65);
+
+              tmpCratep->molePickup = true;
+              obj->Free(true);
+              return;
+
+           }
+
+           RNGn = GS->GetRandom() % 100;
+           RNGnA = GS->GetRandom();
+           RNGnB = GS->GetRandom() % 100;
+
+           local wepindex = 1;
+             if(tmpCratep->FixedWeapon == 0){
+                wepindex = GenerateWeaponID(RNGn, RNGnA, RNGnB);
+             }else{
+                 if(tmpCratep->FixedWeapon > 0 && tmpCratep->FixedWeapon < 80){
+                     wepindex = tmpCratep->FixedWeapon;
+                 }else{
+                     wepindex = GenerateWeaponID(RNGn, RNGnA, RNGnB);
+                 }
+             }
+
+
+           local WepAmount = 1;
+
+           //if((tmpCratep->desc.type != CT_WEAPON && tmpCratep->desc.type != CT_MWEAPON) || tmpCratep->desc.weapon < 100){return;}
+
+
+           //if(wepindex == 12 || wepindex == 3){wepindex = 62;}
+           PlayLocalSound(124, 3, 1, 1); //collect.wav
+
+
+           //Grow
+           WantSize += 2;
+
+           //Print message
+
+
+
+            if(wepindex == 1){ps = "Bazooka";   WepAmount = 4;}
+            if(wepindex == 2){ps = "Homing Missile";  WepAmount = 4;}
+            if(wepindex == 3){ps = "Lantern";}
+            if(wepindex == 4){ps = "Homing Pigeon";   WepAmount = 2;}
+            if(wepindex == 5){ps = "Sheep Launcher"; WepAmount = 2;}
+            if(wepindex == 6){ps = "Grenade";  WepAmount = 4;}
+            if(wepindex == 7){ps = "Cluster Bomb";}
+            if(wepindex == 8){ps = "Banana Bomb";}
+            if(wepindex == 9){ps = "Battle Axe";}
+            if(wepindex == 11){ps = "Shotgun"; WepAmount = 3;}
+            if(wepindex == 12){ps = "Gruesome Grenade";} //
+            if(wepindex == 13){ps = "Sentry Gun";}
+            if(wepindex == 14){ps = "Minigun"; WepAmount = 2;}
+            if(wepindex == 15){ps = "Longbow";}
+            if(wepindex == 16){ps = "Fire Punch";}
+            if(wepindex == 17){ps = "Electromagnet";}
+            if(wepindex == 18){ps = "Kamikaze";}
+            if(wepindex == 19){ps = "Suicide Bomber";}
+            if(wepindex == 20){ps = "Prod";}
+            if(wepindex == 21){ps = "Dynamite"; WepAmount = 2;}
+            if(wepindex == 22){ps = "Mine";}
+            if(wepindex == 23){ps = "Sheep"; WepAmount = 2;}
+            if(wepindex == 24){ps = "Tele Arrow";}
+            if(wepindex == 25){ps = "Aqua Sheep";}
+            if(wepindex == 26){ps = "Mole Bomb";}
+            if(wepindex == 27){ps = "Air Strike"; WepAmount = 2;}
+            if(wepindex == 28){ps = "Napalm Strike"; WepAmount = 2;}
+            if(wepindex == 29){ps = "Far Sight";} //Mine Strike is now Far Sight
+            if(wepindex == 30){ps = "Mine Strike";}
+            if(wepindex == 31){ps = "Super Mole Bomb"; WepAmount = 2;}
+            if(wepindex == 32){ps = "BlowTorch";}
+            if(wepindex == 33){ps = "Drill";}
+            if(wepindex == 34){ps = "Girder";}
+            if(wepindex == 35){ps = "Baseball Bat";}
+            if(wepindex == 36){ps = "Girder Starter Pack";}
+            if(wepindex == 37){ps = "Ninja Rope"; WepAmount = 2;}
+            if(wepindex == 38){ps = "Bungee";}
+            if(wepindex == 39){ps = "Parachute";}
+            if(wepindex == 40){ps = "Teleport";}
+            if(wepindex == 41){ps = "Scales of Justice";}
+            if(wepindex == 42){ps = "Roller Strike";}
+            if(wepindex == 43){ps = "Holy Hand-Grenade";}
+            if(wepindex == 44){ps = "Flame Thrower";}
+            if(wepindex == 45){ps = "Salvation Army";}
+            if(wepindex == 46){ps = "MB Bomb";}
+            if(wepindex == 47){ps = "Petrol Bomb";}
+            if(wepindex == 48){ps = "Skunk";}
+            if(wepindex == 49){ps = "Priceless Ming Vase";}
+            if(wepindex == 50){ps = "French Sheep Strike";}
+            if(wepindex == 51){ps = "Randomgeddon";}
+            if(wepindex == 52){ps = "Mad Cow";  WepAmount = 2;}
+            if(wepindex == 53){ps = "Old Woman";}
+            if(wepindex == 54){ps = "Concrete Donkey";}
+            if(wepindex == 55){ps = "Fire Bolt";}
+            if(wepindex == 56){ps = "Armageddon";}
+            if(wepindex == 57){ps = "Skip Go";}
+            if(wepindex == 58){ps = "Surrender";}
+            if(wepindex == 59){ps = "Select Worm";}
+            if(wepindex == 60){ps = "Explosive Arrow";}
+            if(wepindex == 61){ps = "Patsy Magic Bullet";}
+            if(wepindex == 62){ps = "Jet Pack";}
+            if(wepindex == 63){ps = "Low Gravity"; }
+            if(wepindex == 64){ps = "Fast Walk";}
+            if(wepindex == 65){ps = "Damage x2";}
+            if(wepindex == 66){ps = "Crate Spy";}
+            if(wepindex == 70){ps = "Crate Shower";}
+
+
+            //GS->Info.AddWeapon(firstwormTeam,wepindex, WepAmount);
+            //Count weapon
+            if(PlayingWorm->TeamSide == 1){
+                  WepAmountL[wepindex] += WepAmount;
+              }else{
+                  WepAmountR[wepindex] += WepAmount;
+              }
+            RefreshTeamWeapon(wepindex);
+
+
+            ps = StrCon("x ", ps);
+            ps = StrCon(ItoA(WepAmount), ps);
+            ps = StrCon("Mole found ", ps);
+
+            SuppressAllMsg = false;
+            PlayingWorm->ShowTeamMessage(15, ps, PlayingWorm->WormTeam);
+            SuppressAllMsg = true;
+
+           //PlayingWorm->ShowTeamMessage(12, "wat?", PlayingWorm->WormTeam);
+           /*
+           if (GG->machColors[GetLocalMachine()] & (1 << GetTeamColor(PlayingWorm->WormTeam)))
+            {
+                GG->WriteToChat(11, "WORKS", false);
+                //ShowMessage("test");
+            }
+            */
+            //ShowMessage(wep->NameA);
+           // 00 10
+
+             //local wep1 = GS->GetWeaponByName("Minigun");
+             //local t = new CCrate(Root, &cDesc, DT_NONE);
+             //t->desc.weapon = 100 * wep1->GetPageIndex() + wep1->GetWeaponIndex();
+             //t->desc.wType = WCT_DEFINED;
+             //t->desc.amount = 5;
+
+           //GS->Info.AddWeapon(owningTeam,wepindex,tmpCratep->desc.amount);
+
+            tmpCratep->molePickup = true;
+            obj->Free(true);
+
+        }
+
+    }
+  };
+}
+
+void CLemming::WalkThere(){
+    local Cdir = 0;
+    if(WalkingDir == 0){ Cdir = -1; }else{ Cdir = 1; }
+    if(InMidAir == 0){
+
+        SpX = SpX+(Cdir* 0.5);
+        SpY = SpY-3.0;
+
+    }else{
+        if(Fr % 100 == 0){
+            if (RandomHundo > 60){
+                SpY = SpY-5.0;
+                SpX = SpX+(Cdir * 2.0);
+            }
+         }
+    }
+}
+void CLemming::TurnAround(){
+    if(WalkingDir == 0){
+        WalkingDir = 1;
+    }else{
+        WalkingDir = 0;
+    }
+}
+void CLemming::NeedsToGrow(){
+    if(WantSize != AtSize){
+        StartGrowingNow = true;
+    }
+}
+
+void CLemming::NearbyWorm(){
+local WormCloseby = false;
+if(Root->CurTeam == 0 && Root->CurWorm == 0){return;}
+                     for (j = 6; j >= 1; j-=1)
+                      {
+                        for (i = 8; i >= 1; i-=1)
+                        {
+
+                            local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+                            if (Worm)
+                            {
+                                if(     (abs(Worm->PosX - PosX) < 55)   && (abs(Worm->PosY - PosY) < 55)){
+                                    WormCloseby = true;
+                                    if (owningTeam == Worm->TeamSide){
+                                        //TeamSide = 0; // 1 left, 2 right
+                                        EnemyIsClose = false;
+                                    }else{
+                                        EnemyIsClose = true;
+                                    }
+                                    //GG->WriteToChat(9, "worms close", false);
+                                    break;
+                                }
+
+                            };
+
+                        };
+                      };
+WormsIsClose = WormCloseby;
+
+if(WormsIsClose == false){
+    EnemyIsClose = false;
+}
+
+return;
+}
+
+
+void CLemming::MoveDirection(int dir){ //collision 0up1down 2left3right
+   if(dir == 0){ //hit head, walk somewhere else
+       StateM = 0;
+   }
+   if(dir == 1){
+        SpY = SpY -3.0;
+   }
+   if(dir == 2){
+        SpY = SpY -2.0;
+        SpX = SpX +2.0;
+   }
+   if(dir == 3){
+        SpY = SpY -2.0;
+        SpX = SpX -2.0;
+   }
+}
+void CLemming::DoGrow(){
+
+    if(AtSize > 100){StateM = 1; return; }
+    if(Fr % 4 == 0){
+        if(AtSize < WantSize){
+            AtSize = AtSize + 1;
+            ColMask = new CColMask(AtSize,AtSize,MakeCircleMask(AtSize));
+        }
+        if(AtSize > WantSize){
+            AtSize = AtSize + 1;
+            ColMask = new CColMask(AtSize,AtSize,MakeCircleMask(AtSize));
+        }
+        if(AtSize == WantSize){
+            StateM = 1; return;
+        }
+    }
+}
+
+
+void CLemming::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)            // Root->GetObject(2, 16 * Team + Number);
+{
+if(Type == M_DRAWQUEUE)
+    {
+        local dsize = (AtSize * 7.5) / 100;
+        local zdsize = (AtSize * 1.0) / 10;
+
+        CSprite * tmpSpr;
+        if(OnFire){
+            tmpSpr = lwlkb;
+        }else{
+            tmpSpr = lwlk;
+            //tmpSpr = SprKCrate;
+        }
+
+
+        if(WalkingDir == 0){
+            AddSpriteEx(10,PosX,PosY,tmpSpr->Index+262144,abs(sin((GS->Tick/5))) * abs(SpX),CurrRota,dsize);
+        }else{
+            AddSpriteEx(10,PosX,PosY,tmpSpr->Index,abs(sin((GS->Tick/5))) * abs(SpX),CurrRota,dsize);
+        }
+
+        if(StandingStill == true){
+            
+            AddSpriteEx(9,PosX,(PosY-8)-((GS->Tick/10) % 6),lslp->Index, abs(sin((GS->Tick/15))) ,0.0, zdsize);
+            AddSpriteEx(9,PosX+5,(PosY-14)-(((GS->Tick/10)+33) % 6),lslp->Index, abs(sin((GS->Tick/25))) ,0.0, zdsize);
+        }
+
+    }
+
+    if(Type == M_FRAME)
+    {
+        if(Fr < 10000){Fr += 1;}else{Fr = 0;}
+
+        if(Fr % 100 == 0){
+            RandomHundo = GS->GetRandom()%100;
+        }
+
+        if(Fr % 42){if(OnFire == false){ LookForFire(); }}
+
+        if (Sinking == 1) Free(true);
+
+        if(Fr % 500 == 0){NeedsToGrow();}
+
+        if(Fr % 25 == 0){IsNotMoving();}else{if(PosX != PosHistoryX && PosY != PosHistoryY){ StandingStill = false; } }
+        if(Fr % 102 == 0 ){ NearbyWorm();
+        if(EnemyIsClose == true ){
+            //GG->WriteToChat(11, ItoA(AtSize), false);
+            if(AtSize < 10){
+                DoExplosion (  PosX,  PosY, 50, 20, 0, 0 );
+            }else if(AtSize < 12){
+                DoExplosion (  PosX,  PosY, 50, 30, 0, 0 );
+            }else if(AtSize < 15){
+                DoExplosion (  PosX,  PosY, 50, 40, 0, 0 );
+            }else if(AtSize < 18){
+                DoExplosion (  PosX,  PosY, 50, 50, 0, 0 );
+            }else if(AtSize < 21){
+                DoExplosion (  PosX,  PosY, 50, 70, 0, 0 );
+            }else if(AtSize < 24){
+                DoExplosion (  PosX,  PosY, 50, 90, 0, 0 );
+            }else{
+                DoExplosion (  PosX,  PosY, 50, 120, 0, 0 );
+            }
+
+            Free(true);
+            }
+        }
+
+        if(Fr % 28 == 0){ CheckAllObj(); }
+
+
+        if(Fr % 200 == 0 && WaitInEffect == false){
+            GetNextState = true;
+        }
+
+        if(GetNextState == true){
+            GetNextState = false;
+            RandomHundo = GS->GetRandom()%100;
+            if(StartGrowingNow == true){
+                StateM = 3;
+
+            }else if(TurnAroundNow == true){
+                //not used
+
+            }else if(StandingStill == true){
+
+                if(RandomHundo > 75){ //25% chance to sleep
+                    StateM = 0;
+                }else{
+                    StateM = 1;
+                }
+            }
+
+
+        }
+
+
+        if(StateM == 0){ //standing / sleeping
+                if(WaitSome(500, 0)){
+                    RandomHundo = GS->GetRandom()%100;
+                    PickRandomDir();
+                    StateM = 1;
+                }
+        }else if(StateM == 1){ //walking
+            if(CheckCollision()){
+                WalkThere();
+            }
+        }else if(StateM == 2){
+            if(WaitSome(20, 2)){
+                TurnAround();
+                StateM = 1;
+            }
+        }else if(StateM == 3){ //Grow
+        local testcol = CheckCollisionGrow();
+            if(testcol == 4){
+                DoGrow();
+            }else{ //collision 0up1down 2left3right
+                MoveDirection(testcol);
+            }
+        }
+    }
+}

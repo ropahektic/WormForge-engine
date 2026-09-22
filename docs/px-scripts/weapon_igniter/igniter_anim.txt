@@ -1,0 +1,58 @@
+require p_sprite_builder;
+
+CSprite* igniter_aiming;                                                
+CSprite* igniter_bullet;                                                
+
+void igniter_anim::InitGraphic()                                
+{   CFile* f;                                                            
+    f = GetAttachment("igniter_aiming.png");                             
+    igniter_aiming = LoadSprite(f, 1, 0);                                
+    f = GetAttachment("igniter_bullet.png");                             
+    igniter_bullet = LoadSprite(f, 16, 1);                               
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Igniter";          
+     sprite = igniter_aiming->Index;
+     Params->hand_radius = -6.0;                                                 
+     Params->hand_rotation = 1.0;                                             
+     Params->hand_radial_rotation = 0.9;
+     Params->weap_radial_rotation = 0.0;     
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 0.0;
+     Params->hand_type = 2;    
+     Params->hand_scale = 0.8; 
+//     Params->zplane = 10.0;  
+//     Params->scale = 1.0;    
+                                                  
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){    
+super;
+  if (Type == M_FRAME){                             
+     if (weap->CheckName("Igniter")) {              
+         if (igniter_anim2) {                       
+              local sprite = igniter_bullet->Index; 
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;              
+              new WeapSprite(this, sprite, Params);              
+              weap->launch.anim.spriteIndex = 0;
+              igniter_anim2 = false;            
+         }                                                                     
+     }                                                                                                                                                     
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  igniter_anim2 = true;                                                    
+}

@@ -1,0 +1,48 @@
+void agile::InitGraphic()
+{
+}
+
+void agile::Init()
+{
+}
+
+void agile::FirstFrame()
+{
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+//Agile fields
+IsAgile = false;
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if(IsAgile == true)
+     {
+       if(ObjState == WS_JUMP || ObjState == WS_SLIDING || ObjState == WS_FLYING2)
+        {
+             if(Type == M_PUP)
+             {
+                if(SpY >= -3){SpY = SpY - 0.1;}
+             }
+
+             if(Type == M_PDOWN)
+             {
+                if(SpY <= 3){SpY = SpY + 0.1;}
+             }
+
+             if(Type == M_PLEFT)
+             {
+                if(SpX >= -3){SpX = SpX - 0.1;}
+             }
+
+             if(Type == M_PRIGHT)
+             {
+                if(SpX <= 3){SpX = SpX + 0.1;}
+             }
+        }
+     }
+super;
+}

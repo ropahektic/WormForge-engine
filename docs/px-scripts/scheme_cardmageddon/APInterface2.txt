@@ -1,0 +1,57 @@
+CAPInterface2 : CObject;
+CBitmap* GUIBitmap2;
+
+void APInterface2::InitGraphic()
+   { 
+   GUIBitmap2 = MakeBitmap(50,50);
+   }
+
+void APInterface2::FirstFrame()
+   {
+   local DeIn = new CAPInterface2(Root);
+   DeIn->CalculatePosition2();
+   }
+
+CAPInterface2::CAPInterface2(CObject* parent)
+   {
+   super(parent,GS);   
+   APUI2 = GUIBitmap2;    
+   }
+
+void CAPInterface2::CalculatePosition2()
+   {
+   PositionX = 0 - GS->Disp->xRes / 2 + 200;
+   PositionY = 0 + GS->Disp->yRes / 2 - 35;
+   }
+
+void CAPInterface2::DrawBitmap2()
+   {
+   AddInterfaceBitmap(0,PositionX ,PositionY,APUI2,50,50,0);
+   }
+
+void CAPInterface2::DrawBackground2()
+   {
+   APUI2->Rect(0,0,50,50,ARGB(255,0,0,0));
+   }
+
+void CAPInterface2::DrawText2()
+   {           			 
+   local a = 1;
+   local b = 1;	
+   GS->Disp->DrawText(16,APUI2, 16, 5, "AP:" , &a, &b);	
+  	
+   GS->Disp->DrawText(23,APUI2, 20, 22, ItoA(APs/100), &a, &b);	
+   }
+
+void CAPInterface2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+   {
+   if (Type == M_FRAME)
+       {        
+       DrawBackground2();
+       DrawText2();    
+       }
+   if (Type == M_DRAWQUEUE)
+       {
+       DrawBitmap2();
+       }
+   }

@@ -1,0 +1,135 @@
+require utils, utils_steps;
+
+#KAMIKAZE_ROCKET
+
+CSprite* kRocketFlySpr;
+
+void KamikazeRocket::InitGraphic()    
+{
+  kRocketFlySpr = LoadSprite(GetAttachment("krocketfly.png"), 5, 1);
+  SetSpriteOverride(371, LoadSprite(GetAttachment("krocketl.png"), 1, 0));
+  SetSpriteOverride(372, LoadSprite(GetAttachment("krocketl.png"), 1, 0));
+  SetSpriteOverride(373, LoadSprite(GetAttachment("krocketl.png"), 1, 0));
+  SetSpriteOverride(374, LoadSprite(GetAttachment("krocketfir.png"), 11, 0));
+}
+
+void KamikazeRocket::Init()
+{
+    keySync->AddKey(17); // Ctrl button;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  super;
+  kRocketCtrl = false;  
+  kRocketPosX = PosX;
+  kRocketPosY = PosY;
+  kRocketAngle = FireAngle;
+  kRocketSpeed = 8.0;
+  kRocketCycle = 0.0;
+  kRocketLifeTime = 4000; //4secs
+  kRocketGUITimer = CGUIText(NullObj);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(kRocketCtrl)
+  { 
+    if(Type == M_FRAME)
+    {
+      if(PressedLeft == 1) { kRocketAngle += 0.05; }
+      if(PressedRight == 1) { kRocketAngle -= 0.05; }
+      /*if(PressedDown == 1) { kRocketSpeed = 8.0; } 
+      else { kRocketSpeed = 12.0; } */
+
+      kRocketPosX += kRocketSpeed*sin(kRocketAngle*MATH_PI);
+      kRocketPosY += kRocketSpeed*cos(kRocketAngle*MATH_PI);
+
+      PosX = kRocketPosX;
+      PosY = kRocketPosY;
+      ////////////////////////////////////////////////////////
+      kRocketLifeTime-=20;
+      
+      if(kRocketLifeTime <= 0)
+      {
+          kRocketCtrl = false;
+          GS->Info.SetWormHealth(WormTeam, WormNumber, 0);
+          DoExplosion(PosX, PosY, 100, 30, 0, WormTeam);
+          PosX = -2500;
+          PosY = Env->Water + 1000;
+          //Root->Message( Root, M_SKIPTURN, 0, NullObj);
+      }
+
+      if(kRocketLifeTime > 0)
+      {
+		  GG->land->MakeHole(8,kRocketPosX,kRocketPosY); // additioanl digging for more smooth tunnels
+	  }
+      ////////////////////////////////////////////////////////
+    }    
+    if(Type == M_DRAWQUEUE)
+    {      
+      DrawkRocketGUITimer();
+      
+      if(TurnSide == 1)
+        AddSpriteEx( 1, kRocketPosX, kRocketPosY, kRocketFlySpr->Index+262144, kRocketCycle, -kRocketAngle*MATH_PI, 1.0);
+      else
+        AddSpriteEx( 1, kRocketPosX, kRocketPosY, kRocketFlySpr->Index, kRocketCycle, -kRocketAngle*MATH_PI, 1.0);
+
+      kRocketCycle += 0.1; 
+      
+      return;
+    }
+
+  }
+  super;  
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if(Weap->CheckName("Kamikaze Rocket") && keySync->KeyPressed(17))
+  	{
+    kRocketCtrl = true;
+    kRocketPosX = PosX;  
+    kRocketPosY = PosY;
+    kRocketAngle = FireAngle*TurnSide;                                          
+    kRocketGUITimer = new CGUIText(GS->Disp, 6, 2);
+	super;
+  	}
+else if (Weap->CheckName("Kamikaze Rocket"))
+	{
+	Weap->EndsTurn = false;
+    local TeamNumber = GetTeamNumber(WormTeam);
+    GS->Info.AddWeaponEx(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);
+    ShowMessage("Hold control and press space to use Kamikaze.");
+	return;
+	}
+
+else super;
+}
+
+void CWorm::DrawkRocketGUITimer()                         
+{
+  int outX = 1;
+  int outY = 1;
+  int txtclr = 7;
+  if(kRocketLifeTime <= 3000)
+      txtclr = 0;
+  string Str = ftoaEx(kRocketLifeTime / 1000, 2);
+  CBitmap * bitmap = kRocketGUITimer->SetText(Str, txtclr, RGB(0, 0, 0), RGB(127, 127, 127), &outX, &outY, 0);
+  AddInterfaceBitmap(0, 0, -GS->Disp->halfY + GS->Disp->ViewY + 45, bitmap, outX, outY, 0);
+}
+
+//made by Pablo
+//updated by Rafa``2 (4 secs n gtimer)
+/*
+*    FireAngle:
+*
+*        1.0
+*    0.75   0.75
+* 0.5           0.5
+*    0.25   0.25
+*        0.0
+*
+*    TurnSide:
+* -1           1
+*/

@@ -1,0 +1,12 @@
+CSprite* thumpern_tr;
+
+void sprite_251::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("thumpernt.png");
+    thumpern_tr = LoadSprite(f, 9, 0);
+    // f = GetAttachment("thumpernt_old.png");
+    //thumpernt = LoadSprite(f, 9, 0);
+
+    SetSpriteOverride(251, thumpern_tr);
+}

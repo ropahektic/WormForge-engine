@@ -1,0 +1,145 @@
+// By PyroMan.
+require utils;
+
+WeapSprite : CObject;
+
+WeapSpriteParams::WeapSpriteParams(){
+    animate = false;
+    anim_speed = 1.0;
+    ZPlane = 5.0;
+    scale = 1.0;
+    hideWorm = false;
+    rotation = 0.0;
+    dont_rotate_by_speed = false;
+    animate_by_speed = false;
+    play_backwards = false;
+    ang_if_dont_rotate = 0.0;
+}
+
+WeapSprite::WeapSprite(CMissile* Mis, int Sprite, WeapSpriteParams* Params)
+{
+    super(Root, GS);
+
+    local w = GetCurrentWorm();
+    if (w != NullObj) owner = w;
+    mis = Mis;
+    type = 2;
+    speed = 1.0;
+    sprite = Sprite;
+
+    if (mis->launchdata.anim.type == WAT_Rotation) type = 3;
+    else if (mis->launchdata.anim.type == WAT_TrackMovement) type = 2;
+    else if (mis->launchdata.anim.type == WAT_Slow) { type = 1; speed = 0.5; }
+    else if (mis->launchdata.anim.type == WAT_Medium) { type = 1; speed = 0.8; }
+    else if (mis->launchdata.anim.type == WAT_Fast) { type = 1; speed = 1.35; }
+    else if (mis->launchdata.anim.type == WAT_HSpeed) { type = 3; speed = 1.0; }
+    else if (mis->launchdata.anim.type == WAT_TrackSpeed) { type = 4; speed = 1.0; }
+    else type = 5;
+
+    z = Params->ZPlane;
+    scale = Params->scale;
+    frame = 1.0;
+    rot = 0.0;
+    animSpeed = Params->anim_speed;
+    animate = Params->animate;
+    hideWorm = Params->hideWorm;
+    rotation = Params->rotation;
+    
+    counter = 0;
+    counterMax = 20;  // 800msec
+    
+    readyToDrawAnim = false;
+    allow_render = true;
+    
+    ansp = animSpeed * 30;
+    ansp = float(ansp)/1000.0;
+    AnimationSpeedT = ansp;
+    AnimationPhaseT = 0.0;
+    
+    dont_rotate_by_speed = Params->dont_rotate_by_speed;
+    animate_by_speed = Params->animate_by_speed;
+    backwards = Params->play_backwards;
+    static_angle = Params->ang_if_dont_rotate;
+}
+
+void WeapSprite::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (mis != NullObj && mis->IsMaterial)           // checking "isMaterial" is the way to solve the problem of sticked sprites.
+        {
+            if (allow_render == false) {
+               readyToDrawAnim = false;
+               return;
+            }
+            if (hideWorm && owner != NullObj) owner->hideWorm = true;
+            if (type == 2) CalculateAngle(mis->SpX, mis->SpY);
+            else if (type == 1) {
+               rot += speed * 0.5 * Sign(mis->SpX);
+            }
+            else if (type == 3) {
+               rot += speed * 0.5 * (mis->SpX * 0.15 + abs(mis->SpY * 0.01) * Sign(mis->SpX));
+            }
+            if (animate) 
+            {
+               if (animate_by_speed) CalculateFrameSpeed(mis->SpX, mis->SpY);
+               else CalculateFrame();
+            }
+            readyToDrawAnim = true;
+        }
+        else 
+        {
+           readyToDrawAnim = false;
+           if (hideWorm && owner != NullObj) owner->hideWorm = false;
+           Free(true); // delete itself.
+        }
+    }
+    
+    if (Type == M_DRAWQUEUE)
+    {
+        if (readyToDrawAnim)
+        {
+            DrawAnim();
+        }
+    }
+}
+
+void WeapSprite::DrawAnim()
+{
+    if (mis == NullObj) return;
+    local spr = sprite;
+    if (mis->SpX < 0) spr = sprite+262144;
+    if (dont_rotate_by_speed) rot = static_angle;
+    AddSpriteEx(z, mis->PosX, mis->PosY, spr, frame, rot, scale);
+}
+
+float WeapSprite::CalculateAngle(float sx, float sy)
+{
+    local a = -atan2(sx, sy) - MATH_PI + MATH_PI * rotation;
+    rot = a;
+    return rot;
+}
+
+float WeapSprite::CalculateFrame() {
+
+      if (backwards) 
+      {
+          if (!loop) {AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;}
+          if(AnimationPhaseT > 0.99){ if(!loop) {AnimationPhaseT = AnimationPhaseT - AnimationSpeedT; loop = true;}}
+          if (loop) { AnimationPhaseT = AnimationPhaseT - AnimationSpeedT;}
+          if(loop){ if(AnimationPhaseT <= 0.00){AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;loop = false;}}
+      } else 
+      {         
+          
+          if(AnimationPhaseT > 0.99) AnimationPhaseT = 0.0;
+          else AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;
+      }
+          frame = AnimationPhaseT;
+          return frame;
+}
+
+float WeapSprite::CalculateFrameSpeed(float sx, float sy) {
+
+          frame = -atan2(sx, sy) - MATH_PI + MATH_PI * rotation;
+          return frame;
+}

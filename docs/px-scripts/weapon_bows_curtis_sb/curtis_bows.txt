@@ -1,0 +1,312 @@
+require utils, p_sprite_builder, sprite_curtis_259, sprite_curtis_260,
+sprite_curtis_261, sprite_curtis_451, sprite_curtis_452;
+
+CSprite* explosivea_aiming;
+CSprite* explosivea_bullet;
+
+CSprite* windya_aiming;
+CSprite* windya_bullet;
+
+CSprite* rebounder_aiming;
+CSprite* hominga_aiming;
+
+CSprite* multib_aiming;
+CSprite* multib_bullet;
+
+CSprite* fireb_aiming;
+CSprite* fireb_bullet;
+
+void curtis_bows::InitGraphic()
+{
+    CFile *f;
+
+    f = GetAttachment("spb_explosivea.png");
+    explosivea_aiming = LoadSprite(f, 8, 0);
+    f = GetAttachment("explosivea.png");
+    explosivea_bullet = LoadSprite(f, 1, 0);
+
+    f = GetAttachment("spb_windya.png");
+    windya_aiming = LoadSprite(f, 8, 0);
+    f = GetAttachment("windya.png");
+    windya_bullet = LoadSprite(f, 8, 0);
+
+    f = GetAttachment("spb_rebounder.png");
+    rebounder_aiming = LoadSprite(f, 8, 0);
+    f = GetAttachment("spb_hominga.png");
+    hominga_aiming = LoadSprite(f, 8, 0);
+
+    f = GetAttachment("spb_multib.png");
+    multib_aiming = LoadSprite(f, 12, 0);
+    f = GetAttachment("multib.png");
+    multib_bullet = LoadSprite(f, 12, 0);
+
+    f = GetAttachment("spb_fireb.png");
+    fireb_aiming = LoadSprite(f, 8, 0);
+    f = GetAttachment("fireb.png");
+    fireb_bullet = LoadSprite(f, 8, 0);
+}
+
+
+//---------------------------------EXPLOSIVE ARROW (POWERED)------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Explosive Arrow";
+     sprite = explosivea_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 2.00;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Explosive Arrow")) {
+         if (explosivea_anim) {
+              local sprite = explosivea_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              explosivea_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  explosivea_anim = true;
+}
+
+//---------------------------------WINDY ARROW (POWERED)----------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Windy Arrow";
+     sprite = windya_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 2.00;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Windy Arrow")) {
+         if (windya_anim) {
+              local sprite = windya_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.00;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              windya_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  windya_anim = true;
+}
+
+//---------------------------------REBOUNDER (POWERED)------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Rebounder";
+     sprite = rebounder_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 2.00;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Rebounder")) {
+         if (rebounder_anim) {
+              local sprite = explosivea_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              rebounder_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  rebounder_anim = true;
+}
+
+//---------------------------------HOMING ARROW (POWERED)---------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Homing Arrow";
+     sprite = hominga_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 1.90;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Homing Arrow")) {
+         if (hominga_anim) {
+              local sprite = explosivea_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              hominga_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  hominga_anim = true;
+}
+
+//---------------------------------MULTI BOLT (POWERED)-----------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Multi-Bolt";
+     sprite = multib_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 1.35;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Multi-Bolt")) {
+         if (multib_anim) {
+              local sprite = multib_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.40;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              multib_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  multib_anim = true;
+}
+
+//---------------------------------FIRE BOLT (POWERED)------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Fire-Bolt";
+     sprite = fireb_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 2.50;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Fire-Bolt")) {
+         if (fireb_anim) {
+              local sprite = fireb_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.50;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              fireb_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  fireb_anim = true;
+}

@@ -1,0 +1,400 @@
+require utils, wosc_lib;
+
+#WEAPON_TURRET
+
+CTurretBase : CGObject;
+
+CSprite* turretSprite;
+CSprite* turretSpriteB;
+CSprite* turretAim;
+
+CSoundFile* turretaim;
+CSoundFile* turretsetup;
+
+void turretbase::InitGraphic()
+{
+    local f = GetAttachment("turretbase.png");
+    turretSprite = LoadSprite(f, 1, 0);
+    local f = GetAttachment("turrenttower.png");
+    turretSpriteB = LoadSprite(f, 1, 0);
+    local f = GetAttachment("turret_aim.png");
+    turretAim = LoadSprite(f, 1, 0);
+};
+
+void turretbase::FirstFrame()
+{
+  local envfilter = CFilter(Root->GetObject(25, 0));
+  envfilter->Allow(M_TURNBEGIN);
+
+  turretaim         = new CSoundFile(GetAttachment("turret_aim.wav"));
+  turretsetup       = new CSoundFile(GetAttachment("turret_setup.wav"));
+};
+
+CTurretBase::CTurretBase(CObject* parent, fixed x, fixed y)
+{
+   super(parent, 17, 9);    //barrel's collsion mask
+   PosX = x;
+   PosY = y;
+   SpX = 0;
+   SpY = 0;
+   ColGroup = 6190;
+   DumpingB = 0.5;
+   IsMaterial = true;
+   SpeedDivider = 1;
+   TargetObj = CGObject(NullObj);
+
+   baseSprite = turretSprite;
+   towerSprite = turretSpriteB;
+
+   ClType = EObjectClass(500);
+
+   gFactor = 1.0;
+
+   towerOffset = 25;
+   thinkingTime = 15;
+   curThink = 0;
+
+   dontShoot = false;
+
+   timeForShoot = 15.0; //time, need for ballistic solving
+
+   minimalRadius = 40;
+   sensorRadius = 350;
+   lostRadius = 450;
+
+   turretangle = 1.57;
+   angToShoot = 0.0;
+   turretdir = 1;
+
+   reloadState = 0;
+   reloadTime = 30;
+   initalRTime = 20;
+   stepRTime = 1.12;
+   shootPower = 0.0;
+
+   timeForShoot = 32.0;
+
+   turretTeam = -1;
+
+   ammoPerTurn = 5;
+
+   towerlen = 10;
+
+   local FourCheck = MakeCircleMask(3);
+   FourCheckMask = new CColMask(0, 0, FourCheck);
+
+   breakable = false;
+   health = 50;
+   maxHealth = health;
+   ExpDamage = 50;
+
+   speed = 0.08;
+
+   sprNum = 47;
+
+   aimSoundTimer = 0;
+   aimSoundDelay = 180;
+   aimPosX = PosX;
+   aimPosY = PosY;
+};
+
+void CTurretBase::GetShootAngle()
+{
+  local tm = timeForShoot;
+  local x = TargetObj->PosX - PosX;
+  local rx = x / timeForShoot;
+  local y = TargetObj->PosY - (PosY - towerOffset);
+  local ry = SolveBallistic(y, timeForShoot, Env->Gravity * gFactor);
+
+  angToShoot = 0.0;
+  if (rx > 0)
+  {
+    angToShoot = atan2(rx, 0 - ry);
+    turretdir = 1;
+  } else {
+    angToShoot = atan2(0 - rx, 0 - ry);
+    turretdir = -1;
+  };
+  shootPower = sqrt(rx * rx + ry * ry);
+
+  lrx = rx;
+  lry = ry;
+};
+
+bool CTurretBase::CheckTrace()
+{
+  local trtime = timeForShoot;
+  local a = 0;
+  local HObj = BTrace(this, FourCheckMask, PosX, PosY - towerOffset, lrx, lry, Env->Gravity * gFactor, trtime - 1, 1, &a);
+  if (CObject(HObj) == Env->Objs.Objs[0]) return true;
+  return false;
+};
+
+bool CTurretBase::AimToEnemy()
+{
+
+  DistToEnemy = DistBetweenObjs(this, TargetObj);
+  if (DistToEnemy > lostRadius)
+  {
+    TargetObj = NullObj;
+    return false;
+  };
+
+  local ang = 0.0;
+  //MY RULE FOR ARCTAN
+  //a = sin(ang)
+  //b = cos(ang)
+  //ang = atan2(a, b);
+
+  GetShootAngle();
+
+  local ang = angToShoot;
+
+  if (abs(ang - turretangle) > (speed * 2) )
+  {
+    if (ang > turretangle)
+    {
+      turretangle = turretangle + speed;
+    } else {
+      turretangle = turretangle - speed;
+    };
+    return false;
+  } else {
+    turretangle = ang;
+    if (dontShoot) return false;
+    return true;
+  };
+
+};
+
+void CTurretBase::UpdateTime()
+{
+  timeForShoot += 10.0;
+  timeForShoot = timeForShoot * 1.1;
+  if (timeForShoot > 100.0) timeForShoot = 16.0;
+};
+
+void CTurretBase::FillShootingInfo()
+{
+  ShootX = PosX + sin(turretangle) * turretdir * towerlen;
+  ShootY = (PosY - towerOffset) - cos(turretangle) * towerlen;
+  ShootSX = sin(turretangle) * turretdir;
+  ShootSY = 0.0 - cos(turretangle);
+  UpdateTime();
+};
+
+bool CTurretBase::ShootAtEnemy()
+{
+//  PrintMessage(2);
+  return true;
+};
+
+void CTurretBase::FindTarget()
+{
+   for (local i = 1; i < Env->Objs.Count; i+=1)
+   {
+     local Obj = Env->Objs.Objs[i];
+     if (Obj == NullObj) continue;
+     if (Obj->ClType != OC_Worm) continue;
+
+     local Worm = CWorm(Obj);
+
+     if (turretTeam >= 0)
+     {
+       local tColor = GetTeamColor(Worm->WormTeam);
+       if (tColor == GetTeamColor(turretTeam)) continue;
+     };
+
+     if (Worm->ObjState != WS_WALKING)
+     {
+       if ((Worm->SpX == 0) && (Worm->SpY == 0)) continue;
+     }
+
+     if (GS->Info.GetWormHealth(Worm->WormTeam,Worm->WormNumber) <= 0) continue;
+     
+	 if(Worm->isInvisible) break;
+
+     local CatX = Worm->PosX - PosX;
+     local CatY = Worm->PosY - (PosY - towerOffset);
+     local Dist = sqrt(CatX * CatX + CatY * CatY);
+
+     if (Dist < minimalRadius) continue;
+     if (Dist < sensorRadius)
+     {
+       if (srandom_p() < 0.3)
+       {
+         if (Obj != TargetObj)
+         {
+           TargetObj = Obj;
+           PRegister(&TargetObj);
+         }
+       }
+     }
+   }
+}
+
+bool CTurretBase::ApplyDamage(int dmg)
+{
+   if (breakable == false) return false;
+   health -= dmg;
+   if (health <= 0)
+   {
+      DoExplosion(PosX,PosY, 100, ExpDamage, 0, 0);
+      Free(true);
+      return true;
+   }
+   return false;
+}
+
+void CTurretBase::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+   if (breakable && (health <= 0)) return;
+   if (Type == M_FRAME)
+   {
+      if (reloadState > 0) reloadState -= 1;
+      if (Root->IsTimerActive() == false)
+      {
+        super;
+        return;
+      };
+      if (ammoCurrent <= 0)
+      {
+        super;
+        return;
+      }
+      if(aimSoundTimer > 0)
+	  {
+	  aimSoundTimer = aimSoundTimer - 1;
+	  }
+       	    		
+	  if (TargetObj == NullObj)
+      {
+        FindTarget();
+        curThink = thinkingTime;
+      } else {
+		if (curThink > 0)
+        {
+          curThink = curThink - 1;
+        } else {
+          if (AimToEnemy())
+          {
+             if (reloadState == 0)
+             {
+				if (CheckTrace())
+                {
+				   if (srandom_p() < 0.65)
+                   {
+					 UpdateTime();
+                     curThink = 4;
+                   } else {
+                     TargetObj = NullObj;
+                     curThink = 10;
+                     return;
+                   };
+                   reloadState = reloadTime;
+                   return;
+                };
+                FillShootingInfo();
+                if (ShootAtEnemy())
+                {
+                  draw_aim = true;
+				  reloadState = reloadTime;
+                  reloadTime = int(reloadTime * stepRTime);
+                  ammoCurrent -= 1;
+                  if(aimSoundTimer <= 0)
+                    {
+                    vol = CalculateSoundVolume(PosX,PosY);
+     				pan = CalculateSoundPan(PosX,PosY);
+                    turretaim->Play(vol, pan, false);
+				  	aimSoundTimer = aimSoundDelay;
+				  	}
+                } else {
+                  TargetObj = NullObj;
+                  curThink = 10;
+                  return;
+                }
+             };
+          };
+        };
+      };
+   };
+   if (Type == M_DRAWQUEUE)
+   {
+      local colorCoef = health / maxHealth * 0.75 + 0.25;
+      int r; int g; int b;
+      GetTeamColorRGB(GetTeamColor(turretTeam)+1, &r, &g, &b);
+      if (r < 128) r = 128;
+      if (g < 128) g = 128;
+      if (b < 128) b = 128;
+      SetColorMod(RGB(r, g, b), 0);
+      AddSprite(12, PosX, PosY, 0, baseSprite->Index, 0);
+      if (draw_aim)
+	  	{
+	  	if (TargetObj != NullObj)
+		  	{
+			if (aimPosX < TargetObj->PosX) aimPosX = aimPosX + 4;
+			if (aimPosX > TargetObj->PosX) aimPosX = aimPosX - 4;
+			if (aimPosY < TargetObj->PosY) aimPosY = aimPosY + 4;
+			if (aimPosY > TargetObj->PosY) aimPosY = aimPosY - 4;
+			AddSpriteEx(12, aimPosX, aimPosY, turretAim->Index, 0, GS->Tick * 0.04, 1);
+			}
+		}
+      ClearColorMod();
+      
+      SetColorMod(RGB(colorCoef * r, colorCoef * g, colorCoef * b), 0);
+      AddSprite(10, PosX, PosY, 0, sprNum, 0);
+      local spr = towerSprite->Index;
+      local ang = turretangle;
+      if (turretdir < 0)
+      {
+        spr = spr + 262144;
+        ang = 3.1415 - ang;
+      };
+      
+      
+
+      AddSpriteEx(11, PosX, PosY - towerOffset, spr, 0, ang - 1.5707, 1);
+      ClearColorMod();
+   };
+
+   if (Type == M_TURNBEGIN)
+   {
+      draw_aim = false;
+      aimPosX = PosX;
+   	  aimPosY = PosY;
+	  reloadTime = initalRTime;
+      ammoCurrent = ammoPerTurn;
+      TargetObj = CGObject(NullObj);
+   }
+
+   if (breakable)
+   {
+     if (Type == M_EXPLOSION)
+     {
+        local dx = MData->fparams[1] - PosX;
+        local dy = MData->fparams[2] - PosY;
+
+        local dist = dx*dx + dy*dy;
+        local dmgcoef = 1 - dist / (MData->params[4] * MData->params[4] * 4);
+        if (dmgcoef > 0)
+        {
+           if (ApplyDamage(dmgcoef * MData->params[4])) return;
+        }
+
+     }
+
+     if (Type == M_GUNEXP)
+     {
+        if (sender is CArrow)
+        {
+           if (CArrow(sender)->TeamIndex == turretTeam)
+           {
+             return;
+           }
+        }
+        if (ApplyDamage(MData->params[5])) return;
+     }
+   }
+
+   super;
+};

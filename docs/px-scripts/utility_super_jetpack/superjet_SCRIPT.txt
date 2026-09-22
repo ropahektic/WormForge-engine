@@ -1,0 +1,72 @@
+require utils, utils_steps;
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    plopped = false;
+    swimsuit = false;
+    fastaim = false;
+    helicopter = false;
+    super;
+}
+    
+    
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  CWorm* w = GetCurrentWorm();
+  
+     if (w != NullObj)
+     {
+         if (Type == M_SPACE)
+         {
+             if (w->ObjState == WS_IDLE && w->CurWeapon->CheckName("Super Jetpack"))
+             {
+                 spacepress2 = true;
+             }
+         }
+
+         if (Type == M_FRAME)
+         {                           
+                   if (spacepress2)
+                   {
+                       superjet = true;
+                       spacepress2 = false;
+                   }
+         
+                   if (superjet)
+                   {
+                       w->SetState(WS_JETPACK);
+                       superjet = false;
+                   }
+
+                   if (CurWeapon->CheckName("Super Jet Pack"))
+                   {
+                      JetFuel = 9999*65536;
+                   }
+         }
+     }
+     
+super;
+} 
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+ CWorm* w = GetCurrentWorm();
+ 
+ if (w != NullObj)
+ {
+     if (Weap->CheckName("Super Jetpack"))
+     {
+         superjet = true;
+     }
+     
+     else super;
+ }
+ 
+else super; 
+
+}
+
+override void CWorm::OnSink()
+{
+    return;
+}

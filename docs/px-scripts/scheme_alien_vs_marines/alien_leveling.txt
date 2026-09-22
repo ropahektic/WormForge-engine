@@ -1,0 +1,78 @@
+CSoundFile* alienlevel;
+
+void alien_leveling::Init()
+{
+	alienlevel       = new CSoundFile(GetAttachment("alienlevel.wav"));
+}
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+Lvl = 0;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+      if(Type == M_TURNBEGIN && WormTeam == 1)
+      {
+      Lvl = Lvl + 1;
+      GS->Info.SetWormHealth( WormTeam, WormNumber, GS->Info.GetWormHealth( WormTeam, WormNumber)+10);
+           if(Lvl == 2)
+           {
+           local wep = GS->GetWeaponByName("Fastwalk");
+                     if(wep != NullObj)
+                     {
+                     GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);
+                     }
+           alienlevel->Play(2.0, 0.0, false);
+           }
+           if(Lvl == 5)
+           {
+           local wep = GS->GetWeaponByName("Climb");
+                     if(wep != NullObj)
+                     {
+                     GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);
+                     }
+           alienlevel->Play(2.0, 0.0, false);
+		   }
+           if(Lvl == 8)
+           {
+           local wep = GS->GetWeaponByName("Bite");
+                     if(wep != NullObj)
+                     {
+                     GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);
+                     }
+           alienlevel->Play(2.0, 0.0, false);
+           }
+           if(Lvl == 11)
+           {
+           GS->Info.SetWormHealth( WormTeam, WormNumber, GS->Info.GetWormHealth( WormTeam, WormNumber)+30);
+           local wep = GS->GetWeaponByName("Scare");
+                     if(wep != NullObj)
+                     {
+                     GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);
+                     }
+           alienlevel->Play(2.0, 0.0, false);
+           }
+           if(Lvl == 14)
+           {
+           local wep = GS->GetWeaponByName("Acid Spit");
+                     if(wep != NullObj)
+                     {
+                     GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);
+                     }
+           alienlevel->Play(2.0, 0.0, false);
+           }
+           if(Lvl == 17)
+           {
+           local wep = GS->GetWeaponByName("Slash");
+                     if(wep != NullObj)
+                     {
+                     GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);
+                     }
+           alienlevel->Play(2.0, 0.0, false);
+           }
+      }
+}  

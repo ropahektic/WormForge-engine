@@ -1,0 +1,36 @@
+float MATH_EXP;
+
+void mathematical_functions::FirstFrame()
+{
+    MATH_EXP = 2.718282;
+}
+
+float math_exp(float x)
+{
+//    local result = MATH_EXP;
+    local result = 1.0;
+    
+    if (x == 0.0)
+    {
+        result = 1.0;
+    }
+    else
+    {
+        if (x > 0.0)
+        {
+            for (local i = 0.0; i <= x; i += 0.1)
+            {
+                result = result * 1.105171;     // for 0.1
+//                result = result * 1.01005;
+            }
+        } else
+        {
+            for (local i = 0.0; i > x; i -= 0.1)
+            {
+                result = result / 1.105171;
+//                result = result / 1.01005;                
+            }        
+        }
+    }
+    return result;
+}

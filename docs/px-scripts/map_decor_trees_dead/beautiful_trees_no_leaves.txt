@@ -1,0 +1,474 @@
+//map_objects by 0rang3, based on golf zones by PyroMan
+
+require utils;
+
+#beautiful_trees_no_leaves
+
+$editor
+ 
+ $object tree_no_leaves1                  // Name your object 1
+  $image "tree_no_leaves1.png"            // Name of your png file with object
+  $autoname tree_no_leaves1               // Name for editor
+  $func Spawntree_no_leaves1              // Name of function
+  $origin -80 -180                       // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object tree_no_leaves2                  // Name your object 2
+  $image "tree_no_leaves2.png"            // Name of your png file with object
+  $autoname tree_no_leaves2               // Name for editor
+  $func Spawntree_no_leaves2              // Name of function
+  $origin -34 -166                       // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object tree_no_leaves3                  // Name your object 3
+  $image "tree_no_leaves3.png"            // Name of your png file with object
+  $autoname tree_no_leaves3               // Name for editor
+  $func Spawntree_no_leaves3              // Name of function
+  $origin -62 -122                       // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object tree_no_leaves4                  // Name your object 4
+  $image "tree_no_leaves4.png"            // Name of your png file with object
+  $autoname tree_no_leaves4               // Name for editor
+  $func Spawntree_no_leaves4              // Name of function
+  $origin -62 -164                       // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object tree_no_leaves5                  // Name your object 5
+  $image "tree_no_leaves5.png"            // Name of your png file with object
+  $autoname tree_no_leaves5               // Name for editor
+  $func Spawntree_no_leaves5              // Name of function
+  $origin -25 -76                       // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object tree_no_leaves6                  // Name your object 6
+  $image "tree_no_leaves6.png"            // Name of your png file with object
+  $autoname tree_no_leaves6               // Name for editor
+  $func Spawntree_no_leaves6              // Name of function
+  $origin -42 -160                       // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object tree_no_leaves7                  // Name your object 7
+  $image "tree_no_leaves7.png"            // Name of your png file with object
+  $autoname tree_no_leaves7               // Name for editor
+  $func Spawntree_no_leaves7              // Name of function
+  $origin -27 -122                       // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Add_Layer int 0
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+
+$end 
+
+////////////////////////////////////////////////////////////////////////////////
+
+CSpritertree_no_leaves1 : CObject;           // Object function for 1
+CSpritertree_no_leaves2 : CObject;           // Object function for 2
+CSpritertree_no_leaves3 : CObject;           // Object function for 3
+CSpritertree_no_leaves4 : CObject;           // Object function for 4
+CSpritertree_no_leaves5 : CObject;           // Object function for 5
+CSpritertree_no_leaves6 : CObject;           // Object function for 6
+CSpritertree_no_leaves7 : CObject;           // Object function for 7
+
+CSprite*tree_no_leaves1;                     // Sprite function for 1
+CSprite*tree_no_leaves2;                     // Sprite function for 2
+CSprite*tree_no_leaves3;                     // Sprite function for 3
+CSprite*tree_no_leaves4;                     // Sprite function for 4
+CSprite*tree_no_leaves5;                     // Sprite function for 5
+CSprite*tree_no_leaves6;                     // Sprite function for 6
+CSprite*tree_no_leaves7;                     // Sprite function for 7
+
+////////////////////////////////////////////////////////////////////////////////
+
+void beautiful_trees_no_leaves::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("tree_no_leaves1.png");			tree_no_leaves1 = LoadSprite(f, 1, 0);
+	f = GetAttachment("tree_no_leaves2.png");			tree_no_leaves2 = LoadSprite(f, 1, 0);
+	f = GetAttachment("tree_no_leaves3.png");			tree_no_leaves3 = LoadSprite(f, 1, 0);
+	f = GetAttachment("tree_no_leaves4.png");			tree_no_leaves4 = LoadSprite(f, 1, 0);
+	f = GetAttachment("tree_no_leaves5.png");			tree_no_leaves5 = LoadSprite(f, 1, 0);
+	f = GetAttachment("tree_no_leaves6.png");			tree_no_leaves6 = LoadSprite(f, 1, 0);
+	f = GetAttachment("tree_no_leaves7.png");			tree_no_leaves7 = LoadSprite(f, 1, 0);        	
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+CSpritertree_no_leaves1::CSpritertree_no_leaves1(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(90*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(90*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpritertree_no_leaves2::CSpritertree_no_leaves2(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(83*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(83*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpritertree_no_leaves3::CSpritertree_no_leaves3(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(61*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(61*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpritertree_no_leaves4::CSpritertree_no_leaves4(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(82*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(82*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpritertree_no_leaves5::CSpritertree_no_leaves5(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(38*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(38*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpritertree_no_leaves6::CSpritertree_no_leaves6(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(80*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(80*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+CSpritertree_no_leaves7::CSpritertree_no_leaves7(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(61*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(61*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  pluslayer = aobj->GetInt("Add_Layer")/10;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void CSpritertree_no_leaves1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = tree_no_leaves1->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpritertree_no_leaves2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = tree_no_leaves2->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpritertree_no_leaves3::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = tree_no_leaves3->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpritertree_no_leaves4::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = tree_no_leaves4->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpritertree_no_leaves5::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = tree_no_leaves5->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpritertree_no_leaves6::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = tree_no_leaves6->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+void CSpritertree_no_leaves7::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = tree_no_leaves7->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z+pluslayer, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Spawntree_no_leaves1(CEditorObject* obj)
+{
+  zone = new CSpritertree_no_leaves1(obj);
+}       
+
+void Spawntree_no_leaves2(CEditorObject* obj)
+{
+  zone = new CSpritertree_no_leaves2(obj);
+}       
+
+void Spawntree_no_leaves3(CEditorObject* obj)
+{
+  zone = new CSpritertree_no_leaves3(obj);
+}       
+
+void Spawntree_no_leaves4(CEditorObject* obj)
+{
+  zone = new CSpritertree_no_leaves4(obj);
+}       
+
+void Spawntree_no_leaves5(CEditorObject* obj)
+{
+  zone = new CSpritertree_no_leaves5(obj);
+}       
+
+void Spawntree_no_leaves6(CEditorObject* obj)
+{
+  zone = new CSpritertree_no_leaves6(obj);
+}       
+
+void Spawntree_no_leaves7(CEditorObject* obj)
+{
+  zone = new CSpritertree_no_leaves7(obj);
+}                                                          

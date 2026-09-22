@@ -1,0 +1,33 @@
+bool Randomgeddon;
+int rutick;
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        
+        if (Randomgeddon)
+        {
+            GS->ActCameraX = RandomInt(0, GS->LevelSX);
+            GS->ActCameraY = RandomInt(0, Env->Water+190);
+            DoExplosion(GS->ActCameraX, GS->ActCameraY, 100, 20, 0, Root->CurTeam);
+        }
+    
+        if (gframe >= rutick + 50*5 && Randomgeddon == true)
+        {
+            Randomgeddon = false;
+        }
+    }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Epilepsygeddon"))
+    {
+        Randomgeddon = true;
+        rutick = gframe;
+    }
+    
+super;
+}    

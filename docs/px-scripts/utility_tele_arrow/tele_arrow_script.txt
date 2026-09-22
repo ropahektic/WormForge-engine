@@ -1,0 +1,119 @@
+require utils, p_sprite_builder, sprite_curtis_454;
+
+CSprite* telea_aiming;
+CSprite* telea_bullet;
+
+void tele_arrow_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("spb_telea.png");
+    telea_aiming = LoadSprite(f, 8, 0);
+    f = GetAttachment("telea.png");
+    telea_bullet = LoadSprite(f, 8, 0);
+}
+
+//---------------------------------TELE ARROW (POWERED)-----------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Tele Arrow";
+     sprite = telea_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 1.20;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Tele Arrow")) {
+         if (telea_anim) {
+              local sprite = telea_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 3.00;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              telea_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  telea_anim = true;
+}
+
+//---------------------------------TELE ARROW---------------------------------//
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+
+  if (weap->CheckName("Tele Arrow"))
+  {
+      CWorm * w = GetCurrentWorm();
+      if(w == NullObj) return;
+      int rowX = 0;
+      int colY = 0;
+      int limitX = 9;
+      int limitY = 9;
+      int teleX =  x;
+      int teleY =  y;
+
+      CGObject * o = Env->CheckCollision(w, teleX, teleY);
+
+      if(o == NullObj)
+      {
+          w->PosX = teleX;
+          w->PosY = teleY;
+          return;
+      }
+      else
+      {
+          teleX =  x - limitX/2;
+          teleY =  y - limitY/2;
+      }
+
+      while(1)
+      {
+         CGObject * obj = Env->CheckCollision(w, teleX, teleY);
+
+         if(obj == NullObj)
+         {
+             w->PosX = teleX;
+             w->PosY = teleY;
+             return;
+         }
+         else
+         {
+             if(rowX <= limitX)                   /////////      000--------
+             {                                    /////////      0000-------
+                 teleX++;                         /////////      00000------
+                 rowX++;                          /////////      00000000000
+             }                                    /////////      00000x00000
+             else if(colY <= limitY)              /////////      -----------
+             {                                    /////////      -----------
+                 teleY++;                         /////////      -----------
+                 colY++;                          /////////      -----------
+                 teleX = x - limitX/2;            /////////      -----------
+                 rowX = 0;
+             }
+             else return;
+         }
+      }
+  }
+  else super;
+}

@@ -1,0 +1,26 @@
+
+/*override int CTurnGame::GetNextTeam()
+{
+         if(GameStarted == false)
+         {
+         GameStarted = true;
+         return 2;
+         }
+         else
+         {
+         super;
+         }
+}        */
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+                 if(GameStarted == false)
+                 {
+                 GameStarted = true;
+                 Root->NextTeam = 2;
+                 }
+         }
+super;
+}

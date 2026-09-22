@@ -1,0 +1,45 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a turn-counter to the game (can be used for statistical GUI's)
+
+require utils, utils_dannyb;
+
+int turn_counts[6];
+bool add_turn_now;
+
+void Turn_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          turn_counts[i] = 0;
+     }
+     
+     add_turn_now = false;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{  
+     if(type == M_PAUSETIMER)
+     {
+          add_turn_now = true;
+     }
+     
+     if(GetCurrentWorm() != NullObj)
+     {     
+          if((GetCurrentWorm()->WormTeam - 1) == current_worm_team)
+          {  
+               if(add_turn_now == true)
+               {
+                    turn_counts[current_worm_team]++;
+                    
+                    add_turn_now = false;
+               }
+          }
+     } 
+  
+     super;
+}

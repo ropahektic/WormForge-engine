@@ -1,0 +1,2755 @@
+
+require darkness2016, pxparticles, weapon_sentry_gun, magicmolev2;
+
+$editor
+ $object LanternSource
+  $origin -15 -15
+  $image "edfowcontrol.png"
+  $radius 17
+  $func SpawnLanternSource    
+  $autoname LantSource
+  $param Radius radius 50
+  $param FalloffRadius radius 75
+  $param Intensity int 100
+  $param Team int 1
+ $object_end
+$end
+
+CLightTower : CGObject;
+CSprite* TorchSprite;
+CSprite* TorchHeadSprite;
+
+CSprite* GlowSprite;
+CSprite* revealsprite;
+CSprite* torchSparkSprite;
+
+
+
+//CSprite* GMapSprite;
+
+CBitmap32* CicleMaskMedium;
+CBitmap32* CicleMaskMediumOL;
+
+CMissile* MagicMoleNM;
+
+int BoltsInAir;
+CShootDesc* tmpEditSD;
+ 
+int TeamToAddSprite;
+int allTeamColors[6];
+int cOffX;
+int cOffY;
+int Island2OffX;
+
+int cSizeX;
+int cSizeY;
+int fillprob;
+int r1_cutoff;
+int r2_cutoff;
+
+int CaveMap[2000]; // Enough for 100x100 int
+int CaveMap2[2000]; // needs another..?
+int BigAssRandomArray[2000];
+
+int StartTurnCounter;
+int fireWormSelect;
+
+int LanternsLimit;
+
+int RefreshWeapon; 
+
+CLightTower* LantArrL[15]; int LantArrLat;
+CLightTower* LantArrR[15]; int LantArrRat;
+CLightTower* tmpLant;
+
+CSprite* SprKCrate; 
+CSprite* SprKCrateOL; 
+
+CObjList * KCrateList; 
+
+
+CInterfaceHandler : CObject;
+CCrateHandler : CObject;
+
+bool CrCustomSpawnActive;
+int MapEmptySpaceL[500];  //20*25
+int MapEmptySpaceR[500];
+bool CrMapGenerated;
+//Todo editor item: crate spawn point
+//Todo editor item: ignore this floor/area (for crate line trace)
+
+CCrate* NewlyCrate;
+
+int SMlastdistL;
+int SMlastdistR;
+int ax;
+int ay;
+int CrSearchGridSize;
+int CurrWaterLvl;
+
+//int ix;
+//int iy;
+
+bool GenerateCrSpawnMap(int side, int mSX, int mSY){
+    
+    if(NewlyCrate == NullObj){return false;}
+    
+    local CrSpawnUnderY = 305;
+    local CrSpawnOverY = 1088; //not used?
+    
+    
+    CrSearchGridSize = 50;
+    local extraX = 0;
+    local side2X = 0;
+    if(mSX == 2200 && mSY == 1504){
+        CrSpawnUnderY = 305;
+        CrSpawnOverY = 1088;
+        ax = int(880 / CrSearchGridSize);
+        ay = int(790 / CrSearchGridSize);
+        side2X = 1325;
+    }
+    if(mSX == 2200 && mSY == 2000){
+        CrSpawnUnderY = 713;
+        CrSpawnOverY = 1500;
+        ax = int(730 / CrSearchGridSize);
+        ay = int(790 / CrSearchGridSize);
+        extraX = 80;
+        side2X = 1377;
+    }
+    
+
+    local startx = 0;
+    local starty = CrSpawnUnderY;
+    
+    local dOut = 0;
+    local DFbmp = DigFoam;
+    
+    SMlastdistL = 0;
+    SMlastdistR = 0;
+    for(int iy = 0; iy < ay; iy++ ){
+        for(int ix = 0; ix < ax; ix++ ){
+            
+            local cy = (iy * CrSearchGridSize) + starty;
+            local cx = 0;
+            if(side == 0){
+                cx = (ix * CrSearchGridSize) + extraX;
+            }else{
+                cx = (ix * CrSearchGridSize) + side2X ;
+            }
+                
+                local Obje = Env->CheckCollision( NewlyCrate, cx, cy );
+                if(Obje != NullObj){
+                    if(Obje->ClType == OC_Landscape){
+                        if(side == 0){
+                            MapEmptySpaceL[(iy * ax) + ix] = 0; //not enough room
+                        }else{
+                            MapEmptySpaceR[(iy * ax) + ix] = 0;
+                        }
+                        continue;
+                    }else if(Obje->ClType == OC_Crate){
+                        if(side == 0){
+                            MapEmptySpaceL[(iy * ax) + ix] = 0; //spawning on another crate
+                        }else{
+                            MapEmptySpaceR[(iy * ax) + ix] = 0;
+                        }
+                        continue;
+                    }
+                
+                }
+                
+                local hitx1 = 0;
+                local hity1 = 0;
+                local hit1 = TraceLine(NewlyCrate, cx, cy, cx, CurrWaterLvl + 10, -1, &hitx1, &hity1);
+
+                if (hit1 != NullObj) 
+                {
+                    //GG->land->Draw(DFbmp, cx, cy);
+                    local disty = 0;
+                    disty = abs(cy - hity1);
+                    
+                    if(disty > 100){disty = 100;}
+                    if(disty == 0){disty = 1;}
+                    
+                    if(side == 0){
+                        dOut = SMlastdistL + disty;
+                        SMlastdistL = dOut;
+                        MapEmptySpaceL[(iy * ax) + ix] = dOut;
+                    }else{
+                        dOut = SMlastdistR + disty;
+                        SMlastdistR = dOut;
+                        MapEmptySpaceR[(iy * ax) + ix] = dOut;
+                    }
+
+                    continue;
+                }else{
+                    if(side == 0){
+                        MapEmptySpaceL[(iy * ax) + ix] = 0; //water
+                    }else{
+                        MapEmptySpaceR[(iy * ax) + ix] = 0;
+                    }
+                   
+                    continue;
+                }
+                
+            
+        }
+    }
+    
+    CrMapGenerated = true;
+    return true;
+}
+
+int NewCrX;
+int NewCrY;
+bool CrateSpawnSuccess;
+void GetNewCrateSpawn(int mSX, int mSY, int rngseedA){ 
+    CrateSpawnSuccess = false;
+    
+    local RndSide = RandomInt(0,1);
+    //local RndSide = (StartTurnCounter + 1) % 2; CAUSE OF DESYNC?
+    //if(RndSide < 50){ RndSide = 0; }else{ RndSide = 1;}
+    if (GenerateCrSpawnMap(RndSide, mSX, mSY) == false){
+        CrateSpawnSuccess = false; return;
+    }
+    
+    
+    //pick a value between 1 and SMlastdist
+    local Rtarget = 0;
+    if(RndSide == 0){
+        //Rtarget = RandomInt(1,SMlastdistL);
+        Rtarget = rngseedA % SMlastdistL;
+    }else{
+        //Rtarget = RandomInt(1,SMlastdistR);
+        Rtarget = rngseedA % SMlastdistR;
+    }
+    
+    local lastIndex = 0;
+    //local NoSpots = true;
+    //Find closest value to target in array
+    
+    //Optimize ?
+    
+    for(int i = 0; i < (ax * ay); i++ ){
+        local MapInt = 0;
+        if(RndSide == 0){
+            MapInt = MapEmptySpaceL[i];
+        }else{
+            MapInt = MapEmptySpaceR[i];
+        }
+        
+        if(MapInt != 0){
+            if(MapInt < Rtarget){
+                    lastIndex = i;
+                    CrateSpawnSuccess = true;
+                continue;
+            }else{
+                break;
+            }
+        }
+    }
+    
+
+    
+   // if(NoSpots){return false;} //no spot found
+   
+   
+   if(mSX == 2200 && mSY == 1504){
+       if(RndSide == 0){
+        NewCrX = ((lastIndex % ax) * CrSearchGridSize);
+        NewCrY = (int(lastIndex / ax) * CrSearchGridSize) + 305;
+       }else{
+        NewCrX = ((lastIndex % ax) * CrSearchGridSize) + 1325;
+        NewCrY = (int(lastIndex / ax) * CrSearchGridSize) + 305;  
+       }
+    }
+    if(mSX == 2200 && mSY == 2000){
+       if(RndSide == 0){
+        NewCrX = ((lastIndex % ax) * CrSearchGridSize) + 80;
+        NewCrY = (int(lastIndex / ax) * CrSearchGridSize) + 713;
+       }else{
+        NewCrX = ((lastIndex % ax) * CrSearchGridSize) + 1377;
+        NewCrY = (int(lastIndex / ax) * CrSearchGridSize) + 713;  
+       } 
+    }
+
+    }
+
+
+override void CGObject::LookAtMe(fixed x,fixed y,int priority)
+{
+    if(this->ClType == OC_Crate && (CCrate(this)->PositionSet == false || CCrate(this)->Freeing == true)){
+        return;
+    }
+    super;
+    
+}
+
+void CCrateHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (Type == M_FRAME)
+    {
+        if(mapsizeX < 100 || mapsizeY < 100){
+            mapsizeX = GS->LevelSX;
+            mapsizeY = GS->LevelSY;
+        }
+        local RNGt = GS->GetRandom();
+        local mzX = mapsizeX;
+        local mzY = mapsizeY;
+        if(NewlyCrate != NullObj && CrCustomSpawnActive == true){
+            if(NewlyCrate->FixedWeapon == 0){
+                if(NewlyCrate->PositionSet == false){
+                    
+                    
+                    GetNewCrateSpawn(mzX, mzY, RNGt);
+                    if(CrateSpawnSuccess == true){
+                        NewlyCrate->PosX = NewCrX;
+                        NewlyCrate->PosY = NewCrY;
+                        NewlyCrate->X = NewCrX;
+                        NewlyCrate->Y = NewCrY;
+                        NewlyCrate->PositionSet = true;
+                        NewlyCrate->LookAtMe(NewCrX, NewCrY, 5);
+                    }else{
+                        //could not spawn crate
+                        NewlyCrate->PositionSet = true;
+                        NewlyCrate->Freeing = true;
+                        NewlyCrate->Free(true);
+                    }
+                    
+                }
+            }
+            }
+            
+            DelayRoutine = ( DelayRoutine + 1 ) % DelayRoutineSet;
+            if(DelayRoutine == 0){
+                //GG->WriteToChat(8, "updating wpanel", false); 
+                
+                
+                
+                for(int n = 0; n < 66; n++){
+                    if(n != 37 && n != 0 && n != 10 && n != 64 && n != 59 && n != 26 && n != 18 && n != 29 && n != 39 && n != 38 && n != 3 && n != 32 && n != 33 && n != 34 && n != 57 && n != 58){
+                        twep = GS->GetWeaponByIndex(1, n);
+                        if(twep != NullObj){
+                                local invertTmz = false;
+                                
+                                
+                                //Bug from hell. This fixes it but i cant explain why. Weapons now go to right team. 
+                                if(GetTeamColor(1) == GetTeamColor(2)){
+                                    for(int m = 2; m <= 6; m++){
+                                        if( GetTeamColor(m) != GetTeamColor(m + 1)){     
+                                            if(GetTeamColor(m) > GetTeamColor(m + 1)){
+                                                invertTmz = true;
+                                            }
+                                            break;
+                                        }
+                                        
+                                    }
+                                }
+                                
+                 
+                                
+                                if(invertTmz){
+                                    GS->Info.SetWeaponEx( 2, n, twep->GetPageIndex(), ( WepAmountL[n]) ); 
+                                    GS->Info.SetWeaponEx( 1, n, twep->GetPageIndex(), ( WepAmountR[n]) );
+                                }else{
+                                    GS->Info.SetWeaponEx( 1, n, twep->GetPageIndex(), ( WepAmountL[n]) );
+                                    GS->Info.SetWeaponEx( 2, n, twep->GetPageIndex(), ( WepAmountR[n]) );
+                                }
+                                
+                        }
+                    }
+                }
+             
+            
+            /*
+            if(KCrateList != NullObj){
+                local Weap = GS->GetWeaponByIndex(1, 65); 
+                local Pagez = Weap->GetPageIndex();
+                
+                if(KCrateList->Count > 0){
+                    for(int i = 0; i < 6; i++){ 
+                        GS->Info.SetWeaponDelay(i,65, Pagez, 1);
+                    }
+                }else{
+                    for(int i = 0; i < 6; i++){ 
+                        GS->Info.SetWeaponDelay(i,65, Pagez, 0);
+                    }
+                }
+            }
+            */    
+                
+                
+            }                
+    }
+}
+
+CCrateHandler::CCrateHandler(CObject* parent)
+{
+    super(parent, GS);   
+    col = 8; //maybe needed?
+    DelayRoutine = 0;
+    DelayRoutineSet = 50;
+
+}
+override void CCrate::CCrate(CObject* Parent, CCrateDesc* desc, EDropType type){
+    PositionSet = false;
+    NewlyCrate = this;
+    Freeing = false;
+      
+    super;
+    
+    PosX = -500;
+    PosY = -500;
+    X = -500;
+    Y = -500;
+    
+}
+CInterfaceHandler::CInterfaceHandler(CObject* parent)
+{
+    super(parent, GS);   
+    GUIn = MakeBitmap(32, 32);
+    GUIn2 = MakeBitmap(32, 32);
+    GUIn3 = MakeBitmap(256, 47);
+
+    bool FreeNow = false;
+    bool isFreeing = false;
+    col = 8; //maybe needed?
+    
+    KCx = 0;
+    KCy = 0;
+    KCtl = 0;
+    
+    IsAddHealth = false;
+    HFrame = 0;
+    OwningTeam = 0;
+    
+    IsWelcome = false;
+    IsCenter = false;
+    
+    MapHeight = 0;
+    
+    DrawColor = 0;
+    SetDrawColor = 0;
+    
+}
+
+void CInterfaceHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    
+    
+ if (Type == M_FRAME)
+    {
+        if(FreeNow == true){
+            if(isFreeing == false){
+                isFreeing = true;
+                Free(true);
+            }
+            return;
+        }
+        
+        local a = 0;
+        local b = 0;
+            
+        if(IsAddHealth == true){
+            if(HFrame == 0){
+                GS->Disp->DrawText(3, GUIn2, 0, 0, "+25", &a, &b);
+            }
+            HFrame = HFrame + 1;
+            if(HFrame > 250){
+                FreeNow = true;
+            }
+        }else{
+            
+            if(IsWelcome == true){
+                if(HFrame == 0){
+                    GS->Disp->DrawText(3, GUIn3, 0, 0, "Walking past center of map", &a, &b);
+                    GS->Disp->DrawText(3, GUIn3, 0, 15, "will disable kaos mode.", &a, &b);
+                    GS->Disp->DrawText(3, GUIn3, 0, 30, "Unless Mayhem is active.", &a, &b);
+                }
+                HFrame = HFrame + 1;
+                if(HFrame > 30000){
+                    FreeNow = true;
+                }
+            }else{
+                if(IsCenter == true){
+                    if(SetDrawColor != 0){
+                        if(DrawColor == SetDrawColor){
+                            HFrame = 1;
+                        }else{
+                            DrawColor = SetDrawColor;
+                            HFrame = 0;
+                        }
+                        
+                        SetDrawColor = 0;
+                    }
+                    
+                    if(HFrame == 0){
+                        if(DrawColor == 1){
+                            GS->Disp->DrawText(2, GUIn, 0, 0, "|     ", &a, &b);
+                        }
+                        if(DrawColor == 2){
+                            GS->Disp->DrawText(1, GUIn, 0, 0, "|     ", &a, &b);
+                        }
+                    }
+                    HFrame =  1;
+                    
+                    
+                    
+                }else{
+            
+                    if(KCtl != 0){
+                        if(KCtl <= 2){
+                            
+                            GS->Disp->DrawText(3, GUIn2, 0, 0, ItoA(KCtl - 1), &a, &b);
+                        }else{
+                            GS->Disp->DrawText(3, GUIn, 0, 0, ItoA(KCtl - 1), &a, &b);
+                        }
+                        
+                    }
+                }
+            }
+        }
+        
+        
+    }
+ if (Type == M_DRAWQUEUE)
+    {
+      //Where is crate located on monitor? (Zzz)
+
+          local Cx = GS->ActCameraX;
+          local Cy = GS->ActCameraY;
+          
+          local Ox = (KCx - Cx) + 14;
+          local Oy = (KCy - Cy)  + 6;
+          
+          if(IsAddHealth == true){
+              Ox = (KCx - Cx);
+              Oy = (KCy - Cy) - int(HFrame / 3);
+              AddInterfaceBitmap(0, Ox, Oy, GUIn2,30,12,0); 
+          }else{
+              if(IsWelcome == true){
+                  Ox = (KCx - Cx) + 50;
+                  Oy = (KCy - Cy) - KCy - 200;
+                  AddInterfaceBitmap(0, Ox, Oy, GUIn3,256,47,0); 
+              }else{
+                  
+                  if(IsCenter == true){
+                      Ox = (KCx - Cx);
+                      Oy = (KCy - Cy);
+                      
+                      local iter = int(MapHeight / 50);
+                      
+                      for(int n = 0; n < 50; n++){
+                          local addm = 25 - n;
+                          AddInterfaceBitmap(0, Ox, Oy + int(addm * iter), GUIn,1,12,0); 
+                      }
+  
+                  }else{
+                      if(KCtl != 0){
+                        if(KCtl <= 2){
+                            AddInterfaceBitmap(0, Ox, Oy, GUIn2,10,12,0); 
+                        }else{
+                            AddInterfaceBitmap(0, Ox, Oy, GUIn,10,12,0); 
+                        }
+                      }
+                  }
+              }
+          }
+    }
+}
+
+override void COilDrum::Free(bool FreeMem){
+    if(IsKCrate == true && GUIref != NullObj){
+        GUIref->FreeNow = true;
+    }
+    super;
+}
+
+override void COilDrum::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+    if (Type == M_FRAME)
+    {
+        local mapSY = 0;
+        if(mapsizeY < 100){
+            mapsizeY = GS->LevelSY;
+        }
+        mapSY = mapsizeY;
+        
+        if(IsKCrate && SinkOnce == false){
+            if(PosY > (mapSY - 30) ){
+                KCrateList->Remove(this);
+                KCrateList->Compact();
+                SinkOnce = true;
+                
+            }else{
+                
+                GUIref->KCx = PosX;
+                GUIref->KCy = PosY;
+                
+                nMframes += 1;
+                if(nMframes % 100 == 0){
+                    local StAliveTurns = 5;
+                    TurnsLeft = (StartTurn + StAliveTurns) - StartTurnCounter;
+                    GUIref->KCtl = TurnsLeft;
+                    if((StartTurn + StAliveTurns) <= StartTurnCounter){
+                        
+                        KCrateList->Remove(this);
+                        KCrateList->Compact();
+                        PosX = -500;
+                        PosY = -500;
+                        Free(true);
+                        
+                    }
+                   
+           
+
+                }
+                
+                
+                if(Root->CurTeam == 0 || Root->CurWorm == 0){super; return;} //in-betweem turns?
+                local CurrWormz = GetCurrentWorm();
+                if(CurrWormz == NullObj){super; return;} //No worm?
+                //all worms.. could use curworm instead.. 
+                
+                
+
+                if(     (abs(CurrWormz->PosX - PosX) < 33)   && (abs(CurrWormz->PosY - PosY) < 33)){
+                    CurrWormz->KaozActive = true;
+                    Root->Timer = Root->Timer + 20000;
+                    PlayLocalSound(124, 3, 1, 1); 
+                    
+                    KCrateList->Remove(this);
+                    KCrateList->Compact();
+                    
+                    PosX = -500;
+                    PosY = -500;
+                    
+                    /*
+                     // no DMGx2 during kaoz
+                    local Weap = GS->GetWeaponByIndex(1, 65); //65
+                    local Page = Weap->GetPageIndex();
+                        for(int i = 0; i < 6; i++){ //No other way possible!
+                        GS->Info.SetWeaponDelay(i,65,Page,1);
+                    }
+                    */
+                    //activate swimsuit
+                    CurrWormz->swimsuit = true;
+                    CurrWormz->plopready = true;
+                    CurrWormz->SwimInGame = true;
+                    if (!CurrWormz->ghostjet) CurrWormz->ColGroup = 134342;
+                    else CurrWormz->ColGroup = 0;
+                    
+                    Free(true);
+                }
+
+
+
+            }
+        }
+    
+    }
+    super;
+}
+override void CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+    KaozActive = false;
+    KaozActiveBeta = false; //testing always active kaos on your team side to make more action
+    UpdateWPanel = 0;
+    UpdateWPanelDelay = 0;
+    
+    //duplicate from swim
+    WormAntiZed = 0.0000;
+    plophase = 0.0;
+    flophase = 0.0;
+    fmultipl = 5;
+    antisink_fail = false;
+    helicopter = false;
+    jumpin = false;
+    ghostjet = false;
+    
+    WDRoutine = 0;
+    
+    FirstSafeFrame = 25;
+    
+    super;
+}
+
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) {
+
+        local windex = Weap->GetWeaponIndex();
+              
+        if(windex > 0 && windex < 80){
+          /*
+        //If kaoz active and trying to use x2, block it and print a message + sound
+        if(Worm->KaozActive && windex == 26){
+            local ps = "DMG*2 blocked during mayhem!";
+            //Worm->ShowTeamMessage(15, ps, Worm->WormTeam);
+
+            
+        }
+        */
+            
+        if(windex != 64 && windex != 59 && windex != 26 && windex != 18 && windex != 29 && windex != 39 && windex != 38 && windex != 3 && windex != 32 && windex != 33 && windex != 34 && windex != 57 && windex != 58){
+            
+            local wamount = 0;
+            
+            
+          //  if(KaozActive == false){
+                if(TeamSide == 1){
+        
+                      wamount = WepAmountL[windex] - 1;
+                      if(wamount < 0){wamount = 0;}
+                      WepAmountL[windex] = wamount;
+                      //GS->Info.SetWeaponEx(Worm->WormTeam,windex,Weap->GetPageIndex(), WepAmountL[windex] + 1);
+                  }else{
+                      wamount = WepAmountR[windex] - 1;
+                      if(wamount < 0){wamount = 0;}
+                      WepAmountR[windex] = wamount;
+                      //GS->Info.SetWeaponEx(Worm->WormTeam,windex,Weap->GetPageIndex(), WepAmountR[windex] + 1);
+                  }
+          //  }
+              
+              //TODO: Ninja rope "37" does not fire FireFinal
+              
+                      //Two fire weapon fix TODO 
+                      /*
+                      for (int i = 6; i >= 1; i-=1)
+                        {
+                            for (int j = 8; j >= 1; j-=1)
+                            {
+                                local FTWorm = CWorm(Root->GetObject(2, 16 * i + j));
+                                if(FTWorm != NullObj){
+                                    if(FTWorm->TeamSide == TeamSide){
+                                        FTWorm->UpdateWPanel = windex;
+                                        FTWorm->UpdateWPanelDelay = 50;
+                                        //GG->WriteToChat(8, ItoA(TeamSide), false); 
+                                    }
+                                break;
+                                }
+                            }
+                        }
+                        */
+                        
+        }
+        }
+
+    
+    if(KaozActive || KaozActiveBeta){
+/*
+        tweap = new CWeapon;
+        tweap = Weap;
+        tweap->EndsTurn = false;
+        FireFinal(tweap, Desc);
+        */
+        Weap->EndsTurn = false;
+        super;
+
+        return;
+        /*
+    nAvalShoots = 0;
+    nTotalShoots = 1;
+    nShooted = 0;
+    nShoots = 1;
+    super;
+
+    */
+    
+    //super;
+
+   // Root->RetreatTimer = 60000;
+  //  Root->TimerDisabled = false;
+    }else{
+        if(windex != 64 && windex != 59 && windex != 3 && windex != 37 && windex != 38 && windex != 39 && windex != 57 && windex != 58 && windex != 62 && windex != 63 && windex != 65 && windex != 66 && windex != 70){
+            Weap->EndsTurn = true;
+        }
+        super;
+      
+        
+        
+    }
+}
+override COilDrum::COilDrum(CObject* Parent, fixed X, fixed Y, bool Snap)
+{
+    nMframes = 0;
+    IsKCrate = false;
+     CF = 0;
+     
+     Cat = 0;
+     RndcR = 255;
+     RndcG = 0;
+     RndcB = 0;
+     SinkOnce = false;
+     
+     StartTurn = 1;
+     TurnsLeft = 5;
+     CInterfaceHandler* GUIref;
+     
+     super;
+     
+     
+     
+};
+
+override void COilDrum::Render()
+{
+    CF = CF + 1;
+     if (IsKCrate == false)
+     {
+        super;
+        return;
+     };
+     
+     if(CF % 25 == 0){
+         Cat = (Cat + 1) % 5;
+     }
+         if(Cat == 0){
+                 RndcR = 255;
+                 RndcG = 0;
+                 RndcB = 0;
+         }else if(Cat == 1){
+                 RndcR = 0;
+                 RndcG = 255;
+                 RndcB = 0;
+         }else if(Cat == 2){
+                 RndcR = 0;
+                 RndcG = 0;
+                 RndcB = 255;
+         }else if(Cat == 3){
+                 RndcR = 128;
+                 RndcG = 0;
+                 RndcB = 128;
+         }else if(Cat == 4){
+                 RndcR = 100;
+                 RndcG = 78;
+                 RndcB = 15;
+         }
+     
+     
+     
+     
+     
+     SetColorMod(RGB(RndcR,RndcG,RndcB),8);  
+     AddSpriteEx(16, PosX, PosY, SprKCrateOL->Index, (sin(CF/40)) , 0, 1.0);
+     ClearColorMod();
+     AddSpriteEx(15, PosX, PosY, SprKCrate->Index, (sin(CF/40)) , 0, 1.0);
+     
+     
+};
+override void COilDrum::Explosion()
+{
+     if (IsKCrate == false)
+     {
+        super;
+        return;
+     };
+
+        DoExplosion(PosX, PosY, 100, 100, 0, 1);     
+        KCrateList->Remove(this);
+        KCrateList->Compact();
+    
+    
+        super;
+       
+        
+};
+void SpawnLanternSource(CEditorObject* obj) //MED editor invisible lantern
+{           
+            local lt = new CLightTower(Root->GetObject(25, 0),obj->PosX,obj->PosY - 10);
+            //local worm = CWorm(this);
+            //local wteam = worm->WormTeam;
+            //ColorTeamFix();
+            lt->owningTeam = obj->GetInt("Team");
+            //lt->SpY = -2;
+            //lt->SpX = 2;
+            lt->IsMaterial = false;
+            lt->IsFarSight = false;
+            lt->animSeed = GS->Tick;
+            
+            lt->FixTeamC(); //When first two teams arent different color, we need this hack. Same with turrets.
+            //lt->Layer = 8192; //gravestone
+  
+}
+
+
+
+
+
+
+void lighttower::InitGraphic()  
+{
+    CFile *f;
+    f  = GetAttachment("mlandair.png"); CicleMaskMedium  = LoadImage(f);
+    f  = GetAttachment("MLandAirOutLine.png"); CicleMaskMediumOL  = LoadImage(f);
+
+	f = GetAttachment("opx.png");
+    torchSparkSprite = LoadSprite(f, 1, 0);
+    
+    local spr1     = GetAttachment("Torch.png");
+    TorchSprite = LoadSprite(spr1, 1, 0);
+    SetSpriteOverride(889, TorchSprite);
+    
+    local spr2     = GetAttachment("TorchHead.png");
+    TorchHeadSprite = LoadSprite(spr2, 4, 0);
+    
+    local spr3     = GetAttachment("TorchGlow.png");
+    GlowSprite = LoadSprite(spr3, 1, 0);
+    SetSpriteOverride(890, GlowSprite);
+
+    local spr4 = GetAttachment("reveal.png");
+    revealsprite = LoadSprite(spr4, 1, 0);
+    
+    local spr5  = GetAttachment("kcrate.png"); SprKCrate = LoadSprite(spr5, 7, 0);
+    local spr6  = GetAttachment("kcrateol.png"); SprKCrateOL = LoadSprite(spr6, 7, 0);
+}
+int caveSupported;
+
+int SpawnJetCrate;
+
+int mapsizeX;
+int mapsizeY;
+
+CInterfaceHandler * centerLineGUI;
+
+void lighttower::Init()
+{
+    KCrateList = new CObjList();
+    KCrateList->Compact();
+    RefreshWeapon = -1;
+    CrCustomSpawnActive = false;
+    CrMapGenerated = false;
+    SpawnJetCrate = 1;
+    mapsizeX = 0;
+    mapsizeY = 0;  
+}
+
+void lighttower::FirstFrame()
+{	    
+        //mapsizeX = GS->LevelSX;
+        //mapsizeY = GS->LevelSY;
+        local mapSX = GS->LevelSX;
+        local mapSY = GS->LevelSY;
+        
+        
+
+        
+        CurrWaterLvl = Env->Water;
+        local CrHand = new CCrateHandler(Root);
+        
+
+
+        
+        
+        LanternsLimit = 7;
+        if(mapSX == 2200 && mapSY == 2000){
+            LanternsLimit = 10;
+        }        
+        LantArrLat = 0;
+        LantArrRat = 0;
+        
+        
+        //Remove bottom pixels on map (prevents holes generation)
+            local nmasks = int(mapSX / 19) + 1;
+            for(int m = 0; m < nmasks; m++){
+                GG->land->ApplyMask (4,m * 19,mapSY + 2);
+            }
+        
+        fireWormSelect = 0;
+        //TODO Check 1 worm each team if NULL
+        //...apparently teamnumber is always colornumber+1?
+        local numOfTeams = 0;
+        local numOfTeamColors = 0;
+        local n = 1;
+        for(n=1; n<7; n++){
+            
+            if(Root->NextColor[n] > 0){  //I would like to check each team color. This seems to almost do it but it says RRBBGG teams to be "1, 3, 6" and RGBYPC to be "1,2,3,4,5,6".
+                numOfTeamColors++;
+                //numOfTeams++;
+                //allTeamColors[n-1] = GetTeamColor(Root->NextColor[n]);
+                //GG->WriteToChat(11, ItoA(Root->NextColor[n]), false);
+            }  
+        }
+        if(numOfTeamColors != 2){
+            for(n=0; n<12;n++){
+                GG->WriteToChat(8, "ERROR: THIS IS A 2 TEAM MAP ONLY.", false); 
+            }
+        }else{
+        /*
+        local team1c = 128;
+        local team2c = 128;
+        for(n=0; n<numOfTeams;n++){
+          if(n == 0){
+              team1c = allTeamColors[n];
+          }else{
+              if(allTeamColors[n-1] == allTeamColors[n]){
+                  //not alternating colors!
+                  GG->WriteToChat(12, "not alternating colors!", false);
+              }
+              if(team1c != allTeamColors[n]){
+                  if(team2c != allTeamColors[n] && team2c != 128){
+                      //three team colors! 
+                      GG->WriteToChat(12, "three team colors! ", false);
+                  }else{
+                      team2c = allTeamColors[n];
+                  }
+              }
+          }
+        }
+        */
+        
+      //GG->WriteToChat(4, " ..:: Credits ::..", false); 
+      GG->WriteToChat(8, " Ted, Zed, -raffie-, rafa``2, StepS", false);
+      GG->WriteToChat(8, " Roman, Nikolas, xDMxSilver86, ``Unknown``, Bibletobi, Zalo, Quai, GodMax, Danger135, AlekschTheGreat, Little, RichUK, Magnificent, TheMadCharles, Darmin, SiD, Frizky, Damain, Street ", false);
+      GG->WriteToChat(8, " Twicken, Namely, ravander, _kilburn, Curtis, Entuser, Watermelon", false);
+      //GG->WriteToChat(10, " ", false);
+      GG->WriteToChat(4, " ..:: Info ::..", false); 
+      GG->WriteToChat(8, " Aim with weapons to reveal map in front of you. ", false); 
+      GG->WriteToChat(8, " Far Sight: Reveals part of map from far away.", false); 
+      GG->WriteToChat(8, " Lantern: Place as many as you want without turn ending.", false); 
+      GG->WriteToChat(8, " Super Mole Bomb: Control in air with arrow keys! Press UP to fly higher.", false); 
+      GG->WriteToChat(8, " All projectile/sheep/mines glow in the dark.", false);
+      //GG->WriteToChat(10, " ", false);
+//      GG->WriteToChat(4, " ..:: Rules ::..", false); 
+//      GG->WriteToChat(8, " 1. Invading allowed", false); 
+      
+        local welcomegui = new CInterfaceHandler(Root);
+        welcomegui->IsWelcome = true;
+        welcomegui->KCx = int(mapSX / 2);
+        welcomegui->KCy = int(mapSY / 2);
+        
+        local centergui = new CInterfaceHandler(Root);
+        centergui->IsCenter = true;
+        centergui->KCx = int(mapSX / 2);
+        centergui->KCy = int(mapSY / 2);
+        centergui->MapHeight = mapSY;
+        centergui->SetDrawColor = 1; //blue
+        centerLineGUI = centergui;
+                                            
+        }
+
+        
+        /*
+            CAVE GENERATION !?
+        */
+        
+        for(int r = 0; r < 2000; r++){
+            BigAssRandomArray[r] = GS->GetRandom();
+        }
+        
+        
+        caveSupported = 0;
+        
+        local AreaStartX = 0;
+        local AreaStartY = 0;
+        local AreaEndX = 0;
+        local AreaEndY = 0;
+        
+        
+        CrCustomSpawnActive = false;
+         if(mapSY == 1504 && mapSX == 2200){
+            CrCustomSpawnActive = true;
+            
+            caveSupported = 2;
+            AreaStartX = 141; AreaEndX = 868; 
+            AreaStartY = 600; AreaEndY = 856;
+            //AreaStartY = 15; AreaEndY = 556;
+            Island2OffX = 1224;
+        }
+        
+        if(mapSY == 2000 && mapSX == 2200){
+            CrCustomSpawnActive = true;
+            
+            caveSupported = 2;
+            AreaStartX = 200; AreaEndX = 715; 
+            AreaStartY = 1010; AreaEndY = 1200;
+            //AreaStartY = 15; AreaEndY = 556;
+            Island2OffX = 1296;
+        }
+
+        if(mapSY == 1200 && mapSX == 2200){
+            
+     //       GG->WriteToChat(5, "Cave+cloud generation supported (big map)", false);
+            caveSupported = 2;
+            AreaStartX = 141; AreaEndX = 868; 
+            AreaStartY = 300; AreaEndY = 556;
+            //AreaStartY = 15; AreaEndY = 556;
+            Island2OffX = 1224;
+        }
+        if(mapSY == 1040 && mapSX == 2200){
+     //       GG->WriteToChat(5, "Cave+cloud generation supported (big map)", false);
+            caveSupported = 2;
+            AreaStartX = 141; AreaEndX = 868; 
+            AreaStartY = 300; AreaEndY = 500;
+            //AreaStartY = 15; AreaEndY = 556;
+            Island2OffX = 1224;
+        }               
+        if(mapSY == 800 && mapSX == 2000){
+      //      GG->WriteToChat(5, "Cloud generation supported (small map)", false); AreaStartX = 125; AreaStartY = 125; AreaEndX = 665; AreaEndY = 550; Island2OffX = 1210;
+            caveSupported = 0; //Set this to 1 if you want cave generation in mc_mole_fort_PXFOW map.
+        }
+        if(mapSY == 800 && mapSX == 800){
+     //       GG->WriteToChat(5, "Cloud generation supported (mini lolmap)", false); AreaStartX = 125; AreaStartY = 125; AreaEndX = 665; AreaEndY = 550; Island2OffX = 1210;
+            caveSupported = 0;
+        }
+        if(caveSupported > 0){
+            
+            cSizeX = int((AreaEndX - AreaStartX) / 19); //19x19 == size of hole
+            cSizeY = int((AreaEndY - AreaStartY) / 19);
+            
+            cOffX = AreaStartX;
+            cOffY = AreaStartY;
+            
+            //Magic values to get nice looking caverns
+            fillprob = 66; //40
+            r1_cutoff = 7; //5
+            r2_cutoff = 1; //2
+            local generations = 3; //3
+            
+            //Island 1
+            CaveInitmap(GS->GetRandom());
+            local ii = 0;
+            for(ii=0; ii<generations; ii++)
+            {
+                CaveGeneration();
+            }
+            CavernPrintmap(0, 19, 14);
+            placeTreasure(6,1);
+
+            //Island 2
+            cOffX = cOffX + Island2OffX;
+            CaveInitmap(GS->GetRandom());
+            local ii = 0;
+            for(ii=0; ii<generations; ii++)
+            {
+                CaveGeneration();
+            }
+            CavernPrintmap(0, 19, 14);
+            placeTreasure(6,2);
+            if(caveSupported == 2){
+                //cloud "Bridge"
+                
+            fillprob = 35; //40
+            r1_cutoff = 6; //5
+            r2_cutoff = 3; //2
+            generations = 1; //3
+                
+                cSizeX = 24; //442 / 19; //19x19 == size of hole
+                cSizeY = 20; //380 / 19;
+                
+                cOffX = 868;
+                cOffY = 200;
+            /*
+                CaveInitmap();
+                local ii = 0;
+                for(ii=0; ii<generations; ii++)
+                {
+                    CaveGeneration();
+                }
+                CavernPrintmap(1, 19, 14);
+            */
+            }
+        }
+        
+        
+}
+
+
+//Returns the number of cells in a ring around (x,y) that are alive.
+
+int countAliveNeighbours(int inX, int inY){
+    local count = 0;
+    local i = 0;
+    local j = 0;
+    local neighbour_x = 0;
+    local neighbour_y = 0;
+    
+    local widthRow = cSizeX;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+    
+    for(i = -1; i < 2; i++){
+        for(j = -1; j < 2; j++){
+            neighbour_x = inX + i;
+            neighbour_y = inY + j;
+            //If we're looking at the middle point
+            if(i == 0 && j == 0){
+                //Do nothing, we don't want to add ourselves in!
+            }
+            //In case the index we're looking at it off the edge of the map
+            /*else if(neighbour_x < 0 || neighbour_y < 0 || neighbour_x >= size_x || neighbour_y >= size_y){
+                count = count + 1;
+            }*/
+            //Otherwise, a normal check of the neighbour
+            else if( CaveMap[ neighbour_x + ( neighbour_y * widthRow)] == 1){
+                count = count + 1;
+            }
+        }
+    }
+    return count;
+}
+
+void spawnSentryN(int InTeam, int x, int y){
+                            local teamno = InTeam;
+                            CShootDesc SDesc;
+                            zero(&SDesc);
+                            local BaseForce = 0.3;
+                            local InTeam = teamno;
+                            //Find first different team color if two first are the same
+                            local FirstOtherT = 2;
+                            local fi;
+                            local c1 = GetTeamColor(1);
+                            if(GetTeamColor(1) == GetTeamColor(2)){
+                                for(fi = 0; fi < 6; fi++){
+                                    if(GetTeamColor(fi + 1) != c1){
+                                       FirstOtherT = fi + 1;
+                                       break;
+                                    }
+                                }
+                                if(GetTeamColor(1) > GetTeamColor(FirstOtherT)){
+                                    if(InTeam == 1){
+                                        InTeam = FirstOtherT;
+                                    }
+                                    if(InTeam == 2){
+                                        InTeam = 1;
+                                    }
+                                }else{
+                                    if(InTeam == 2){
+                                        InTeam = FirstOtherT;
+                                    }
+                                }
+                            }
+                            SDesc.Team = InTeam;          
+                            SDesc.X = (x*19) + cOffX;
+                            SDesc.Y = (y*19) + cOffY;
+                            if(teamno == 1){
+                                SDesc.SpX = 0.1;
+                            }else{
+                                SDesc.SpX = -0.1;
+                            }
+                            SDesc.SpY = -0.05;
+                            GG->land->MakeHole (35,(x*19) + cOffX,(y*19) + cOffY);
+                            new PxSentryGun(Root->GetObject(25, 0), &SDesc);
+    
+}
+
+int placedT;
+void placeTreasure(int inLimit, int teamno){
+    local LocalCircle = CicleMaskMedium;
+    //How hidden does a spot need to be for treasure?
+    //I find 5 or 6 is good. 6 for very rare treasure.
+    local treasureHiddenLimit = 30;
+    local x = 0; local y = 0;
+    local nbs = 0;
+    placedT = 0;
+    local widthRow = cSizeX;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+    treasureHiddenLimit = inLimit;
+    for (x=0; x < size_x; x++){
+        for (y=0; y < size_y; y++){
+            if(CaveMap[x + (y * widthRow)] == 0){
+                nbs = countAliveNeighbours(x, y);
+                if (placedT < 4){ //Up to 4 sentrys, rare occurance
+                if(nbs >= treasureHiddenLimit){
+                    //GG->land->Draw(LocalCircle,(x*19) + cOffX -6,(y*19) + cOffY - 6);
+                    
+                    		
+                    spawnSentryN(teamno, x, y);
+                    
+                    placedT = placedT + 1;
+                }
+                }
+            }
+        }
+    }
+    
+    if(placedT < 2){//if < 2 sentrys could spawn, spawn two in a more common place.
+        
+        for (x=0; x < size_x; x++){
+        for (y=0; y < size_y; y++){
+            if(CaveMap[x + (y * widthRow)] == 0){
+                nbs = countAliveNeighbours(x, y);
+                if (placedT < 2){
+                if(nbs >= (treasureHiddenLimit - 1)){
+                    //GG->land->Draw(LocalCircle,(x*19) + cOffX -6,(y*19) + cOffY - 6);
+                    
+                    		
+                    spawnSentryN(teamno, x, y);
+                    
+                    placedT = placedT + 1;
+                }
+                }
+            }
+        }
+    }
+        
+    }
+    
+}
+
+
+
+ int CaveRandpick(int RNGa)
+ {
+     
+ 	if((RNGa % 100) < fillprob)
+ 		return 1;//TILE_WALL;
+ 	else
+ 		return 0;//TILE_FLOOR; 
+ }
+
+ void CaveInitmap(int RNGa)
+ {
+	local xi = 0;
+    local yi = 0;
+    local widthRow = cSizeX;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+ 
+    
+    //not sure if all these below are correct.
+    //feel free to check against C source: http://www.roguebasin.com/index.php?title=Cellular_Automata_Method_for_Generating_Random_Cave-Like_Levels
+
+	for(yi=1; yi<size_y-1; yi++){
+	for(xi=1; xi<size_x-1; xi++){
+        local NewRNG = BigAssRandomArray[(yi * 40) + xi] + RNGa;
+        BigAssRandomArray[(yi * 40) + xi] = NewRNG;
+		CaveMap[(yi * widthRow) + xi] = CaveRandpick(NewRNG); 
+    }
+    }    
+    
+    for(yi=0; yi<size_y; yi++)
+	for(xi=0; xi<size_x; xi++)
+		CaveMap2[(yi * widthRow) + xi] = 0;
+	for(yi=0; yi<size_y; yi++)
+		CaveMap[(yi * widthRow)] = 0;
+        CaveMap[(yi * widthRow) + size_x - 1 ] = 0;
+	for(xi=0; xi<size_x; xi++)
+		CaveMap[xi] = 0;
+        CaveMap[((size_y - 1)*widthRow) + xi] = 0;
+ }
+ 
+ 
+ void CaveGeneration()
+ {
+	local xi = 0;
+    local yi = 0;
+    local ii = 0;
+    local jj = 0;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+    local widthRow = cSizeX;
+    
+    local adjcount_r1 = 0;
+ 	local adjcount_r2 = 0;
+ 
+	for(yi=1; yi<size_y-1; yi++)
+	for(xi=1; xi<size_x-1; xi++)
+ 	{
+ 		adjcount_r1 = 0;
+ 		adjcount_r2 = 0;
+ 
+ 		for(ii= -1; ii<=1; ii++)
+		for(jj= -1; jj<=1; jj++)
+ 		{
+ 			if(CaveMap[((yi+ii)*widthRow)+xi+jj] != 0)
+ 				adjcount_r1++;
+ 		}
+ 		for(ii = yi - 2; ii<=yi+2; ii++)
+ 		for(jj = xi - 2; jj<=xi+2; jj++)
+ 		{
+ 			if( abs( ii - yi ) == 2 && abs( jj - xi ) == 2 )
+ 				continue;
+ 			if(ii<0 || jj<0 || ii>=size_y || jj>=size_x)
+ 				continue;
+ 			if(CaveMap[(ii*widthRow)+jj] != 0)
+ 				adjcount_r2++;
+ 		}
+ 		if(adjcount_r1 >= r1_cutoff || adjcount_r2 <= r2_cutoff)
+ 			CaveMap2[(yi*widthRow)+xi] = 1;
+ 		else
+ 			CaveMap2[(yi*widthRow)+xi] = 0;
+ 	}
+ 	for(yi=1; yi<size_y-1; yi++)
+ 	for(xi=1; xi<size_x-1; xi++)
+ 		CaveMap[(yi*widthRow)+xi] = CaveMap2[(yi*widthRow)+xi];
+ } 
+ 
+int hremover;
+ bool dohole;
+ int RandHoleT()
+ {
+
+     hremover = (hremover +1)%33;
+     if(hremover == 0){
+         dohole = !dohole;
+     }
+    local Ri = 0;
+     
+     if(dohole == 1){
+ 	Ri = GS->GetRandom()%25;
+
+        if(Ri < 15){
+            Ri = 15;
+        }
+        if(Ri > 25){
+            Ri = 15;
+        }
+     }else{
+         Ri = 0;
+     }
+    return Ri;
+ }
+ 
+  void CavernPrintmap(int toggleLand, int gridSize, int holeSize)
+ {
+ 	local xi;
+    local yi;
+    local size_x = cSizeX;
+    local size_y = cSizeY;
+    local widthRow = cSizeX;
+    hremover = 0;
+    local hsiztmp = 0;
+    dohole = 1;
+    local LocalCircle = CicleMaskMedium;
+    local LocalCircleOL = CicleMaskMediumOL;
+    
+    if(toggleLand == 1){
+        for(yi=0; yi<size_y; yi++)
+        {
+            for(xi=0; xi<size_x; xi++)
+            {
+                if(CaveMap[(yi*widthRow)+xi] == 0){
+                }else{
+                    local ppX = (xi*gridSize) + cOffX - 6;
+                    local ppY = (yi*gridSize) + cOffY - 6;
+                    if(xi < (size_x - 1) && WormNotThere(ppX, ppY, true) ){
+                            GG->land->Draw( LocalCircleOL, ppX, ppY);
+                    }
+                }
+            }
+            //new line
+        }
+    }
+    
+    for(yi=0; yi<size_y; yi++)
+ 	{
+ 		for(xi=0; xi<size_x; xi++)
+ 		{
+ 			if(CaveMap[(yi*widthRow)+xi] == 0){
+               // GG->land->ApplyMask(RandHoleT(),(xi*19) + cOffX,(yi*19) + cOffY);
+               // GG->land->MakeHole (RandHoleT(),(xi*19),(yi*19));
+               
+            }else{
+               //GG->land->ApplyMask(RandHoleT(),(xi*19) + cOffX,(yi*19) + cOffY);
+               
+                    if(toggleLand == 0){
+                        GG->land->MakeHole (holeSize,(xi*gridSize) + cOffX,(yi*gridSize) + cOffY);
+                    }
+                    if(toggleLand == 1){
+                        local pppX = (xi*gridSize) + cOffX;
+                        local pppY = (yi*gridSize) + cOffY;
+                        
+                        if(xi < (size_x - 1)  && WormNotThere(pppX, pppY, false) ){
+                            GG->land->Draw(LocalCircle, pppX, pppY);
+                        }
+                    }
+            }
+ 		}
+ 		//new line
+ 	}
+    
+ }
+ 
+ 
+ void CLightTower::FixTeamC(){
+      local InTeam = owningTeam;
+
+                //Find first different team color if two first are the same
+                local FirstOtherT = 2;
+                local fi;
+                local c1 = GetTeamColor(1);
+                if(GetTeamColor(1) == GetTeamColor(2)){
+                    
+                    for(fi = 0; fi < 6; fi++){
+                        if(GetTeamColor(fi + 1) != c1){
+                           FirstOtherT = fi + 1;
+                           break;
+                        }
+                    }
+                    
+                    if(GetTeamColor(1) > GetTeamColor(FirstOtherT)){
+                        
+                        if(InTeam == 1){
+                            InTeam = FirstOtherT;
+                        }
+                        if(InTeam == 2){
+                            InTeam = 1;
+                        }
+                    }else{
+                    
+                        if(InTeam == 2){
+                            InTeam = FirstOtherT;
+                        }
+                        
+                    }
+                }
+            owningTeam = InTeam;
+    
+ }
+
+
+CLightTower::CLightTower(CObject* parent, fixed x, fixed y)
+{    
+    super(parent, 7, 7);
+    
+    PosX          = x;
+    PosY          = y;
+    IsFarSight    = false;
+    IsMaterial    = true; //activates physics and also used to check if its a lantern or "invisible MED editor light source"
+    HasWobbleGraphics = true; //raffie
+    
+    animSeed = GS->Tick;
+    
+    ClType        = EObjectClass(9966);
+    ColGroup      = 4423679 ;
+    //Layer = 8192;
+    
+    currentSize  = 1.0;
+    currentSizeInv  = 1.0;
+    currentRRot = 0.0;
+    currentRRotInv = 0.0;
+    particleFrameCounter = 0;
+    owningTeam   = 0;
+    caveSupported = 0;
+    cOffX = 0;
+    cOffY = 0;
+    
+               
+}
+
+
+void CLightTower::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ super; 
+ if (Type == M_DRAWQUEUE) {
+    currentSize =  0.97 + ((sin((GS->Tick/10)+animSeed)) * 0.03);
+    currentSizeInv =  1.0 - ((sin((GS->Tick/10)+animSeed+333)) * 0.03);
+    currentRRot = currentRRot + abs((sin((GS->Tick/50)+animSeed)) * 0.0015) + 0.0015;
+    currentRRotInv = currentRRotInv - abs((sin((GS->Tick/50+animSeed))) * 0.0008) + 0.00012;
+     
+   
+   //if(currentRRot >= 360) currentRRot = 0.0;
+    local Colorin = GetTeamColor(owningTeam);
+    if(IsMaterial == true){
+        
+        
+        //AddSpriteEx(19,PosX,PosY - 0,GlowSprite->Index,0.0,currentRRot,currentSize);
+        //AddSpriteEx(19,PosX,PosY - 0,GlowSprite->Index,0.0,currentRRotInv,currentSizeInv);
+        
+        //TorchSprite->Index
+        TeamToAddSprite = owningTeam;
+        AddSprite(18,PosX-1,PosY-12,0,889,0.0); //base //82,77
+        //AddSprite(19,PosX,PosY-14,0,TorchHeadSprite->Index,0.0); 
+        AddSpriteEx(19,PosX,PosY - 24,TorchHeadSprite->Index,abs(sin((GS->Tick/5+animSeed))),0.0,1.0);//86, 92
+        AddSprite(20,PosX,PosY-14,0,890,0.0); //glow
+        
+        //AddSpriteEx(19,PosX,PosY - 0,889,0.0,0.0,1.0);
+        //AddSpriteEx(19,PosX,PosY - 0,TorchHeadSprite->Index,0.0,0.0,1.0);
+        
+  
+    }
+    if(IsFarSight == true && HasWobbleGraphics == true){ //raffie
+    
+        //Color mod
+        local Color = Colorin;
+        
+        if (Color == 0)
+        {
+          SetColorMod(RGB(245, 40, 40), 8); //4 - diffuse color goes to smooth addition
+        }
+        if (Color == 1)
+        {
+          SetColorMod(RGB(0, 135, 255), 8);
+        }
+        if (Color == 2)
+        {
+          SetColorMod(RGB(99, 211, 60), 8);
+        }     
+        if (Color == 3)
+        {
+          SetColorMod(RGB(255, 245, 83), 8);
+        }
+        if (Color == 4)
+        {
+          SetColorMod(RGB(173, 69, 199), 8);
+        }
+        if (Color == 5)
+        {
+          SetColorMod(RGB(62, 244, 255), 8);
+        }
+        //end Color mod
+    
+        AddSpriteEx(22,PosX,PosY - 0,revealsprite->Index,0.0,currentRRot,currentSize);
+        AddSpriteEx(22,PosX,PosY - 0,revealsprite->Index,0.0,(currentRRotInv),currentSizeInv);
+        
+        ClearColorMod();
+    }
+
+
+    }
+    
+    if (Type == M_FRAME) {
+    if (Sinking == 1) Free(true);
+    
+    PxParticle *p;
+    if(IsMaterial == true ){
+        particleFrameCounter = (particleFrameCounter + 1) % 6;
+        if(particleFrameCounter == 0){
+            p = new PxParticle(torchSparkSprite->Index, (sin(GS->Tick)*6) + PosX - 2, (PosY-24));
+                            p->SetBlendMode(1);
+                            p->SetLifeTime(30);
+                            p->SetRandomVelocity(0.3, 0.3);
+                            p->SetAirResistance(0.0);
+                            p->GravityFactor(-0.3);
+                            p->SetAlpha(150);
+                            
+                            p->SetColor(255, 255, 255);
+                            
+                            if(sin(GS->Tick) < 0.5){
+                            p->SetStartSize(9.0, 13.0);
+                            p->SetEndSize(4.0, 6.0);
+                            }else{
+                            p->SetStartSize(5.0, 7.0);
+                            p->SetEndSize(2.0, 3.0);
+                            }
+            
+            }  
+        }    
+    }
+}
+
+override void CDarknessControl::GenerateLSources()
+{
+    super;
+  for (local i = 1; i < Env->Objs.Count; i++)
+  {
+    local obj = CGObject(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    if (obj->ClType == EObjectClass(9966)) {
+        if (obj != NullObj) {
+        if (obj->Sinking != 1) {
+        local team = CLightTower(obj)->owningTeam;
+        if (darkControl->IsTeamVisible(team)) {
+            if(CLightTower(obj)->IsMaterial == true){
+                SetLight(obj->PosX, obj->PosY, 50, 110, 0.9); //regular lantern
+            }else{
+                if(CLightTower(obj)->IsFarSight == true){
+                    SetLight(obj->PosX, obj->PosY, 75, 155, 0.5); //Far sight
+                }else{
+                    SetLight(obj->PosX, obj->PosY, 250, 350, 1.0); //Invisible MED light
+                }
+            }
+            }
+            }
+            }
+    }else{
+         if (obj->ClType == EObjectClass(73)) {
+             if (obj != NullObj) {
+                 if (obj->Sinking != 1) {
+                     local team = PxSentryGun(obj)->OwnerTeam;
+                     if (darkControl->IsTeamVisible(team)) {
+                         SetLight(obj->PosX, obj->PosY, 50, 110, 0.9); 
+                     }
+                 }
+             }
+         }else{
+            if(obj->ClType == EObjectClass(OC_Mine)){
+                local teamTwo = CMine(obj)->ShootData.Team;
+                if (darkControl->IsTeamVisible(teamTwo))
+                    {
+                    SetLight(obj->PosX, obj->PosY, 30, 60, 0.5);
+                    }
+            }else{
+                
+                
+                if (obj->ClType == OC_Missile){
+                    
+                    local teamThree = CMissile(obj)->initdesc.Team;
+                    if (darkControl->IsTeamVisible(teamThree))
+                    {
+                        
+
+                            if(CMissile(obj)->weap->CheckName("Mole Bomb") == true)
+                            {
+                                SetLight(obj->PosX, obj->PosY, 40, 70, 0.5);    
+                            }else{
+                                if(MagicMoleNM == NullObj)
+                                {
+                                 SetLight(obj->PosX, obj->PosY, 100, 150, 1.0);  
+                                }      
+                            }
+                        
+                        
+                        if( MagicMoleNM != NullObj && obj == MagicMoleNM)
+                        {
+                            SetLight(obj->PosX, obj->PosY, 40, 70, 0.5);  
+                        }
+                    }   
+                }else if (obj->ClType == OC_OilDrum){
+                    if(COilDrum(obj)->IsKCrate == true){
+                        SetLight(obj->PosX, obj->PosY, 40, 70, 0.5);   
+                    }
+                    
+                }
+                
+                
+                
+                    
+            }
+         }
+    }
+  }
+}
+   
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) {
+         super;
+         if (Weap->CheckName("Lantern")) {
+            local lt = new CLightTower(Root->GetObject(25, 0),PosX,PosY - 10);
+            local worm = CWorm(this);
+            local wteam = worm->WormTeam;
+            lt->owningTeam = wteam;
+            lt->SpY = (-1.5) + ((worm->SpY * 1.5));
+            
+            if (TurnSide == 1) {
+            lt->SpX = 2 + (worm->SpX);
+            } else lt->SpX = -2 + (worm->SpX);
+            
+            //Check amount
+            
+        local CurrWormz = GetCurrentWorm();
+        if(CurrWormz != NullObj)
+        { 
+            //limit amount
+            if(CurrWormz->TeamSide == 1){
+                LantArrLat = (LantArrLat + 1) % LanternsLimit;
+                
+                tmpLant = LantArrL[(LantArrLat - (LanternsLimit) % LanternsLimit)];
+                if(tmpLant != NullObj){ tmpLant->Free(true); }
+                
+                LantArrL[LantArrLat] = lt;
+
+            }else{
+                LantArrRat = (LantArrRat + 1) % LanternsLimit;
+                
+                tmpLant = LantArrR[(LantArrRat - (LanternsLimit) % LanternsLimit)];
+                if(tmpLant != NullObj){ tmpLant->Free(true); }
+                
+                LantArrR[LantArrRat] = lt;
+            }
+        }
+            
+    }  
+    
+         if (Weap->CheckName("Fire Bolt")) {
+         
+         if(BoltsInAir < 3){
+             tmpEditSD = Desc;
+             tmpEditSD->SpY = tmpEditSD->SpY - BoltsInAir;
+             BoltsInAir++;
+             FireFinal(Weap, tmpEditSD);
+             
+             if(BoltsInAir == 2){
+                 tmpEditSD->SpX = tmpEditSD->SpX - BoltsInAir;
+             }
+             
+         }else{
+             BoltsInAir = 0;
+         }
+
+     }
+    
+}      
+
+
+
+CObjList * WormsOnClouds;
+
+bool WormNotThere(int pX, int pY, bool moreminus){
+    CWorm * TWrm;
+    if(WormsOnClouds == NullObj){return true;}
+    for(int n = 0; n<WormsOnClouds->Count; n++) 
+            {
+                TWrm = WormsOnClouds->Objs[n];
+                local morem = 10;
+                if(moreminus){
+                    morem = 16;
+                }
+                if(     (abs(TWrm->PosX - pX - morem) < 50)
+                     && (abs(TWrm->PosY - pY - morem) < 50)
+                 ){
+                    return false;
+                }
+            }
+            return true;
+    
+}
+bool isAnyWormOnClouds(int INmapSY,int INmapSX){
+    if(INmapSY == 1504 && INmapSX == 2200){
+         return isAnyWormOnCloudsPt2(26,27,888,448);
+     }
+     
+     
+     if(INmapSY == 2000 && INmapSX == 2200){ 
+         return isAnyWormOnCloudsPt2(119,17,80,5);
+     }
+     if(INmapSY == 1200 && INmapSX == 2200){
+         return isAnyWormOnCloudsPt2(26,27,888,148);
+     }
+     if(INmapSY == 1040 && INmapSX == 2200){
+         return isAnyWormOnCloudsPt2(26,27,888,148);
+     }
+     if(INmapSY == 800 && INmapSX == 2000){
+         return isAnyWormOnCloudsPt2(29,23,762,367);
+     }
+     if(INmapSY == 800 && INmapSX == 800){
+         return isAnyWormOnCloudsPt2(9,42,332,65);
+     }
+}
+bool isAnyWormOnCloudsPt2(int INsizex, int INsizey, int xoff, int yoff){
+    local size_x = INsizex;
+    local size_y = INsizey;
+    
+    for (int j = 6; j >= 1; j-=1){
+            for (int i = 8; i >= 1; i-=1)
+            {
+                local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+                if (Worm)
+                {
+                     //Standing on clouds?
+                    if(
+                        Worm->PosX > (xoff - 20) && Worm->PosX < (xoff + (size_x * 17)) 
+                     && Worm->PosY > (yoff - 120) && Worm->PosY < (yoff + (size_y * 17)) 
+                    ){
+                        return true;
+
+                    }
+                }
+
+            }
+          }
+          
+          return false;
+}
+void ApplyMaskExt(int INsizex, int INsizey, int xoff, int yoff){
+    
+   // local xi = 0;
+   // local yi = 0;
+    local size_x = INsizex;
+    local size_y = INsizey;
+    
+    //Search for worms inside proximity to clouds (lets not plop worms standing on clouds!)
+    //clear objlist <.<
+/*
+    local Cn;
+    CWorm * DMN;
+    for(Cn = 0; Cn < WormsOnClouds->Count; Cn++) 
+    {
+        DMN = WormsOnClouds->Objs[Cn];
+        WormsOnClouds->Remove(DMN);
+        delete(DMN);
+    }
+    WormsOnClouds->Compact();
+  */  
+    delete(WormsOnClouds); //hopefully no memory leak!
+    WormsOnClouds = new CObjList();
+    
+
+
+    for (int j = 6; j >= 1; j-=1){
+            for (int i = 8; i >= 1; i-=1)
+            {
+                local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+                if (Worm)
+                {
+                     //Standing on clouds ? TODO: Search for turrets | TODO: set xy under worm to 1 in generation so a new cloud appear under him. 
+                    if(
+                        Worm->PosX > (xoff - 20) && Worm->PosX < (xoff + (size_x * 17)) 
+                     && Worm->PosY > (yoff - 20) && Worm->PosY < (yoff + (size_y * 17)) 
+                    ){
+                        WormsOnClouds->Add(Worm);
+
+                    }
+                }
+
+            }
+          }
+
+    CWorm * TWrm;
+    for(int yi = 0; yi < size_y; yi++)
+    {
+        for(int xi = 0; xi < size_x; xi++)
+        {
+            local mpX = (xi*17) + xoff;
+            local mpY = (yi*17) + yoff;
+            local PosFree = true;
+            
+
+            for(int ai = 0; ai<WormsOnClouds->Count; ai++) 
+            {
+                TWrm = WormsOnClouds->Objs[ai];
+                
+                if(     (abs(TWrm->PosX - mpX) < 18)
+                     && (abs(TWrm->PosY - (mpY-12)) < 18)
+                 ){
+                    PosFree = false;
+                    break;
+                }
+            }
+            if(PosFree){
+                GG->land->ApplyMask (4,mpX,mpY);
+            }
+            
+        }
+
+    }
+    
+}
+
+ void ClearCloudBridge(int INmapSY,int INmapSX){
+     if(INmapSY == 1504 && INmapSX == 2200){
+         ApplyMaskExt(26,27,888,448);
+     }
+     if(INmapSY == 2000 && INmapSX == 2200){ //TODO VALUES
+         ApplyMaskExt(119,17,80,10);
+     }
+     if(INmapSY == 1200 && INmapSX == 2200){
+         ApplyMaskExt(26,27,888,148);
+     }
+     if(INmapSY == 1040 && INmapSX == 2200){
+         ApplyMaskExt(26,27,888,148);
+     }
+     if(INmapSY == 800 && INmapSX == 2000){
+         ApplyMaskExt(29,23,762,367);
+     }
+     if(INmapSY == 800 && INmapSX == 800){
+         ApplyMaskExt(9,42,332,65);
+     }
+ }
+ 
+ 
+ CWorm* NearestEnemyWorm;
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+    /*
+    if(Type != 1 && Type != 31 && Type != 71 && Type != 5 && Type != M_FRAME && Type != M_DRAWQUEUE && Type != M_INPUT && Type != M_EXPLOSION && Type != M_ENTER && Type != M_SHOWMESSAGE && Type != M_SETTEAM && Type != M_TURNBEGIN && Type != M_UPDATEWIND && Type != M_AFTERSHOOT){
+        GG->WriteToChat(11, ItoA(int(Type)), false);
+        if(Type == 51){
+            WriteToLog("-- 51 START v -- \r\n");
+            WriteToLog(ItoA(MData->GetParameter(0) ));
+            WriteToLog(ItoA(MData->GetParameter(1) ));
+            WriteToLog(ItoA(MData->GetParameter(2) ));
+            WriteToLog(ItoA(MData->GetParameter(3) ));
+            WriteToLog(ItoA(MData->GetParameter(4) ));
+            WriteToLog(ItoA(MData->GetParameter(5) ));
+            WriteToLog(ItoA(MData->GetParameter(6) ));
+            WriteToLog(ItoA(MData->GetParameter(7) ));
+            WriteToLog(ItoA(MData->GetParameter(8) ));
+            WriteToLog(ItoA(MData->GetParameter(9) ));
+            WriteToLog(ItoA(MData->GetParameter(10) ));
+            WriteToLog(ItoA(MData->GetParameter(11) ));
+            WriteToLog(ItoA(MData->GetParameter(12) ));
+            WriteToLog(ItoA(MData->GetParameter(13) ));
+            WriteToLog(ItoA(MData->GetParameter(14) ));
+            WriteToLog(ItoA(MData->GetParameter(15) ));
+            WriteToLog(ItoA(MData->GetParameter(16) ));
+            
+        }
+        
+    }
+*/
+
+
+CWorm * tmpTW;
+
+if(Type == M_DRAWQUEUE){
+    
+  //  AddSprite(2, -1165, 0, 0, (GMapSprite->Index)+262144, 0.0);
+   // AddSprite(2, 2446, 0, 0, GMapSprite->Index, 0.0);    
+  //  AddSprite(2, 0, 0, 0, (GMapSprite->Index)+262144, 0.0);
+  //  AddSprite(2, 200, 0, 0, GMapSprite->Index, 0.0);
+    
+    //AddSpriteEx(19,0,0,GMapSprite->Index,0.0,0.0,1.0);
+    
+local PlayingWorm = GetCurrentWorm();
+        if(PlayingWorm != NullObj){
+            if(PlayingWorm != this){super; return;}
+            if(PlayingWorm->KaozActive == true){
+                local CaX = GS->ActCameraX;
+                local CaY = GS->ActCameraY;
+                //local CaX = GS->CameraX;
+                //local CaY = GS->CameraY ;
+
+                AddSpriteEx(0,CaX,CaY - GS->Disp->halfY + 100,SprMayhem->Index,1.0,0.0,1.0);
+                
+                //GG->WriteToChat(11, ItoA(GS->Disp->ViewX), false);
+               // GG->WriteToChat(11, ItoA(GS->Disp->xRes), false);
+               // GG->WriteToChat(11, ItoA(GS->Disp->ViewSX), false);
+               // GG->WriteToChat(11, ItoA(GS->Disp->halfX), false);
+                //GG->WriteToChat(11, ItoA(GS->Disp->halfX), false);
+            }
+        }
+
+}
+
+if(Type == M_FRAME)
+   {
+       
+      //Every frame for every worm check wep panel refresh
+       //every first worm in team that fired will do this
+
+       /*
+       
+       removed cuz code referring here is commented ?
+       
+        if(UpdateWPanelDelay != 0){
+            UpdateWPanelDelay = UpdateWPanelDelay - 1;
+            if(UpdateWPanelDelay == 1){
+                //Refresh Wpanel
+                RefreshTeamWeapon(UpdateWPanel);
+                //reset
+                UpdateWPanelDelay = 0;
+            }
+        }
+
+        */
+        
+        local PlayingWorm = GetCurrentWorm();
+        if(PlayingWorm != NullObj){
+            if(PlayingWorm != this){super;return;}
+            
+          
+            
+            /*
+            WDRoutine = ( WDRoutine + 1 ) % 50;
+            if(WDRoutine == 5){
+                
+                if(CurrentWSide != 0){
+                    for(int n = 0; n < 66; n++){
+                        if(n != 37 && n != 0 && n != 10 && n != 64 && n != 59 && n != 26 && n != 18 && n != 29 && n != 39 && n != 38 && n != 3 && n != 32 && n != 33 && n != 34 && n != 57 && n != 58){
+                        twep = GS->GetWeaponByIndex(1, n);
+                            if(twep != NullObj){
+                                if(CurrentWSide == 1){
+                                    GS->Info.SetWeaponEx(CurrentWTeam,n,twep->GetPageIndex(), ( WepAmountL[n]) );
+                                }else{
+                                    GS->Info.SetWeaponEx(CurrentWTeam,n,twep->GetPageIndex(), ( WepAmountR[n]) );
+                                }
+                            }
+                        }
+                    }
+                    
+                }
+                
+                
+            }
+            */
+            
+            if(JobFrame > 0 && JobFrame < 10){
+                JobFrame++;
+            }
+             if(JobFrame == 10){
+                JobFrame = 0;
+                //Worms select !
+                
+                local wTeam = PlayingWorm->WormTeam;
+                local wInTeam = 0;
+                
+                //Find out if only 1 worm alive
+                for (int j = 6; j >= 1; j-=1)
+                      {
+                        for (int i = 8; i >= 1; i-=1)
+                        {
+                            tmpTW = Root->GetObject(2, 16 * j + i);
+            
+                            if (tmpTW != NullObj && wTeam == tmpTW->WormTeam )
+                            {
+                                wInTeam += 1;
+                                if(wInTeam >= 2){
+                                    break;
+                                }
+                            };
+                        
+                        };
+                      }; 
+                if(wInTeam > 1){
+                    CMessageData msgselect;
+                    msgselect.params[0] = PlayingWorm->WormTeam;
+                    msgselect.params[1] = PlayingWorm->WormNumber;
+                    msgselect.params[2] = 59;
+                    msgselect.params[3] = 0;
+                    PlayingWorm->Message(NullObj, M_SETWEAPON, 1032, &msgselect);
+                    CMessageData msgspace;
+                    msgspace.params[0] = PlayingWorm->WormTeam;
+                    PlayingWorm->Message(NullObj, M_SPACE, 1032, &msgspace); 
+                    }
+               }
+           
+            if(NearestEnemyWorm != NullObj){
+            
+            //GG->WriteToChat(11, ItoA(PlayingWorm->ObjState), false);
+            
+                if (PlayingWorm->ObjState == WS_JETPACK){
+
+                   //Find nearest worm
+                   local distanceX = abs(NearestEnemyWorm->PosX - PlayingWorm->PosX);
+                   local distanceY = abs(NearestEnemyWorm->PosY - PlayingWorm->PosY);
+                   local hypotenusa = sqrt((distanceX*distanceX) + (distanceY*distanceY));
+                   /*
+                   if(hypotenusa > 1000){
+                       hypotenusa = 1000;
+                   }*/
+                   if(hypotenusa < 1){
+                       hypotenusa = 1;
+                   }
+                   
+                       
+                       PlayingWorm->JetFuel = hypotenusa*65536; //Fuel = distance to closest enemy worm
+                   
+                   
+                
+                }
+            }
+            
+            if(mapsizeX < 100 || mapsizeY < 100){
+                mapsizeX = GS->LevelSX;
+                mapsizeY = GS->LevelSY;
+            }
+            
+            
+            if(TeamSide == 1){
+                if(PosX < int(mapsizeX / 2)){
+                    KaozActiveBeta = true;
+                    centerLineGUI->SetDrawColor = 1;
+                }else{
+                    KaozActiveBeta = false;
+                    centerLineGUI->SetDrawColor = 2;
+                }
+            }else{
+                 if(PosX > int(mapsizeX / 2)){
+                    KaozActiveBeta = true;
+                    centerLineGUI->SetDrawColor = 1;
+                }else{
+                    KaozActiveBeta = false;
+                    centerLineGUI->SetDrawColor = 2;
+                }
+            }
+            /*
+            
+            TODO. FINNISH THIS. 
+            
+            //check X
+            local MapBoundryX = 246;
+
+            if(PosX <= (MapBoundryX * -1) ){
+                PosX = GS->LevelSX + MapBoundryX - 10;
+            }
+            
+            if(PosX >= GS->LevelSX + MapBoundryX){
+                PosX = (MapBoundryX * -1) + 10;
+            }
+            */
+            
+            
+            
+            
+           
+        }
+   }
+   
+   
+     super;
+}  
+
+
+int TeamLowestHealth;
+
+int TeamHealthDiff(){
+    teamLhp = 0;
+    teamRhp = 0;
+    local whp = 0;
+for (int j = 6; j >= 1; j-=1)
+                      {
+                        for (int i = 8; i >= 1; i-=1)
+                        {
+                          
+                            local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+                            if (Worm)
+                            {
+                                if(Worm->TeamSide == 1){
+                                    whp = GS->Info.GetWormHealth(Worm->WormTeam, Worm->WormNumber);
+                                    if(whp < 0){whp = 0;}
+                                    teamLhp += whp;
+                                }else{
+                                    whp = GS->Info.GetWormHealth(Worm->WormTeam, Worm->WormNumber);
+                                    if(whp < 0){whp = 0;}
+                                    teamRhp += whp;
+                                }
+                            };
+                        
+                        };
+                      };
+    
+    if(teamLhp < teamRhp){
+        TeamLowestHealth = 1;
+    }else{
+        TeamLowestHealth = 2;
+    }
+    
+    return abs(teamLhp - teamRhp);
+    
+}
+
+bool SpawnKCrateOverride;
+
+override void CTurnGame::FinishTurn(int reason)
+{
+    
+    
+    //spawn extra crate
+    
+    CCrateDesc CDesc;
+    local RNGt = GS->GetRandom();
+    for(int w = 0; w < 3; w++){
+        zero(&CDesc);
+            
+        CDesc.X = -1000;
+        CDesc.Y = -1000;
+        
+        CDesc.type = CT_WEAPON;//cratype;
+        CDesc.wType = WCT_RANDOM;//WCT_RANDOM;
+        CDesc.weapon = 127;
+        
+        //CDesc.health = 25;//RandomInt(1,30);
+        local daJetCrate = new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+        daJetCrate->FixedWeapon = 0; //random wep
+        daJetCrate->PosX = -1000 + (w * 30);
+        daJetCrate->PosY = -1000;
+        daJetCrate->X = -1000;
+        daJetCrate->Y = -1000;
+        daJetCrate->PositionSet = true;
+        
+        RNGt = GS->GetRandom();
+        local mzX = mapsizeX;
+        local mzY = mapsizeY;
+        GetNewCrateSpawn(mzX, mzY, RNGt);
+        if(CrateSpawnSuccess == true){
+            daJetCrate->PosX = NewCrX;
+            daJetCrate->PosY = NewCrY;
+            daJetCrate->X = NewCrX;
+            daJetCrate->Y = NewCrY;
+            daJetCrate->PositionSet = true;
+            daJetCrate->LookAtMe(NewCrX, NewCrY, 5);
+        }else{
+            //could not spawn crate
+            daJetCrate->PositionSet = true;
+            daJetCrate->Freeing = true;
+            daJetCrate->Free(true);
+        }
+
+        
+        
+        
+    }
+            
+    
+    local tcworm = GetCurrentWorm();
+    
+    if(mapsizeX < 100 || mapsizeY < 100){
+        mapsizeX = GS->LevelSX;
+        mapsizeY = GS->LevelSY;
+    }
+    
+    local mSX = mapsizeX;
+    local mSY = mapsizeY;
+    
+    
+/*    
+    CTeam* team = Root->GetObject(TI_Team, tcworm->WormTeam);
+*/
+    local SpawnKCrateResult = 5;
+    
+     if(isAnyWormOnClouds(mSY, mSX) == false){
+        ClearCloudBridge(mSY, mSX);
+     }
+        
+        if(SpawnKCrateOverride == true){
+            SpawnKCrateOverride = false;
+            NewKCrate(NextKcrateX, mSX, mSY); 
+        }else{
+            // A TINY BIT OF BALANCING!
+            //is one team lower health than the other by x amount?
+           if(TeamHealthDiff() > 100){
+            //if(1 == 0){
+                //TeamLowestHealth
+                
+                //Do we want to spawn crate?
+                SpawnKCrateResult = WantToSpawnKCrate(GS->GetRandom(),GS->GetRandom(), mSX, mSY, StartTurnCounter);
+                if(SpawnKCrateResult == 1){
+                    //is crate spawning on the low health teams turn?
+                    if(tcworm->TeamSide != TeamLowestHealth){
+                        //its the low health teams turn next, spawn crate
+                        NewKCrate(NextKcrateX, mSX, mSY); 
+                        
+                    }else{
+                        if(SpawnKCrateResult != 3){
+                            SpawnKCrateOverride = true;
+                        }
+                    }
+
+                }
+                
+                
+            }else{
+                //normal spawn
+                SpawnKCrateResult = WantToSpawnKCrate(GS->GetRandom(),GS->GetRandom(), mSX, mSY, StartTurnCounter);
+                if(SpawnKCrateResult == 1){
+                    NewKCrate(NextKcrateX, mSX, mSY); 
+                }
+            }
+
+        }
+        //DESYNC CAUSE?
+        //Add 25hp to worms in their fort
+        
+        local whp = 0;
+        // for (int j = 6; j >= 1; j-=1)
+                      // {
+                        // for (int i = 8; i >= 1; i-=1)
+                        // {
+                          
+                            // local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+                            // if (Worm != NullObj)
+                            // {
+                                // whp = GS->Info.GetWormHealth(Worm->WormTeam, Worm->WormNumber);
+                                // if(whp < 170 && whp != 0 && (Worm->PosY < CurrWaterLvl) ){
+                                    
+                                    // local printHealth = false;
+
+                                    
+                                    // whp = whp + 25;
+                                    // if(whp > 170){
+                                        // whp = 170;
+                                    // }
+                                    // if(mSX == 2200 && mSY == 1504){
+                                        // if(Worm->TeamSide == 1 && Worm->PosX < 880){
+                                            // GS->Info.SetWormHealth(Worm->WormTeam,Worm->WormNumber,whp); printHealth = true;
+                                        // }
+                                        // if(Worm->TeamSide == 2 && Worm->PosX > 1325){
+                                            // GS->Info.SetWormHealth(Worm->WormTeam,Worm->WormNumber,whp); printHealth = true;
+                                        // }
+                                    // }
+                                    // if(mSX == 2200 && mSY == 2000){
+                                        // if(Worm->TeamSide == 1 && Worm->PosX < 900){
+                                            // GS->Info.SetWormHealth(Worm->WormTeam,Worm->WormNumber,whp); printHealth = true;
+                                        // }
+                                        // if(Worm->TeamSide == 2 && Worm->PosX > 1300){
+                                            // GS->Info.SetWormHealth(Worm->WormTeam,Worm->WormNumber,whp); printHealth = true;
+                                        // }
+                                    // }
+                                    
+                                    // if(printHealth == true){
+                                        // local team = Worm->WormTeam;
+                                        // if (darkControl->IsTeamVisible(team)) {
+                                            // local whpgui = new CInterfaceHandler(Root);
+                                            // whpgui->IsAddHealth = true;
+                                            // whpgui->KCx = Worm->PosX;
+                                            // whpgui->KCy = Worm->PosY;
+                                        // }
+                                    // }
+                                    
+                                // }
+                            // };
+                        
+                        // };
+                      // };
+        
+    StartTurnCounter = StartTurnCounter + 1; // must maybe be here for desync reasons
+    CurrWaterLvl = Env->Water;        
+
+super;
+}
+
+
+
+void NewKCrate(int PoX, int SX, int SY){
+    
+    local NewPosY = -125;
+    if(SX == 2200 && SY == 1504){
+        NewPosY = -125;
+    }
+    if(SX == 2200 && SY == 2000){
+        if(CurrWaterLvl > 1850){
+            NewPosY = 1518;
+            if(PoX > 900 && PoX < 1300){
+                NewPosY = 1100;
+            }
+        }else{
+            NewPosY = -125;
+        }
+        
+    }
+    local drumee = new COilDrum(Root->GetObject(25, 0), 0, 0, false);
+
+    drumee->PosX = PoX;
+    
+    drumee->PosY = NewPosY;
+    drumee->IsKCrate = true;
+    drumee->StartTurn = StartTurnCounter;
+    KCrateList->Add(drumee);
+    
+    drumgui = new CInterfaceHandler(Root);
+    
+    drumee->GUIref = drumgui;
+}
+
+int NextKcrateX;
+int WantToSpawnKCrate(int RNGA,int RNGB, int SX, int SY, int startturns){
+    KCrateList->Compact();
+    if(KCrateList->Count >= 2){return 3;} //No more 2 at the time
+    
+    
+/*
+    if(StartTurnCounter == 4){
+
+        NewKCrate(540); 
+        NewKCrate(1660);
+        return false; //secret spawn
+    }else{
+        
+        
+        if(StartTurnCounter > 4){
+            */
+            local bonus = int(startturns);
+            //local bonus = 5;
+            if(bonus > 30 || bonus < 0){bonus = 30;}
+            if((RNGA % 100) < (5 + bonus)){
+                local sp = 20;
+                local xstep = SX / sp;
+                NextKcrateX = xstep * ((RNGB % sp) + 1);
+                
+                if(SX == 2200 && SY == 1504){
+                    if(NextKcrateX < 105){NextKcrateX = 105; return 1;}
+                    if(NextKcrateX > 2098){NextKcrateX = 2098; return 1;}
+                    if(NextKcrateX > 1010 && NextKcrateX < 1195){
+                        if(RNGB % 2 == 0){
+                            NextKcrateX = 555; 
+                        }else{
+                            NextKcrateX = 1690;
+                        } 
+                    }
+                }
+                
+                return 1;
+            }
+     //   }
+    //}
+    
+    return 0;
+}
+
+
+
+/*
+override void CTurnGame::FinishTurn (int reason)
+{
+
+ WHY U NO WORK
+ 
+    //if (Type == M_TURNEND) { //  M_AFTERRETREAT ? M_TURNEND
+        local mapSX = GS->LevelSX;
+        local mapSY = GS->LevelSY;
+        if(mapSY == 1200 && mapSX == 2200){
+            ClearCloudBridge();
+        }
+     //}
+     super;
+    
+{
+
+*/
+void FindClosestEnemy(){
+    NearestEnemyWorm = NullObj;
+    local currW = GetCurrentWorm();
+    local j; local i;
+    local shortestDistance = 3000;
+    if(currW == NullObj){ return; }
+    
+       for (j = 6; j >= 1; j-=1)
+                          {
+                            for (i = 8; i >= 1; i-=1)
+                            {
+                              
+                                local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+                                if (Worm)
+                                {
+                                    if(Worm->TeamSide == currW->TeamSide){continue;}
+                                    local distX = abs(Worm->PosX - currW->PosX);
+                                    local distY = abs(Worm->PosY - currW->PosY);
+                                    local tmpdist = sqrt((distX*distX) + (distY*distY));
+                                    if(tmpdist < shortestDistance){
+                                        shortestDistance = tmpdist;
+                                        NearestEnemyWorm = Worm;
+                                    }  
+
+                                };
+                            
+                            };
+                          };
+}
+
+void FWormSel(){
+    CWorm* currWW = GetCurrentWorm();
+    
+    if(currWW != NullObj)
+    { 
+       
+      
+//Fast walk!
+                CMessageData msgselectMole;
+                msgselectMole.params[0] = currWW->WormTeam;
+                msgselectMole.params[1] = currWW->WormNumber;
+                msgselectMole.params[2] = 64;
+                msgselectMole.params[3] = 0;
+                currWW->Message(NullObj, M_SETWEAPON, 1032, &msgselectMole);
+                CMessageData msgspaceT;
+                msgspaceT.params[0] = currWW->WormTeam;
+                currWW->Message(NullObj, M_SPACE, 1032, &msgspaceT); 
+
+
+    }
+}
+
+
+
+
+
+
+
+bool FastWalkNow;
+
+void CaveGenExt(int fp, int co1, int co2, int gens, int sx, int sy, int offx, int offy, int RNGa){
+    fillprob = fp; //40
+    r1_cutoff = co1; //5
+    r2_cutoff = co2; //2
+    local generations = gens; //3
+    cSizeX = sx; //442 / 19; //19x19 == size of hole
+    cSizeY = sy; //380 / 19;
+    cOffX = offx;
+    cOffY = offy;
+    
+    CaveInitmap(RNGa);
+    
+    local ii = 0;
+    for(ii=0; ii<generations; ii++)
+    {
+        CaveGeneration();
+    }
+    CavernPrintmap(1, 19, 14);
+    
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+    
+    
+    //maybe only pick map size if its not done.
+    
+    if(mapsizeX < 100 || mapsizeY < 100){
+        mapsizeX = GS->LevelSX;
+        mapsizeY = GS->LevelSY;
+    }
+    local mapSX = mapsizeX;
+    local mapSY = mapsizeY;
+    
+     if(isAnyWormOnClouds(mapsizeY, mapsizeX) == true){
+        ClearCloudBridge(mapsizeY, mapsizeX);
+     }
+     
+     /*
+        //another one.. 
+        local Weap = GS->GetWeaponByIndex(1, 65); 
+        local Page = Weap->GetPageIndex();
+        if(KCrateList->Count > 0){
+            for(int i = 0; i < 6; i++){ 
+                GS->Info.SetWeaponDelay(i,65,Page,1);
+            }
+        }else{
+            for(int i = 0; i < 6; i++){ 
+                GS->Info.SetWeaponDelay(i,65,Page,0);
+            }
+        }
+    */
+    
+     
+local twep = GS->GetWeaponByIndex(1, 1);
+local HasDoneTeamWep = false;
+
+    for (int j = 6; j >= 1; j-=1)
+                      {
+                        HasDoneTeamWep = false;
+                        for (int i = 8; i >= 1; i-=1)
+                        {
+                          
+                            local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+                            if (Worm != NullObj)
+                            {
+                                
+                                // if(HasDoneTeamWep == false){
+                                    // for(int n = 0; n < 80; n++){
+                                        // if(n != 64 && n != 59 && n != 26 && n != 18 && n != 29 && n != 39 && n != 38 && n != 3 && n != 32 && n != 33 && n != 34 && n != 57 && n != 58){
+                                        // twep = GS->GetWeaponByIndex(1, n);
+                                            // if(twep != NullObj){
+                                                // if(Worm->TeamSide == 1){
+                                                    // GS->Info.SetWeaponEx(j,n,twep->GetPageIndex(), (WepAmountL[n]) ); //need +1?
+                                                // }else{
+                                                    // GS->Info.SetWeaponEx(j,n,twep->GetPageIndex(), (WepAmountR[n]) );
+                                                // }
+                                            // }
+                                        // }
+                                    // }
+                                    // HasDoneTeamWep = true;
+                                // }
+                                
+                                Worm->KaozActive = false;
+                                Worm->swimsuit = false;
+                                Worm->plopready = false;
+                                Worm->plopped = false;
+                                Worm->wasinwater = false;
+                                Worm->wfloating = false;
+                                Worm->antisink_fail = false;
+                                Worm->GravityFactor = 1;
+                                if (!Worm->ghostjet) Worm->ColGroup = 134342 + 4194304;
+                                else Worm->ColGroup = 134342;
+                            };
+                        
+                        };
+                      };
+                      
+                      
+                      
+    
+    SpawnJetCrate = SpawnJetCrate + 1; if(SpawnJetCrate > 10){SpawnJetCrate = 10;}
+    
+    
+    //spawn jetpack if right map
+    
+    if(mapSX == 2200 && mapSY == 2000 && (SpawnJetCrate == 3)){
+        if(JetCrateAlive == false){
+            JetCrateAlive = true;
+            
+            CCrateDesc CDesc;
+            zero(&CDesc);
+                
+            CDesc.X = 1096;
+            CDesc.Y = CurrWaterLvl - 636;
+            
+            CDesc.type = CT_WEAPON;//cratype;
+            CDesc.wType = WCT_RANDOM;//WCT_RANDOM;
+            CDesc.weapon = 127;
+            
+            //CDesc.health = 25;//RandomInt(1,30);
+            local daJetCrate = new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+            daJetCrate->FixedWeapon = 62;
+            daJetCrate->PosX = 1096;
+            daJetCrate->PosY = 1373;
+            daJetCrate->X = 1096;
+            daJetCrate->Y = 1373;
+
+        }
+    }
+    
+   super;
+   
+   CWorm* currWormy = GetCurrentWorm();
+   if(currWormy != NullObj)
+    { 
+                
+        FindClosestEnemy();
+       
+
+        FWormSel();
+        currWormy->JobFrame = 1; //Fast walk
+        
+        
+    }
+    
+    //Sometimes leave space empty with no clouds
+    if(StartTurnCounter % 5 == 0){return;} //3 is too many empy.. 5 maybe better.
+    
+    if(mapSY == 1504 && mapSX == 2200){
+        CaveGenExt(51,7,1,5,24,24,868,425, GS->GetRandom());
+    }
+
+    if(mapSY == 2000 && mapSX == 2200){
+        CaveGenExt(51,7,1,5,   107,15, 69, 10, GS->GetRandom());
+    }
+    if(mapSY == 1200 && mapSX == 2200){
+        CaveGenExt(51,7,1,5,24,24,868,125, GS->GetRandom());
+    }
+    if(mapSY == 1040 && mapSX == 2200){
+        CaveGenExt(51,7,1,5,24,24,868,125, GS->GetRandom());
+    }
+   if(mapSY == 800 && mapSX == 2000){
+       CaveGenExt(51,7,1,5,27,21,740,350, GS->GetRandom());
+    }
+    if(mapSY == 800 && mapSX == 800){
+        CaveGenExt(49,6,2,1,9,37,312,60, GS->GetRandom());
+    }
+    
+    
+    
+}
+
+
+override void CDDQueue::AddSprite(fixed z,fixed x,fixed y,int unk,int sprite,fixed frame)
+{
+      if(sprite == 889 || sprite == 890)
+      {
+          //SetColorMod(RGB(175,0,0),8);
+          //super;
+          //ClearColorMod();
+          local worm = GetCurrentWorm();
+
+    //local Color = GetTeamColor(worm->WormTeam);
+    local Color = GetTeamColor(TeamToAddSprite);
+    
+    if (Color == 0)
+    {
+      SetColorMod(RGB(175, 20, 20), 8); //4 - diffuse color goes to smooth addition
+    }
+    if (Color == 1)
+    {
+      SetColorMod(RGB(20, 20, 180), 8);
+    }
+    if (Color == 2)
+    {
+      SetColorMod(RGB(20, 180, 20), 8);
+    }     
+    if (Color == 3)
+    {
+      SetColorMod(RGB(120, 120, 40), 8);
+    }
+    if (Color == 4)
+    {
+      SetColorMod(RGB(120, 40, 120), 8);
+    }
+    if (Color == 5)
+    {
+      SetColorMod(RGB(40, 120, 120), 8);
+    }
+  
+    super;
+    ClearColorMod();
+
+      }
+      else super;  
+}

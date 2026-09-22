@@ -1,0 +1,56 @@
+void CAttacker::BossMovement()
+{
+   if(DistBetweenObjs2(Base, this) > 250)//resetting to hovering state
+           {
+           MovingX = false; MovingY = false;
+           } 
+           
+           
+           if (MovingX == false && MovingY == false)//Hovering state
+           {
+           if(FloatDirection == 1){SpX = -1;}
+           if(FloatDirection == 2){SpY = -1;}
+           if(FloatDirection == 3){SpX = 1;}
+           if(FloatDirection == 4){SpY = 1;} 
+           }
+           
+           //Bouncing state
+           if(BounceDir == 1){SpX = -BounceSpeed;}
+           if(BounceDir == 2){SpY = -BounceSpeed;}
+           if(BounceDir == 3){SpX = BounceSpeed;}
+           if(BounceDir == 4){SpY = BounceSpeed;} 
+           
+           int hitx1;
+           int hity1;
+           local hit1 = CObject(NullObj);
+           if(BounceDir == 1)hit1 = CObject(TraceLine(this, PosX, PosY, PosX - 15, PosY, 2, &hitx1, &hity1));
+           if(BounceDir == 2)hit1 = CObject(TraceLine(this, PosX, PosY, PosX, PosY - 15, 2, &hitx1, &hity1));
+           if(BounceDir == 3)hit1 = CObject(TraceLine(this, PosX, PosY, PosX + 15, PosY, 2, &hitx1, &hity1));
+           if(BounceDir == 4)hit1 = CObject(TraceLine(this, PosX, PosY, PosX, PosY + 15, 2, &hitx1, &hity1));         
+                 if(hit1 != NullObj)
+                 { 
+			if(hit1->ClType == OC_Landscape){ChangeBounceDir();} 
+                 }
+                 
+           if(DistBetweenObjs2(Base, this) < 350)    //Base in zone, destroy the worm!
+           {
+           MovingX = true; MovingY = true; 
+           if(FloatDirection == 1){SpX = 0;}
+           if(FloatDirection == 2){SpY = 0;}
+           if(FloatDirection == 3){SpX = 0;}
+           if(FloatDirection == 4){SpY = 0;}          
+           }
+           
+    CrosshairTimer = CrosshairTimer + 1;    
+    if(CrosshairTimer == 180)CrosshairAnimOn = true;
+    if(CrosshairTimer > 180 && CrosshairTimer < 230)CrosshairAnimCol = CrosshairAnimCol + 5;
+    if(CrosshairTimer == 230){Fire(); CrosshairAnimOn = false; CrosshairAnimCol = 1; MissileType = 2;}
+    if(CrosshairTimer == 410)CrosshairAnimOn = true;
+    if(CrosshairTimer > 410 && CrosshairTimer < 460)CrosshairAnimCol = CrosshairAnimCol + 3; 
+    if(CrosshairTimer == 460)Fire();
+    if(CrosshairTimer == 475)Fire();
+    if(CrosshairTimer == 490)Fire();
+    if(CrosshairTimer == 505)Fire();
+    if(CrosshairTimer == 520)Fire();
+    if(CrosshairTimer == 535){Fire(); CrosshairAnimOn = false; CrosshairAnimCol = 1; MissileType = 3; CrosshairTimer = 0;}    
+}

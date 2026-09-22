@@ -1,0 +1,31 @@
+//script by StepS
+
+require utils;
+
+void crazyjumps::Init()
+{
+        keySync->AddKey(8); // Backspace
+        keySync->AddKey(13); // Enter
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{      
+CWorm *ActWorm = GetCurrentWorm();
+if(ActWorm == NullObj) {Crazyjumps = false;}
+if(ActWorm == this) {Crazyjumps = true;}
+
+         if(Type == M_FRAME)
+         {      
+                   if(ActWorm != NullObj && Crazyjumps == true)
+                   {
+                   if((keySync->KeyPressedNow(13) || keySync->KeyPressedNow(8)) && (ActWorm->ObjState == WS_JUMP))
+                   {ActWorm->ObjState = WS_JUMPPREPARE;}
+                   }
+         }
+super;  
+}

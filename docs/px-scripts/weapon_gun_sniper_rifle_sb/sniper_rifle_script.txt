@@ -1,0 +1,55 @@
+require p_sprite_builder;
+
+CSprite* sniper_aiming;
+
+void sniper_rifle_script::InitGraphic()  
+{   CFile* f;                            
+    f = GetAttachment("sr.png");         
+    sniper_aiming = LoadSprite(f, 1, 0);
+}                                        
+                                         
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                  
+  if (Type == M_FRAME) {                 
+    if (gframe == 1) {                   
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Sniper Rifle";                     
+     sprite = sniper_aiming->Index;
+     Params->hand_radius = -6.0;                                                 
+     Params->hand_rotation = 1.0;                   
+     Params->hand_radial_rotation = 0.9;
+     Params->weap_radial_rotation = 0.0;     
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 0.1;
+     Params->hand_type = 1;    
+     Params->hand_scale = 0.0; 
+
+	local WA = new WormSprite(weapName, sprite, Params);
+    } 
+  }   
+}     
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Sniper Rifle ";
+     sprite = sniper_aiming->Index;
+     Params->hand_radius = -6.0;
+     Params->hand_rotation = 1.0;
+     Params->hand_radial_rotation = 0.9;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 0.1;
+     Params->hand_type = 1;
+     Params->hand_scale = 0.0;
+
+	local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

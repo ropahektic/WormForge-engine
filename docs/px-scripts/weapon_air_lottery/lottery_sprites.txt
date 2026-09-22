@@ -1,0 +1,13 @@
+//List of sprites
+CSprite* tickets;
+
+void lottery_sprites::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("Lottery Tickets.png"); 
+   tickets = LoadSprite(f, 0, 15);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(710, tickets);
+}

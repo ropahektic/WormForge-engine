@@ -1,0 +1,126 @@
+ require utils;        
+ 
+override void COilDrum::COilDrum(CObject* Parent,fixed X,fixed Y,bool Snap)
+{
+ homingCD = 20;
+ homingIterations = 0; //Holy Hand Grenade or others.
+ homeActive = false;
+ CurseTarget = CWorm(NullObj);
+ super;
+}
+
+override void COilDrum::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{    
+ if (Type==M_FRAME)
+   {
+      if (CurseTarget == NullObj && !deleteTracking){homeActive = false; CurseTarget = FindClosestVisibleCursedWorm(this);}
+     
+      if (CurseTarget != NullObj) homeActive = true;
+     
+      if (homeActive)  //Homing
+      {
+                        // --- NEW DIRECT GUIDANCE LOGIC ---   thank you deep seek i cant do math
+                float missX = PosX;
+                float missY = PosY;  
+                if (homingIterations>=200)
+                   {
+                   homingCD = 9900;       //Holy Grenade or others
+                   SpX = 0;
+                   
+                   deleteTracking = true;
+                   homeActive = false;
+                   }
+                if (homingCD==0)
+                {
+                  // 1. Get the direction vector pointing straight at the target.
+                  float dirX = CurseTarget->PosX - missX;
+                  float dirY = CurseTarget->PosY - missY;
+
+                  // 2. Normalize the vector to get a pure direction (length of 1).
+                  float distanceToTarget = sqrt(dirX * dirX + dirY * dirY);
+                  if (distanceToTarget > 0) // Avoid division by zero
+                  {
+                    dirX = dirX / distanceToTarget;
+                    dirY = dirY / distanceToTarget;
+                  }
+
+                  float missileSpeed = 12.0;   // How fast the missile tries to fly.
+                  float homingStrength = 0.33; // How sharply it can turn (0.0 to 1.0).
+
+                  // 4. Calculate the ideal velocity (direction * speed).
+                  float requiredSpX = dirX * missileSpeed;
+                  float requiredSpY = dirY * missileSpeed;
+
+                  // 5. Gently steer the current velocity towards the ideal velocity.
+                  // This prevents the zig-zagging and creates a smooth turn.
+                  SpX += (requiredSpX - SpX) * homingStrength;
+                  SpY += (requiredSpY - SpY) * homingStrength;
+                
+                  homingCD = 3; // Cooldown before the next minor adjustment. 
+                  homingIterations++;
+                }
+                else if (homingCD > 0)
+                {
+                     homingCD--;
+                     homingIterations++;
+                }
+        }         
+   }
+   if (Type==M_PRETURNSTART)
+   {
+      HomingCD = 50;
+   }  
+ super;
+}
+
+
+bool COilDrum::IsTargetVisibleAll(COilDrum* missile, CWorm* target)
+{
+    if (missile == NullObj || target == NullObj)
+    {
+        return false;
+    }
+    int hitX; int hitY;
+    if (TraceLine(missile, missile->PosX, missile->PosY, target->PosX, target->PosY, CMASK_TERRAIN, &hitX, &hitY) == NullObj)
+    {
+        return true;
+    }
+    return false;
+}
+
+CWorm* COilDrum::FindClosestVisibleCursedWorm(COilDrum* curMis)
+{
+    CWorm* closestWorm = CWorm(NullObj);
+    
+    CWorm* currWorm = GetCurrentWorm();
+    float closestDistance = 999999.0; // Large number
+    
+    for(int i = 0; i < Env->Objs.Count; i++)
+    {
+        local obj = CGObject(Env->Objs.Objs[i]);
+        if (obj is NullObj) continue;
+        if(obj is CWorm == false) continue;
+        
+        local worm = CWorm(obj);
+        if(worm->isCursed && worm != currWorm) // Don't target yourself
+        {
+            // Check if visible
+            if(IsTargetVisibleAll(curMis, worm))
+            {
+                // Calculate distance
+                float dx = worm->PosX - PosX;
+                float dy = worm->PosY - PosY;
+                float distance = sqrt(dx*dx + dy*dy);
+                
+                // Find closest
+                if(distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    //worm->timesTargeted++;         //Oildrums are free
+                    closestWorm = worm;
+                }
+            }
+        }
+    }
+    return closestWorm;
+}

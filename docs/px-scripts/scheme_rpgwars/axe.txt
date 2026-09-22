@@ -1,0 +1,92 @@
+CSprite* waveSprite;
+
+void axe::InitGraphic()
+{
+    local spr1     = GetAttachment("orangewave.png");
+    waveSprite     = LoadSprite(spr1, 1, 0);
+}
+
+void axe::Init()
+{
+
+}
+
+void axe::FirstFrame()
+{
+
+}
+
+//This changes all battleaxe type hits into 60 dmg non-percentage based ones.
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+ AxeTimer = 60;
+ AxeDigPosX = 0;
+ AxeDigPosY = 0;
+ AxeDigSide = 0; // -1 +1
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_GUNEXP)
+         {
+                 if(MData->params[0] == 10)
+                 {
+                 CMessageData msg;
+                 msg.params[0]	= 3;
+                 msg.fparams[1]	= MData->fparams[1];
+                 msg.fparams[2]	= MData->fparams[2];
+                 msg.fparams[3]	= MData->fparams[3];
+                 msg.fparams[4]	= MData->fparams[4];
+                 msg.params[5]	= 60;                    //dmg
+                 if(IsArmored == true){msg.params[5] = 55;}
+                 msg.params[6]	= MData->params[6];
+                 super(sender, M_GUNEXP, 1032, &msg);
+                 return;
+                 }
+         }
+
+         if(Type == M_FRAME)
+         {
+                 if(AxeTimer < 40)
+                 {
+                 AxeTimer = AxeTimer + 1;
+                  if(AxeTimer > 0)
+                  {
+                  //AddSprite(5,AxeDigPosX+AxeTimer*AxeDigSide,AxeDigPosY,0,1,AxeTimer/60);
+                  //AddSprite(5,AxeDigPosX+AxeTimer*AxeDigSide,AxeDigPosY-10,0,1,AxeTimer/60);
+                  //AddSprite(5,AxeDigPosX+AxeTimer*AxeDigSide,AxeDigPosY-20,0,1,AxeTimer/60);
+                  GG->land->ApplyMask(1, AxeDigPosX+AxeTimer*AxeDigSide, AxeDigPosY);
+                  GG->land->ApplyMask(1, AxeDigPosX+AxeTimer*AxeDigSide, AxeDigPosY-10);              //ill add cool sprites later... probably...
+                  GG->land->ApplyMask(1, AxeDigPosX+AxeTimer*AxeDigSide, AxeDigPosY-20);
+                  }
+                 }
+         }
+
+         if(Type == M_DRAWQUEUE)
+         {
+          if(AxeTimer < 40 && AxeTimer > 0)
+          {
+           local spr = waveSprite->Index;
+           if(AxeDigSide == -1){spr = spr + 262144;}                                     //262144
+           AddSprite(23,AxeDigPosX+AxeTimer*AxeDigSide,AxeDigPosY,0,spr,0.0);    //dem cool sprites, just like i said :D
+           AddSprite(23,AxeDigPosX+AxeTimer*AxeDigSide,AxeDigPosY-10,0,spr,0.0);
+           AddSprite(23,AxeDigPosX+AxeTimer*AxeDigSide,AxeDigPosY-20,0,spr,0.0);
+          }
+         }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+         if(Weap->CheckName("Battle Axe"))
+         {
+         AxeTimer = -60;
+         AxeDigPosX = PosX;
+         AxeDigPosY = PosY;
+         AxeDigSide = TurnSide;
+         //GG->land->ApplyMask( index, x, y)
+         }
+super;
+}

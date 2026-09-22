@@ -1,0 +1,12 @@
+CSprite* telea_tr;
+
+void sprite_454::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("teleat.png");
+    telea_tr = LoadSprite(f, 7, 0);
+    //f = GetAttachment("teleat_old.png");
+    //teleat = LoadSprite(f, 14, 0);
+
+    SetSpriteOverride(454, telea_tr);
+}

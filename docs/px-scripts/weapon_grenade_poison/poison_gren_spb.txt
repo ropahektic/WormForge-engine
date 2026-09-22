@@ -1,0 +1,119 @@
+// by 0rang3
+
+require utils, utils_pyroman, p_sprite_builder, p_animation;
+
+CSprite* poisong_aim;
+CSprite* poisonf_aim;
+CSprite* p_cluster;
+
+void poison_gren_spb::InitGraphic()
+{
+CFile *f;
+f = GetAttachment("poisong.png");
+poisong_aim = LoadSprite(f, 1, 0);
+
+f = GetAttachment("poisonf.png");
+poisonf_aim = LoadSprite(f, 1, 0);
+
+f = GetAttachment("poisonc.png");
+p_cluster = LoadSprite(f, 8, 0);
+}
+
+//---------------------------SPRITE-BUILDER-------------------------------------
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+	if (Type == M_FRAME)
+		{
+		if (gframe == 1)
+			{
+			local weapName = "Poison Grenade";
+			local sprite = poisong_aim->Index;
+			CWormAnimParams* Params = new CWormAnimParams;
+
+//-------------------------AIMING-ANIMATIONS------------------------------------
+
+			Params->hand_type = 1;
+			Params->hand_scale = 1.2;
+			Params->hand_radius = -9.8;
+			Params->hand_rotation = -0.05;
+			Params->hand_radial_rotation = 0.09;
+			Params->weap_radial_rotation = 0.0;
+			Params->weap_rotation = 0.5;
+			Params->weap_radius = -10.0;
+			Params->animate = true;
+			Params->anim_speed = 1.00;
+//------------------------------------------------------------------------------
+			local WA = new WormSprite(weapName, sprite, Params);
+			}
+		}
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+	if (Type == M_FRAME)
+		{
+		if (gframe == 1)
+			{
+			local weapName = "Poison Flask";
+			local sprite = poisonf_aim->Index;
+			CWormAnimParams* Params = new CWormAnimParams;
+
+//-------------------------AIMING-ANIMATIONS------------------------------------
+
+			Params->hand_type = 1;
+			Params->hand_scale = 1.2;
+			Params->hand_radius = -9.8;
+			Params->hand_rotation = -0.05;
+			Params->hand_radial_rotation = 0.09;
+			Params->weap_radial_rotation = 0.0;
+			Params->weap_rotation = 0.5;
+			Params->weap_radius = -10.0;
+			Params->animate = true;
+			Params->anim_speed = 1.00;
+//------------------------------------------------------------------------------
+			local WA = new WormSprite(weapName, sprite, Params);
+			}
+		}
+}
+//-------------------------BULLET-ANIMATIONS------------------------------------
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+	if (Type == M_FRAME)
+		{
+		if (weap->CheckName("Poison Grenade"))
+			{
+			if (poisong_anim)
+				{
+				local sprite = poisong_aim->Index;
+				WeapSpriteParams* Params = new WeapSpriteParams;
+				Params->animate = true;
+				new WeapSprite(this, sprite, Params);
+				weap->launch.anim.spriteIndex = 0;
+				poisong_anim = false;
+				}
+			}
+			
+		if (weap->CheckName("Poison Flask"))
+			{
+			if (poisonf_anim)
+				{
+				local sprite = poisonf_aim->Index;
+				WeapSpriteParams* Params = new WeapSpriteParams;
+				Params->animate = true;
+				new WeapSprite(this, sprite, Params);
+				weap->launch.anim.spriteIndex = 0;
+				poisonf_anim = false;
+				}
+			}
+		}
+}
+//------------------------------------------------------------------------------
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+poisonf_anim = true;
+poisong_anim = true;
+}

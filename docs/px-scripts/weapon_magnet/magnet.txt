@@ -1,0 +1,1376 @@
+require utils, pxparticles, weapon_bowlingball, weapon_buffalo, weapon_lightning;
+
+#WEAPON_MAGNET
+
+CSprite* magnetSprite;
+CSprite* magnetSprite2;
+CSprite* magnetDamagedSprite;
+CSprite* magnetDamagedSprite2;
+
+CSprite* magnetRingSprite;
+CSprite* magnetRingSprite2;
+
+CSprite* magnetSparks;
+
+CSprite* magmissileSprite;
+CSprite* magmissileSprite2;
+
+CSprite* wmaglnk;
+CSprite* wmaglnku;
+CSprite* wmaglnkd;
+CSprite* wmag2lnk;
+CSprite* wmag2lnku;
+CSprite* wmag2lnkd;
+
+CMagnet : CMine;
+
+CMagnetResult::CMagnetResult()
+{
+	ForceX = float(0.0);
+	ForceY = float(0.0);
+	IsNull = true;
+}
+
+void CMagnetResult::Reset()
+{
+	ForceX = float(0.0);
+	ForceY = float(0.0);
+	IsNull = true;
+}
+
+CMagnetResult *MagnetInternalResult;
+
+override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+ isMagnetic = true;
+ super;
+}
+
+// Loading resources
+void magnet::InitGraphic()
+{
+	CFile *f;
+	
+	f = GetAttachment("magnet.png");			magnetSprite 			= LoadSprite(f, 1, 0);
+	f = GetAttachment("magnet2.png");			magnetSprite2 			= LoadSprite(f, 1, 0);
+	f = GetAttachment("magnet_damaged.png");	magnetDamagedSprite 	= LoadSprite(f, 1, 0);
+	f = GetAttachment("magnet2_damaged.png");	magnetDamagedSprite2	= LoadSprite(f, 1, 0);
+	f = GetAttachment("ring_in.png");			magnetRingSprite 		= LoadSprite(f, 1, 0);
+	f = GetAttachment("ring_out.png");			magnetRingSprite2 		= LoadSprite(f, 1, 0);
+	f = GetAttachment("magnetsparks.png");		magnetSparks 			= LoadSprite(f, 10, 0);
+	f = GetAttachment("magmissile.png");		magmissileSprite 		= LoadSprite(f, 1, 0);
+	f = GetAttachment("magmissile2.png");		magmissileSprite2 		= LoadSprite(f, 1, 0);
+	
+	// note to entuser and self: the third parameter isn't actually flags, it's the framerate of the sprite
+	// also those deploy animation sprites need to be loaded in a precise order (normal, up, down)
+	f = GetAttachment("wmaglnk.png");	wmaglnk   = LoadSprite(f, 10, 24);
+	f = GetAttachment("wmaglnku.png");	wmaglnku  = LoadSprite(f, 10, 24);
+	f = GetAttachment("wmaglnkd.png");	wmaglnkd  = LoadSprite(f, 10, 24);
+	
+	f = GetAttachment("wmag2lnk.png");	wmag2lnk  = LoadSprite(f, 10, 24);
+	f = GetAttachment("wmag2lnku.png");	wmag2lnku = LoadSprite(f, 10, 24);
+	f = GetAttachment("wmag2lnkd.png");	wmag2lnkd = LoadSprite(f, 10, 24);
+}
+
+void magnet::FirstFrame()
+{
+	local envfilter = CFilter(Root->GetObject(25, 0));
+	envfilter->Allow(M_TURNEND);
+	
+	MagnetInternalResult = new CMagnetResult();
+}
+
+///////////////////////////////////////////////////
+// CMagnet class
+
+CMagnet::CMagnet(CObject* Parent, CShootDesc* Desc, int WormDir, int Pol)
+{
+	WormTurnSide = WormDir;
+	
+	// Maximum distance in which objects can be affected by the magnet
+	MaxRange = 170.0;
+	
+	// Maximum acceleration the magnet can apply
+	MaxForce = 12.0;
+	
+	// How much the force applied by the magnet is multiplied
+	ForceCoefficient = 14000.0;
+	
+	// This value is added to the squared distance to avoid divisions by zero, it also gives the magnet a less violent behaviour
+	// on objects which are near the center
+	AttractOffset = 10.0;
+	RepelOffset = 5.0;
+	
+	// If set to true, magnets in attract mode will attempt to synchronize caught random mines
+	// so they explode at the same time, causing maximum damage
+	MineTriggerSync = true;
+	
+	// How many cycles of turns before the magnet stops working
+	TurnsRemaining = 4;
+	
+	// How much damage the magnet can take before breaking
+	Health = 80;
+	ExplosionDamage = 50;
+	ExplosionBlast = 100;
+	
+	// Ignore any damage taken
+	IgnoreDamage = false;
+	
+	// Offset between the projectile and the actual magnetic field
+	MagnetOffsetX = 0.0;
+	MagnetOffsetY = 0.0;
+	MagnetOffsetRelative = false;
+	
+	// END OF MAGNET PARAMETERS
+	
+	// Sprite parameters
+	Sprite1 = magnetSprite->Index;
+	Sprite2 = magnetSprite2->Index;
+	Sprite1Damaged = magnetDamagedSprite->Index;
+	Sprite2Damaged = magnetDamagedSprite2->Index;
+	
+	// Animation parameters
+	SpinMultiplier = 0.04;
+	MaxSpinSpeed = 0.5;
+	
+	OrientationOption = 0;
+	
+	RingSpeed = 8;
+	RingPeriod = 65;
+	RingMinSize = 5;
+	RingMaxSize = 120;
+	
+	SparkAnimSpeed = 0.02;
+	SparkPauseDuration = 0.4;
+	
+	// Physics crap
+	DumpingA = 0.3;
+	DumpingB = 0.3;
+	DumpingC = 0.3;
+	
+	// Private shit
+	Removed = false;
+	
+	Rotation = float(0.0);
+	Mirrored = false;
+	Polarity = Pol;
+	LowHealth = 30;
+	
+	NumRings = 0;
+	Rings = new int[5];
+	for(local i=0 ; i<5 ; i+=1) Rings[i] = 0;
+	NextRing = 0;
+	
+	NextRecalcZPlane = 0;
+	ZPlane = 10;
+	
+	SparkCycle = 0.0;
+	
+	OwnerTeam = Desc->Team;
+	LastTeam = OwnerTeam;
+	
+	CMineParams MParams;
+	zero(&MParams);
+
+	MParams.Prefuse = 0;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Radius = 1;
+	MParams.Fuse = 70;
+	MParams.Damage = 48;
+	MParams.BlastPower = 100;
+	
+	super(Parent, &MParams, Desc, false, 0);
+	
+	MagnetPosX = PosX;
+	MagnetPosY = PosY;
+	
+	ClType = EObjectClass(70);
+	Initialized = false;
+	
+	TurnEnded = false;
+	TurnEndTime = 0;
+	TurnsLifetime = 0;
+	
+	DoMagneticField(false, true);
+}
+
+void CMagnetResult::CalculateMagneticForce(CMagnet *mag, fixed PosX, fixed PosY, float fmul)
+{
+	if(mag->Removed || mag->TurnsRemaining <= 0) return;
+	
+	float offset = mag->RepelOffset;
+	if(mag->Polarity < 0)
+	{
+		offset = mag->AttractOffset;
+	}
+	
+	// Calculating distance from object to magnet
+	float fX = PosX - mag->MagnetPosX;
+	float fY = PosY - mag->MagnetPosY;
+	float r2 = fX*fX + fY*fY + offset;
+	
+	// Too far away, don't do anything
+	if(r2>mag->MaxRange) return;
+	
+	// Calculating force
+	float r = sqrt(r2);
+	float mul = mag->ForceCoefficient / r2;
+	
+	if(mul > mag->MaxForce) mul = mag->MaxForce;
+	
+	fX = (fX / r) * mul * mag->Polarity;
+	fY = (fY / r) * mul * mag->Polarity;
+	
+	ForceX = fmul * fX;
+	ForceY = fmul * fY;
+	IsNull = false;
+}
+
+void CMagnetResult::CalculateGlobalMagneticForce(fixed PosX, fixed PosY, float fmul)
+{
+	for(int i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = Env->Objs.Objs[i];
+		
+		if(obj == NullObj) continue;
+		if(obj is CMagnet)
+		{
+			CMagnet *mag = CMagnet(obj);
+			CalculateMagneticForce(mag, PosX, PosY, fmul);
+		}
+	}
+}
+
+// Placeholder for CMagnetMissile
+void CMagnet::Collide(CGObject* Obj, int type)
+{
+	super;
+}
+
+// Initializations which require the initial parameters should be done there
+void CMagnet::InitializeParameters()
+{
+	if(Initialized) return;
+	
+	MaxRange = MaxRange * MaxRange;
+	MaxSyncRange = MaxRange * 0.25;
+	AttractOffset = AttractOffset * AttractOffset;
+	RepelOffset = RepelOffset * RepelOffset;
+	
+	RingMinSize = RingMinSize * 10;
+	RingMaxSize = RingMaxSize * 10;
+	
+	SparkCycleDuration = 1.0 + SparkPauseDuration;
+	
+	TurnsLifetime = TurnsRemaining;
+	
+	Initialized = true;
+}
+
+// Recharges a discharged magnet
+void CMagnet::Recharge()
+{
+	if(Removed) return;
+	
+	if(TurnsRemaining <= 0)
+	{
+		NextRing = 0;
+	}
+	
+	TurnsRemaining = TurnsLifetime;
+	
+	DoMagneticField(false, true);
+}
+
+// Update the position of the magnetic field relative to the actual projectile
+void CMagnet::UpdateMagnetPosition()
+{
+	if(MagnetOffsetRelative)
+	{
+		float s = sin(Rotation);
+		float c = cos(Rotation);
+		MagnetPosX = PosX - s * MagnetOffsetX - c * MagnetOffsetY;
+		MagnetPosY = PosY + c * MagnetOffsetX - s * MagnetOffsetY;
+	}
+	else
+	{
+		MagnetPosX = PosX + MagnetOffsetX;
+		MagnetPosY = PosY + MagnetOffsetY;
+	}
+}
+
+// Update the angle of the projectile
+void CMagnet::UpdateRotation()
+{
+	if(OrientationOption == 0)
+	{
+		float speed = sqrt(SpX*SpX + SpY*SpY);
+		float rot = SpinMultiplier * speed;
+		
+		if(rot > MaxSpinSpeed) rot = MaxSpinSpeed;
+		if(SpX<0) rot = 0-rot;
+		
+		ApplyRotation(rot);
+	}
+	else
+	{
+
+		if(SpX==0.0)
+		{
+			if(SpY>0.0)
+			{
+				if(WormTurnSide > 0)
+				{
+					Rotation = 0;
+				}
+				else
+				{
+					Rotation = 3.141593;
+				}
+			}
+			else if(SpY<0.0)
+			{
+				if(WormTurnSide > 0)
+				{
+					Rotation = 3.141593;
+				}
+				else
+				{
+					Rotation = 0;
+				}
+			}
+		}
+		else
+		{
+			Rotation = 0-atan2(SpX, SpY);
+		}
+		ApplyRotation(0.0);
+	}
+}
+
+// Rotates the projectile by r radians, and normalizes the angle
+void CMagnet::ApplyRotation(float r)
+{
+	Rotation += r;
+	while(Rotation > 3.141593)		Rotation -= 6.283186;
+	while(Rotation <= 0 - 3.141593)	Rotation += 6.283186;
+}
+
+// Applies blast damage to the magnet
+// x, y : origin of the explosion
+// dmg : maximum damage the explosion should do
+void CMagnet::TakeExplosionDamage(fixed x, fixed y, int dmg)
+{
+	if(dmg == 0) return;
+	
+	float fdmg = dmg;
+	float dx = PosX - x;
+	float dy = PosY - y;
+	
+	float distsqr = dx*dx + dy*dy;
+	float fdmgsqr = fdmg*fdmg*4.0;
+	
+	fdmg = (1.0-distsqr/fdmgsqr) * fdmg;
+	dmg = fdmg;
+	
+	if(dmg > 0) TakeDamage(0, dmg);
+}
+
+// Applies direct damage to the magnet (without any further calculation)
+// type should be always 0 (10 is for percentage-based damage and is reserved to the Battle Axe)
+void CMagnet::TakeDamage(int type, int dmg)
+{
+	if(type == 10)
+	{
+		fixed fdmg = dmg;
+		fdmg = Health * fdmg / 100.0;
+		dmg = fdmg;
+	}
+	
+	Health -= dmg;
+}
+
+int  CMagnet::GetRing(int i)		{ return Rings[i]; }
+void CMagnet::SetRing(int i, int x)	{ Rings[i] = x; }
+
+// Adds a ring effect to the magnetic field
+void CMagnet::PushRing()
+{
+	if(NumRings<5)
+	{
+		if(Polarity>0) 	SetRing(NumRings, RingMinSize);
+		else			SetRing(NumRings, RingMaxSize);
+		NumRings = NumRings + 1;
+	}
+}
+
+// Removes a ring when it has disappeared
+void CMagnet::PopRing()
+{
+	if(NumRings>0)
+	{
+		for(local i = 1; i < NumRings; i+=1)
+		{
+			SetRing(i-1, GetRing(i));
+		}
+		NumRings = NumRings - 1;
+	}
+}
+
+// Triggers a mine and applies mine timer synchronization
+void CMagnet::TriggerMine(CMine *mine)
+{
+	// Not a special mine
+	if(#STONE) if (mine is CStone) return;
+        if(#ROCK) if (mine is CRock) return; 
+	if(mine->Radius > 1 && mine->Active == 0 && mine->Prefuse <= 0 && mine->Fuse < 0)
+	{
+		// Give it a random fuse time (between 1 and 5)
+		mine->Fuse = 1000 + (GS->GetRandom()%4000);
+		
+		// Mine synchronisation mode is on
+		if(MineTriggerSync)
+		{
+			// Only applies to magnets in attract mode
+			if(Polarity<0)
+			{
+				// Search for an attracted mine with the highest fuse time
+				int maxFuse = 1000;
+				for(local i = 1; i < Env->Objs.Count; i+=1)
+				{
+					local obj2 = Env->Objs.Objs[i];
+					
+					if(obj2 == NullObj) continue;
+					
+					if(obj2->ClType == OC_Mine)
+					{
+						local mine2 = CMine(obj2);
+						
+						if(mine2 == mine) continue;
+						
+						// Calculate distance from mine to magnet
+						float mX = mine2->PosX - MagnetPosX;
+						float mY = mine2->PosY - MagnetPosY;
+						float rm2 = mX * mX + mY * mY;
+						
+						// If it's close enough, we'll consider it's being attracted
+						if(rm2 < MaxSyncRange)
+						{
+							if(mine2->Fuse > maxFuse) maxFuse = mine2->Fuse;
+						}
+					}
+				}
+				
+				// If another mine was found and its fuse is long enough
+				if(maxFuse > 1000)
+				{
+					// Synchronize the current mine with it
+					// and give it a slight random offset so it doesn't look too suspicious
+					mine->Fuse = maxFuse + (GS->GetRandom()%400) - 200;
+				}
+			}
+		}
+	}
+	
+	// Trigger the mine
+	mine->Active = 1;
+	mine->nPulses = mine->Fuse / 250;
+} 
+
+// Applies force to nearby objects
+// It will also trigger mines to make sure the turn will not get stuck due to perpetual motion
+void CMagnet::ApplyForce(CGObject *obj, float fmul, bool forceWake)
+{
+	// Wake up nearby bowling balls
+	if(SpX != 0 || SpY != 0) forceWake = true;
+	
+	if(forceWake == false)
+	{
+		if(#WEAPON_BOWLINGBALL)
+		{
+			if(obj is CBowlingBall)
+			{
+				local ball = CBowlingBall(obj);
+				if(ball->IsAsleep) return;
+			}
+		}
+	}
+	
+	MagnetInternalResult->Reset();
+	MagnetInternalResult->CalculateMagneticForce(this, obj->PosX, obj->PosY, fmul);
+	
+	if(MagnetInternalResult->IsNull) return;
+	
+	// If the object is a mine, trigger it to make it explode
+	/*
+    if(#StunMine)
+		{
+		if(obj is StunMine)
+		    {
+		    StunMine * csmine = StunMine(obj);
+		    csmine->SpX += MagnetInternalResult->ForceX;
+			csmine->SpY += MagnetInternalResult->ForceY;
+			return;
+		    }
+		}
+	*/
+    if(#ROCK)
+		{
+		if(obj is CRock)
+		    {
+		    CRock * cmrock = CRock(obj);
+		    cmrock->SpX += MagnetInternalResult->ForceX;
+			cmrock->SpY += MagnetInternalResult->ForceY;
+			if (GS->Tick - obj->GS->Tick >= 250)return;  //this doesn't work for some reason, just use stone man idk
+			
+		    }
+		}
+    if(#STONE)
+		{
+		if(obj is CStone)
+		    {
+		    CStone * cstone = CStone(obj);
+		    if (cstone->isMagnetic==false)return;
+		    }
+		}
+		
+	if(obj->ClType == OC_Mine)
+	{
+		local mine = CMine(obj);
+		TriggerMine(mine);
+	}
+	
+	if(forceWake)
+	{
+		if(#WEAPON_BOWLINGBALL)
+		{
+			if(obj is CBowlingBall)
+			{
+				CBowlingBall *ball = CBowlingBall(obj);
+				ball->Wake();
+			}
+		}
+	}
+	if(obj is CMissile == true)
+	{
+        local missileM = CMissile(obj);
+        if (missileM->isMagnetic == false) return; 
+        } 
+	// Applying force
+	obj->SpX += MagnetInternalResult->ForceX;
+	obj->SpY += MagnetInternalResult->ForceY;
+	
+	obj->Stopped = 1;
+	obj->InMidAir = 0;
+	
+	// End the turn if there are still moving missiles after 600 ticks
+	if(obj->ClType == OC_Missile)
+	{
+        local missile = CMissile(obj);         
+        if(missile->weap->CheckName("Hellish Hand-Grenade") ||
+           missile->weap->CheckName("Devil Grenade") ||
+           missile->weap->CheckName("Crate Collector") ||
+		   missile->weap->CheckName("Holy Hand-Grenade"))
+        {
+        	missile->SpX = missile->SpX * 0.985;
+        	missile->SpY = missile->SpY * 0.985;
+
+            if(GS->Tick - missile->GS->Tick >= 250)
+            {
+                missile->ExplodeAt(missile->PosX, missile->PosY);
+		        missile->Free(true);
+            }
+        }
+
+
+		if(TurnEnded)
+		{
+   			if(GS->Tick - TurnEndTime > 300)
+			{
+				local missile = CMissile(obj);
+				missile->ExplodeAt(missile->PosX, missile->PosY);
+
+                if(missile is CBuffalo)
+                    {
+                    CBuffalo * Buffalo = CBuffalo(missile);
+
+                    if(Buffalo->BL_Manager != NullObj)
+                        {
+                        Buffalo->BL_Manager->BuffaloStopSound();
+                        Buffalo->BL_Manager->Free(true);
+                        }
+                    }
+
+                                
+                missile->Free(true);
+				
+			}
+		}
+	}
+}
+
+void CMagnet::DoMagneticField(bool applyForce, bool forceWake)
+{
+	float force = 0.0;
+	if(applyForce) force = 1.0;
+	
+	for(int i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = Env->Objs.Objs[i];
+		
+		if(obj == NullObj) continue;
+		if(obj->ClType == OC_Mine) ApplyForce(obj, force, forceWake);
+		if(obj->ClType == OC_Missile) ApplyForce(obj, force, forceWake);
+		
+		// Support for bowling balls
+		if(#WEAPON_BOWLINGBALL)
+		{
+			if(obj is CBowlingBall) ApplyForce(obj, force * 0.25, forceWake);
+		}
+        // support golf ball
+		if(#WEAPON_GOLFBALL)
+			{
+            if(obj is CGolfBall)
+                {
+                local ball = CGolfBall(obj);
+                ApplyForce(obj, force * 0.25, forceWake);
+                }
+			}
+	}
+}
+
+// Draws the magnetic ring effect
+void CMagnet::DrawMagnetRings()
+{
+	if(NumRings>0)
+	{
+		CQuad q;
+		q.blend = 1;
+		for(local i = 0; i < NumRings; i+=1)
+		{
+			local size = GetRing(i) / 10;
+			local alpha = ((RingMaxSize - GetRing(i)) * 255) / RingMaxSize;
+			
+			q.v[0].x = MagnetPosX - size; q.v[0].y = MagnetPosY - size;
+				q.v[0].color = ARGB(alpha,255,255,255);
+			q.v[1].x = MagnetPosX + size; q.v[1].y = MagnetPosY - size;
+				q.v[1].color = ARGB(alpha,255,255,255);
+			q.v[2].x = MagnetPosX + size; q.v[2].y = MagnetPosY + size;
+				q.v[2].color = ARGB(alpha,255,255,255);
+			q.v[3].x = MagnetPosX - size; q.v[3].y = MagnetPosY + size;
+				q.v[3].color = ARGB(alpha,255,255,255);
+			
+			if(Polarity>0)
+			{
+				AddSpriteQ(ZPlane+1, &q, magnetRingSprite2->Index, 0, 64);
+			}
+			else
+			{
+				AddSpriteQ(ZPlane+1, &q, magnetRingSprite->Index, 0, 64);
+			}
+		}
+	}
+}
+
+// Takes care of the animations
+void CMagnet::DoAnimation()
+{
+	// Rings
+	if(NumRings>0)
+	{
+		for(local i = 0; i < NumRings; i+=1)
+		{
+			SetRing(i, GetRing(i) + RingSpeed * Polarity);
+		}
+		if(Polarity>0)
+		{
+			if(GetRing(0)>RingMaxSize) PopRing();
+		}
+		else
+		{
+			if(GetRing(0)<RingMinSize) PopRing();
+		}
+	}
+	
+	if(TurnsRemaining>0 && Removed == false)
+	{
+		if(NextRing <= 0)
+		{
+			PushRing();
+			NextRing = RingPeriod;
+		}
+		else
+		{
+			NextRing = NextRing - 1;
+		}
+	}
+	
+	// Sparks animation
+	if(TurnsRemaining>0)
+	{
+		SparkCycle = SparkCycle + SparkAnimSpeed;
+		if(SparkCycle > SparkCycleDuration) SparkCycle = SparkCycle - SparkCycleDuration;
+	}
+}
+
+// Draws the magnet's sprite
+void CMagnet::DrawMagnet()
+{
+	int sprite = Sprite1;
+	
+	if(Polarity<0)
+	{
+		if(Health<=LowHealth)	sprite = Sprite1Damaged;
+		else					sprite = Sprite1;
+	}
+	else
+	{
+		if(Health<=LowHealth)	sprite = Sprite2Damaged;
+		else					sprite = Sprite2;
+	}
+	
+	if(Mirrored) sprite += 262144;
+	
+	AddSpriteEx(ZPlane, PosX, PosY, sprite, 0, Rotation + 3.14159, 1);
+}
+
+// Draws additional effects such as electrical sparks
+void CMagnet::DrawMagnetEffects()
+{
+	if(TurnsRemaining>0)
+	{
+		if(SparkCycle <= 1.0)
+			AddSpriteEx(ZPlane-1, PosX, PosY, magnetSparks->Index, SparkCycle, Rotation, 1);
+	}
+}
+
+// Called when a new turn begins (this is used to discharge the magnet after a given number of turn cycles)
+void CMagnet::OnTurnBegin(int Team)
+{
+	TurnEnded = false;
+	TurnEndTime = 0;
+	if(TurnsRemaining>0)
+	{
+		if(Team == OwnerTeam) TurnsRemaining = TurnsRemaining - 1;
+		if(TurnsRemaining <= 0) 
+		{
+			// Wake all nearby objects without applying force to them
+			DoMagneticField(false, true);
+		}
+	}	
+}
+
+void CMagnet::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		InitializeParameters();
+	}
+	
+	if(Type == M_TURNEND)
+	{
+		TurnEnded = true;
+		TurnEndTime = GS->Tick;
+	}
+	
+	// Drawing operations are done here
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Initialized == false) return;
+		
+		UpdateMagnetPosition();
+		DrawMagnetRings();
+		
+		if(Removed==false)
+		{
+			if(Mirrored) SetColorMod(RGB(0, 255, 0), 6);
+			if(Sinking)	SetColorMod(RGB(90, 90, 240), 6);
+			
+			DrawMagnet();
+			
+			if(Sinking) ClearColorMod();
+			if(Mirrored) ClearColorMod();
+			
+			DrawMagnetEffects();
+			
+			// Recalculate Z plane periodically to make sure magnets are drawn properly when overlapping each other
+			if(NextRecalcZPlane <= 0)
+			{
+				local matches = 0;
+				
+				for(local i = 1; i < Env->Objs.Count; i+=1)
+				{
+					local obj = Env->Objs.Objs[i];
+					
+					if(obj == NullObj) continue;
+					if(obj == this) continue;
+					if(obj->ClType == EObjectClass(70))
+					{
+						local mag = CMagnet(obj);
+								
+						float dX = mag->PosX - PosX;
+						float dY = mag->PosY - PosY;
+						float r2 = dX*dX + dY*dY;
+							
+						if(r2 < 900.0)
+						{
+							if(mag->ZPlane == ZPlane)
+							{
+								mag->ZPlane = mag->ZPlane + 2;
+							}
+							matches = matches + 1;
+						}
+					}
+				}
+				
+				if(matches == 0)	ZPlane = 10;
+				
+				NextRecalcZPlane = 200;
+			}
+			else
+			{
+				NextRecalcZPlane = NextRecalcZPlane - 1;
+			}
+		}
+		
+		return;
+	}
+	
+	// Damage handling
+	if(Removed==false)
+	{
+		if(Type == M_EXPLOSION)
+		{
+			if(IgnoreDamage) return;
+			TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]);
+		}
+		if(Type == M_GUNEXP)
+		{
+			if(IgnoreDamage) return;
+			TakeDamage(MData->params[0], MData->params[5]);
+		}
+	}
+	
+	super;
+	
+	// This is done every frame (derp)
+	if(Type == M_FRAME)
+	{
+		UpdateMagnetPosition();
+		DoAnimation();
+		
+		if(Removed)
+		{
+			if(NumRings == 0) Free(true);
+			return;
+		}
+		else
+		{
+			if(Sinking)
+			{
+				TurnsRemaining = 0;
+				DoMagneticField(false, true);
+			}
+			else
+			{
+				UpdateRotation();
+			}
+			
+			if(TurnsRemaining>0)
+			{
+				// Apply magnetic force to nearby objects but don't wake them if the magnet is standing still
+				DoMagneticField(true, false);
+			}
+			
+			// No more health -> KA-BEWM!
+			if(Health <= 0)
+			{
+				// Wake all nearby objects without applying force to them
+				DoMagneticField(false, true);
+				
+				DoExplosion(PosX,PosY-20, ExplosionBlast, ExplosionDamage, 0, 0);
+				Removed = true;
+				SpeedDivider = 1000;
+				SpX = 0.0;
+				SpY = 0.0;
+				GravityFactor = 0.0;
+				IsMaterial = false;
+				Stopped = 1;
+			}
+		}
+	}
+}
+
+///////////////////////////////////////////////////
+// CMagnetMissile class
+
+CMagnetMissile : CMagnet;
+
+CMagnetMissile::CMagnetMissile(CObject* Parent, CShootDesc* Desc, int WormDir, int Pol)
+{
+	super;
+	
+	// Maximum distance in which objects can be affected by the magnet
+	MaxRange = 120.0;
+	
+	// Maximum acceleration the magnet can apply
+	MaxForce = 12.0;
+	
+	// How much the force applied by the magnet is multiplied
+	ForceCoefficient = 12000.0;
+	
+	// This value is added to the squared distance to avoid divisions by zero, it also gives the magnet a less violent behaviour
+	// on objects which are near the center
+	AttractOffset = 20.0;
+	RepelOffset = 10.0;
+	
+	// If set to true, magnets in attract mode will attempt to synchronize caught random mines
+	// so they explode at the same time, causing maximum damage
+	MineTriggerSync = true;
+	
+	// How many cycles of turns before the magnet stops working
+	TurnsRemaining = 3;
+	
+	// How much damage the magnet can take before breaking
+	Health = 20;
+	ExplosionDamage = 40;
+	ExplosionBlast = 100;
+	
+	// Ignore any damage taken
+	IgnoreDamage = true;
+	
+	// Offset between the projectile and the actual magnetic field
+	MagnetOffsetX = -14.0;
+	MagnetOffsetY = 0.0;
+	MagnetOffsetRelative = true;
+	
+	// END OF MAGNET PARAMETERS
+	
+	// Sprite parameters
+	Sprite1 = magmissileSprite->Index;
+	Sprite2 = magmissileSprite2->Index;
+	Sprite1Damaged = magmissileSprite->Index;
+	Sprite2Damaged = magmissileSprite2->Index;
+	
+	// Animation parameters
+	SpinMultiplier = 0.04;
+	MaxSpinSpeed = 0.5;
+	
+	RingSpeed = 12;
+	RingPeriod = 30;
+	RingMinSize = 5;
+	RingMaxSize = 60;
+	
+	OrientationOption = 1;
+	
+	// Private
+	Phase = 0;
+	AttachX = 0.0;
+	AttachY = 0.0;
+	
+	LastSpX = SpX;
+	LastSpY = SpY;
+}
+
+// Collisions derp
+void CMagnetMissile::Collide(CGObject* Obj, int type)
+{
+	if(Phase == 0)
+	{
+		float speed = sqrt(LastSpX * LastSpX + LastSpY * LastSpY);
+		
+		// Collided with the world
+		if(Obj->ClType == OC_Landscape)
+		{
+			int hitx;
+			int hity;
+			
+			float s = sin(Rotation);
+			float c = cos(Rotation);
+			float dx = 0 - (s * 8.0);
+			float dy = c * 8.0;
+			
+			// Perform a trace 8 units forwards
+			CGObject *hit = TraceLine(this, PosX, PosY, PosX + dx, PosY + dy, 2, &hitx, &hity);
+			
+			if(hit != NullObj)
+			{
+				// The trace hit the world, make the missile stick
+				if(hit->ClType == OC_Landscape)
+				{
+					AttachX = PosX;
+					AttachY = PosY;
+					SpeedDivider = 1000;
+					SpeedDividerB = 1000;
+					SpX = 0.0;
+					SpY = 0.0;
+					GravityFactor = 0.0;
+					Stopped = 1;
+					InMidAir = 0;
+					Phase = 1;
+					
+					// Arrow impact sound
+					PlayLocalSound(28, 5, 1.0, 1.0);
+					
+					IgnoreDamage = false;
+					OrientationOption = 0;
+					
+					return;
+				}
+			}
+			else if(speed>5.0)
+			{
+				// Didn't hit the world at a suitable angle, reflect it if it has enough speed
+				super;
+				return;
+			}
+			
+			// Not enough speed, make it roll away
+			IgnoreDamage = false;
+			OrientationOption = 0;
+			Phase = 2;
+		}
+		else	// Collided with something else
+		{
+			bool nodamage = false;
+			
+			// Bounce off oil drums and crates without dealing any damage
+			if(Obj->ClType == OC_OilDrum)	nodamage = true;
+			if(Obj->ClType == OC_Crate)		nodamage = true;
+			
+			if(nodamage)
+			{
+				IgnoreDamage = false;
+				OrientationOption = 0;
+				Phase = 2;
+				super;
+				return;
+			}
+			
+			// Knock colliding objects away
+			fixed forceX;
+			fixed forceY;
+			
+			if(speed>0.5)
+			{
+				forceX = LastSpX * 0.3;
+				forceY = (LastSpY - speed) * 0.3;
+				// This will ensure the missile keeps going right through whatever it collided with
+				// (see CMagnetMissile::Message)
+				PostCollide = true;
+				
+				CMessageData msg;
+				msg.params[0]	= 0;
+				msg.fparams[1]	= PosX;
+				msg.fparams[2]	= PosY;
+				msg.fparams[3]	= forceX;
+				msg.fparams[4]	= forceY;
+				msg.params[5]	= 5;
+				msg.params[6]	= 0;
+				
+				Obj->Message(this, M_GUNEXP, 1032, &msg);
+				
+				// PUNCH!
+				PlayLocalSound(101, 5, 1.0, 1.0);
+				return;
+			}
+			else
+			{
+				IgnoreDamage = false;
+				OrientationOption = 0;
+				Phase = 2;
+				super;
+				return;
+			}
+		}
+	}
+	super;
+}
+
+void CMagnetMissile::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Phase == 1)
+	{
+		bool checkdetach = false;
+		bool detach = true;
+		
+		// Took damage, see if it should detach or not
+		if(Type == M_EXPLOSION)	{ checkdetach = true; detach = false; }
+		else if(Type == M_GUNEXP)
+		{
+			// Detach it no matter what if melee damage has been received (aka type != 1 and 3)
+			checkdetach = true;
+			if(MData->params[0] == 1) detach = false;
+			if(MData->params[0] == 3) detach = false;
+		}
+		
+		if(checkdetach)
+		{
+			if(detach == false)
+			{
+				// Damage has been dealt by fire, bullets or explosions, check if the missile still has an attachment point
+				int hitx;
+				int hity;
+				
+				float s = sin(Rotation);
+				float c = cos(Rotation);
+				float dx = 0 - (s * 8.0);
+				float dy = c * 8.0;
+				
+				// Perform a trace 8 units forwards
+				CGObject *hit = TraceLine(this, PosX, PosY, PosX + dx, PosY + dy, CMASK_TERRAIN, &hitx, &hity);
+				
+				// Not attached to world anymore, detach it
+				if(hit == NullObj)						detach = true;
+				else if(hit->ClType != OC_Landscape)	detach = true;
+			}
+			
+			// Detaching :(
+			if(detach)
+			{
+				AttachX = 0.0;
+				AttachY = 0.0;
+				SpeedDivider = 1;
+				SpeedDividerB = 1;
+				GravityFactor = 1.0;
+				Stopped = 0;
+				InMidAir = 1;
+				Phase = 2;
+			}
+		}
+	}
+	
+	super;
+	
+	if(Type == M_FRAME)
+	{
+		if(Phase == 0)
+		{
+			if(Sinking == false)
+			{
+				local p = new PxParticle(131, MagnetPosX, MagnetPosY);
+				p->SetLifeTime(30);
+				p->SetRandomVelocity(0.2, 0.6);
+				p->SetAirResistance(0.5);
+				p->SetAlpha(255);
+				if(Polarity==1)
+				{
+					p->SetColor(60,80,190);
+				}
+				else
+				{
+					p->SetColor(200,60,60);
+				}
+			}
+		}
+		
+		if(Phase == 1)
+		{
+			PosX = AttachX;
+			PosY = AttachY;
+			SpX = 0.0;
+			SpY = 0.0;
+			Stopped = 1;
+			InMidAir = 0;
+		}
+		
+		if(PostCollide)
+		{
+			// Collided with something it should go right through
+			// Set its velocity back to what it was before the collision
+			SpX = LastSpX;
+			SpY = LastSpY;
+			PostCollide = false;
+		}
+		LastSpX = SpX;
+		LastSpY = SpY;
+	}
+}
+
+///////////////////////////////////////////////////
+// CTurnGame overrides
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+	super;
+	
+	for(local i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = Env->Objs.Objs[i];
+		
+		if(obj == NullObj) continue;
+		if(obj is CMagnet)
+		{
+			CMagnet *mag = CMagnet(obj);
+			mag->OnTurnBegin(Team);
+		}
+	}
+}
+
+///////////////////////////////////////////////////
+// CWorm overrides
+
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	super;
+	MagnetPolarity = 0;
+	AnimCanChangeMagnetType = false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Electromagnet"))
+	{
+		local ang = (1 - FireAngle) * 3.14159;
+		if (TurnSide < 0) 
+		{
+			ang = 6.28318 - ang;
+		}
+		
+		CShootDesc SDesc;
+		zero(&SDesc);
+
+		local BaseForce = 0.3;
+		
+		SDesc.Team = WormTeam;
+		SDesc.X = PosX;
+		SDesc.Y = PosY;
+		SDesc.SpX = SpX + TurnSide * BaseForce;
+		SDesc.SpY = SpY - 0.15;
+		
+		int polarity = 1;
+		if(MagnetPolarity==1) polarity = -1;
+		new CMagnet(GetObject(25, 0), &SDesc, TurnSide, polarity);
+	}
+	else if(Weap->CheckName("Magnetic Missile"))
+	{
+		local ang = (1 - FireAngle) * 3.14159;
+		if (TurnSide < 0) 
+		{
+			ang = 6.28318 - ang;
+		};
+		
+		CShootDesc SDesc;
+		zero(&SDesc);
+		
+		float BaseForce = FirePower * 20.0;
+		
+		SDesc.Team = WormTeam;
+		SDesc.X = PosX;
+		SDesc.Y = PosY;
+		SDesc.SpX = SpX + sin(ang) * BaseForce;
+		SDesc.SpY = SpY - cos(ang) * BaseForce;
+		
+		int polarity = 1;
+		if(MagnetPolarity==1) polarity = -1;
+		new CMagnetMissile(GetObject(25, 0), &SDesc, TurnSide, polarity);
+	}
+	else
+	{
+		super;
+	}
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		if (CurWeapon->CheckName("Electromagnet"))
+		{
+			local Team = CTeam(GetObject(21, WormTeam));
+			Team->AllowSelectBounce = true;
+		}
+		else if (CurWeapon->CheckName("Magnetic Missile"))
+		{
+			local Team = CTeam(GetObject(21, WormTeam));
+			Team->AllowSelectBounce = true;
+		}
+	}
+	if (Type == M_SETBOUNCE)
+	{
+		if (CurWeapon->CheckName("Electromagnet"))
+		{
+			if (MData->GetParameter(1) != WormNumber) return;
+			local Dir = MData->GetParameter(2);
+			
+			if(MagnetPolarity != Dir)
+			{
+				MagnetPolarity = Dir;
+				
+				if(AnimCanChangeMagnetType) // Don't replay the deploy animation if we're not standing still
+				{
+					Anim->SetAnim(334); // Dynamite deploy animation
+				}
+			}
+			
+			if(Dir==1) ShowTeamMessage(1,"Electromagnet, ATTRACT Mode",WormTeam);
+			else ShowTeamMessage(2,"Electromagnet, REPEL Mode",WormTeam);
+			return;
+		}
+		else if (CurWeapon->CheckName("Magnetic Missile"))
+		{
+			if (MData->GetParameter(1) != WormNumber) return;
+			local Dir = MData->GetParameter(2);
+			MagnetPolarity = Dir;
+			if(Dir==1) ShowTeamMessage(1,"Magnetic Missile, ATTRACT Mode",WormTeam);
+			else ShowTeamMessage(2,"Magnetic Missile, REPEL Mode",WormTeam);
+			return;
+		}
+	}
+	//if(Type == M_DRAWQUEUE)
+	//{
+	//	int sx;
+	//	int sy;
+	//	
+    //    AnimDebugBitmap->Rect(0,0,299,35,ARGB(255,0,0,0));
+	//	GS->Disp->DrawText(1, AnimDebugBitmap, 5, 3, AnimDebugText, &sx, &sy);
+	//	
+	//	int RenderX = -GS->ResX / 2 + 165;
+	//	int RenderY = -GS->ResY / 2 + 55;
+	//	AddInterfaceBitmap(1, RenderX, RenderY, AnimDebugBitmap, 0, 0, 300, 100,0);
+	//}
+	
+	super;
+}
+
+///////////////////////////////////////////////////
+// CSpriteAnim overrides
+
+override void CSpriteAnim::SetAnimEx(int sindex, fixed frame)
+{
+	 // Make sure the game has actually started (otherwise GetCurrentWorm would crash the game due to Root not existing)
+	if(GS->Tick >= 1)
+	{
+		// If we belong to the current worm
+		CWorm *w = GetCurrentWorm();
+		if(w != NullObj && w->Anim == this)
+  		{
+   
+
+			if(sindex == 334 && w->CurWeapon->CheckName("Electromagnet")) // Dynamite deploy animation
+			{
+				if(w->MagnetPolarity == 1)
+				{
+					// Red magnet deploy animation
+					super(wmaglnk->Index, frame);
+				}
+				else
+				{
+					// Blue magnet deploy animation
+					super(wmag2lnk->Index, frame);
+				}
+				
+				w->AnimCanChangeMagnetType = true;
+				
+				return;
+			}
+			else
+			{
+				w->AnimCanChangeMagnetType = false;
+			}
+		}
+	}
+	
+	super;
+}

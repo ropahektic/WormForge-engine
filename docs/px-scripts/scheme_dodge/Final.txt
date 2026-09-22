@@ -1,0 +1,25 @@
+void Final()
+{
+     FinalT = 1;
+     ShowMessage("AAAAAAAARGHHHHH!!!!!!!!!!");
+     ShowMessage("AAAAAAAARGHHHHH!!!!!!!!!!");
+     ShowMessage("AAAAAAAARGHHHHH!!!!!!!!!!");
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+      if(Type == M_FRAME)
+      {
+              if(FinalT != 0 && FinalT < 130){FinalT = FinalT + 1;}
+              if(FinalT == 10 || FinalT == 60 || FinalT == 100){DoExplosion(PosX1, PosY2, 100, 20, 0, CurTeam);}
+              if(FinalT > 120){FinalR();}
+      }
+}
+
+void FinalR()
+{
+     FinalT = 0;
+     FinalAnim = 1;
+     music2->Play(1.0, 0.0, false);
+}

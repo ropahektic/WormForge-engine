@@ -1,0 +1,94 @@
+require utils;
+
+$editor
+
+ $object Tree
+  $origin -93 -275
+  $image "tree.png"
+  $radius 17
+  $autoname map_tree
+  $func SpawnTree
+  $param Tree enum 2 Pine Maple
+  $param Size int 100
+  $param Z_Layer int 1
+ $object_end
+
+ $object Grass
+  $origin -40 -50
+  $image "grass.png"
+  $radius 17
+  $autoname map_grass
+  $func SpawnGrass
+  $param Size int 100
+  $param Z_Layer int 1
+ $object_end
+
+$end
+
+CGolfSpriterTree : CObject;
+CGolfSpriterGrass : CObject;
+
+CSprite*golfTree;
+CSprite*golfTree2;
+CSprite*golfGrass;
+
+void golf_deco::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("tree.png");			golfTree = LoadSprite(f, 1, 0);
+	f = GetAttachment("tree2.png");			golfTree2 = LoadSprite(f, 1, 0);
+	f = GetAttachment("grass.png");			golfGrass = LoadSprite(f, 1, 0);
+}
+
+CGolfSpriterTree::CGolfSpriterTree(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Scale = aobj->GetInt("Size");
+  if (StrCmp(aobj->GetString("Tree"), "Pine")) tree_type = 1;
+  if (StrCmp(aobj->GetString("Tree"), "Maple")) tree_type = 2;
+  scale = Scale/100.0;
+  x = aobj->PosX;
+  y = aobj->PosY - 130*scale;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+}
+
+CGolfSpriterGrass::CGolfSpriterGrass(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  x = aobj->PosX;
+  y = aobj->PosY - 15*scale;
+  z = 16.0 + aobj->GetInt("Z_Layer")/100;
+  rot = 0.0;
+}
+
+
+void CGolfSpriterTree::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        if (tree_type == 1) sprite = golfTree->Index;
+        if (tree_type == 2) sprite = golfTree2->Index;
+        AddSpriteEx( z, x, y, sprite, 0.0, rot, scale);
+    }
+}
+
+void CGolfSpriterGrass::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        AddSpriteEx( z, x, y, golfGrass->Index, 0.0, rot, scale);
+    }
+}
+
+void SpawnTree(CEditorObject* obj)
+{
+  zone = new CGolfSpriterTree(obj);
+}
+
+void SpawnGrass(CEditorObject* obj)
+{
+  zone = new CGolfSpriterGrass(obj);
+}

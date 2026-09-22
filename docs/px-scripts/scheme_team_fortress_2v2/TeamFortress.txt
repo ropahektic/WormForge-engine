@@ -1,0 +1,192 @@
+require utils, utils_steps, wosc_lib, script_swat_enabler;
+
+CSprite* glowSpr;
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+void TeamFortress::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("glow.png");  glowSpr = LoadSprite(f, 1, 0);
+}
+
+void TeamFortress::Init()
+{
+  swat = true;
+}
+
+void TeamFortress::FirstFrame()
+{
+	GG->WriteToChat(GG->curFont+3," ---------------------------------- TEAM FORTRESS ---------------------------------- ",false);
+    GG->WriteToChat(GG->curFont+6,"    - Jump Pad = 2 metal",false);
+    GG->WriteToChat(GG->curFont+6,"    - Hover Pad = 2 metal",false);
+    GG->WriteToChat(GG->curFont+6,"    - Sentry = 6 metal",false);
+    GG->WriteToChat(GG->curFont+6,"    - Disruptor = 4 metal",false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+TFclass = "Null";
+Weapons = new string[71];
+
+	if(StrCmp(GetTeamName(WormTeam), "RED LEADER") || StrCmp(GetTeamName(WormTeam), "BLUE LEADER"))
+    	{
+    	if(WormNumber == 1)
+			{
+			TFclass = "Captain";
+			Weapons[0] = "Uzi";
+      		Weapons[1] = "Friendly Mine";
+      		Weapons[2] = "Parachute";
+			}
+    	else if(WormNumber == 2)
+			{
+			TFclass = "Sniper";
+			Weapons[0] = "Sniper Rifle ";
+      		Weapons[1] = "Aim on reaction";
+			}
+    	}
+
+    if(StrCmp(GetTeamName(WormTeam), "RED SUPPORT") || StrCmp(GetTeamName(WormTeam), "BLUE SUPPORT"))
+        {
+        if(WormNumber == 1)
+			{
+			TFclass = "Soldier";
+			Weapons[0] = "Bazooka";
+      		Weapons[1] = "Grenade";
+      		Weapons[2] = "Medkit 25";
+      		}
+     	else if(WormNumber == 2)
+		 	{
+		 	TFclass = "Engineer";
+		 	Weapons[0] = "Magnum";
+      		Weapons[1] = "Construct JumpPad";
+      		Weapons[2] = "TeleNade";
+      		Weapons[3] = "Pneumatic Drill";
+      		Weapons[4] = "BlowTorch";
+      		Weapons[5] = "Construct HoverPad";
+      		Weapons[6] = "Construct Sentry";
+      		Weapons[7] = "Construct Disruptor";
+      		}
+     	}
+
+     SetName(TFclass);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+    if(Type == M_FRAME)
+      	{
+      	//w = GetCurrentWorm();
+      	//if (w != NullObj) GG->WriteToChat(GG->curFont+6,ItoA(GetTeamNumber(GetCurrentWorm()->WormTeam)),false);
+
+       	if(StrCmp(TFclass, "Captain"))
+            {
+            CaptainAlive();
+            }
+
+       	if(GS->Info.GetWormHealth(WormTeam, WormNumber) > 100)
+            {
+            GS->Info.SetWormHealth(WormTeam, WormNumber, 100);    //max hp
+            DispHealth = GS->Info.GetWormHealth(WormTeam, WormNumber);
+            }
+            
+        if (gframe < 10)
+        	{
+            for(int i = 1; i < Env->Objs.Count; i++)
+    			{
+        		local obj = Env->Objs.Objs[i];
+
+		        if(obj == NullObj) continue;
+    		    if((obj is CWorm) == false) continue;
+
+	        	CWorm* worm = CWorm(obj);
+
+		        if(worm == NullObj) continue;
+
+        	    for (local wormIndex = 3; wormIndex <= 8; wormIndex++)
+						{
+   			 			GS->Info.SetWormHealth( WormTeam, wormIndex, 0);
+      					GS->Info.Teams[WormTeam-1].Worms[wormIndex-1].State = 135;
+	      				CWorm* wormy = Root->GetObject( 2, 16 * WormTeam + wormIndex);
+    	  				if (wormy == NullObj) continue;
+      					wormy->Free(true);
+  						}
+				}
+        	}
+		}
+
+      if(Type == M_TURNBEGIN || Type == M_TURNEND || Root->Timer == 0)
+      {
+      AutoWeaponManagement();
+      }
+      
+      if (Type == M_PRETURNSTART)
+	  {
+	  	if(StrCmp(TFclass, "Captain"))
+            {
+            HealingAura();
+            }
+	  }
+      
+      if(Type == M_AFTERSHOOT && this == GetCurrentWorm()) AutoWeaponManagement();
+      
+      if(Type == M_DRAWQUEUE)
+      {
+      	if(StrCmp(TFclass, "Captain"))
+      	{
+        	local c = GetTeamColor(WormTeam);
+            if(c == 0) SetColorMod(ARGB(80, 120, 0, 0), 8);
+        	else if(c == 1) SetColorMod(ARGB(80, 0, 0, 120), 8);
+        	else if(c == 2) SetColorMod(ARGB(80, 0, 120, 0), 8);
+        	else if(c == 3) SetColorMod(ARGB(80, 90, 90, 0), 8);
+        	else if(c == 4) SetColorMod(ARGB(80, 90, 0, 90), 8);
+        	else if(c == 5) SetColorMod(ARGB(80, 0, 90, 90), 8);
+        	AddSpriteEx(15, PosX, PosY, glowSpr->Index, 1.0, 0, 0.2);
+        	ClearColorMod();
+      	}
+      }
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+void CWorm::AutoWeaponManagement()
+{
+    RemoveWeaps();
+    AddWeaps();
+}
+
+void CWorm::RemoveWeaps()
+{
+  local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=1; i<68; i++)
+  {
+    local weap = GS->GetWeaponByIndex(1, i);
+    if(weap == NullObj) continue;
+    if(weap->CheckName("Skip Go") || weap->CheckName("Surrender") || weap->CheckName("Fire Punch") || weap->CheckName("Metal")) continue;
+
+    GS->Info.SetWeaponEx(TeamNumber, i, weap->GetPageIndex(), 0);
+  }
+}
+
+void CWorm::AddWeaps()
+{
+  local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=0; i<71; i++)
+  {
+    if(Weapons[i] == 0) continue;
+
+    local weap = GetWeaponByName(Weapons[i]);
+    if(weap == NullObj) continue;
+    //if(TotalShots >= 4 && weap->EndsTurn) continue;
+
+    GS->Info.SetWeaponEx(TeamNumber, weap->GetWeaponIndex(), weap->GetPageIndex(), -1);
+  }
+}

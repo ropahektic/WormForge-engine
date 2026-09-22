@@ -1,0 +1,68 @@
+require p_sprite_builder;
+
+CSprite* SBA;
+CSprite* SBB;
+
+void SBS::InitGraphic()
+{   CFile* f;          
+    f = GetAttachment("SBa.png"); 
+    SBA = LoadSprite(f, 1, 0);    
+    f = GetAttachment("SB.png");  
+    SBB = LoadSprite(f, 1, 0);    
+}                                 
+                                  
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                           
+  if (Type == M_FRAME) {          
+    if (gframe == 1) {            
+     local weapName; local sprite;
+     
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Sticky Bomb";
+     sprite = SBA->Index;     
+     Params->hand_radius = 22.0;                                                 
+     Params->hand_rotation = 1.0;
+     Params->hand_radial_rotation = 1.05;
+     Params->weap_radial_rotation = 0.9;     
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = 10.0;
+     Params->hand_type = 1;     
+     Params->hand_scale = 0.8;  
+//     Params->zplane = 10.0;   
+//     Params->scale = 1.0;     
+
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){    
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Sticky Bomb")) {
+         if (SBAN) {                      
+              local sprite = SBB->Index;  
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);              
+              weap->launch.anim.spriteIndex = 0;
+              SBAN = false;               
+         }                                                                     
+     }                                                                                                                                                     
+  }                                       
+}                                         
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                    
+  SBAN = true;                            
+}                                         
+
+/*override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("Sticky Bomb")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+//DoAnimParticleEffects( sprite, Rad, RelX, RelY, lifeTime, animSpeed, veloMin, veloMax, startAlpha, endAlpha, windFactor, startSize, endSize, angleMin, angleMax, randomMotion, grav);
+            DoAnimParticleEffects(608, 1, 20, -13, 20, 0.03, 1.0, 7.0, 255, 255, 0, 1.0, 0.5, 0.0, 2.31, 0.0, 1.0);
+        }
+    }
+}*/

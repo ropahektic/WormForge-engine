@@ -1,0 +1,58 @@
+require utils, p_sprite_builder, sprite_curtis_250, sprite_curtis_260, sprite_curtis_466;
+
+CSprite* homingm_aiming;
+CSprite* homingm_bullet;
+
+void homing_mortar_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("spb_homingm.png");
+    homingm_aiming = LoadSprite(f, 8, 0);
+    f = GetAttachment("homingm.png");
+    homingm_bullet = LoadSprite(f, 12, 0);
+}
+
+//---------------------------------HOMING MORTAR------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Homing Mortar";
+     sprite = homingm_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 1.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 0.0;
+     Params->animate = true;
+     Params->anim_speed = 1.00;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Homing Mortar")) {
+         if (homingma_anim) {
+              local sprite = homingm_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 10.00;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              homingma_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  homingma_anim = true;
+}

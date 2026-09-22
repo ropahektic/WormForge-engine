@@ -1,0 +1,207 @@
+// Made 29.07.16 by RS'Zed
+// Version 3.6
+// Cleanup and tweaks by 0rang3
+
+int gamestarted;   //2 is started
+bool gg; //good game fellas
+
+void basescript::InitGraphic()
+{
+}
+
+void basescript::Init()
+{
+gamestarted = 0;
+gg = false;
+}
+
+void basescript::FirstFrame()
+{
+  //GG->WriteToChat(6, "Type the name of the class in the chat to get all info about his capabilities (case sensitive: 'King').", false);
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  //King = 150; Knight = 125; Ranger = 100; Mage = 75; Rogue = 100;
+
+    super;
+
+    Class = "";
+    MaxHealth = 100;
+    Weapons = new string[71];
+
+    if(WormNumber == 1)
+    {
+      Class = "King";
+      MaxHealth = 150;
+      Weapons[0] = "Crossbow";
+      Weapons[1] = "Kick";
+      Weapons[2] = "Longsword";
+    }
+    else if(WormNumber == 2)
+    {
+      Class = "Knight";
+      MaxHealth = 125;
+      Weapons[0] = "Javelin";
+      Weapons[1] = "Kick";
+      Weapons[2] = "Battle Axe";
+      Weapons[3] = "Siege ladder";
+      IsHeavyweight = true;
+      IsArmored = true;
+    }
+    else if(WormNumber == 3)
+    {
+      Class = "Ranger";
+      MaxHealth = 100;
+      Weapons[0] = "Kick";
+      Weapons[1] = "Longbow";
+      CanSprint = true;
+      IsLightweight = true;
+      IsAgile = true;
+    }
+    else if(WormNumber == 4)
+    {
+      Class = "Mage";
+      MaxHealth = 75;
+      Weapons[0] = "Kick";
+      Weapons[1] = "Concentrate";
+      CastedConcentrateToday = false;
+    }
+    else if(WormNumber == 5)
+    {
+      Class = "Rogue";
+      MaxHealth = 100;
+      Weapons[0] = "Kick";
+      Weapons[1] = "Dagger";
+      Weapons[2] = "Climb";
+      IsSneaky = true;
+    }
+
+    GS->Info.SetWormHealth( WormTeam, WormNumber, MaxHealth);
+    SetName(Class);
+}
+
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Type == M_TURNBEGIN || Type == M_TURNEND || Root->Timer == 0) AutoWeaponManagement();
+
+    if(Type == M_AFTERSHOOT && this == GetCurrentWorm()) AutoWeaponManagement();
+    
+    if(Type == M_TURNEND) CastedConcentrateToday = false;
+
+    if(Type == M_TURNEND && IsSneaky == true && gamestarted < 2) gamestarted = gamestarted + 1;
+
+    if(Type == M_FRAME)                                                         //nolag plx
+    {
+      if (gframe < 10)
+        {
+            for(int i = 1; i < Env->Objs.Count; i++)
+    		{
+        	local obj = Env->Objs.Objs[i];
+
+	        if(obj == NullObj) continue;
+    	    if((obj is CWorm) == false) continue;
+
+        	CWorm* worm = CWorm(obj);
+
+	        if(worm == NullObj) continue;
+
+	        for (local wormIndex = 6; wormIndex <= 8; wormIndex++)
+					{
+   			 		GS->Info.SetWormHealth( WormTeam, wormIndex, 0);
+      				GS->Info.Teams[WormTeam-1].Worms[wormIndex-1].State = 135;
+      				CWorm* wormy = Root->GetObject( 2, 16 * WormTeam + wormIndex);
+      				if (wormy == NullObj) continue;
+      				wormy->Free(true);
+  					}
+			}
+        }
+
+	  if(GS->Info.GetWormHealth(WormTeam, WormNumber) > MaxHealth)
+      {
+      GS->Info.SetWormHealth(WormTeam, WormNumber, MaxHealth);
+      TargHealth = MaxHealth;
+      }
+
+      if((ObjState == WS_DEAD || ObjState == WS_SINKING || ObjState == WS_DEATH) && Class == "King" && gg == false)  //my name is king and i pay you muni
+      {
+       for(local i = 1; i < 6; i++)
+       {
+       local guy = CWorm(Root->GetObject(2, 16 * WormTeam + i));
+       if(guy != NullObj){GS->Info.SetWormHealth(guy->WormTeam, guy->WormNumber, 0);}
+       }
+       gg = true;  //this is the end, my beautiful friend
+      }
+    }
+    super;
+}
+
+void CWorm::AutoWeaponManagement()
+{
+    RemoveWeaps();
+    AddWeaps();
+}
+
+void CWorm::RemoveWeaps()
+{
+  local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=1; i<68; i++)
+  {
+    local weap = GS->GetWeaponByIndex(1, i);
+    if(weap == NullObj) continue;
+    if(weap->CheckName("Skip Go") || weap->CheckName("Surrender") || weap->CheckName("Auto-ballista") || weap->CheckName("Magic Potion")) continue;
+
+    GS->Info.SetWeaponEx(TeamNumber, i, weap->GetPageIndex(), 0);
+  }
+}
+
+void CWorm::AddWeaps()
+{
+  local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=0; i<71; i++)
+  {
+    if(Weapons[i] == 0) continue;
+
+    local weap = GetWeaponByName(Weapons[i]);
+    if(weap == NullObj) continue;
+
+    GS->Info.SetWeaponEx(TeamNumber, weap->GetWeaponIndex(), weap->GetPageIndex(), -1);
+  }
+}
+
+void CWorm::AddSpells()
+{
+    if(CastedConcentrateToday == true)
+    	{
+    	local TeamNumber = GetTeamNumber(WormTeam);
+
+		local weap = GetWeaponByName("Healing Spell");
+    	GS->Info.SetWeaponEx(TeamNumber, weap->GetWeaponIndex(), weap->GetPageIndex(), -1);
+    	weap = GetWeaponByName("Fireball Spell");
+    	GS->Info.SetWeaponEx(TeamNumber, weap->GetWeaponIndex(), weap->GetPageIndex(), -1);
+    	weap = GetWeaponByName("Dimensional Door");
+    	GS->Info.SetWeaponEx(TeamNumber, weap->GetWeaponIndex(), weap->GetPageIndex(), -1);
+    	weap = GetWeaponByName("Concentrate");
+    	GS->Info.SetWeaponEx(TeamNumber, weap->GetWeaponIndex(), weap->GetPageIndex(), 0);
+    	}
+}
+
+override int CTurnGame::GetNextTeam()    //between turns stuff
+{
+   for(local i = 1; i < Env->Objs.Count; i+=1)
+   {
+   local obj = Env->Objs.Objs[i];
+   if(obj == NullObj) continue;
+        if(obj->ClType == OC_Worm)
+        {
+        CWorm* warm;
+        warm = obj;
+        warm->WasSeenThisTurn = false;
+        warm->CastedConcentrateToday = false;
+        }
+   }
+//GG->WriteToChat( 1, "override int CTurnGame::GetNextTeam()", false);
+super;
+}

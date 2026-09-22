@@ -1,0 +1,75 @@
+// by PyroMan
+
+require utils;
+
+#CPOOL_BG
+
+$editor
+
+$object PTBG
+$origin -248 -342
+$image "edguide.png"
+$radius 60
+$autoname map_bg
+$func SpawnPTBG
+$param PTBG enum 6 pooltbg1 pooltbg2 pooltbg3 pooltbg4 pooltbg5 pooltbg6
+$param Size int 100
+$param Z_Layer int 1
+$object_end
+$end
+
+CPoolSpriterBG : CObject;
+
+CSprite*pooltbg1;
+CSprite*pooltbg2;
+CSprite*pooltbg3;
+CSprite*pooltbg4;
+CSprite*pooltbg5;
+CSprite*pooltbg6;
+
+void cpl_med::InitGraphic()
+{
+CFile *f;
+f = GetAttachment("pooltbg1.png");			pooltbg1 = LoadSprite(f, 1, 0);
+f = GetAttachment("pooltbg2.png");			pooltbg2 = LoadSprite(f, 1, 0);
+f = GetAttachment("pooltbg3.png");			pooltbg3 = LoadSprite(f, 1, 0);
+f = GetAttachment("pooltbg4.png");		        pooltbg4 = LoadSprite(f, 1, 0);
+f = GetAttachment("pooltbg5.png");		        pooltbg5 = LoadSprite(f, 1, 0);
+f = GetAttachment("pooltbg6.png");		        pooltbg6 = LoadSprite(f, 1, 0);
+}
+
+CPoolSpriterBG::CPoolSpriterBG(CEditorObject* aobj)
+{
+super(Root, GS);
+Scale = aobj->GetInt("Size");
+if (StrCmp(aobj->GetString("PTBG"), "pooltbg1")) tree_type = 1;
+if (StrCmp(aobj->GetString("PTBG"), "pooltbg2")) tree_type = 2;
+if (StrCmp(aobj->GetString("PTBG"), "pooltbg3")) tree_type = 3;
+if (StrCmp(aobj->GetString("PTBG"), "pooltbg4")) tree_type = 4;
+if (StrCmp(aobj->GetString("PTBG"), "pooltbg5")) tree_type = 5;
+if (StrCmp(aobj->GetString("PTBG"), "pooltbg6")) tree_type = 6;
+scale = Scale/100.0;
+x = aobj->PosX;
+y = aobj->PosY - 130*scale;
+z = aobj->GetInt("Z_Layer")*1.0 - 0.01;
+rot = 0.0;
+}
+
+void CPoolSpriterBG::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_DRAWQUEUE)
+{
+if (tree_type == 1) sprite = pooltbg1->Index;
+if (tree_type == 2) sprite = pooltbg2->Index;
+if (tree_type == 3) sprite = pooltbg3->Index;
+if (tree_type == 4) sprite = pooltbg4->Index;
+if (tree_type == 5) sprite = pooltbg5->Index;
+if (tree_type == 6) sprite = pooltbg6->Index;
+AddSpriteEx( z, x, y, sprite, 0.0, rot, scale);
+}
+}
+
+void SpawnPTBG(CEditorObject* obj)
+{
+zone = new CPoolSpriterBG(obj);
+}

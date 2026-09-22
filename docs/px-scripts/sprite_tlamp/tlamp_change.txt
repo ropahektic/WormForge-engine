@@ -1,0 +1,19 @@
+//List of sprites
+
+CSprite* tcloud;
+
+
+void tlamp_change::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   
+   f = GetAttachment("tcloud.png"); 
+   tcloud = LoadSprite(f, 29, 0);
+   
+  
+   //Let's override the sprites!
+   
+   SetSpriteOverride(136, tcloud);
+   
+}

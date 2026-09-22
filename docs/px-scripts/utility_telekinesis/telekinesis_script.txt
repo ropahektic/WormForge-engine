@@ -1,0 +1,225 @@
+//script by StepS
+
+require utils, p_sprite_builder, weapon_sentry_gun, weapon_sentry_laser, weapon_magnet, utility_fan, p_turrets;
+
+bool MouseControl;
+bool LookingForObj;
+bool ObjCatched;
+bool TelekinesisUsed;
+
+int remObjX;
+int remObjY;
+
+CSoundFile* catch_obj;
+CSprite* tk_particle;
+CGObject* fObj;
+
+void telekinesis_script::Init()
+{
+catch_obj = new CSoundFile(GetAttachment("catch_obj.wav"));
+}
+
+void telekinesis_script::InitGraphic()
+{
+	CFile* f;
+    f = GetAttachment("tk_particle.png");
+    tk_particle = LoadSprite(f, 1, 0);
+}
+
+void telekinesis_script::FirstFrame()
+{
+MouseControl = false;
+LookingForObj = false;
+ObjCatched = false;
+TelekinesisUsed = false;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+CWorm* wrmi = GetCurrentWorm();
+
+if (Type == M_FRAME)
+    {
+    if (wrmi != NullObj)
+        {
+        if (wrmi->CurWeapon->CheckName("Telekinesis")){MouseControl = true;}
+        else {MouseControl = false; LookingForObj = false;}
+        }
+    }
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+CWorm* wrmi = GetCurrentWorm();
+
+if (wrmi != NullObj)
+    {
+    if(wrmi->CurWeapon->CheckName("Telekinesis"))
+        {
+        if (Type == M_SETWEAPON)
+    		{
+    		LookingForObj = true;
+    		TelekinesisUsed = false;
+    		}
+        if (Type == M_SPACE)
+    		{
+    		TelekinesisUsed = true;
+    		}
+		}
+	}
+	
+if (Type == M_TURNEND)
+    {
+    TelekinesisUsed = false;
+    }
+    
+if (Type == M_FRAME)
+	{
+    if (CurWeapon->CheckName("Telekinesis"))
+		{
+        if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+		//DoParticleEffects( sprite, RelX, RelY, lifeTime, animSpeed, veloMin, veloMax, startAlpha, endAlpha, windFactor, startSize, endSize, angleMin, angleMax, randomMotion, grav);
+        if (ObjCatched) DoAnimParticleEffects(tk_particle->Index, 0, 0, -7, 20, 0.03, -3.0, -7.0, 50, 255, 0, 0.1, 0.3, 0.0, 2.31, 0.0, -1.0);
+        }
+    }
+super;
+}
+
+override void CGObject::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+CWorm* wrmi = GetCurrentWorm();
+    
+local lsx = GS->landSelectX;
+local lsy = GS->landSelectY;
+if (lsx & 32768) lsx = lsx | (65535 << 16);
+if (lsy & 32768) lsy = lsy | (65535 << 16);
+
+if (Type == M_FRAME)
+    {
+    if (!Root->TimerDisabled)
+        {
+        if (wrmi != NullObj)
+			{
+        	if (MouseControl == true)
+	            {
+    	        if (LookingForObj == true)
+        	        {
+        	        fObj = SCFindObj(lsx-10, lsx+10, lsy-10, lsy+10);
+	            	if (fObj != NullObj)
+    	            	{
+						catch_obj->Play(1.0, 0.0, false);
+						ObjCatched = true;
+						LookingForObj = false;
+						remObjX = fObj->PosX;
+						remObjY = fObj->PosY;
+						}
+					else
+						{
+						ObjCatched = false;
+						}
+	                }
+
+				if (ObjCatched && fObj != NullObj)
+	    	        {
+	    	        CMessageData msg;
+					fObj->PosX = lsx;
+	            	fObj->PosY = lsy;
+	            	fObj->SpX = 0;
+	            	fObj->SpY = 0;
+	            	fObj->GravityFactor = 0;
+	            	if(fObj->ClType == OC_Mine)
+	            	    {
+	            	    local mObj = CMine(fObj);
+	            	    if(mObj->Active == 1)
+							{
+							wrmi->Message(Root, M_SPACE, 1032, &msg);
+	            	    	}
+	            		}
+	                }
+	                
+	            else if (ObjCatched == false)
+	    	        {
+	            	GravityFactor = 1;
+					}
+				}
+            else if (MouseControl == false)
+				{
+				LookingForObj = true;
+				GravityFactor = 1;
+				if (ObjCatched == true && fObj != NullObj && TelekinesisUsed == false)
+    	            {
+    				PlayLocalSound(21, 1.0, 1.0, 1.0);
+                	fObj->PosX = remObjX;
+	            	fObj->PosY = remObjY;
+	            	fObj->SpX = 0;
+	            	fObj->SpY = 0;
+	            	ObjCatched = false;
+	            	}
+				}
+			}
+		else
+			{
+			ObjCatched = false;
+			LookingForObj = true;
+			GravityFactor = 1;
+			}
+		}
+	else
+		{
+		ObjCatched = false;
+		LookingForObj = true;
+		GravityFactor = 1;
+		}
+    }
+super;
+}
+
+CGObject * CGObject::SCFindObj(int l, int r, int t, int b)     // left, right, top, bottom
+{
+      for(int i = 0; i < Env->Objs.Count; i++)
+      {
+          local obj = CGObject(Env->Objs.Objs[i]);
+          if(obj == NullObj) continue;
+          if(obj->ClType == OC_Crate || obj->ClType == OC_Mine || obj->ClType == OC_OilDrum || obj is PxSentryGun || obj is PxSentryLaser || obj is CMagnet || obj is PxFan || obj is CTurretBase)
+             {
+             if(obj->IsInBox( l, t, r, b))                    // left, top, right, bottom
+             return obj;
+             }
+      }
+      return CGObject(NullObj);
+}
+
+override void CCrate::Free(bool FreeMem)
+{
+CWorm* wrmi = GetCurrentWorm();
+if (wrmi != NullObj)
+	{
+	if(wrmi->CurWeapon->CheckName("Telekinesis"))
+        {
+        if (MouseControl == true)
+	        {
+	        CMessageData msg;
+			wrmi->Message(Root, M_SPACE, 1032, &msg);
+			}
+		}
+	}
+super;
+}
+
+override void COilDrum::Free(bool FreeMem)
+{
+CWorm* wrmi = GetCurrentWorm();
+if (wrmi != NullObj)
+	{
+	if(wrmi->CurWeapon->CheckName("Telekinesis"))
+        {
+        if (MouseControl == true)
+	        {
+	        CMessageData msg;
+			wrmi->Message(Root, M_SPACE, 1032, &msg);
+			}
+		}
+	}
+super;
+}

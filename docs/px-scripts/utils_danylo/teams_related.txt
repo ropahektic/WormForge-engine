@@ -1,0 +1,25 @@
+//-----------------------------------------------------------------------------
+void destroyTeam(int teamIndex)
+{
+for (local wormIndex = 1; wormIndex <= 8; wormIndex++)
+	{
+    GS->Info.SetWormHealth(teamIndex, wormIndex, 0);
+	//CWorm* worm = Root->GetObject( 2, 16 * teamIndex + wormIndex);
+    //if (worm == NullObj) continue;
+  	}
+}
+
+//-----------------------------------------------------------------------------
+int getTeamColourRGB(int colour) {
+  int r;
+  int g;
+  int b;
+  if (colour == 0) { r = 255; g = 128; b = 128; }
+  else if (colour == 1) { r = 0; g = 150; b = 255; }
+  else if (colour == 2) { r = 0; g = 208; b = 0; }
+  else if (colour == 3) { r = 255; g = 255; b = 64; }
+  else if (colour == 4) { r = 232; g = 0; b = 232; }
+  else if (colour == 5) { r = 80; g = 255; b = 255; }
+  return RGB(r, g, b);
+}
+//-----------------------------------------------------------------------------

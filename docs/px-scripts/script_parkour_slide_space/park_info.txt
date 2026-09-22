@@ -1,0 +1,11 @@
+void park_info::FirstFrame()
+{
+GG->WriteToChat(GG->curFont+5, "Parkour Mode:", false); 
+GG->WriteToChat(GG->curFont+1, "Wall-Jump (ENTER)", false); 
+GG->WriteToChat(GG->curFont+4, "If the wall is close enough, the worm will make an additional jump in the air.", false);
+GG->WriteToChat(GG->curFont+1, "Bunny-Hop (BACKSPACE)", false); 
+GG->WriteToChat(GG->curFont+4, "If the floor is close, the worm will make another jump with additional horisontal speed. Can be used while sliding.", false);
+GG->WriteToChat(GG->curFont+1, "Slide (SPACE)", false);
+GG->WriteToChat(GG->curFont+4, "Worm getting Slide state, allowing him to increase and keep horisontal speed for some time.", false);
+GG->WriteToChat(GG->curFont+4, "If the worm used Slide, while sliding, he will get Flying state, that allows him to stop upon connecting with ground.", false);
+}

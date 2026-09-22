@@ -1,0 +1,24 @@
+CSprite* gravlerdive;
+CSprite* gravlerdiga;
+CSprite* gravlerdigb;
+CSprite* gravlerdigc;
+
+void gravler_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   
+   f = GetAttachment("gravlerdive.png");
+   gravlerdive = LoadSprite(f, 17, 0);
+   f = GetAttachment("gravlerdiga.png");
+   gravlerdiga = LoadSprite(f, 17, 0);
+   f = GetAttachment("gravlerdigb.png");
+   gravlerdigb = LoadSprite(f, 17, 0);
+   f = GetAttachment("gravlerdigc.png");
+   gravlerdigc = LoadSprite(f, 17, 0);
+
+   SetSpriteOverride(245, gravlerdive);
+   SetSpriteOverride(246, gravlerdiga);
+   SetSpriteOverride(247, gravlerdigb);
+   SetSpriteOverride(248, gravlerdigc);
+}

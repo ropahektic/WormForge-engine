@@ -1,0 +1,12 @@
+CSprite* stone_tr;
+
+void sprite_456::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("stonet.png");
+    stone_tr = LoadSprite(f, 7, 0);
+    //f = GetAttachment("stonet_old.png");
+    //stone_tr = LoadSprite(f, 5, 0);
+
+    SetSpriteOverride(456, stone_tr);
+}

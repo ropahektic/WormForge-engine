@@ -1,0 +1,71 @@
+int alienframes;
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+                 if(alienframes < 15)
+                 {
+                 alienframes = alienframes+1;
+                 }
+                 if(alienframes == 10){GiveWeapons();}
+         }
+super;
+}
+
+void GiveWeapons()
+{
+	wep = GS->GetWeaponByName("Look Around");
+    if(wep != NullObj){GS->Info.SetWeaponEx(1, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);}
+
+
+    local wep = GS->GetWeaponByName("Knife");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);}
+
+    wep = GS->GetWeaponByName("Plasma Pistol");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);}
+    
+    wep = GS->GetWeaponByName("Parachute");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);}
+                              
+                     
+    wep = GS->GetWeaponByName("Petrol Bomb");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                     
+    wep = GS->GetWeaponByName("Light Armor Vest");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                     
+    wep = GS->GetWeaponByName("Laser Pointer");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 3);}
+                     
+    wep = GS->GetWeaponByName("Personal Invisibility");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                     
+    wep = GS->GetWeaponByName("Medkit 25");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                     
+    wep = GS->GetWeaponByName("Trampoline");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                     
+                     
+    wep = GS->GetWeaponByName("Blast Zone");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                    
+    wep = GS->GetWeaponByName("Hand Grenade");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                     
+	wep = GS->GetWeaponByName("Automatic Shotgun");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                    
+	wep = GS->GetWeaponByName("Tazer");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                     
+	wep = GS->GetWeaponByName("Light Tower");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 5);}
+                    
+    wep = GS->GetWeaponByName("Sentry Gun");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);}
+                     
+    wep = GS->GetWeaponByName("Fart");
+    if(wep != NullObj){GS->Info.SetWeaponEx(2, wep->GetWeaponIndex(), wep->GetPageIndex(), 5);}
+}

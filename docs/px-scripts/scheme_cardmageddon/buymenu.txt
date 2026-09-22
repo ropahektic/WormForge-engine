@@ -1,0 +1,350 @@
+                          require utils;
+
+CSprite* sel;
+CSprite* wepanel;
+string WeaponN[100]; //Name of each weapon
+int WeaponA[100];  //amount of each weapon current player has
+int WeaponC[100]; //cost of each weapon
+string WeaponD[100];
+string WeaponD2[100];
+int Selection; // currently selected weapon number in buymenu
+int Credits;  //sample
+int Cash[6];  //amount of credits player has at the moment
+bool PlayerBought[6]; //true if player already bought weapons
+int cooldown; //cooldown between button presses
+int WeapCounter;
+                                                  
+void buymenu::InitGraphic()     
+{
+ local spr1       = GetAttachment("selection.png");             
+ sel     = LoadSprite(spr1, 1, 0);
+ local spr2       = GetAttachment("wa_weaponpanel.png");             
+ wepanel     = LoadSprite(spr2, 1, 0);
+}
+
+void buymenu::Init()    
+{
+cooldown = 0;
+Selection = 0;
+Credits = 30;
+ for(local t = 0;t<99;t++)
+                 {
+                 WeaponN[t] = "Surrender";
+                 WeaponA[t] = 0;
+                 WeaponC[t] = 0;
+                 WeaponD[t] = " ";
+                 WeaponD2[t] = " ";
+                 if(t >= 0 && t <=5){Cash[t] = Credits; PlayerBought[t] = false;}
+                 }
+
+WeaponN[0] = "Melee Worm";
+WeaponC[0] = 2;
+WeaponD[0] = "Worm with Fire Punch";
+
+WeaponN[1] = "Infected Worm";
+WeaponC[1] = 3;
+WeaponD[1] = "Turns into a Zombie when health reaches 0.";
+WeaponD2[1] = "Has an Uzi. Zombies can't use mana weapons";
+
+WeaponN[2] = "Flying Zombie";
+WeaponC[2] = 3;
+WeaponD[2] = "Zombie with Fire Punch and Jet Pack.";
+WeaponD2[2] = "Zombies can't use mana weapons";
+
+WeaponN[3] = "Mine Worm";
+WeaponC[3] = 3;
+WeaponD[3] = "Worm with Mine Launcher";  
+
+WeaponN[4] = "Spawn 3 Zombies";
+WeaponC[4] = 3;
+WeaponD[4] = "Zombies can't use mana weapons";
+
+WeaponN[5] = "Rope Worm";
+WeaponC[5] = 4;
+WeaponD[5] = "Worm with Ninja Rope";
+WeaponD2[5] = "and Handgun";
+
+WeaponN[6] = "Haste Worm"; 
+WeaponC[6] = 4;
+WeaponD[6] = "Can move on the turn he is";
+WeaponD2[6] = "summoned. Has Fire Punch";
+
+WeaponN[7] = "Bazooka Worm";
+WeaponC[7] = 4;
+WeaponD[7] = "Worm with Bazooka";     
+
+WeaponN[8] = "Shotgun Worm";
+WeaponC[8] = 5;
+WeaponD[8] = "Worm with Shotgun";
+
+WeaponN[9] = "Sniper Worm";
+WeaponC[9] = 5;
+WeaponD[9] = "Worm with Sniper Rifle";  
+
+WeaponN[10] = "Fat Worm";
+WeaponC[10] = 6;
+WeaponD[10] = "Worm with Sheep Launcher and";
+WeaponD2[10] = "BlowTorch. Can't teleport";
+
+WeaponN[11] = "Minigun Worm";
+WeaponC[11] = 6;
+WeaponD[11] = "Worm with Minigun";  
+
+WeaponN[12] = "Tanky Worm";
+WeaponC[12] = 7;
+WeaponD[12] = "Has big health and an Uzi";   
+ 
+WeaponN[13] = "Necromancer";
+WeaponC[13] = 7;
+WeaponD[13] = "Can spawn Zombies. Has a Handgun.";
+WeaponD2[13] = "Zombies can't use mana weapons";
+
+WeaponN[14] = "Prince";
+WeaponC[14] = 8;
+WeaponD[14] = "If King dies while Prince is on the";
+WeaponD2[14] = "map, Prince becomes the new leader";
+
+WeaponN[15] = "Medkit 25";
+WeaponC[15] = 0;
+WeaponD[15] = "Worm heals 25hp"; 
+
+WeaponN[16] = "Get 2 Mana";
+WeaponC[16] = 0;
+
+WeaponN[17] = "Dragon Ball";
+WeaponC[17] = 1;
+
+WeaponN[18] = "Mole Bomb";
+WeaponC[18] = 1;
+
+WeaponN[19] = "Extra Teleport";
+WeaponC[19] = 1;
+WeaponD[19] = "Spare Teleport for extra";
+WeaponD2[19] = "mobility";
+
+WeaponN[20] = "Grenade";
+WeaponC[20] = 2;
+
+WeaponN[21] = "Longbow";
+WeaponC[21] = 2;
+
+WeaponN[22] = "Petrol Bomb";
+WeaponC[22] = 2;
+
+WeaponN[23] = "Friendly Mine";
+WeaponC[23] = 2; 
+WeaponD[23] = "Can only be triggered by";
+WeaponD2[23] = "enemy worms";
+
+WeaponN[24] = "Magnetic Missile";
+WeaponC[24] = 3;
+
+WeaponN[25] = "Draw 3 Weapons";
+WeaponC[25] = 3;
+
+WeaponN[26] = "+25hp For All";
+WeaponC[26] = 3; 
+WeaponD[26] = "Heals all friendly worms";
+WeaponD2[26] = "on the map";
+
+WeaponN[27] = "Zombie Damage*2";
+WeaponC[27] = 4;
+WeaponD[27] = "Friendly zombies deal double"; 
+WeaponD2[27] = "damage this turn. Doesn't stack";
+
+WeaponN[28] = "Homing Missile";
+WeaponC[28] = 4;
+
+WeaponN[29] = "Dynamite";
+WeaponC[29] = 5;
+
+WeaponN[30] = "Sheep";
+WeaponC[30] = 5;
+
+WeaponN[31] = "Air Strike";
+WeaponC[31] = 5;
+
+WeaponN[32] = "Mine Strike";
+WeaponC[32] = 5;
+
+WeaponN[33] = "Napalm Strike";
+WeaponC[33] = 6;
+
+WeaponN[34] = "Homing Pigeon";
+WeaponC[34] = 6;
+
+WeaponN[35] = "Flame Thrower";
+WeaponC[35] = 6;
+
+WeaponN[36] = "Super Sheep";
+WeaponC[36] = 7;
+
+WeaponN[37] = "Holy Hand-Grenade";
+WeaponC[37] = 8;
+
+WeaponN[38] = "Mike's Carpet Bomb";  
+WeaponC[38] = 8;
+
+WeaponN[39] = "Armageddon";
+WeaponC[39] = 20;
+
+}
+
+void buymenu::FirstFrame()
+{
+
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(GetCurrentWorm() != NullObj)
+  {
+       if(PlayerBought[WormTeam-1] == false && GetCurrentWorm() == this && getweapons == true)
+       {
+                   if(Type == M_FRAME)
+                   {
+                    if(cooldown > 0){cooldown = cooldown - 1;}
+                    if(PlayerBought[WormTeam-1] == false){Root->Timer = 10000;}
+                   }
+       
+                   if(Type == M_PLEFT)
+                   {
+                           if(Selection != 0 && cooldown == 0)
+                           {
+                           cooldown = 15;
+                           Selection = Selection - 1;
+                           }
+                   return;        
+                   }
+                   
+                   if(Type == M_PRIGHT)
+                   {
+                           if(Selection != 39 && cooldown == 0)
+                           {
+                           cooldown = 15;
+                           Selection = Selection + 1;
+                           }
+                   return;        
+                   }
+                   
+                   if(Type == M_PUP)
+                   {
+                           if(Selection > 4 && cooldown == 0)
+                           {
+                           cooldown = 15;
+                           Selection = Selection - 5;
+                           }
+                   return;        
+                   }
+                   
+                   if(Type == M_PDOWN)
+                   {
+                           if(Selection < 35 && cooldown == 0)
+                           {
+                           cooldown = 15;
+                           Selection = Selection + 5;
+                           }
+                   return;        
+                   }
+                   
+                   if(Type == M_ENTER)
+                   {
+                           if(Cash[WormTeam-1] > 0 && WeaponA[Selection] < 3)
+                           {
+                           WeaponA[Selection] = WeaponA[Selection] + 1;
+                           local wep1 = GS->GetWeaponByName(WeaponN[Selection]);
+                           if(wep1 != NullObj){
+                           if(GetTeamColor(WormTeam) == 0) { RedWeapons[WeapCounter] = WeaponN[Selection]; }
+                           if(GetTeamColor(WormTeam) == 1) { BlueWeapons[WeapCounter] = WeaponN[Selection]; }
+                           if(GetTeamColor(WormTeam) == 2) { GreenWeapons[WeapCounter] = WeaponN[Selection]; }
+                           if(GetTeamColor(WormTeam) == 3) { YellowWeapons[WeapCounter] = WeaponN[Selection]; }
+                           if(GetTeamColor(WormTeam) == 4) { PurpleWeapons[WeapCounter] = WeaponN[Selection]; }
+                           if(GetTeamColor(WormTeam) == 5) { CyanWeapons[WeapCounter] = WeaponN[Selection]; }
+                           WeapCounter++;}
+                           Cash[WormTeam-1] = Cash[WormTeam-1] - 1;
+                           }
+                   return; 
+                   }
+                   
+                   if(Type == M_SPACE)
+                   {
+                  
+                   PlayerBought[WormTeam-1] = true;
+                   
+                   if(Cash[WormTeam-1]> 0){
+                   for(local y = WeapCounter; y < Credits; y++)
+                     {
+                           if(GetTeamColor(WormTeam) == 0) { RedWeapons[y] = WeaponN[RandomInt(0, 39)]; }
+                           if(GetTeamColor(WormTeam) == 1) { BlueWeapons[y] = WeaponN[RandomInt(0, 39)]; }
+                           if(GetTeamColor(WormTeam) == 2) { GreenWeapons[y] = WeaponN[RandomInt(0, 39)]; }
+                           if(GetTeamColor(WormTeam) == 3) { YellowWeapons[y] = WeaponN[RandomInt(0, 39)]; }
+                           if(GetTeamColor(WormTeam) == 4) { PurpleWeapons[y] = WeaponN[RandomInt(0, 39)]; }
+                           if(GetTeamColor(WormTeam) == 5) { CyanWeapons[y] = WeaponN[RandomInt(0, 39)]; }
+                   }
+                   }
+                   for(local t = 0;t<99;t++)
+                             {
+                             WeaponA[t] = 0;
+                             }
+                   Root->RetreatTimer = 1;
+	           WeapCounter = 0;
+                   getweapons = false;
+                  
+                   local TeamNumber = GetTeamNumber(WormTeam);
+                   GS->Info.SetWeaponDelay(TeamNumber, 62, 1, -1); 
+                   
+                    GiveWeapons();
+                    GiveWeapons();
+                    GiveWeapons();
+                    GiveWeapons();
+                    GiveWeapons(); 
+    
+   
+    
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*1 - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "BlowTorch";
+                 HasWeapons[multipl+1] = "Girder";
+                 HasWeapons[multipl+2] = "Draw 1 Weapon";
+                 HasWeapons[multipl+3] = "Teleport";
+                 GiveWormWeapons();  
+   
+    TeleportingCheck[WormTeam] = 1;
+    PreturnCheck[WormTeam] = 0;
+                   return;        
+                   }
+                   
+                   if(Type == M_DRAWQUEUE)
+                   {
+                           if(PlayerBought[WormTeam-1] == false)
+                           {
+                           DrawBuyMenu();
+                           }
+                   }
+       }
+  }
+super;
+}
+
+void CWorm::DrawBuyMenu()
+{
+ if(DoIKnowHim(this) == true)
+ {
+  local spr1 = wepanel->Index;
+  AddSprite(5,GS->CameraX,GS->CameraY,0,spr1, 0.0);
+  
+  local x = 0;
+  local y = 0;
+  local t = 0;
+  x = GS->CameraX-90;
+  y = GS->CameraY-190;
+  if(Selection != 0){t = Selection/5;}else{t = 0;}
+  y = y + 16 + 29 * t;
+  x = x + 48 + 29 * (Selection - t*5);
+
+  local spr2 = sel->Index;
+  AddSprite(4,x,y,0,spr2, 0.0);
+ }
+}

@@ -1,0 +1,85 @@
+/* 
+
+Made by: DannyB, February 2023
+
+*/
+
+// This script adds an effect to fire to give it a more realistic look.
+
+require utils, utils_steps;
+
+bool realistic_fire_active;
+
+void Realistic_Fire_SCRIPT::FirstFrame()
+{
+     // initialize variable
+     realistic_fire_active = true;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{    
+     // activate realistic fire when a turn starts
+     if(type == M_TURNBEGIN)
+     {
+          if(realistic_fire_active == false)
+          {
+               realistic_fire_active = true;     
+          }
+     }
+  
+     super;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{    
+     // activate realistic fire when a weapon is selected (for when weapons don't end the turn)
+     if(type == M_SETWEAPON)
+     {
+          if(realistic_fire_active == false)
+          {
+               realistic_fire_active = true;     
+          }
+     }
+  
+     super;
+}
+
+override void CWorm::SetState(EObjState state)
+{
+     // activate realistic fire if a worm dies (to avoid death scenes without it)
+     if(state == WS_DEATH)
+     {
+          realistic_fire_active = true;
+     }
+   
+     super;
+}
+
+override void CFire::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{    
+     // perform the color overlay
+     if(realistic_fire_active == true)
+     {     
+          if(type == M_DRAWQUEUE)
+          { 
+               SetColorMod(RGB(255, 60, 30), 1); // the last value is diffuse
+               
+               super;
+               
+               if(gframe % 10 == 0)
+               {
+                    super;
+               }
+                           
+               ClearColorMod();
+          }     
+          else
+          { 
+               super;
+          }
+     }
+     else
+     {     
+          super;
+     }
+}

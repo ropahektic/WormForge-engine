@@ -1,0 +1,168 @@
+CSoundFile* ding;
+bool personalinvisibility;
+int invisibilityturns;
+
+void PersonalInvisibility::Init()
+{
+  personalinvisibility = false;
+  invisibilityturns = 0;
+}
+
+void PersonalInvisibility::FirstFrame()
+{
+f = GetAttachment("ding.wav");		        ding = new CSoundFile(f);
+}
+
+// personalinvisibility
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(!personalinvisibility) { super;  return; }
+  
+  if(Type == M_AFTERSHOOT && this == GetCurrentWorm() && isInvisible)
+  {
+    //weapons that don't end invisibility
+    if(!CurWeapon->CheckName("Invisibility") &&
+       !CurWeapon->CheckName("Prod") &&
+       !CurWeapon->CheckName("Girder") &&
+       !CurWeapon->CheckName("Girder Starter-Pack") &&
+       !CurWeapon->CheckName("Freeze") &&
+       !CurWeapon->CheckName("Ninja Rope") &&
+       !CurWeapon->CheckName("Bungee") &&
+       !CurWeapon->CheckName("Parachute") &&
+       !CurWeapon->CheckName("Hang-Glider") &&
+       !CurWeapon->CheckName("Teleport") &&
+       !CurWeapon->CheckName("Select Worm") &&
+       !CurWeapon->CheckName("Jet Pack") &&
+       !CurWeapon->CheckName("Low Gravity") &&
+       !CurWeapon->CheckName("Fast Walk") &&
+       !CurWeapon->CheckName("Laser Sight") &&
+       !CurWeapon->CheckName("Skip Go") &&
+       !CurWeapon->CheckName("Surrender") &&
+       
+       !CurWeapon->CheckName("Stone") &&
+       !CurWeapon->CheckName("Spot Hider") &&
+	   !CurWeapon->CheckName("Crate Collector") &&
+       !CurWeapon->CheckName("Trampoline") &&
+       !CurWeapon->CheckName("Climb") &&
+       !CurWeapon->CheckName("Umbrella") &&
+       !CurWeapon->CheckName("Med Pack 25") &&
+       !CurWeapon->CheckName("Weapon Crate") &&
+       !CurWeapon->CheckName("Hot Air Balloon") &&
+       !CurWeapon->CheckName("Siege ladder") &&
+       !CurWeapon->CheckName("Tele Arrow") &&
+       !CurWeapon->CheckName("Tele Arrow ") &&
+       !CurWeapon->CheckName("Antifire Suit") &&
+       !CurWeapon->CheckName("Sacrifice") &&
+       !CurWeapon->CheckName("Skip Go/Surrender") &&
+
+    //weapon rows that don't end invisibility
+       CurWeapon->Row != 0
+
+    ) isInvisible = false;
+  }
+  
+  if(Type == M_DRAWQUEUE && isInvisible)
+  {
+      if(IsMultiplayer() && !isWinner && !isSurrender && ObjState != WS_SINKING && ObjState != WS_DEATH)
+      {
+        local c = GetTeamColor(WormTeam);
+        if((GG->machColors[GetLocalMachine()] & (1 << c)) != 0)
+        {
+          SetColorMod(ARGB(180, 0, 0, 0), (1 | 4));
+          super;
+          ClearColorMod();
+        }
+      }
+      else
+      {
+        SetColorMod(ARGB(180, 0, 0, 0), (1 | 4));
+        super;
+        ClearColorMod();
+      }
+      return;
+  }
+  super;
+}
+
+override void CWorm::RenderCrosshair()
+{
+  if(!personalinvisibility) { super;  return; }
+  
+  if(isInvisible) ClearColorMod();
+  super;
+}
+
+override void CObject::ForceFocus(fixed x,fixed y)
+{
+  if(!personalinvisibility) { super;  return; }
+  
+  local w = GetCurrentWorm();
+  if(w != NullObj && w->isInvisible && !w->isWinner && !w->isSurrender && w->ObjState != WS_SINKING && w->ObjState != WS_DEATH)
+    if(IsMultiplayer())
+    {
+      local c = GetTeamColor(w->WormTeam); 
+      if((GG->machColors[GetLocalMachine()] & (1 << c)) != 0)
+      {
+        super; return;
+      }
+      else return;
+    }
+  super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(!personalinvisibility) { super;  return; }
+  
+  if(Weap->CheckName("Invisibility"))
+  { 
+    if(isInvisible) isInvisible = false;
+    else
+        vol = CalculateSoundVolume(PosX,PosY);
+      	pan = CalculateSoundPan(PosX,PosY);
+      	ding->Play(vol, pan, false);
+		isInvisible = true;
+
+    return;
+  }
+  super;
+}
+
+// invisibilityturns
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+  super;
+
+  if(invisibilityturns == 0) return;
+  
+  invisibilitycount = invisibilityturns;
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+  super;
+
+  if(invisibilityturns == 0) return;
+  
+  for(local i=0; i < Env->Objs.Count; i++)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+    if(obj->ClType != OC_Worm) continue;
+    
+    local w = CWorm(obj);
+    if(w->isInvisible)
+    {
+      w->invisibilitycount--;
+      if(w->invisibilitycount <= 0) 
+      {  
+        w->invisibilitycount = invisibilityturns;
+        w->isInvisible = false;
+        
+        local vol = CalculateSoundVolume(w->PosX,w->PosY);
+        local pan = CalculateSoundPan(w->PosX,w->PosY);
+        ding->Play(vol, pan, false);
+      }
+    }
+  }
+}

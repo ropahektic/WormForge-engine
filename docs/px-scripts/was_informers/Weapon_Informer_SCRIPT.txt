@@ -1,0 +1,439 @@
+/* 
+
+Made by: DannyB, February 2023
+
+*/
+
+// This script displays important information about the selected weapon/utility (can easily be adapted to work with schemes other than those of WAS).
+
+CWeaponInformerHandler : CObject;
+CBitmap32* GUI_Weapon_Informer;
+string speedx_Weapon_Informer;
+string speedy_Weapon_Informer;
+int Weapon_Informer_PosX;
+int Weapon_Informer_PosY;
+
+bool Weapon_Informer_Active;
+
+bool WI_Is_Weapon;
+bool WI_Ends_Turn;
+int WI_Number_of_Shots;
+int WI_Retreat_Time;
+bool WI_Ground_Use_Only;
+
+bool WI_Menu_Informer_Used;
+
+void Weapon_Informer_SCRIPT::FirstFrame()
+{
+     new CWeaponInformerHandler();
+     Weapon_Informer_PosX = 0;
+     Weapon_Informer_PosY = 0;
+   
+     Weapon_Informer_Active = false;
+   
+     WI_Is_Weapon = true;
+     WI_Ends_Turn = true;
+     WI_Number_of_Shots = 0;
+     WI_Retreat_Time = 0;
+     WI_Ground_Use_Only = false;
+     
+     WI_Menu_Informer_Used = true; // ADAPT TO OTHER SCHEMES: change this to false if you won't be using the 'Menu Informer'.
+}
+
+void Weapon_Informer_SCRIPT::InitGraphic()
+{ 
+     WI_Background  = GetAttachment("weapon informer background.png");
+     GUI_Weapon_Informer = LoadImage(WI_Background);
+}
+
+CWeaponInformerHandler::CWeaponInformerHandler()
+{
+     super(Root, GS);  
+     
+     GUI_Weapon_Informer_n = GUI_Weapon_Informer;
+}
+
+// This displays the weapon information on the 'Weapon Informer Background'
+void CWeaponInformerHandler::ListAndDraw()
+{
+     int a;
+     int b;
+
+     GUI_Weapon_Informer_n->Rect(0, 0, 162, 89, 0);
+     
+     // Gets the team color for the current team
+     local cw = GetCurrentWorm();
+     local Team_Color = getWormColor(cw, 0) + 1;
+
+     if(cw->WeaponN != 0)
+     {     
+          // Displays if the selection is a weapon or utility
+          if(WI_Is_Weapon == true)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 7, "Type: weapon", &a, &b); 
+          }
+          else
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 7, "Type: utility", &a, &b); 
+          }
+	      
+          // Displays if the selection ends the turn
+          if(WI_Ends_Turn == true)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 22, "Ends turn: yes", &a, &b); 
+          }
+          else
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 22, "Ends turn: no", &a, &b); 
+          }
+           
+          // Displays how many shots the selection has available
+          if(WI_Number_of_Shots == 0)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 0", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 1)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 1", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 2)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 2", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 3)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 3", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 4)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 4", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 5)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 5", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 6)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 6", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 7)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 7", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 8)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 8", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 9)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 9", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 10)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 10", &a, &b); 
+          }
+          else if(WI_Number_of_Shots == 11)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: 10+", &a, &b); 
+          }
+          
+          // Displays how much retreat time the selection gives
+          if(WI_Retreat_Time == 0)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: none", &a, &b); 
+          } 
+          else if(WI_Retreat_Time == 1)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 1 second", &a, &b); 
+          }
+          else if(WI_Retreat_Time == 2)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 2 seconds", &a, &b); 
+          }
+          else if(WI_Retreat_Time == 3)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 3 seconds", &a, &b); 
+          }
+          else if(WI_Retreat_Time == 4)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 4 seconds", &a, &b); 
+          }
+          else if(WI_Retreat_Time == 5)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 5 seconds", &a, &b); 
+          }
+          else if(WI_Retreat_Time == 6)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 6 seconds", &a, &b); 
+          }
+          else if(WI_Retreat_Time == 7)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 7 seconds", &a, &b); 
+          }
+          else if(WI_Retreat_Time == 8)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 8 seconds", &a, &b); 
+          } 
+          else if(WI_Retreat_Time == 9)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 9 seconds", &a, &b); 
+          }
+          else if(WI_Retreat_Time == 10)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 10 seconds", &a, &b); 
+          }
+          else if(WI_Retreat_Time == 11)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: 10+ seconds", &a, &b); 
+          }
+          
+          // Displays if the selection can only be used from the ground (not on a Jet Pack, Ninja Rope, Parachute, Bungee etc.)
+          if(WI_Ground_Use_Only == false)
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 67, "Ground use only: no", &a, &b); 
+          }
+          else
+          {                  
+               GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 67, "Ground use only: yes", &a, &b); 
+          }
+     }
+     else
+     {
+          GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 7, "Type: N/A", &a, &b);
+          GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 22, "Ends turn: N/A", &a, &b);
+          GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 37, "Shots: N/A", &a, &b);
+          GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 52, "Retreat time: N/A", &a, &b); 
+          GS->Disp->DrawText(Team_Color, GUI_Weapon_Informer_n, 10, 67, "Ground use only: N/A", &a, &b);    
+     }                                 
+}
+
+// This activates the weapon informer when a turn is active
+void CWeaponInformerHandler::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+     local cw = GetCurrentWorm();
+   
+     if(cw != NullObj)
+     {
+          if(Type == M_FRAME)
+          {
+               ListAndDraw();
+          }
+      
+          if(Type == M_DRAWQUEUE)
+          {
+               if(WI_Menu_Informer_Used == true)
+               {
+                    Weapon_Informer_PosX = 0 + GS->Disp->xRes / 2 - 92;
+                    Weapon_Informer_PosY = 0 - GS->Disp->yRes / 2 + 87;
+         
+                    AddInterfaceBitmap(15, Weapon_Informer_PosX, Weapon_Informer_PosY, GUI_Weapon_Informer_n, 162, 89, 1);
+               }
+               else if(WI_Menu_Informer_Used == false)
+               {
+                    Weapon_Informer_PosX = 0 + GS->Disp->xRes / 2 - 92;
+                    Weapon_Informer_PosY = 0 - GS->Disp->yRes / 2 + 60;
+         
+                    AddInterfaceBitmap(15, Weapon_Informer_PosX, Weapon_Informer_PosY, GUI_Weapon_Informer_n, 162, 89, 1);
+               }
+          }
+     } 
+}
+
+// This is where the information about the selection is gathered
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+     // Starts the checking process everytime a weapon/utility is selected
+     if(Type == M_SETWEAPON)
+     {
+          Weapon_Informer_Active = true;
+     }
+	 
+     // The actual checking process
+     if(Weapon_Informer_Active == true)
+     {
+          if(Type == M_FRAME)
+          {   
+               local cw = GetCurrentWorm();
+               
+               if(cw != NullObj)
+               {
+                    local cwp = cw->CurWeapon;
+                    
+                    if(cwp != NullObj)
+                    {          
+                         wi_is_none = false;
+                         
+                         // Is it a weapon or utility?
+                         if(cwp->IsWeaponCrate == true)
+                         {
+                              WI_Is_Weapon = true;
+                         }
+                         else if(cwp->IsWeaponCrate == false)
+                         {
+                              WI_Is_Weapon = false;
+                         }
+                         
+                         // Does it end the turn?
+                         if(cwp->EndsTurn == true)
+                         {
+                              WI_Ends_Turn = true;
+                         }
+                         else if(cwp->EndsTurn == false)
+                         {
+                              WI_Ends_Turn = false;
+                         }
+                         
+                         // How many shots does it have?
+                         if(cwp->NShoots == 0)
+                         {
+                              WI_Number_of_Shots = 0;   
+                         }
+                         else if(cwp->NShoots == 1)
+                         {
+                              WI_Number_of_Shots = 1;   
+                         }    
+                         else if(cwp->NShoots == 2)
+                         {
+                              WI_Number_of_Shots = 2;   
+                         }
+                         else if(cwp->NShoots == 3)
+                         {
+                              WI_Number_of_Shots = 3;  
+                         }
+                         else if(cwp->NShoots == 4)
+                         {
+                              WI_Number_of_Shots = 4; 
+                         }
+                         else if(cwp->NShoots == 5)
+                         {
+                              WI_Number_of_Shots = 5;
+                         }
+                         else if(cwp->NShoots == 6)
+                         {
+                              WI_Number_of_Shots = 6; 
+                         }
+                         else if(cwp->NShoots == 7)
+                         {
+                              WI_Number_of_Shots = 7;  
+                         }
+                         else if(cwp->NShoots == 8)
+                         {
+                              WI_Number_of_Shots = 8;  
+                         }
+                         else if(cwp->NShoots == 9)
+                         {
+                              WI_Number_of_Shots = 9;  
+                         }
+                         else if(cwp->NShoots == 10)
+                         {
+                              WI_Number_of_Shots = 10;  
+                         }
+                         else if(cwp->NShoots > 10)
+                         {
+                              WI_Number_of_Shots = 11;  
+                         }
+                         
+                         // How much retreat time is there?
+                         if(cwp->RetreatTime <= 0)
+                         {
+                              WI_Retreat_Time = 0;   
+                         }
+                         else if(cwp->RetreatTime == 1000)
+                         {
+                              WI_Retreat_Time = 1;   
+                         }
+                         else if(cwp->RetreatTime == 2000)
+                         {
+                              WI_Retreat_Time = 2;   
+                         }
+                         else if(cwp->RetreatTime == 3000)
+                         {
+                              WI_Retreat_Time = 3;   
+                         }
+                         else if(cwp->RetreatTime == 4000)
+                         {
+                              WI_Retreat_Time = 4;   
+                         }
+                         else if(cwp->RetreatTime == 5000)
+                         {
+                              WI_Retreat_Time = 5;   
+                         }
+                         else if(cwp->RetreatTime == 6000)
+                         {
+                              WI_Retreat_Time = 6;   
+                         }
+                         else if(cwp->RetreatTime == 7000)
+                         {
+                              WI_Retreat_Time = 7;   
+                         }
+                         else if(cwp->RetreatTime == 8000)
+                         {
+                              WI_Retreat_Time = 8;   
+                         }
+                         else if(cwp->RetreatTime == 9000)
+                         {
+                              WI_Retreat_Time = 9;   
+                         }
+                         else if(cwp->RetreatTime == 10000)
+                         {
+                              WI_Retreat_Time = 10;   
+                         }
+                         else if(cwp->RetreatTime > 10000)
+                         {
+                              WI_Retreat_Time = 11;   
+                         }  
+                         
+                         // Can it only be used from the ground? (this information won't be 100% accurate due to too many variables)
+                         if(cwp->WeaponType == WT_Gun || cwp->WeaponType == WT_Bow || cwp->WeaponType == WT_Flamer)
+                         {
+                              WI_Ground_Use_Only = true;
+                         }
+                         else if(cwp->NShoots >= 2)
+                         {
+                              if(cwp->CheckName("Laser Dome 3-Pack") || cwp->CheckName("Laser Dome 5-Pack") || cwp->CheckName("Sentry Gun 2-Pack") || cwp->CheckName("Sentry Gun 3-Pack") || cwp->CheckName("Inv. Sentry 2-Pack") || cwp->CheckName("Missile Turret 2-Pack"))
+                              {
+                                   WI_Ground_Use_Only = false;
+                              }
+                              else
+                              {
+                                   WI_Ground_Use_Only = true;
+                              }
+                         }
+                         else if(cwp->CheckName("Battle Axe") || cwp->CheckName("Fire Punch") || cwp->CheckName("Dragon Ball") || cwp->CheckName("Kamikaze") || cwp->CheckName("Suicide Bomber") || cwp->CheckName("Prod") || cwp->CheckName("BlowTorch") || cwp->CheckName("Pneumatic Drill") || cwp->CheckName("Baseball Bat") || cwp->CheckName("Ninja Rope") || cwp->CheckName("Bungee") || cwp->CheckName("Parachute") || cwp->CheckName("Skip Go") || cwp->CheckName("Surrender") || cwp->CheckName("Select Worm") || cwp->CheckName("Freeze") || cwp->CheckName("Jet Pack") || cwp->CheckName("Prod Gold") || cwp->CheckName("Kamikaze Gold") || cwp->CheckName("Suicide Bomber Gold") || cwp->CheckName("BlowTorch+") || cwp->CheckName("Pneumatic Drill+") || cwp->CheckName("Battle Axe Gold"))
+                         {
+                              WI_Ground_Use_Only = true;
+                         }
+                         else if(cwp->CheckName("Inf. Freeze") || cwp->CheckName("Inf. Select Worm") || cwp->CheckName("Helicopter") || cwp->CheckName("Super Ninja Rope") || cwp->CheckName("Super Jet Pack") || cwp->CheckName("Ghost Jet Pack") || cwp->CheckName("Hoverboard") || cwp->CheckName("Hot Air Balloon") || cwp->CheckName("Hang-Glider") || cwp->CheckName("Ninja Sheep") || cwp->CheckName("Mummy Scarabs") || cwp->CheckName("The Force") || cwp->CheckName("BlowTorch Madness") || cwp->CheckName("Drill Madness") || cwp->CheckName("Agent 47") || cwp->CheckName("Gravity Gun") || cwp->CheckName("Holy Qur'an") || cwp->CheckName("Candy Crush Bomb") || cwp->CheckName("Bouncy Ball") || cwp->CheckName("Underwater Mine"))
+                         {
+                              WI_Ground_Use_Only = true;
+                         }
+                         else
+                         {
+                              WI_Ground_Use_Only = false;
+                         }
+                              
+                         Weapon_Informer_Active = false;
+                    }
+               }
+          }
+     } 
+     
+     super;
+}
+
+// Deactivates the checking process when there is no active turn and resets the values
+override void CTurnGame::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{    
+     if(Type == M_TURNEND)
+     {
+          Weapon_Informer_Active = false;
+           
+          WI_Is_Weapon = true;
+          WI_Ends_Turn = true;
+          WI_Number_of_Shots = 0;
+          WI_Retreat_Time = 0;
+          WI_Ground_Use_Only = false;
+     }
+  
+     super;
+}

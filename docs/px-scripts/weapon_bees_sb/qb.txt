@@ -1,0 +1,21 @@
+//List of sprites
+CSprite* beect;
+CSprite* sqbfly1;
+CSprite* sqbfly2;
+
+void qb::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("beect.png"); 
+   beect = LoadSprite(f, 9, 0);
+   f = GetAttachment("sqbfly1.png"); 
+   sqbfly1 = LoadSprite(f, 32, 1);
+   f = GetAttachment("sqbfly2.png"); 
+   sqbfly2 = LoadSprite(f, 32, 1);
+
+   //Let's override the sprites!
+   SetSpriteOverride(712, beect);
+   SetSpriteOverride(713, sqbfly1);
+   SetSpriteOverride(714, sqbfly2);
+}

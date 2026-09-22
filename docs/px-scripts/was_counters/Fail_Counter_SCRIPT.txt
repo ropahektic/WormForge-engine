@@ -1,0 +1,33 @@
+/* 
+
+Made by: DannyB, April 2023
+
+*/
+
+// This script adds a fail-counter to the game (can be used for statistical GUI's)
+
+int fail_counts[6];
+
+void Fail_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          fail_counts[i] = 0;
+     }
+}
+
+override void CTurnGame::Message( CObject *sender, EMType type, int msize, CMessageData *mdata )
+{
+     if(type == M_TURNEND)
+     {
+          if(Current_Worm != NullObj)
+          {
+               if(Current_Worm->ObjState == WS_FLYING || Current_Worm->ObjState == WS_FLYING2 || Current_Worm->ObjState == WS_POWERFLY || Current_Worm->ObjState == WS_SINKING)
+               {
+                    fail_counts[current_worm_team]++;
+               }
+          }
+     }
+  
+     super;
+}

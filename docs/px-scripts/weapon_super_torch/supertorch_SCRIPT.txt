@@ -1,0 +1,47 @@
+require utils;
+
+CSprite* wbloww3;
+
+void supertorch_SCRIPT::InitGraphic()
+{
+   CFile *f;
+   f = GetAttachment("wbloww3.png");	wbloww3 = LoadSprite(f, 15, 1);
+
+   //SetSpriteOverride(140, wbloww3);
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (supertorch)
+        {
+			if (TurnSide > 0) TurnSide = 3;
+            else if (TurnSide < 0) TurnSide = -3;
+
+            if (ObjState != WS_FIRED && ObjState != WS_BLOWTORCH)
+            {
+                supertorch = false;
+                if (TurnSide == 3) TurnSide = 1;
+                else if (TurnSide == -3) TurnSide = -1;
+            }
+        }
+                   
+    }
+    
+super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+
+ if (Weap->CheckName("Super Torch"))
+ {
+     supertorch = true;
+ }
+ 
+super; 
+
+}

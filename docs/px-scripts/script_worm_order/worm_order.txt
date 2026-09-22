@@ -1,0 +1,80 @@
+require utils, utils_steps, wosc_lib;
+
+CGUIText* GUIWormOrder;
+CBitmap * orderinfo;
+
+void worm_order::Init()
+{
+}
+
+void worm_order::InitGraphic()
+{
+    GUIWormOrder = new CGUIText(GS->Disp, 16, 1);
+}
+
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+	Index = 0;
+    OrderNum = "";
+
+    if(WormNumber == 1)
+    {
+	  	Index = 0;
+      	OrderNum = "1";
+      	local outX = 1;
+  	local outY = 1;
+
+	orderinfo = GUIWormOrder->SetText(OrderNum, 7, RGB(0, 0, 0), RGB(127, 127, 127), &outX, &outY, 0);
+	AddBitmap(1, PosX, PosY-20, orderinfo, outX, outY, 1);
+    }
+    if(WormNumber == 2)
+    {
+        Index = 1;
+      	OrderNum = "2";
+    }
+    if(WormNumber == 3)
+    {
+        Index = 2;
+      	OrderNum = "3";
+    }
+    if(WormNumber == 4)
+    {
+        Index = 3;
+      	OrderNum = "4";
+    }
+    if(WormNumber == 5)
+    {
+        Index = 4;
+      	OrderNum = "5";
+    }
+    if(WormNumber == 6)
+    {
+    	Index = 5;
+      	OrderNum = "6";
+    }
+    if(WormNumber == 7)
+    {
+        Index = 6;
+      	OrderNum = "7";
+    }
+    if(WormNumber == 8)
+    {
+    	Index = 7;
+      	OrderNum = "8";
+    }
+
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+
+    if(Type == M_DRAWQUEUE)
+    {
+    
+	
+    }
+}

@@ -1,0 +1,707 @@
+require utils, wosc_lib;
+
+   //0 - 99
+
+CWorm* CurW;
+int TeleportingCheck[7];  
+int SelectCheck[7];
+int ShotgunCheck[7];
+bool getweapons;
+int CurrentMana;
+
+bool Zombie2X;
+
+int Fatigue[7];
+
+string RedWeapons[100];
+string BlueWeapons[100];
+string GreenWeapons[100];
+string YellowWeapons[100];
+string PurpleWeapons[100];
+string CyanWeapons[100];
+
+int RedWeapCount[100];
+int BlueWeapCount[100];
+int GreenWeapCount[100];
+int YellowWeapCount[100];
+int PurpleWeapCount[100];
+int CyanWeapCount[100];
+int TotalCount[7];
+
+int PreturnCheck[7];
+
+
+void DrawingAndMana::InitGraphic()
+{
+}
+
+void DrawingAndMana::Init()
+{    swat = true;
+    swatsd = true;
+    teleportrange = 200;
+  	                    
+}
+
+void DrawingAndMana::FirstFrame()
+{
+ 
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  super;
+  
+  
+   if(Weap->CheckName("Select Worm"))
+  {
+   
+   SelectCheck[WormTeam] = 1;
+   }
+   
+  if(Weap->CheckName("Get Weapons"))
+  {  
+    RemoveWeapons();
+    
+     getweapons = true;     
+  }
+  
+ 	
+	if (Weap->CheckName("Draw 3 Weapons"))
+	{    GiveWeapons();
+             GiveWeapons();
+             GiveWeapons();
+        }
+
+        if (Weap->CheckName("Get 2 Mana"))
+	{    GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] + 2;
+        }
+        
+        if(Weap->CheckName("MedPack")) GS->Info.SetWormHealth( Root->CurTeam, Root->CurWorm, GS->Info.GetWormHealth( Root->CurTeam, Root->CurWorm)+25);
+ 
+        if (Weap->CheckName("Draw 1 Weapon"))
+	{    GiveWeapons();
+             GS->Info.SetWormHealth( Root->CurTeam, Root->CurWorm, GS->Info.GetWormHealth( Root->CurTeam, Root->CurWorm)-10);
+        }
+
+        if (Weap->CheckName("Get 1 Mana"))
+	{    GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] + 1;
+        }
+        
+        if (Weap->CheckName("Extra Teleport"))
+	{    GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - 1;
+        }
+ 
+ 
+        if (Weap->CheckName("Zombie Damage*2"))
+	{    Zombie2X = true;   	     
+        }
+        
+        if (Weap->CheckName("+25hp For All"))
+        {
+          CGObject *eobj; local TeamColor = GetTeamColor(WormTeam);
+            for(local i = 0; i < Env->Objs.Count; i++)
+              {
+                 eobj = CGObject(Env->Objs.Objs[i]);
+      
+         if(eobj == NullObj) continue;
+           if(eobj->IsMaterial == false) continue;                         			
+              if(eobj->ClType == OC_Worm)
+                   {
+                        local worm = CWorm(eobj);
+              if(GetTeamColor(worm->WormTeam) == TeamColor)
+                    {
+                           
+                            GS->Info.SetWormHealth( worm->WormTeam, worm->WormNumber, GS->Info.GetWormHealth( worm->WormTeam, worm->WormNumber)+25);
+                                   } 
+             }
+                 }   
+    
+        }
+    
+    
+   
+   RemoveDelays();
+   PersonalDelayCheck();
+   DelayCheck();
+   if(Zombie == true) { AddDelays(); }   
+}   
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+        if (Type == M_PRETURNSTART) 
+        {  
+        
+           
+          SelectCheck[WormTeam] = 1;                
+  	  Zombie2X = false;
+                         
+        }
+                 
+
+       if (Type == M_TURNBEGIN)
+	{        
+	
+	         ShotgunCheck[WormTeam] = 0;
+	         if (SelectCheck[WormTeam] == 1) {
+		 if (TeleportingCheck[WormTeam] == 1) {
+                
+               
+		GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] + 5; 
+                GiveWeapons(); 
+              
+              
+                 
+              
+            }   
+             SelectCheck[WormTeam] = 0;  
+             
+             
+            }    
+	
+            if(CurW != NullObj){CurW->RemoveWormWeapons();}
+                 CurW = this;
+                 
+                  if(Zombie == true)
+                  {                   
+                   if(Zombie2X == false) { GiveZombieWeapons(); RemoveDelays(); AddDelays(); PersonalDelayCheck();}
+                   if(Zombie2X == true) { GiveZombieSuperWeapons(); RemoveDelays(); AddDelays(); PersonalDelayCheck();}
+                   if(SpecialZombie == true)  {GiveWormWeapons(); RemoveDelays(); AddDelays(); PersonalDelayCheck();}
+                    
+                  }     
+                  else{GiveWormWeapons();
+                  
+                  
+                  RemoveDelays();
+                  PersonalDelayCheck();
+                  DelayCheck();
+                  }
+         	 
+	}
+
+                  
+               
+
+	if(Type == M_SPACE && (ObjState == WS_IDLE || ObjState == WS_JUMP || ObjState == WS_JUMPPREPARE || ObjState == WS_AIMING || ObjState == WS_AFTERROPE || ObjState == WS_BUNGEE || ObjState == WS_ROPING || ObjState == WS_PARACHUTE))                                                    //SPACE pressed
+         {      
+            for(local x = 0; x < 71; x++)
+            {  
+                if(CurWeapon->CheckName(WeaponN[x]))                         
+                {   
+                                 
+                    if(CurWeapon->CheckName("Extra Teleport") || CurWeapon->CheckName("Bazooka Worm") || CurWeapon->CheckName("Shotgun Worm") || CurWeapon->CheckName("Haste Worm") || CurWeapon->CheckName("Tanky Worm") || CurWeapon->CheckName("Rope Worm") || CurWeapon->CheckName("Melee Worm") || CurWeapon->CheckName("Fat Worm") || CurWeapon->CheckName("Mine Worm") || CurWeapon->CheckName("Sniper Worm") || CurWeapon->CheckName("Minigun Worm") || CurWeapon->CheckName("Prince") || CurWeapon->CheckName("Infected Worm") || CurWeapon->CheckName("Necromancer")|| CurWeapon->CheckName("Flying Zombie") || CurWeapon->CheckName("Spawn 3 Zombies"))
+                       { 
+                        super;
+                        return;
+                       }
+                   else if(CurWeapon->CheckName("Longbow")) 
+                   {
+                    super;
+                    if (ShotgunCheck[WormTeam] == 0) 
+                    {  GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                        ShotgunCheck[WormTeam]++; }
+                       else  { ShotgunCheck[WormTeam] = 0; }
+                    return; 
+                   }
+                   
+                   else
+                       super;
+                       GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x];
+                       RemoveDelays();
+                       PersonalDelayCheck(); 
+                       DelayCheck();  
+ 
+                    return;                                                     
+                } 
+                
+            }    
+         } 
+       super;
+
+	
+}
+
+
+
+int picked_numbers[3];
+
+
+
+
+bool red_is_available(int num) {
+      local weap = GetWeaponByName(RedWeapons[num]);
+      if (weap == NullObj) { return false; }
+      if (RedWeapCount[num] == 1) {
+      return false;
+      }
+      return true;
+}
+
+bool blue_is_available(int num) {
+      local weap = GetWeaponByName(BlueWeapons[num]);
+      if (weap == NullObj) { return false; }
+      if (BlueWeapCount[num] == 1) {
+      return false;
+      }
+      return true;
+}
+
+bool green_is_available(int num) {
+      local weap = GetWeaponByName(GreenWeapons[num]);
+      if (weap == NullObj) { return false; }
+      if (GreenWeapCount[num] == 1) {
+      return false;
+      }
+      return true;
+}
+
+bool yellow_is_available(int num) {
+      local weap = GetWeaponByName(YellowWeapons[num]);
+      if (weap == NullObj) { return false; }
+      if (YellowWeapCount[num] == 1) {
+      return false;
+      }
+      return true;
+}
+
+bool purple_is_available(int num) {
+      local weap = GetWeaponByName(PurpleWeapons[num]);
+      if (weap == NullObj) { return false; }
+      if (PurpleWeapCount[num] == 1) {
+      return false;
+      }
+      return true;
+}
+
+bool cyan_is_available(int num) {
+      local weap = GetWeaponByName(CyanWeapons[num]);
+      if (weap == NullObj) { return false; }
+      if (CyanWeapCount[num] == 1) {
+      return false;
+      }
+      return true;
+}
+
+void CWorm::GiveWeapons()
+{
+	picked_numbers[0] = 99;
+
+
+
+	
+	
+               if (GetTeamColor(WormTeam) == 0) 
+               {
+		int na = RandomInt(0, Credits - 1);
+		if (TotalCount[0] < Credits - 6)
+                {
+		while (!red_is_available(na)) 
+                 {
+			na = RandomInt(0, Credits - 1);   
+                 }
+	        }
+               	if (TotalCount[0] > Credits - 7) { na = 0;}                       
+		picked_numbers[0] = na;
+               }    
+                   
+	
+               if (GetTeamColor(WormTeam) == 1) 
+               {
+		int na = RandomInt(0, Credits - 1);
+		if (TotalCount[1] < Credits - 6)
+                {
+	 	 while (!blue_is_available(na)) 
+                 {
+		  na = RandomInt(0, Credits - 1);
+		 }
+		}
+		if (TotalCount[1] > Credits - 7) {  na = 0;}
+		picked_numbers[0] = na;
+               }
+        
+        
+        
+              if (GetTeamColor(WormTeam) == 2) 
+               {
+		int na = RandomInt(0, Credits - 1);
+		if (TotalCount[2] < Credits - 6)
+                {
+		while (!green_is_available(na)) 
+                 {
+			na = RandomInt(0, Credits - 1);   
+                 }
+	        }
+               	if (TotalCount[2] > Credits - 7) { na = 0;}                       
+		picked_numbers[0] = na;
+               }
+     
+     
+     
+               if (GetTeamColor(WormTeam) == 3) 
+               {
+		int na = RandomInt(0, Credits - 1);
+		if (TotalCount[3] < Credits - 6)
+                {
+		while (!yellow_is_available(na)) 
+                 {
+			na = RandomInt(0, Credits - 1);   
+                 }
+	        }
+               	if (TotalCount[3] > Credits - 7) { na = 0;}                       
+		picked_numbers[0] = na;
+               }
+     
+     
+              if (GetTeamColor(WormTeam) == 4) 
+               {
+		int na = RandomInt(0, Credits - 1);
+		if (TotalCount[4] < Credits - 6)
+                {
+		while (!purple_is_available(na)) 
+                 {
+			na = RandomInt(0, Credits - 1);   
+                 }
+	        }
+               	if (TotalCount[4] > Credits - 7) { na = 0;}                       
+		picked_numbers[0] = na;
+               }
+      
+     
+             if (GetTeamColor(WormTeam) == 5) 
+               {
+		int na = RandomInt(0, Credits - 1);
+		if (TotalCount[5] < Credits - 6)
+                {
+		while (!cyan_is_available(na)) 
+                 {
+			na = RandomInt(0, Credits - 1);   
+                 }
+	        }
+               	if (TotalCount[5] > Credits - 7) { na = 0;}                       
+		picked_numbers[0] = na;
+               }
+      
+
+	          
+		
+  	       
+                 if( TotalCount[GetTeamColor(WormTeam)] == Credits ) 
+                   {
+                    if( KingDead[WormTeam] == 0) 
+                    {
+		     GS->Info.SetWormHealth( WormTeam, 1, GS->Info.GetWormHealth( WormTeam, 1) - 5 - Fatigue[WormTeam-1]*5);
+		     Fatigue[WormTeam-1]++;
+		     if(GS->Info.GetWormHealth( WormTeam, 1) <= 0) 
+                      {
+		       if(PrinceAlive[WormTeam] == 0 && PrinceAlive2[WormTeam] == 0 && PrinceAlive3[WormTeam] == 0)
+                       { Ded(); }
+                     else {GS->Info.SetWormHealth( WormTeam, 1, 0);} 
+                      }
+		    }
+                  
+		 if( KingDead[WormTeam] == 1)
+		 {   if(PrinceAlive[WormTeam] == 1)
+		      { GS->Info.SetWormHealth( WormTeam, PrinceIndex[WormTeam], GS->Info.GetWormHealth( WormTeam, PrinceIndex[WormTeam]) - 5 - Fatigue[WormTeam-1]*5);
+		        Fatigue[WormTeam-1]++;
+		        if(GS->Info.GetWormHealth( WormTeam, PrinceIndex[WormTeam]) <= 0) 
+                          { 
+		            if(KingDead[WormTeam] == 1 && PrinceAlive2[WormTeam] == 0 && PrinceAlive3[WormTeam] == 0) 
+                              { Ded(); }
+                            else {GS->Info.SetWormHealth( WormTeam, PrinceIndex[WormTeam], 0); }
+                          }
+		      } 
+                      else if(PrinceAlive2[WormTeam] == 1)
+        		{ GS->Info.SetWormHealth( WormTeam, Prince2Index[WormTeam], GS->Info.GetWormHealth( WormTeam, Prince2Index[WormTeam]) - 5 - Fatigue[WormTeam-1]*5);
+		          Fatigue[WormTeam-1]++;
+		          if(GS->Info.GetWormHealth( WormTeam, Prince2Index[WormTeam]) <= 0) 
+                           {
+		           if(KingDead[WormTeam] == 1 && PrinceAlive[WormTeam] == 0 && PrinceAlive3[WormTeam] == 0) 
+                             { Ded(); }
+                           else {GS->Info.SetWormHealth( WormTeam, Prince2Index[WormTeam], 0);  }
+                           }
+		       }  
+                     else if(PrinceAlive3[WormTeam] == 1)
+		      { GS->Info.SetWormHealth( WormTeam, Prince3Index[WormTeam], GS->Info.GetWormHealth( WormTeam, Prince3Index[WormTeam]) - 5 - Fatigue[WormTeam-1]*5);
+		        Fatigue[WormTeam-1]++;
+		        if(GS->Info.GetWormHealth( WormTeam, Prince3Index[WormTeam]) <= 0) { 
+		        if(KingDead[WormTeam] == 1 && PrinceAlive[WormTeam] == 0 && PrinceAlive2[WormTeam] == 0) { Ded(); }
+                        else {GS->Info.SetWormHealth( WormTeam, Prince3Index[WormTeam], 0); } }
+		     } 
+		   }  
+                 }      
+		  
+                  
+                  
+                   
+               if(GetTeamColor(WormTeam) == 0) 
+               {    		
+		if(TotalCount[0] > Credits - 7)  
+                 {
+                 for(local i=0; i<Credits; i++) 
+                  { if(RedWeapCount[i] == 0) 
+                    { local weap = GetWeaponByName(RedWeapons[i]);
+                      if(weap == NullObj) continue;
+                      GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                      RedWeapCount[i] = 1;
+                      TotalCount[0]++;
+                      break;
+                      }                       
+                   }   
+                 }
+		if(TotalCount[0] < Credits - 6) 
+                {
+                local weap = GetWeaponByName(RedWeapons[picked_numbers[0]]);   		
+		GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                RedWeapCount[picked_numbers[0]] = 1;
+                TotalCount[0]++;      
+                }
+               } 
+                
+                 
+                     
+		
+               if(GetTeamColor(WormTeam) == 1) 
+               {                           	
+                if(TotalCount[1] > Credits - 7) 
+                 {
+                 for(local i=0; i<Credits; i++) 
+                  { if(BlueWeapCount[i] == 0) 
+                    { local weap = GetWeaponByName(BlueWeapons[i]);
+                      if(weap == NullObj) continue;
+                      GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                      BlueWeapCount[i] = 1;
+                      TotalCount[1]++;
+                      break;
+                      }                        
+                   }   
+                 } 
+		if(TotalCount[1] < Credits - 6)
+                {
+                local weap = GetWeaponByName(BlueWeapons[picked_numbers[0]]);   		
+		GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                BlueWeapCount[picked_numbers[0]] = 1;
+                TotalCount[1]++;      
+                }
+               } 
+		
+		
+		
+		
+		if(GetTeamColor(WormTeam) == 2) 
+                {    		
+		if(TotalCount[2] > Credits - 7)  
+                 {
+                 for(local i=0; i<Credits; i++) 
+                  { if(GreenWeapCount[i] == 0) 
+                    { local weap = GetWeaponByName(GreenWeapons[i]);
+                      if(weap == NullObj) continue;
+                      GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                      GreenWeapCount[i] = 1;
+                      TotalCount[2]++;
+                      break;
+                      }                       
+                   }   
+                 }
+		if(TotalCount[2] < Credits - 6) 
+                {
+                local weap = GetWeaponByName(GreenWeapons[picked_numbers[0]]);   		
+		GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                GreenWeapCount[picked_numbers[0]] = 1;
+                TotalCount[2]++;      
+                }
+               } 
+
+
+
+
+
+                if(GetTeamColor(WormTeam) == 3) {    		
+		if(TotalCount[3] > Credits - 7)  
+                 {
+                 for(local i=0; i<Credits; i++) 
+                  { if(YellowWeapCount[i] == 0) 
+                    { local weap = GetWeaponByName(YellowWeapons[i]);
+                      if(weap == NullObj) continue;
+                      GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                      YellowWeapCount[i] = 1;
+                      TotalCount[3]++;
+                      break;
+                      }                       
+                   }   
+                 }
+		if(TotalCount[3] < Credits - 6) 
+                {
+                local weap = GetWeaponByName(YellowWeapons[picked_numbers[0]]);   		
+		GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                YellowWeapCount[picked_numbers[0]] = 1;
+                TotalCount[3]++;      
+                }
+               }     
+               
+               
+               
+                    
+        
+                if(GetTeamColor(WormTeam) == 4) 
+               {    		
+		if(TotalCount[4] > Credits - 7)  
+                 {
+                 for(local i=0; i<Credits; i++) 
+                  { if(PurpleWeapCount[i] == 0) 
+                    { local weap = GetWeaponByName(PurpleWeapons[i]);
+                      if(weap == NullObj) continue;
+                      GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                      PurpleWeapCount[i] = 1;
+                      TotalCount[4]++;
+                      break;
+                      }                       
+                   }   
+                 }
+		if(TotalCount[4] < Credits - 6) 
+                {
+                local weap = GetWeaponByName(PurpleWeapons[picked_numbers[0]]);   		
+		GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                PurpleWeapCount[picked_numbers[0]] = 1;
+                TotalCount[4]++;      
+                }
+               }
+       
+                   
+                   
+                   
+       
+                if(GetTeamColor(WormTeam) == 5) 
+               {    		
+		if(TotalCount[5] > Credits - 7)  
+                 {
+                 for(local i=0; i<Credits; i++) 
+                  { if(CyanWeapCount[i] == 0) 
+                    { local weap = GetWeaponByName(CyanWeapons[i]);
+                      if(weap == NullObj) continue;
+                      GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                      CyanWeapCount[i] = 1;
+                      TotalCount[5]++;
+                      break;
+                      }                       
+                   }   
+                 }
+		if(TotalCount[5] < Credits - 6) 
+                {
+                local weap = GetWeaponByName(CyanWeapons[picked_numbers[0]]);   		
+		GS->Info.SetWeaponEx(WormTeam, weap->GetWeaponIndex(), weap->GetPageIndex(),  1+GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2]);
+                CyanWeapCount[picked_numbers[0]] = 1;
+                TotalCount[5]++;      
+                }
+               }
+                
+}
+
+
+void CWorm::RemoveWeapons()
+{
+ local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=1; i<68; i++)
+  {
+    local weap = GS->GetWeaponByIndex(1, i);
+    if(weap == NullObj) continue;
+    if(weap->CheckName("Skip Go") || weap->CheckName("Surrender") || weap->CheckName("Teleport")) continue;
+
+    GS->Info.SetWeaponEx(TeamNumber, i, weap->GetPageIndex(), 0);
+  }
+  
+	
+}
+
+
+
+void CWorm::DelayCheck()
+{
+ local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=1; i<68; i++)
+  {
+    local weap = GS->GetWeaponByIndex(1, i);
+    if(weap == NullObj) continue;
+    if(weap->CheckName("Skip Go") || weap->CheckName("Surrender") || weap->CheckName("Freeze")) continue;
+   
+      for(local j=0; j<71; j++)
+  {   
+        
+      if(weap->CheckName(WeaponN[j]))
+      {
+       if (GS->Info.Stores[WormTeam-1].Count[62+2] < WeaponC[j])
+        {          
+        if (GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2] !=0) 
+        {
+        GS->Info.SetWeaponDelay(TeamNumber, i, weap->GetPageIndex(), -1);
+        }
+      }
+                            
+      }  
+  }  
+ }
+	
+}
+
+void CWorm::PersonalDelayCheck()
+{
+    local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=1; i<68; i++)
+  {
+    local weap = GS->GetWeaponByIndex(1, i);
+    if(weap == NullObj) continue;
+    if(weap->CheckName("Skip Go") || weap->CheckName("Surrender") || weap->CheckName("Freeze")) continue;
+   
+      for(local j=0; j<71; j++)
+  {   if(weap->CheckName(WeaponName[j])) {
+         if(ActionPoints < WeaponAPcost[j]) {
+          if (GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2] !=0) 
+        {
+        GS->Info.SetWeaponDelay(TeamNumber, weap->GetWeaponIndex(), weap->GetPageIndex(), -1);  }   }
+        } 
+     
+  }  
+ }           
+}
+
+void CWorm::RemovePersonalDelays()
+{
+                 for(local t = 0;t<16;t++)
+                 {                  
+                 local wep = GS->GetWeaponByName(WeaponName[t]);                   
+                 if(wep == NullObj) continue;
+                 GS->Info.SetWeaponDelay(GetTeamNumber(WormTeam), wep->GetWeaponIndex(), wep->GetPageIndex(), 0);
+  }
+  
+	
+}
+
+void CWorm::AddDelays()
+{
+ local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=1; i<68; i++)
+  {
+    local weap = GS->GetWeaponByIndex(1, i);
+    if(weap == NullObj) continue;
+    if(weap->CheckName("Skip Go") || weap->CheckName("Surrender") || weap->CheckName("Teleport") || weap->CheckName("Fire Punch") || weap->CheckName("Jet Pack") || weap->CheckName("Super Punch")) continue;
+    if (GS->Info.Stores[WormTeam-1].Count[weap->GetWeaponIndex()+2] !=0) 
+    {
+    GS->Info.SetWeaponDelay(TeamNumber, i, weap->GetPageIndex(), -1);     
+    }
+  }
+  
+	
+}
+
+void CWorm::RemoveDelays()
+{
+ local TeamNumber = GetTeamNumber(WormTeam);
+  for(local i=1; i<68; i++)
+  {
+    local weap = GS->GetWeaponByIndex(1, i);
+    if(weap == NullObj) continue;
+    if(weap->CheckName("Freeze")) continue;     
+    GS->Info.SetWeaponDelay(TeamNumber, i, weap->GetPageIndex(), 0);
+  }
+  
+	
+}

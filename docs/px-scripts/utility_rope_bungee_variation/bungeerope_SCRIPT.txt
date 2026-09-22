@@ -1,0 +1,51 @@
+CBitmap32* pixel3;
+
+void bungeerope_SCRIPT::FirstFrame()
+{
+    GG->land->BitMask->Rect(-1000, -1000, -1000, -1000, 1);
+    pixel3->Rect(0,0,3,3,0);
+    //eraser fix.
+}
+
+void bungeerope_SCRIPT::InitGraphic()
+{
+    pixel3  = MakeBitmap(3, 3);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (bungeerope)
+        {
+            if (ObjState != WS_ROPING && ObjState != WS_BUNGEE && bungeerope)
+            {
+                GG->land->ApplyCustomMask(pixel3, ax-1, ay-1, CM_SOIL);
+                bungeerope = false;
+            }
+        }
+    }
+
+    super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Bungeerope"))
+    {
+        if (PosY >= 3 && PosX >= 3 && PosX <= GS->LevelSX - 3 && PosY <= Env->Water - 3)
+        {
+            ax = RopeAX/65536;
+            ay = RopeAY/65536;
+            GG->land->BitMask->Rect(ax -1, ay -1, ax +1, ay +1, 1);   //prevent the rope from being cut. invisible square
+            DestrBlit = true;
+            SetState(WS_ROPING);
+            bungeerope = true;
+        }
+
+        else ShowTeamMessage(1,"This distance isn't suitable for Bungeerope!",WormTeam); //ShowMessage("Warning: this distance isn't suitable for Bungeerope!");
+    }
+
+    super;
+}

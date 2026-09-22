@@ -1,0 +1,37 @@
+
+CSprite* cursorr;
+CSprite* cursorb;
+CSprite* cursorg;
+CSprite* cursory;
+CSprite* cursorp;
+CSprite* cursorc;
+
+
+void cursor_change::InitGraphic()
+{
+   CFile *f;
+   
+   f = GetAttachment("cursorr.png");
+   cursorr = LoadSprite(f, 64, 1);
+   f = GetAttachment("cursorb.png");
+   cursorb = LoadSprite(f, 64, 1);
+   f = GetAttachment("cursorg.png");
+   cursorg = LoadSprite(f, 64, 1);
+   f = GetAttachment("cursory.png");
+   cursory = LoadSprite(f, 64, 1);
+   f = GetAttachment("cursorp.png");
+   cursorp = LoadSprite(f, 64, 1);
+   f = GetAttachment("cursorc.png");
+   cursorc = LoadSprite(f, 64, 1);
+
+       
+   SetSpriteOverride(32, cursorr);
+   SetSpriteOverride(33, cursorb);
+   SetSpriteOverride(34, cursorg);
+   SetSpriteOverride(35, cursory);
+   SetSpriteOverride(36, cursorp);
+   SetSpriteOverride(37, cursorc);  
+     
+}   
+
+                        

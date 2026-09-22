@@ -1,0 +1,36 @@
+
+int CGOBJECT_LAYER_OVERRIDE;
+int CGOBJECT_MASKINDEX_OVERRIDE;
+
+void layer_override::FirstFrame()
+{
+	CGOBJECT_LAYER_OVERRIDE = -1;
+	CGOBJECT_MASKINDEX_OVERRIDE = -1;
+}
+
+void SetLayerOverride(int layer)
+{
+	CGOBJECT_LAYER_OVERRIDE = layer;
+}
+
+void SetMaskIndexOverride(int maskIndex)
+{
+	CGOBJECT_MASKINDEX_OVERRIDE = maskIndex;
+}
+
+override CGObject::CGObject(CObject *parent, int layer, int maskIndex)
+{
+	if(CGOBJECT_LAYER_OVERRIDE > 0)
+	{
+		layer = CGOBJECT_LAYER_OVERRIDE;
+		CGOBJECT_LAYER_OVERRIDE	= -1;
+	}
+	
+	if(CGOBJECT_MASKINDEX_OVERRIDE > 0)
+	{
+		maskIndex = CGOBJECT_MASKINDEX_OVERRIDE;
+		CGOBJECT_MASKINDEX_OVERRIDE	= -1;
+	}
+	
+	super;
+}

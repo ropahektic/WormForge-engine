@@ -1,0 +1,197 @@
+
+
+EMType M_TOUCHSENSOR;         
+EMType M_TOUCHSENSOR_COLLIDE;
+                       
+CTouchSensor : CGObject;
+CTouchSensorParent : CObject;
+
+CTouchSensorParent * TSensorParent;
+CColMask* terrainColMask;
+
+void ldetector_script::Init()
+{
+  M_TOUCHSENSOR = RegisterPXMessage();    
+  M_TOUCHSENSOR_COLLIDE = RegisterPXMessage();
+  TSensorParent = new CTouchSensorParent;
+  terrainColMask = CColMask(NullObj);
+}
+
+CTouchSensorParent::CTouchSensorParent()
+{
+  super(NullObj, GS); //GS is not initialized there.. but who cares
+  activatorObj = CGObject(NullObj);
+  isCheckCollision = false;
+}
+                                                         /*
+int CTouchSensorParent::Check(int x,int y,CColMask* trg)
+{
+  if (!isCheckCollision) return 0;
+  for (local i = 0;i < Childs.Count; i++)
+  {
+    local ts = CTouchSensor(Childs.Objs[i]);
+    if (trg->Check(x, y, ts->ColMask, ts->PosX, ts->PosY))
+    {
+      if (activatorObj != NullObj)
+      {
+        ts->activator = activatorObj;
+        ts->noCollide = false;
+        CMessageData mData;
+        ts->notify->Message( ts, M_TOUCHSENSOR, 1032, &mData);     
+        if (ts->noCollide) return -1;
+      }
+      return 1;
+    }
+  }
+  return 0;
+}                                                */
+
+CTouchSensor::CTouchSensor(CObject* notifyTo, int x, int y, int sx, int sy)
+{
+  super(Root, 1, 9); 
+  
+  ClType = EObjectClass(4020);    
+  
+  terrain = CGObject( Env->Objs.Objs[0] );
+  
+                                           
+   Env->ObjsL[1].Remove(this);              //some zhl for the win
+   Env->ObjsL[1].Remove(terrain);   
+   Env->ObjsL[1].Compact();  
+   Env->ObjsL[1].Add(this);
+   Env->ObjsL[1].Add(terrain); 
+  
+  terrainColMask = CGObject(Env->Objs.Objs[0])->ColMask;   
+  noCollide = false;
+  if ( (x + sx) > GG->land->BitMask->SX ) sx = x - GG->land->BitMask->SX;    
+  if ( (y + sy) > GG->land->BitMask->SY ) sy = y - GG->land->BitMask->SY;
+  if ( x < 0 )
+  {
+    sx += x;
+    x = 0;
+  }         
+  if ( y < 0 )
+  {
+    sy += y;
+    y = 0;
+  }
+  if ( (sx <= 0) || (sy <= 0) )
+  {
+    PosX = -1000; PosY = -1000;
+    return;
+  }
+  
+  bMask = new CBitmap1(sx, sy);
+  
+  for (local cx = 0; cx < sx; cx++)
+  {
+    for (local cy = 0; cy < sy; cy++)
+    {
+      bMask->SetPixel(cx, cy, GG->land->BitMask->GetPixel( cx+x, cy+y));
+    }
+  }
+//  GG->land->BitMask->Rect(x, y, sx+x, sy+y, 0);   //   for ropez!
+  
+  ColMask = new CColMask(0, 0, bMask);
+  
+  notify = notifyTo;
+  
+  PosX = x;
+  PosY = y;
+  Stopped = false;
+//  GravityFactor = 0;
+  IsMaterial = true;
+  IsStatic = true;
+  
+  aObjs = new CGObject*[10];
+  aCObjs = new bool[10];
+  maxObjects = 10;
+  nObjects = 0;
+}
+                                                /*
+override bool CColMask::Check(int x,int y,CColMask* trg,int trgx,int trgy)
+{
+  local ans = 0;
+  if (trg == terrainColMask)
+  {
+    ans = TSensorParent->Check(x, y, this);
+  } else if (this == terrainColMask)
+  {       
+    ans = TSensorParent->Check(trgx, trgy, trg);
+  }
+  if (ans > 0)
+  {
+    return true;
+  } else if (ans < 0) return false;
+  return super;
+}                                             */
+                                                                     
+void CTouchSensor::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type == M_FRAME)
+  {
+    if (nObjects > 0)
+    {                      
+      if (notify != NullObj)
+      {
+        CMessageData mData;
+        for (local i = 0; i < nObjects; i++)
+        {
+          activator = aObjs[i];
+          notify->Message( this, M_TOUCHSENSOR, 1032, &mData);
+        }
+      }
+      nObjects = 0;
+    }
+  }
+}
+
+override CGObject* CEnv::CheckCollisionEx(CGObject* obj,fixed x,fixed y,CColMask* mask,int colflags)
+{
+  local res = super;                       
+  
+  if (res != NullObj)
+  {            
+    if (res->ClType == EObjectClass(4020))
+    {
+      local ts = CTouchSensor(res);
+      ts->activator = obj;
+      
+      for (local i = 0; i < ts->nObjects; i++)
+      {
+          if (ts->aObjs[i] == obj)
+          {
+             if (ts->aCObjs[i]) 
+             {
+               return NullObj;
+             } else {
+               return ts->terrain;
+             }
+          }
+      }
+                                   
+      CMessageData mData;
+      mData.params[0] = 0;
+      obj->Message( ts, M_TOUCHSENSOR_COLLIDE, 1032, &mData);
+      
+      if (ts->nObjects < ts->maxObjects)
+      {
+         ts->aObjs[ts->nObjects] = obj;
+         ts->aCObjs[ts->nObjects] = mData.params[0] != 0;
+         ts->nObjects++;
+      }
+                              
+      if (mData.params[0] != 0) return NullObj;
+      return ts->terrain;
+    }
+  }
+  
+  return res;
+}                                     
+                                    
+
+                      
+bool CTouchSensor::Reflect(CGObject* Obj,int type)
+{
+  return false;
+}              

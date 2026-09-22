@@ -1,0 +1,303 @@
+require utils, wosc_lib, utils_danylo, map_object_ktk_control;
+
+int zomb_cooldown; //random cooldown for turnbegin
+int nocrash; // over 100 - it stops nextteam from crashing the game
+CWorm* Player; //non-zombie worm thats active
+
+CSprite* glowSpr;
+CSprite* crown;
+
+int KingX1;
+int KingY1;
+
+void zomb::InitGraphic()    
+{
+CFile* f;   
+f = GetAttachment("glow.png");   glowSpr = LoadSprite(f, 1, 0);
+f = GetAttachment("crown.png");  crown = LoadSprite(f, 1, 0);
+}
+
+void zomb::Init(){}
+
+void zomb::FirstFrame()
+{
+ zomb_cooldown = 0;
+ nocrash = 0;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)     
+{
+CanBeZombie = true; //always true, unless already Zombie or lower than bottom of the map (sinking).
+Zombie = false;
+Act = false; //true when IT moves 
+EndingT = false;
+DamageCooldown = 0;
+FirePunchTimer = 0;
+StopFirePunchTimer = 0;
+AttackCooldown = 0; //between attacks
+
+super;    
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+         for(int i = 1; i < Env->Objs.Count; i++)
+               {
+                    local obj = Env->Objs.Objs[i];
+                         
+                    if(obj == NullObj)
+                    {
+                         continue;
+                    }
+                         
+                    if((obj is CWorm) == false)
+                    { 
+                         continue;
+                    }
+                         
+                    CWorm* worm = CWorm(obj);
+                    
+                    if(worm == NullObj) 
+                    {
+                         continue;
+                    }
+                    
+                    if(StrCmp(GetTeamName(worm->WormTeam), "KING"))
+                    {                                                  
+                         worm->Zombie = true;
+						 if (worm->CanBeZombie == true)
+						 	{
+							worm->PosX = KingX1+10;
+						 	worm->PosY = KingY1+10;
+						 	worm->SetName("King");
+                         	worm->GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, 50);
+						 	worm->CanBeZombie = false;
+						 	}
+						 	
+                         if(worm->GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber) > 50)
+                            {
+                            worm->GS->Info.SetWormHealth(worm->WormTeam, worm->WormNumber, 50);
+                            }
+
+                         if(worm->GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber) <= 0)
+                              {                                                                                          
+                              for (local teamIndex = 1; teamIndex <= 6; teamIndex++)
+                				{
+                    			if (GetTeamColor(teamIndex) == 1) destroyTeam(teamIndex);
+				 				}
+                              }                                                                                                                          
+                    }
+               }
+         
+         
+                           
+         
+         if(FirePunchTimer != 0 && GG->land->Undestructable == false){GG->land->ApplyMask(4, PosX, PosY - 7);}
+
+         if(zomb_cooldown != 0){zomb_cooldown = zomb_cooldown - 1;}
+                     if(Zombie == true && Act == true && Root->TimerDisabled == false)
+                     {
+                     ZombieBehavior();
+                     }
+         }
+         
+         if(Type == M_TURNBEGIN)
+         {
+         if(zomb_cooldown == 0){zomb_cooldown = 10;Player = CWorm(Root->GetObject(2, 16 * WormTeam + WormNumber));MakeActive();nocrash = 0;}
+         }
+         
+         if(Type == M_TURNEND)
+         {
+         if(zomb_cooldown == 0){zomb_cooldown = 10;MakeInactive();Player = NullObj;}
+                     if(Zombie == true && zomb_cooldown == 0)
+                     {
+                     return;
+                     }
+         }
+         
+         if(Type == M_DRAWQUEUE && Zombie == true)
+         {         
+         if(TurnSide < 0)
+         {AddSpriteEx(13, PosX+5, PosY-22, crown->Index, 1.0, 0, 0.8);}
+         else
+         {AddSpriteEx(13, PosX-5, PosY-22, crown->Index + 262144, 1.0, 0, 0.8);}
+         
+         SetColorMod(ARGB(80, 0, 120, 0), 8);
+         AddSpriteEx(15, PosX, PosY, glowSpr->Index, 1.0, 0, 1.0);
+         ClearColorMod();
+         }
+         
+super;
+}
+
+void CWorm::MakeActive()
+{
+  for(local t = 1; t<7; t++)
+  {
+     for(local i = 1; i<9; i++)
+     {
+     local obj1 = CGObject(Root->GetObject(2, 16 * t + i));
+     local wrm1 = CWorm(Root->GetObject(2, 16 * t + i));
+        if (obj1 != NullObj && obj1 != CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber)) && wrm1->Zombie == true && wrm1->Act == false && wrm1 != Player)
+        {             
+             wrm1->Act = true;
+        }
+     }
+  }
+}
+
+void CWorm::MakeInactive()
+{
+  for(local t = 1; t<7; t++)
+  {
+     for(local i = 1; i<9; i++)
+     {
+     local obj1 = CGObject(Root->GetObject(2, 16 * t + i));
+     local wrm1 = CWorm(Root->GetObject(2, 16 * t + i));
+        if (obj1 != NullObj && obj1 != CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber)) && wrm1->Zombie == true && wrm1->Act == true && wrm1 != Player)
+        {             
+             wrm1->Act = false;
+        }
+     }
+  }
+}
+
+
+
+void CWorm::ZombieBehavior()
+{
+   if(AttackCooldown > 0){AttackCooldown = AttackCooldown - 1;}
+               local obj1 = CGObject(Root->GetObject(2, 16 * WormTeam + WormNumber));
+               local wrm1 = CWorm(Root->GetObject(2, 16 * WormTeam + WormNumber));
+                          if (obj1 != NullObj && Player != NullObj )
+                          {
+                              if(Player != this && wrm1->isInvisible == false)
+                              {                                   
+                                   local w = GetCurrentWorm();
+                                   if (w != NullObj && GetTeamColor(w->WormTeam) != 1)
+                                   {
+                                   
+                                   float radius = 100.0;
+                    
+                                   float dx = Player->PosX - PosX;
+                                   float dy = Player->PosY - PosY;                    
+                                   float dist = sqrt(dx * dx + dy * dy);
+                                                                                                         
+                                   if(dist < radius)
+                                   {   
+                                   FirePunch(obj1,wrm1);
+                                           if(obj1->PosX < Player->PosX + 20 && obj1->PosX > Player->PosX - 20 && obj1->PosY > Player->PosY - 12 && obj1->PosY < Player->PosY + 90)
+                                           {
+                                           return;
+                                           }
+                                   Moving(obj1,wrm1);   
+                                   }
+                                   else
+                                   {
+                                   if(ObjState == WS_IDLE){Leap(obj1,wrm1);}
+                                   }
+                    
+                                   }
+                    
+                              }
+                          }
+}
+
+void CWorm::FirePunch(CGObject* obj1, CWorm* worm1)
+{
+
+        if(obj1->PosX <= Player->PosX + 20 && obj1->PosX >= Player->PosX - 20 && obj1->PosY > Player->PosY - 12 && obj1->PosY < Player->PosY + 100 && AttackCooldown == 0)
+        {
+        if(ObjState == WS_IDLE || ObjState == WS_JUMP || ObjState == WS_WALKING || ObjState == WS_SLIDING || ObjState == WS_JUMPPREPARE)
+        {
+          if(obj1->PosX < Player->PosX){worm1->TurnSide = 1;}else{worm1->TurnSide = -1;}
+        AttackCooldown = 60;
+        PunchIt(); //workaround for online games
+        }
+        }
+}
+
+void CWorm::PunchIt()
+{
+     SpY = -6;
+     SpX = 0;
+     FirePunchTimer = 30;
+}
+
+void CWorm::Moving(CGObject* obj1, CWorm* worm1)
+{
+    if(obj1->PosX > Player->PosX)
+    {
+     CMessageData msgleft;
+     msgleft.params[0] = worm1->WormTeam;
+     obj1->Message(NullObj, M_PLEFT, 1032, &msgleft);
+    }
+    
+    if(obj1->PosX < Player->PosX)
+    {
+     CMessageData msgright;
+     msgright.params[0] = worm1->WormTeam;
+     obj1->Message(NullObj, M_PRIGHT, 1032, &msgright);
+    }
+}
+
+void CWorm::Leap(CGObject* obj1, CWorm* worm1)
+{
+  if(DistBetweenObjs(Player, CWorm(Root->GetObject(2, 16 * WormTeam + WormNumber))) <= 96)
+  {
+     int hitx;
+     int hity;
+     local flags = 2+4+8+16+32;
+     CWorm *hitObject = TraceLine(this, PosX, PosY, Player->PosX, Player->PosY, flags, &hitx, &hity);
+           if(hitObject != NullObj)
+           {                   
+           if(hitObject->ClType == OC_Worm)
+			{
+			local worm = CWorm(hitObject);
+			if(worm == Player)
+			                  {
+                                          MakeLeap(CWorm(Root->GetObject(2, 16 * WormTeam + WormNumber)), Player);
+			                  }
+                        }
+           }
+   }
+}
+
+void CWorm::MakeLeap(CWorm* Leaper, CWorm* Target)     //how to skillfully apply aiming script to leaping worm:
+{
+  if(Leaper->PosX < Target->PosX){Leaper->TurnSide = 1;}else{Leaper->TurnSide = -1;}
+  CShootDesc sdesc;
+  zero(&sdesc);
+
+  local l = DistBetweenObjs(Target, Leaper);
+  local timeForShoot = l / 10 + 1;         
+  local x = Target->PosX - PosX;
+  local rx = x / timeForShoot;
+  local y = Target->PosY - PosY;
+  local ry = SolveBallistic(y, timeForShoot, Env->Gravity * Target->GravityFactor);
+  
+  local angToShoot = 0.0;
+  local shootdir = 0;
+  if (rx > 0)
+  {
+    angToShoot = atan2(rx, 0 - ry);
+    shootdir = 1;
+  } else {
+    angToShoot = atan2(0 - rx, 0 - ry);
+    shootdir = -1;  
+  };
+  
+  local shootPower = sqrt(rx * rx + ry * ry);
+  local ForceVar = GS->GetRandom() % 64;
+  local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+  
+  sdesc.X = PosX + sin(angToShoot) * shootdir * 14;      //
+  sdesc.Y = PosY - cos(angToShoot) * 14;                 //
+  local ShootSX = sin(angToShoot) * shootdir;
+  local ShootSY = 0.0 - cos(angToShoot);
+  
+  SpX = ShootSX * BaseForce;          //
+  SpY = ShootSY * BaseForce;          //
+}

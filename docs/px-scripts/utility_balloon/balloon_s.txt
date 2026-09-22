@@ -1,0 +1,214 @@
+//r2_balloon by rafa''2, modified by 0rang3
+
+require utils, wosc_lib;
+
+#PARTY_BALLOON
+
+CSprite * balloon_spr;
+CSprite * wballoon_spr;
+
+CSoundFile* inflate1;
+CSoundFile* inflate2;
+CSoundFile* inflate3;
+
+CSoundFile* pop1;
+CSoundFile* pop2;
+CSoundFile* pop3;
+CSoundFile* pop4;
+
+void balloon_s::InitGraphic()
+{   
+    balloon_spr = LoadSprite(GetAttachment("balloon.png"), 16, 3);
+    wballoon_spr = LoadSprite(GetAttachment("wballoon.png"), 17, 3);
+}
+
+void balloon_s::Init()
+{   
+    inflate1 = new CSoundFile(GetAttachment("inflate1.wav"));
+    inflate2 = new CSoundFile(GetAttachment("inflate2.wav"));
+    inflate3 = new CSoundFile(GetAttachment("inflate3.wav"));
+    
+    pop1 = new CSoundFile(GetAttachment("pop1.wav"));
+    pop2 = new CSoundFile(GetAttachment("pop2.wav"));
+    pop3 = new CSoundFile(GetAttachment("pop3.wav"));
+    pop4 = new CSoundFile(GetAttachment("pop4.wav"));
+}
+
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+    super;
+    balloon_gravity      = 0;
+    balloon_frame_b      = 0.0;
+    balloon_frame_w      = 0.0;
+    balloon_max_frame_b  = 200;
+    balloon_max_frame_w  = 80;
+    balloon_initial_tick = 0;
+    balloon_spd_factor_b = float(1 / balloon_max_frame_b);
+    balloon_spd_factor_w = float(1 / balloon_max_frame_w);   
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+     if(balloon_active)
+     {
+          
+          if(Type == M_FRAME)
+          {
+               
+               if(ObjState == WS_PARACHUTE)
+               {
+                    GravityFactor = balloon_gravity;
+               }
+               else
+               {
+                    if(ObjState == WS_IDLE)
+                    {
+                         SetState(WS_SLIDING);
+                    }                    
+                    StopBalloon();                                      
+               }  
+               
+               balloon_frame_b = (GS->Tick - balloon_initial_tick) % balloon_max_frame_b;
+               balloon_frame_w = (GS->Tick - balloon_initial_tick) % balloon_max_frame_w;                          
+          }
+
+          if(Type == M_TURNBEGIN || Type == M_TURNEND)
+          {
+                StopBalloon();
+          }
+     }
+     else
+     {
+         if(Type == M_FRAME)
+         {
+              balloon_gravity = -GravityFactor;
+         }
+     }
+     
+     super;
+}
+
+void CWorm::DrawBalloonWorm()
+{
+local w = GetCurrentWorm();
+if (w == NullObj) return;
+   
+SetColorMod(GetTeamColorRGB(GetTeamColor(WormTeam)+1), 8);
+AddSpriteEx( 6.2, PosX + (6 * TurnSide), PosY-43, balloon_spr->Index,
+            balloon_frame_b * balloon_spd_factor_b, 0, 1);
+ClearColorMod();
+
+if (w->SickDamage > 0) {SetColorMod(RGB(0, 130, 0), 4);}
+if(isInvisible)
+	{
+    local c = GetTeamColor(WormTeam);
+    if((GG->machColors[GetLocalMachine()] & (1 << c)) != 0)
+        {
+        if (w->SickDamage > 0) SetColorMod(ARGB(100, 0, 130, 0), (1 | 4));
+        else SetColorMod(ARGB(100, 0, 0, 0), (1 | 4));
+        }
+	}
+
+AddSpriteEx( 6.1, PosX + (6 * TurnSide), PosY + 3, wballoon_spr->Index + 262144 * -Sign(-TurnSide - 1), //
+            balloon_frame_w * balloon_spd_factor_w, 0, 1);
+            
+if (w->SickDamage > 0) ClearColorMod();
+
+if(isInvisible)
+	{
+    local c = GetTeamColor(WormTeam);
+    if((GG->machColors[GetLocalMachine()] & (1 << c)) != 0)
+        {
+        ClearColorMod();
+        }
+	}
+}
+
+override void CWorm::RenderWorm()
+{
+if(!balloon_active)
+    {
+	super;
+    }
+if (balloon_active)
+	{
+	DrawBalloonWorm();
+	}
+}
+
+override void CWorm::OnSink()
+{
+     if(balloon_active)
+     {
+         StopBalloon();
+     }
+     super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+     if(Weap->CheckName("Hot Air Balloon"))
+     {
+         balloon_active = true;
+         balloon_initial_tick = GS->Tick;         
+         disableGlider();
+         vol = CalculateSoundVolume(PosX,PosY);
+     	 pan = CalculateSoundPan(PosX,PosY);
+         local i = RandomInt(1, 3);
+               if      (i == 1) inflate1->Play(vol, pan, false);
+               else if (i == 2) inflate2->Play(vol, pan, false);
+               else if (i == 3) inflate3->Play(vol, pan, false);
+     }
+     else 
+     {
+         super;
+     }
+}
+                            
+void CWorm::StopBalloon()
+{ 
+    GravityFactor   = -balloon_gravity;
+    balloon_active  =  false;
+    balloon_frame_b = 0.0;
+    balloon_frame_w = 0.0;
+    balloon_initial_tick = 0;
+    vol = CalculateSoundVolume(PosX,PosY);
+    pan = CalculateSoundPan(PosX,PosY);
+    
+    local i = RandomInt(1, 4);
+    if      (i == 1) pop1->Play(vol, pan, false);
+    else if (i == 2) pop2->Play(vol, pan, false);
+    else if (i == 3) pop3->Play(vol, pan, false);
+    else if (i == 4) pop4->Play(vol, pan, false);
+    
+     
+    disableGlider();
+}
+
+override void CSpriteAnim::SetAnimEx(int sindex, fixed frame)
+{
+	if(GS->Tick >= 1)
+	{
+		CWorm *w = GetCurrentWorm();
+		
+		if(w != NullObj && w->Anim == this && w->balloon_active)
+		{
+			if(sindex == 287 || sindex == 288) sindex = 278;
+			else if(sindex == 289) sindex = 272;
+                        else if(sindex == 290) sindex = 273;
+			else if(sindex == 291) sindex = 274;
+			}
+	}
+	super(sindex, frame);
+}
+
+void CWorm::disableGlider()
+{
+     if(#WEAPON_GLIDER)
+    {
+         if(Glider == NullObj) 
+              return;
+              
+         Glider->Enabled = false;
+    }
+}

@@ -1,0 +1,710 @@
+require utils;
+
+
+CMissile* MagicMole;
+CMissile* WalkingMole;
+CMissile* WalkingMoleNM;
+
+CFoam : CGObject;
+
+int MagicMolePosX;
+int MagicMolePosY;
+
+int MagicMolePosXNM;
+int MagicMolePosYNM;
+
+int MagicMoleExplodeTimer;
+int CustomRetreatTimer;
+
+int mlastX;
+int mlastY;
+float molerot;
+int everyxframe;
+int everyxframeDQ;
+int fn;
+
+int fcount;
+int fcolor;
+int moleframe;
+
+float currVecX;
+float currVecY;
+
+int foamx[50];
+int foamy[50];
+bool foamdone;
+
+
+CSprite* mdk;
+CSprite* mdn;
+
+CSprite* mwk;
+CSprite* mwn;
+
+CSprite* transp;
+
+CBitmap32* DigFoam;
+CBitmap32* DigFoam2;
+CBitmap1* FMask;
+CSprite* DigFoamSpr;
+
+
+CColMask* circleCM;
+
+
+override void CGObject::LookAtMe(fixed x,fixed y,int priority)
+{
+    if(MagicMole == NullObj){
+        super;
+    }else{
+        if(     (abs(MagicMole->PosX - x) > 100) || (abs(MagicMole->PosY - y) > 100)){
+            return;
+        }else{
+            super;
+        }
+    }
+}
+
+void magic_mole::InitGraphic()
+{
+    circleCM = new CColMask(15,15,MakeCircleMask(15));
+
+    local f  = GetAttachment("dig.png"); mdk = LoadSprite(f, 3, 1);
+    local f  = GetAttachment("dign.png"); mdn = LoadSprite(f, 3, 1);
+
+    local f  = GetAttachment("w.png"); mwk = LoadSprite(f, 8, 1);
+    local f  = GetAttachment("wn.png"); mwn = LoadSprite(f, 8, 1);
+
+
+    local f  = GetAttachment("trans.png"); transp = LoadSprite(f, 1, 0);
+    local f  = GetAttachment("digland.png"); DigFoamSpr = LoadSprite(f, 1, 0);
+
+    local f  = GetAttachment("digland.png"); DigFoam  = LoadImage(f);
+    local f  = GetAttachment("digland2.png"); DigFoam2  = LoadImage(f);
+
+    local f  = GetAttachment("foammask.png"); FMask  = LoadImage(f);
+
+}
+
+void magic_mole::Init()
+{
+MagicMole = NullObj;
+WalkingMole = NullObj;
+MagicMolePosX = 0; //Seems to be the place where mole started jump.
+MagicMolePosY = 0;
+MagicMoleExplodeTimer = 0;
+CustomRetreatTimer = 0;
+mlastX = 0;
+mlastY = 0;
+molerot = 0.0;
+everyxframe = 0;
+everyxframeDQ = 0;
+foamdone = false;
+}
+
+void magic_mole::FirstFrame()
+{
+foamdone = false;
+}
+
+
+
+
+CFoam::CFoam(CObject* parent, fixed x, fixed y)
+{
+    super(parent, 7, 7);
+
+    PosX          = x;
+    PosY          = y;
+    IsMaterial    = true;
+
+    animSeed = GS->Tick;
+
+    ClType        = EObjectClass(8866);
+    ColGroup      = 198782 ;
+    ColMask->CColMask(10, 10, FMask);
+    GravityFactor = 0.1;
+    Layer = 17; //oil drum..?
+
+    owningTeam   = 0;
+}
+
+void CFoam::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ super;
+
+    if (Type == M_FRAME) {
+    if (Sinking == 1) Free(true);
+
+    }
+
+     if (Type == M_DRAWQUEUE) {
+         AddSpriteEx(15,PosX,PosY,DigFoamSpr->Index,0.0,0.0,0.9 + (sin((GS->Tick+animSeed/50))*0.1) );
+     }
+}
+
+void CFoam::FirstFrame(){
+
+}
+
+
+
+
+
+void foamArrPush(){
+
+          for(fn = 0; fn<50; fn++){
+                if((48-fn) >= 0){
+                    ix = foamx[48-fn];
+                    iy = foamy[48-fn];
+                    foamx[49-fn] = ix;
+                    foamy[49-fn] = iy;
+                }
+            }
+
+            if(foamx[49] != 0){
+                foamdone=true;
+            }
+
+}
+void foamArrEmpty(){
+    local DFbmp = DigFoam;
+    for(fn = 0; fn<50; fn++){
+        if(foamx[fn] != 0 && foamy[fn] != 0){
+                    GG->land->Draw(DFbmp, foamx[fn], foamy[fn]);
+        }
+                    foamx[fn] = 0;
+                    foamy[fn] = 0;
+            }
+
+}
+
+
+
+override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+//MagicMoleInertiaTimer = 60;  //So that the mole can't go upward infinitely.
+super;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{        local dx = 0;
+        local dy = 0;
+        local DFbmp = DigFoam;
+        local DFbmp2 = DigFoam2;
+   if(Type == M_FRAME)
+   {
+
+
+         if(MagicMole == NullObj)
+         {
+                      if(weap->CheckName("Super Mole Bomb") == true)
+                      {
+                      WalkingMole = this;
+                      }
+         }
+
+         if(MagicMoleNM == NullObj)
+         {
+                      if(weap->CheckName("Mole Bomb") == true)
+                      {
+                      WalkingMoleNM = this;
+                      }
+         }
+
+
+         if(MagicMoleExplodeTimer > 0 && MagicMole == NullObj)
+         {
+         MagicMoleExplodeTimer = MagicMoleExplodeTimer - 1;
+              if(PosX <= MagicMolePosX + 10 && PosX >= MagicMolePosX - 10)
+              {
+                 if(PosY <= MagicMolePosY + 10 && PosY >= MagicMolePosY - 10)
+                 {
+                 MagicMole = this;
+
+                 MagicMoleExplodeTimer = 0;
+                //GG->WriteToChat( 1, "MM was set", false);
+                 }
+              }
+         }
+         if(MagicMoleNM == NullObj)
+         {
+              if(PosX <= MagicMolePosXNM + 10 && PosX >= MagicMolePosXNM - 10)
+              {
+                 if(PosY <= MagicMolePosYNM + 10 && PosY >= MagicMolePosYNM - 10)
+                 {
+                 MagicMoleNM = this;
+                 }
+              }
+         }
+         if(MagicMole != NullObj)
+         {
+
+                if(MagicMole == this)
+                {
+                             if(SpX > 0){Side = 1;}
+                             if(SpX < 0){Side = -1;}
+                             local lCurrWorm = GetCurrentWorm();
+                             if(lCurrWorm != NullObj){
+                                 if(lCurrWorm->KaozActive == false && lCurrWorm->KaozActiveBeta == false){
+                                    Root->RetreatTimer = 30;
+                                 }
+                             }
+
+
+                             //ActionType=3;
+
+                }
+         }
+         if(MagicMoleNM != NullObj)
+         {
+
+                if(MagicMoleNM == this)
+                {
+                             if(SpX > 0){Side = 1;}
+                             if(SpX < 0){Side = -1;}
+
+
+                }
+         }
+
+
+
+        if (MagicMole != NullObj && MagicMole == this) { //digging/flying kamikaze mole
+            everyxframe = (everyxframe + 1) % 5;
+
+
+
+
+           if((Env->Water - MagicMole->PosY) < 9)
+           {
+                ExplodeAt(MagicMole->PosX, MagicMole->PosY);
+                return;
+           }
+
+
+
+
+
+           // LookAtMe(MagicMole->PosX,MagicMole->PosY,1);
+            if(everyxframe == 4){
+
+
+                if(mlastX != 0 && mlastY != 0){
+
+                    if(mlastX != MagicMole->PosX && mlastY != MagicMole->PosY){
+
+                        dx = mlastX - MagicMole->PosX;
+                        dy = mlastY - MagicMole->PosY;
+
+                        //if(ar>0) {molerot = ar*360;} else {molerot = 2*MATH_PI  + ar;}
+                        //molerot = (-atan2(-dx,-dy))/MATH_PI*180 + 180;
+                        molerot = -atan2(dx, dy) - MATH_PI + MATH_PI * 360;
+
+                        currangleAtan = atan2(dx, dy);
+                        currangleRad = (((currangleAtan + MATH_PI) / 2) * 360) / MATH_PI; //radians , down = 0, up = 180, right = 90
+                        currangleNormal = (currangleAtan + MATH_PI);
+                        currVecX = (cos(currangleNormal+1.57));
+                        currVecY = (sin(currangleNormal-1.57));
+
+                        //Issue: When mole is digging, its not getting the right angle, its too glitchy.
+                    }
+                }
+
+            }
+           // if(MagicMole->IsFlying == true){
+
+            //}
+
+            //GG->WriteToChat( 1, ItoA(lastdbg), false);
+            if(currVecX != 0 && currVecY != 0){ //if we have a direction of mole
+
+
+                local Obje = Env->CheckCollision( this, MagicMole->PosX+((currVecX*-1)*1), MagicMole->PosY+((currVecY*-1)*1) );
+                if(Obje != NullObj){if(Obje->ClType == OC_Landscape){
+                   foamx[0] = int(MagicMole->PosX) - 10;
+                   foamy[0] = int(MagicMole->PosY) - 10;
+                }else{
+                   foamx[0] = 0; foamy[0] = 0;
+                }
+
+                }else{
+                   foamx[0] = 0; foamy[0] = 0;
+                }
+
+
+                foamArrPush();
+
+
+
+                if(foamdone == true){
+                    local drx = foamx[49];//(currVecX*(moleframe%10));//(foamx[49] + (currVecX*30) - 6);
+                    local dry = foamy[49]; //(currVecY*(moleframe%10));//(foamy[49] + (currVecY*30));
+
+                    fcount = (fcount+1)%10;
+
+
+                    if(fcount == 0){
+                        fcolor = (fcolor + 1) % 2;
+                    }
+
+
+                    if(drx != 0 && dry != 0){
+                        if(fcolor == 0){
+                            GG->land->Draw(DFbmp2, drx, dry);
+                        }else{
+                            GG->land->Draw(DFbmp, drx, dry);
+                        }
+                    }
+                    moleframe++;
+                }
+            }
+            //GG->WriteToChat( 1, ItoA(currvectorRad), false);
+            if(molerot > 1128.0){
+                //AddSpriteEx(5,MagicMole->PosX,MagicMole->PosY,mdk->Index,abs(sin((GS->Tick/5))),molerot+1.5,1.0);
+            }else{
+
+                    //AddSpriteEx(5,MagicMole->PosX,MagicMole->PosY,(mdk->Index)+262144,abs(sin((GS->Tick/5))),molerot-1.5,1.0);
+
+            }
+
+            if(everyxframe == 0){
+            mlastX = MagicMole->PosX;
+            mlastY = MagicMole->PosY;
+            }
+
+
+    }
+
+   }
+   /* DESYNC !!! WTF! PARTICLES CANT DSYNC!
+    if (Type == M_DRAWQUEUE && MagicMole != NullObj && MagicMole == this) {//digging/flying normal mole
+       if(GS->Tick % 3 == 0){ //DESYNC ?
+            PxParticle *p;
+            p = new PxParticle(DigFoamSpr->Index, MagicMole->PosX, MagicMole->PosY);
+            p->SetBlendMode(0);
+            p->SetLifeTime(150);
+            p->SetRandomVelocity(0.05, 0.05);
+            p->SetAirResistance(0.0);
+            p->GravityFactor(0.0);
+            //p->SetAlpha(255);
+
+
+            p->SetColor(
+            Lerp(sin((GS->Tick/5)), 144, 161),
+            Lerp(sin((GS->Tick/5)), 63, 92),
+            Lerp(sin((GS->Tick/5)), 31, 64)
+            );
+
+            p->SetStartSize(0.5, 0.5);
+            p->SetEndSize(1.2, 1.2);
+       }
+   }
+   */
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+        local dx = 0;
+        local dy = 0;
+        local DFbmp = DigFoam;
+        local DFbmp2 = DigFoam2;
+
+   if(Type == M_PUP)
+   {
+
+           //if(MagicMole != NullObj && (GS->LevelSY - MagicMole->PosY) > 10) water rises.... BUG.
+
+           if(MagicMole != NullObj && (Env->Water - MagicMole->PosY) > 10)
+           {
+
+              //if(MagicMole->MagicMoleInertiaTimer > 0)
+              //{
+              if(MagicMole->SpY >= -10){MagicMole->SpY = MagicMole->SpY - 0.5;}
+              //MagicMole->MagicMoleInertiaTimer = MagicMole->MagicMoleInertiaTimer - 1;
+              //MD->PosY = MD->PosY - 10;
+              //GG->WriteToChat( 1, "UP2", false);
+              //}
+           return;
+           }
+   }
+
+   if(Type == M_PDOWN)
+   {
+
+           if(MagicMole != NullObj && (GS->LevelSY - MagicMole->PosY) > 10)
+           {
+           if(MagicMole->SpY <= 10){MagicMole->SpY = MagicMole->SpY + 0.5;}
+           return;
+           }
+   }
+
+   if(Type == M_PLEFT)
+   {
+           if(MagicMole != NullObj && (GS->LevelSY - MagicMole->PosY) > 10)
+           {
+           if(MagicMole->SpX >= -10){MagicMole->SpX = MagicMole->SpX - 0.5;}
+           return;
+           }
+   }
+
+
+   if(Type == M_PRIGHT)
+   {
+
+           if(MagicMole != NullObj && (GS->LevelSY - MagicMole->PosY) > 1)
+           {
+           if(MagicMole->SpX <= 10){MagicMole->SpX = MagicMole->SpX + 0.5;}
+           return;
+           }
+   }
+
+
+
+    if (Type == M_DRAWQUEUE && MagicMoleNM != NullObj) {//digging/flying normal mole
+        everyxframeDQ = (everyxframeDQ + 1) % 5;
+
+
+        if(everyxframeDQ == 4){
+            if(mlastX != 0 && mlastY != 0){
+
+                if(mlastX != MagicMoleNM->PosX && mlastY != MagicMoleNM->PosY){
+
+
+                    dx = mlastX - MagicMoleNM->PosX;
+                    dy = mlastY - MagicMoleNM->PosY;
+
+
+                    //if(ar>0) {molerot = ar*360;} else {molerot = 2*MATH_PI  + ar;}
+                    //molerot = (-atan2(-dx,-dy))/MATH_PI*180 + 180;
+                    molerot = -atan2(dx, dy) - MATH_PI + MATH_PI * 360;
+                }
+            }
+
+        }
+
+        if(molerot > 1128.0){
+            //AddSpriteEx(5,MagicMoleNM->PosX,MagicMoleNM->PosY,mdn->Index,abs(sin((GS->Tick/5))),molerot+1.5,1.0);
+        }else{
+            //AddSpriteEx(5,MagicMoleNM->PosX,MagicMoleNM->PosY,(mdn->Index)+262144,abs(sin((GS->Tick/5))),molerot-1.5,1.0);
+        }
+
+        if(everyxframeDQ == 0){
+        mlastX = MagicMoleNM->PosX;
+        mlastY = MagicMoleNM->PosY;
+         }
+
+
+    }
+
+
+    if (Type == M_DRAWQUEUE && WalkingMole != NullObj) {//walking kamikaze mole
+        everyxframeDQ = (everyxframeDQ + 1) % 5;
+        if(everyxframeDQ == 4){
+            if(mlastX != 0 && mlastY != 0){
+                if(mlastX != WalkingMole->PosX && mlastY != WalkingMole->PosY){
+                    dx = mlastX - WalkingMole->PosX;
+                    dy = mlastY - WalkingMole->PosY;
+                    molerot = -atan2(dx, dy) - MATH_PI + MATH_PI * 360;
+                }
+            }
+
+        }
+
+
+
+        if(molerot > 1128.0){
+           // AddSpriteEx(5,WalkingMole->PosX,WalkingMole->PosY,mwk->Index,abs(sin((GS->Tick/15))),0.0,1.0);
+        }else{
+            //AddSpriteEx(5,WalkingMole->PosX,WalkingMole->PosY,(mwk->Index)+262144,abs(sin((GS->Tick/15))),0.0,1.0);
+        }
+
+        if(everyxframeDQ == 0){
+        mlastX = WalkingMole->PosX;
+        mlastY = WalkingMole->PosY;
+         }
+
+
+
+    }
+        if (Type == M_DRAWQUEUE && WalkingMoleNM != NullObj) {//walking nornmal mole
+        everyxframeDQ = (everyxframeDQ + 1) % 5;
+        if(everyxframeDQ == 4){
+            if(mlastX != 0 && mlastY != 0){
+                if(mlastX != WalkingMoleNM->PosX && mlastY != WalkingMoleNM->PosY){
+                    dx = mlastX - WalkingMoleNM->PosX;
+                    dy = mlastY - WalkingMoleNM->PosY;
+                    molerot = -atan2(dx, dy) - MATH_PI + MATH_PI * 360;
+                }
+            }
+
+        }
+
+
+
+        if(molerot > 1128.0){
+           // AddSpriteEx(5,WalkingMoleNM->PosX,WalkingMoleNM->PosY,mwn->Index,abs(sin((GS->Tick/15))),0.0,1.0);
+        }else{
+           // AddSpriteEx(5,WalkingMoleNM->PosX,WalkingMoleNM->PosY,(mwn->Index)+262144,abs(sin((GS->Tick/15))),0.0,1.0);
+        }
+
+        if(everyxframeDQ == 0){
+        mlastX = WalkingMoleNM->PosX;
+        mlastY = WalkingMoleNM->PosY;
+         }
+
+
+
+    }
+
+   if(Type == M_TURNBEGIN && MagicMole != NullObj)
+   {
+   MagicMole = NullObj;
+   MagicMolePosX = 0;
+   MagicMolePosY = 0;
+   MagicMoleExplodeTimer = 0;
+   WalkingMole = NullObj;
+   //GG->WriteToChat( 1, "tbegin", false);
+   }
+   if(Type == M_TURNBEGIN && MagicMoleNM != NullObj)
+   {
+   MagicMoleNM = NullObj;
+   MagicMolePosXNM = 0;
+   MagicMolePosYNM = 0;
+   WalkingMoleNM = NullObj;
+   }
+
+super;
+}
+
+
+void SpawnMineMole(int x, int y, int teamz)
+{
+            CMineParams MParams;
+            CShootDesc SDesc;
+            zero(&MParams);
+            zero(&SDesc);
+            MParams.Prefuse = 500;  //time before ability to activate
+            MParams.Flags = 60;    //flags of objects to react on
+            MParams.Bias = 0;     //Y shift of explosion
+            MParams.Damage = 29;  //damage
+            MParams.BlastPower = 300;
+            MParams.Fuse = 3000;
+            MParams.Radius = 40;
+            SDesc.Team = teamz;
+            SDesc.X = 0;
+            SDesc.Y = 0;
+            SDesc.SpX = 0;   //speed
+            SDesc.SpY = 0;
+            local Mine = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+            Mine->PosX = x;
+            Mine->PosY = y;
+
+}
+
+
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+
+     if(MagicMole != NullObj)
+     {
+         if(MagicMole == this)
+         {
+            /*
+            local r = 0;
+            local c = 0;
+            local n = 0;
+            for(n = 0; n<16; n++){
+                local sx = 0;
+                local sy = 0;
+
+                if(n%4 == 0){r++; c = 0;}
+                sx = (x - 20) + (10*c) + 5;
+                sy = (y - 20) + (10*r) - 5;
+                local Obje = CheckMaskAt(CGObject(Env->Objs.Objs[0]), circleCM, sx, sy, -1);
+                if(Obje != NullObj){if(Obje->ClType != OC_Worm && Obje->ClType != OC_Landscape && Obje->ClType != OC_Crate && Obje->ClType != OC_OilDrum){
+
+
+
+                local lt = new CFoam(Root->GetObject(25, 0),sx,sy);
+                lt->owningTeam = CMissile(this)->initdesc.Team;
+                lt->SpY = -0.0;
+                lt->SpX = 0.0;
+
+                //lt->CColMask(8, 8, MakeCircleMask(15));
+                }}
+                c++;
+            }
+             */
+
+           SpawnMineMole(x,y, MagicMole->initdesc.Team);
+
+           everyxframe = 0;
+           everyxframeDQ = 0;
+           currVecX = 0; currVecY = 0;
+           foamArrEmpty();
+           foamdone = false;
+           MagicMole = NullObj;
+           MagicMolePosX = 0;
+           MagicMolePosX = 0;
+           MagicMoleExplodeTimer = 0;
+           //GG->WriteToChat( 1, "mm null", false);
+           local lCurrW = GetCurrentWorm();
+           if(lCurrW == NullObj){
+                Root->RetreatTimer = 0;
+           }else{
+               if(lCurrW->KaozActive == false && lCurrW->KaozActiveBeta == false){
+               Root->RetreatTimer = 3000;
+               }
+           }
+
+         }
+     }
+     if(MagicMoleNM != NullObj)
+     {
+         if(MagicMoleNM == this)
+         {
+           MagicMoleNM = NullObj;
+           MagicMolePosXNM = 0;
+           MagicMolePosXNM = 0;
+         }
+     }
+     if(weap->CheckName("Super Mole Bomb") == true && MagicMole == NullObj)
+     {
+
+         MagicMolePosX = x;
+         MagicMolePosY = y;
+         MagicMoleExplodeTimer = 10;
+         WalkingMole = NullObj;
+
+     }
+     if(weap->CheckName("Mole Bomb") == true && MagicMoleNM == NullObj)
+     {
+         MagicMolePosXNM = x;
+         MagicMolePosYNM = y;
+         WalkingMoleNM = NullObj;
+
+     }
+super;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_FRAME)
+         {
+                // if(MagicMole != NullObj || WalkingMole != NullObj)
+               //  {
+                    //if(CustomRetreatTimer == 0){CustomRetreatTimer = RetreatTimer;}    //freezing Retreat Timer while Moles are active.
+               //  RetreatTimer = 30; //seems to prevent antiglitch, a value of 5 breaks mole movement
+                 //GG->WriteToChat( 1, "retreat set", false);
+               //  }
+         }
+
+         if(Type == M_TURNBEGIN)
+         {
+         if(CustomRetreatTimer != 0){CustomRetreatTimer = 0;}
+         }
+super;
+}

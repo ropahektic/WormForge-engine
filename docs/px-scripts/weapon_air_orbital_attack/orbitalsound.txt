@@ -1,0 +1,15 @@
+CSoundFile* satellitelasersound;
+ 
+void orbitalsound::Init()
+{
+	satellitelasersound       = new CSoundFile(GetAttachment("Satellite Laser.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Orbital Attack"))
+  {  
+             satellitelasersound->Play(1.75, 0.0, false);
+  }
+  super;
+}

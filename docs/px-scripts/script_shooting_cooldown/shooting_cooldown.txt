@@ -1,0 +1,22 @@
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+Cooldown = 0;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+CanFire = false;
+Cooldown = 60;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if(Type == M_FRAME && CanFire == false)
+	{
+	if(Cooldown > 0){Cooldown = Cooldown - 1;}
+	else{CanFire = true;}
+	}
+}

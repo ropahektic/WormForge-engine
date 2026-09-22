@@ -1,0 +1,41 @@
+//List of sprites
+
+CSprite* wcrate1;
+CSprite* mcrate1;
+CSprite* ucrate1;
+CSprite* wcrate2;
+CSprite* mcrate2;
+CSprite* ucrate2;
+
+
+void crates_change::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   
+   f = GetAttachment("wcrate1.png"); 
+   wcrate1 = LoadSprite(f, 15, -1);
+   f = GetAttachment("mcrate1.png"); 
+   mcrate1 = LoadSprite(f, 12, -1);
+   f = GetAttachment("ucrate1.png"); 
+   ucrate1 = LoadSprite(f, 20, -1);
+   
+   f = GetAttachment("wcrate2.png"); 
+   wcrate2 = LoadSprite(f, 20, -1);
+   f = GetAttachment("mcrate2.png"); 
+   mcrate2 = LoadSprite(f, 20, -1);
+   f = GetAttachment("ucrate2.png"); 
+   ucrate2 = LoadSprite(f, 20, -1);
+   
+  
+   //Let's override the sprites!
+   
+   SetSpriteOverride(96, wcrate1);
+   SetSpriteOverride(97, mcrate1);
+   SetSpriteOverride(98, ucrate1);
+   
+   SetSpriteOverride(99, wcrate2);
+   SetSpriteOverride(100, mcrate2);
+   SetSpriteOverride(101, ucrate2);
+   
+}

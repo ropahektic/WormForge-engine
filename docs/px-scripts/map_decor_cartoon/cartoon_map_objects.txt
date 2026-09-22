@@ -1,0 +1,1838 @@
+//map_objects by 0rang3, based on golf zones by PyroMan
+
+require utils;
+
+#cartoon_map_objects
+
+$editor
+ 
+ $object cartoon_bush1                  // Name your object 1
+  $image "cartoon_bush1.png"            // Name of your png file with object
+  $autoname cartoon_bush1               // Name for editor
+  $func Spawncartoon_bush1              // Name of function
+  $origin -38 -54             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_bush2                 // Name your object 2
+  $image "cartoon_bush2.png"           // Name of your png file with object
+  $autoname cartoon_bush2              // Name for editor
+  $func Spawncartoon_bush2             // Name of function
+  $origin -190 -143             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_bush3                   // Name your object 3
+  $image "cartoon_bush3.png"             // Name of your png file with object
+  $autoname cartoon_bush3                // Name for editor
+  $func Spawncartoon_bush3               // Name of function
+  $origin -76 -79             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_bush4                  // Name your object 4
+  $image "cartoon_bush4.png"            // Name of your png file with object
+  $autoname cartoon_bush4               // Name for editor
+  $func Spawncartoon_bush4              // Name of function
+  $origin -75 -78             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_fence                  // Name your object 5
+  $image "cartoon_fence.png"            // Name of your png file with object
+  $autoname cartoon_fence               // Name for editor
+  $func Spawncartoon_fence              // Name of function
+  $origin -97 -69             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_flower1                 // Name your object 6
+  $image "cartoon_flower1.png"           // Name of your png file with object
+  $autoname cartoon_flower1              // Name for editor
+  $func Spawncartoon_flower1             // Name of function
+  $origin -15 -53             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_flower2                   // Name your object 7
+  $image "cartoon_flower2.png"             // Name of your png file with object
+  $autoname cartoon_flower2                // Name for editor
+  $func Spawncartoon_flower2               // Name of function
+  $origin -23 -58             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_grass1                  // Name your object 8
+  $image "cartoon_grass1.png"            // Name of your png file with object
+  $autoname cartoon_grass1               // Name for editor
+  $func Spawncartoon_grass1              // Name of function
+  $origin -18 -19             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_grass2                  // Name your object 9
+  $image "cartoon_grass2.png"            // Name of your png file with object
+  $autoname cartoon_grass2               // Name for editor
+  $func Spawncartoon_grass2              // Name of function
+  $origin -26 -27             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_grass3                  // Name your object 10
+  $image "cartoon_grass3.png"            // Name of your png file with object
+  $autoname cartoon_grass3               // Name for editor
+  $func Spawncartoon_grass3              // Name of function
+  $origin -53 -25             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_house                   // Name your object 11
+  $image "cartoon_house.png"             // Name of your png file with object
+  $autoname cartoon_house                // Name for editor
+  $func Spawncartoon_house               // Name of function
+  $origin -132 -272             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_root1                  // Name your object 12
+  $image "cartoon_root1.png"            // Name of your png file with object
+  $autoname cartoon_root1               // Name for editor
+  $func Spawncartoon_root1              // Name of function
+  $origin -36 -17             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_root2                  // Name your object 13
+  $image "cartoon_root2.png"            // Name of your png file with object
+  $autoname cartoon_root2               // Name for editor
+  $func Spawncartoon_root2              // Name of function
+  $origin -33 -15             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_stalactite1                 // Name your object 14
+  $image "cartoon_stalactite1.png"           // Name of your png file with object
+  $autoname cartoon_stalactite1              // Name for editor
+  $func Spawncartoon_stalactite1             // Name of function
+  $origin -40 -243             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_stalactite2                 // Name your object 15
+  $image "cartoon_stalactite2.png"           // Name of your png file with object
+  $autoname cartoon_stalactite2              // Name for editor
+  $func Spawncartoon_stalactite2
+  $origin -43 -256             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+$object cartoon_stalactite3                 // Name your object 16
+  $image "cartoon_stalactite3.png"           // Name of your png file with object
+  $autoname cartoon_stalactite3              // Name for editor
+  $func Spawncartoon_stalactite3
+  $origin -43 -165             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_stalactite4                 // Name your object 17
+  $image "cartoon_stalactite4.png"           // Name of your png file with object
+  $autoname cartoon_stalactite4              // Name for editor
+  $func Spawncartoon_stalactite4
+  $origin -45 -162             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_stone1                 // Name your object 18
+  $image "cartoon_stone1.png"           // Name of your png file with object
+  $autoname cartoon_stone1              // Name for editor
+  $func Spawncartoon_stone1             // Name of function
+  $origin -16 -44             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+  $object cartoon_stone2                 // Name your object 19
+  $image "cartoon_stone2.png"           // Name of your png file with object
+  $autoname cartoon_stone2              // Name for editor
+  $func Spawncartoon_stone2             // Name of function
+  $origin -37 -18             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+  $object cartoon_stone3                 // Name your object 20
+  $image "cartoon_stone3.png"           // Name of your png file with object
+  $autoname cartoon_stone3              // Name for editor
+  $func Spawncartoon_stone3             // Name of function
+  $origin -25 -23             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_stone4                 // Name your object 21
+  $image "cartoon_stone4.png"           // Name of your png file with object
+  $autoname cartoon_stone4              // Name for editor
+  $func Spawncartoon_stone4             // Name of function
+  $origin -45 -70             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_stump                 // Name your object 22
+  $image "cartoon_stump.png"           // Name of your png file with object
+  $autoname cartoon_stump              // Name for editor
+  $func Spawncartoon_stump             // Name of function
+  $origin -34 -49             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_tree1                   // Name your object 23
+  $image "cartoon_tree1.png"             // Name of your png file with object
+  $autoname cartoon_tree1                // Name for editor
+  $func Spawncartoon_tree1               // Name of function
+  $origin -80 -270             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_tree2                   // Name your object 24
+  $image "cartoon_tree2.png"             // Name of your png file with object
+  $autoname cartoon_tree2                // Name for editor
+  $func Spawncartoon_tree2               // Name of function
+  $origin -69 -148             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_tree3                   // Name your object 25
+  $image "cartoon_tree3.png"             // Name of your png file with object
+  $autoname cartoon_tree3                // Name for editor
+  $func Spawncartoon_tree3               // Name of function
+  $origin -116 -273             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_tree4                   // Name your object 26
+  $image "cartoon_tree4.png"             // Name of your png file with object
+  $autoname cartoon_tree4                // Name for editor
+  $func Spawncartoon_tree4               // Name of function
+  $origin -101 -251             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+ 
+ $object cartoon_tree5                   // Name your object 27
+  $image "cartoon_tree5.png"             // Name of your png file with object
+  $autoname cartoon_tree5                // Name for editor
+  $func Spawncartoon_tree5               // Name of function
+  $origin -155 -310             // Set these numbers as negatives of x = half of width, y = hight  
+  $radius 15
+  $param Size int 100
+  $param Rotation int 0
+  $param Flip enum 2 No Yes
+  $param Z_Layer enum 3 Behind_Map Above_Map Above_Worm
+  $param Color_R int 255
+  $param Color_G int 255
+  $param Color_B int 255
+  $param Transparency enum 2 No Yes
+ $object_end
+
+
+$end 
+
+////////////////////////////////////////////////////////////////////////////////
+
+CSpritercartoon_bush1 : CObject;          
+CSpritercartoon_bush2 : CObject;         
+CSpritercartoon_bush3 : CObject;           
+CSpritercartoon_bush4 : CObject;
+CSpritercartoon_fence : CObject;          
+CSpritercartoon_flower1 : CObject;         
+CSpritercartoon_flower2 : CObject;           
+CSpritercartoon_grass1 : CObject;
+CSpritercartoon_grass2 : CObject;          
+CSpritercartoon_grass3 : CObject;         
+CSpritercartoon_house : CObject;           
+CSpritercartoon_root1 : CObject;
+CSpritercartoon_root2 : CObject;          
+CSpritercartoon_stalactite1 : CObject;         
+CSpritercartoon_stalactite2 : CObject;           
+CSpritercartoon_stalactite3 : CObject;
+CSpritercartoon_stalactite4 : CObject;          
+CSpritercartoon_stone1 : CObject;         
+CSpritercartoon_stone2 : CObject;           
+CSpritercartoon_stone3 : CObject;
+CSpritercartoon_stone4 : CObject;          
+CSpritercartoon_stump : CObject;         
+CSpritercartoon_tree1 : CObject;           
+CSpritercartoon_tree2 : CObject;
+CSpritercartoon_tree3 : CObject;          
+CSpritercartoon_tree4 : CObject;         
+CSpritercartoon_tree5 : CObject;          
+
+CSprite*cartoon_bush1;                    
+CSprite*cartoon_bush2;                   
+CSprite*cartoon_bush3;                     
+CSprite*cartoon_bush4;
+CSprite*cartoon_fence;                    
+CSprite*cartoon_flower1;                   
+CSprite*cartoon_flower2;                     
+CSprite*cartoon_grass1;
+CSprite*cartoon_grass2;                    
+CSprite*cartoon_grass3;                   
+CSprite*cartoon_house;                     
+CSprite*cartoon_root1;
+CSprite*cartoon_root2;                    
+CSprite*cartoon_stalactite1;                   
+CSprite*cartoon_stalactite2;                     
+CSprite*cartoon_stalactite3;
+CSprite*cartoon_stalactite4;                    
+CSprite*cartoon_stone1;                   
+CSprite*cartoon_stone2;                     
+CSprite*cartoon_stone3;
+CSprite*cartoon_stone4;                    
+CSprite*cartoon_stump;                   
+CSprite*cartoon_tree1;                     
+CSprite*cartoon_tree2;
+CSprite*cartoon_tree3;                   
+CSprite*cartoon_tree4;                     
+CSprite*cartoon_tree5;                    
+
+////////////////////////////////////////////////////////////////////////////////
+
+void cartoon_map_objects::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("cartoon_bush1.png");			cartoon_bush1 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_bush2.png");			cartoon_bush2 = LoadSprite(f, 1, 0);	
+        f = GetAttachment("cartoon_bush3.png");			cartoon_bush3 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_bush4.png");			cartoon_bush4 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_fence.png");			cartoon_fence = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_flower1.png");		cartoon_flower1 = LoadSprite(f, 1, 0);	
+        f = GetAttachment("cartoon_flower2.png");		cartoon_flower2 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_grass1.png");		cartoon_grass1 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_grass2.png");		cartoon_grass2 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_grass3.png");		cartoon_grass3 = LoadSprite(f, 1, 0);	
+        f = GetAttachment("cartoon_house.png");			cartoon_house = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_root1.png");			cartoon_root1 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_root2.png");			cartoon_root2 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_stalactite1.png");		cartoon_stalactite1 = LoadSprite(f, 1, 0);	
+        f = GetAttachment("cartoon_stalactite2.png");		cartoon_stalactite2 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_stalactite3.png");		cartoon_stalactite3 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_stalactite4.png");		cartoon_stalactite4 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_stone1.png");		cartoon_stone1 = LoadSprite(f, 1, 0);	
+        f = GetAttachment("cartoon_stone2.png");		cartoon_stone2 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_stone3.png");		cartoon_stone3 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_stone4.png");		cartoon_stone4 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_stump.png");			cartoon_stump = LoadSprite(f, 1, 0);	
+        f = GetAttachment("cartoon_tree1.png");			cartoon_tree1 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_tree2.png");			cartoon_tree2 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_tree3.png");			cartoon_tree3 = LoadSprite(f, 1, 0);
+        f = GetAttachment("cartoon_tree4.png");			cartoon_tree4 = LoadSprite(f, 1, 0);	
+        f = GetAttachment("cartoon_tree5.png");			cartoon_tree5 = LoadSprite(f, 1, 0);	
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Object 1 Settings
+
+CSpritercartoon_bush1::CSpritercartoon_bush1(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(27*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(27*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 2 Settings
+
+CSpritercartoon_bush2::CSpritercartoon_bush2(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(72*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(72*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 3 Settings
+
+CSpritercartoon_bush3::CSpritercartoon_bush3(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(40*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(40*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 4 Settings
+
+CSpritercartoon_bush4::CSpritercartoon_bush4(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(39*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(39*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 5 Settings
+
+CSpritercartoon_fence::CSpritercartoon_fence(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(35*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(35*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 6 Settings
+
+CSpritercartoon_flower1::CSpritercartoon_flower1(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(26*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(26*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 7 Settings
+
+CSpritercartoon_flower2::CSpritercartoon_flower2(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(29*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(29*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 8 Settings
+
+CSpritercartoon_grass1::CSpritercartoon_grass1(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(10*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(10*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 9 Settings
+
+CSpritercartoon_grass2::CSpritercartoon_grass2(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(13*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(13*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 10 Settings
+
+CSpritercartoon_grass3::CSpritercartoon_grass3(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(13*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(13*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 11 Settings
+
+CSpritercartoon_house::CSpritercartoon_house(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(136*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(136*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 12 Settings
+
+CSpritercartoon_root1::CSpritercartoon_root1(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(8*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(8*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 13 Settings
+
+CSpritercartoon_root2::CSpritercartoon_root2(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(7*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(7*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 14 Settings
+
+CSpritercartoon_stalactite1::CSpritercartoon_stalactite1(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(121*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(121*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 15 Settings
+
+CSpritercartoon_stalactite2::CSpritercartoon_stalactite2(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(128*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(128*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 16 Settings
+
+CSpritercartoon_stalactite3::CSpritercartoon_stalactite3(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(82*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(82*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 17 Settings
+
+CSpritercartoon_stalactite4::CSpritercartoon_stalactite4(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(81*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(81*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 18 Settings
+
+CSpritercartoon_stone1::CSpritercartoon_stone1(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(22*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(22*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 19 Settings
+
+CSpritercartoon_stone2::CSpritercartoon_stone2(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(9*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(9*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 20 Settings
+
+CSpritercartoon_stone3::CSpritercartoon_stone3(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(11*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(11*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 21 Settings
+
+CSpritercartoon_stone4::CSpritercartoon_stone4(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(35*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(35*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 22 Settings
+
+CSpritercartoon_stump::CSpritercartoon_stump(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(25*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(25*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 23 Settings
+
+CSpritercartoon_tree1::CSpritercartoon_tree1(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(135*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(135*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 24 Settings
+
+CSpritercartoon_tree2::CSpritercartoon_tree2(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(74*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(74*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 25 Settings
+
+CSpritercartoon_tree3::CSpritercartoon_tree3(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(136*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(136*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 26 Settings
+
+CSpritercartoon_tree4::CSpritercartoon_tree4(CEditorObject* aobj)
+{
+  super(Root, GS);
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;
+  
+  newx = x+(125*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(125*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+// Object 27 Settings
+
+CSpritercartoon_tree5::CSpritercartoon_tree5(CEditorObject* aobj)
+{
+  super(Root, GS); 
+  Color_R = aobj->GetInt("Color_R");
+  Color_G = aobj->GetInt("Color_G");
+  Color_B = aobj->GetInt("Color_B");
+  Scale = aobj->GetInt("Size");
+  scale = Scale/100.0;
+  rot = aobj->GetInt("Rotation")/57.325;
+  x = aobj->PosX;
+  y = aobj->PosY;        
+  
+  newx = x+(155*sin(rot))*scale;      // number is half of hight of your image
+  newy = y-(155*cos(rot))*scale;      // number is half of hight of your image
+  
+  if (StrCmp(aobj->GetString("Z_Layer"), "Behind_Map")) z = 25;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Map")) z = 15;
+  if (StrCmp(aobj->GetString("Z_Layer"), "Above_Worm")) z = 5;
+  
+  if (StrCmp(aobj->GetString("Transparency"), "No")) transp = 0;
+  if (StrCmp(aobj->GetString("Transparency"), "Yes")) transp = 1;
+  
+  if (StrCmp(aobj->GetString("Flip"), "No")) flip = 0;
+  if (StrCmp(aobj->GetString("Flip"), "Yes")) flip = 262144;   
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Draw Object 1
+
+void CSpritercartoon_bush1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_bush1->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 2 
+        
+void CSpritercartoon_bush2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_bush2->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 3 
+
+void CSpritercartoon_bush3::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_bush3->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 4 
+        
+void CSpritercartoon_bush4::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_bush4->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 5
+
+void CSpritercartoon_fence::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_fence->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 6 
+        
+void CSpritercartoon_flower1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_flower1->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 7 
+
+void CSpritercartoon_flower2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_flower2->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 8 
+        
+void CSpritercartoon_grass1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_grass1->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 9
+
+void CSpritercartoon_grass2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_grass2->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 10 
+        
+void CSpritercartoon_grass3::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_grass3->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 11
+
+void CSpritercartoon_house::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_house->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 12
+        
+void CSpritercartoon_root1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_root1->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 13
+
+void CSpritercartoon_root2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_root2->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 14
+        
+void CSpritercartoon_stalactite1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_stalactite1->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 15 
+
+void CSpritercartoon_stalactite2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_stalactite2->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 16 
+        
+void CSpritercartoon_stalactite3::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_stalactite3->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 17
+
+void CSpritercartoon_stalactite4::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_stalactite4->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 18 
+        
+void CSpritercartoon_stone1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_stone1->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 19
+
+void CSpritercartoon_stone2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_stone2->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 20
+        
+void CSpritercartoon_stone3::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_stone3->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 21
+
+void CSpritercartoon_stone4::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_stone4->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 22 
+        
+void CSpritercartoon_stump::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_stump->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 23 
+
+void CSpritercartoon_tree1::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_tree1->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 24 
+        
+void CSpritercartoon_tree2::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_tree2->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 25
+
+void CSpritercartoon_tree3::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_tree3->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 26 
+        
+void CSpritercartoon_tree4::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_tree4->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+// Draw Object 27 
+
+void CSpritercartoon_tree5::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_DRAWQUEUE)
+    {
+        sprite = cartoon_tree5->Index;
+        SetColorMod(RGB(Color_R, Color_G, Color_B), transp); 
+        AddSpriteEx(z, newx, newy, sprite+flip, 0.0, rot, scale);
+        ClearColorMod();
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Spawn Object 1
+
+void Spawncartoon_bush1(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_bush1(obj);
+}       
+
+// Spawn Object 2
+
+void Spawncartoon_bush2(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_bush2(obj);
+}
+
+// Spawn Object 3
+
+void Spawncartoon_bush3(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_bush3(obj);
+}       
+
+// Spawn Object 4
+
+void Spawncartoon_bush4(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_bush4(obj);
+}
+
+// Spawn Object 5
+
+void Spawncartoon_fence(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_fence(obj);
+}       
+
+// Spawn Object 6
+
+void Spawncartoon_flower1(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_flower1(obj);
+}
+
+// Spawn Object 7
+
+void Spawncartoon_flower2(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_flower2(obj);
+}       
+
+// Spawn Object 8
+
+void Spawncartoon_grass1(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_grass1(obj);
+}  
+
+// Spawn Object 9
+
+void Spawncartoon_grass2(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_grass2(obj);
+}       
+
+// Spawn Object 10
+
+void Spawncartoon_grass3(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_grass3(obj);
+}
+
+// Spawn Object 11
+
+void Spawncartoon_house(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_house(obj);
+}       
+
+// Spawn Object 12
+
+void Spawncartoon_root1(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_root1(obj);
+}  
+
+// Spawn Object 13
+
+void Spawncartoon_root2(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_root2(obj);
+}       
+
+// Spawn Object 14
+
+void Spawncartoon_stalactite1(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_stalactite1(obj);
+}
+
+// Spawn Object 15
+
+void Spawncartoon_stalactite2(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_stalactite2(obj);
+}       
+
+// Spawn Object 16
+
+void Spawncartoon_stalactite3(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_stalactite3(obj);
+}  
+
+// Spawn Object 17
+
+void Spawncartoon_stalactite4(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_stalactite4(obj);
+}       
+
+// Spawn Object 18
+
+void Spawncartoon_stone1(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_stone1(obj);
+}
+
+// Spawn Object 19
+
+void Spawncartoon_stone2(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_stone2(obj);
+}       
+
+// Spawn Object 20
+
+void Spawncartoon_stone3(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_stone3(obj);
+}  
+
+// Spawn Object 21
+
+void Spawncartoon_stone4(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_stone4(obj);
+}       
+
+// Spawn Object 22
+
+void Spawncartoon_stump(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_stump(obj);
+}
+
+// Spawn Object 23
+
+void Spawncartoon_tree1(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_tree1(obj);
+}       
+
+// Spawn Object 24
+
+void Spawncartoon_tree2(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_tree2(obj);
+}  
+
+// Spawn Object 25
+
+void Spawncartoon_tree3(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_tree3(obj);
+}       
+
+// Spawn Object 26
+
+void Spawncartoon_tree4(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_tree4(obj);
+}
+
+// Spawn Object 27
+
+void Spawncartoon_tree5(CEditorObject* obj)
+{
+  zone = new CSpritercartoon_tree5(obj);
+}                                                                    

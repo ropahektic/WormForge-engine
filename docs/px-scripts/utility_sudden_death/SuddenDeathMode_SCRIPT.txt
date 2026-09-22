@@ -1,0 +1,23 @@
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{ 
+  if(Weap->CheckName("Sudden Death Mode"))
+  {  
+     if(Root->SuddenDeath == false)
+     {
+        Root->SuddenDeath = true;
+        Root->SD_Check = true;
+        PlayLocalSound(7, 3, 1.0, 1.0);
+        ShowMessage("Sudden Death Mode: ON");
+     }
+         
+     else if(Root->SuddenDeath == true)
+     {
+        Root->SuddenDeath = false;
+        Root->RaiseWater = false;
+        Root->SD_Check = false;
+        PlayLocalSound(1, 3, 1.0, 1.0);
+        ShowMessage("Sudden Death Mode: OFF");
+     }      
+  } 
+  super;
+}

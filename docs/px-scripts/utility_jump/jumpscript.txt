@@ -1,0 +1,66 @@
+void jumpscript::InitGraphic()
+{
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Jump"))
+  {
+    SpX = Desc->SpX;
+    SpY = Desc->SpY;
+    SettingJump = false;
+    PlaySoundBank(150,1.0);
+    return;
+  }
+  super;
+}
+
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+	if((sound == 140 || sound == 177) && CurWeapon->CheckName("Jump")) return;
+    super;
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    SettingJump = false;
+}
+                                  
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if(Type == M_SPACE)
+		{
+        if(CurWeapon->CheckName("Jump"))
+			{
+            SettingJump = true;
+            }
+        }
+
+	if(Type == M_FRAME)
+		{
+		if (CurWeapon->CheckName("Jump"))
+		{
+			local Team = CTeam(GetObject(21, WormTeam));
+			Team->AllowSelectDelay = false;
+			Team->AllowSelectBounce = false;
+		}
+		
+        if(SettingJump == true)
+			{
+            if (ObjState == WS_SETPOWER || ObjState == WS_FIRED || ObjState == WS_FIRECONT)
+                {
+                Anim->Reset();
+                Anim->SetAnimEx(269, FirePower);
+                }
+			else SettingJump = false;
+            }
+        }
+        
+    if(Type == M_TURNEND)
+		{
+        SettingJump = false;
+        }
+
+super;
+}

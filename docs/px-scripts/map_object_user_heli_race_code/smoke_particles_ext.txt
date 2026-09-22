@@ -1,0 +1,287 @@
+#particleSystem
+
+CParticleExtendedMan : CObject;
+CParticleExtendedMan* parmanExtended;
+float maximumHealthBoost;
+float healingFactor;
+float toxicDamage;
+CSprite* parspritesExtended[8];
+
+CParticleExtendedDesc::CParticleExtendedDesc()
+{
+};
+
+CParticleExtendedDesc::CParticleExtendedDesc(CParticleExtendedDesc* from)
+{
+  startsize = from->startsize;
+  endsize = from->endsize;
+  texindex = from->texindex;
+  startA = from->startA;
+  endA = from->endA;
+  colorR = from->colorR;
+  colorG = from->colorG;
+  colorB = from->colorB;
+  lifetime = from->lifetime;
+  lifevar = from->lifevar;
+  sizevar = from->sizevar;
+  gravity = from->gravity;
+  rotspeed = from->rotspeed;
+  randomrot = from->randomrot;
+  damping = from->damping;
+  randomness = from->randomness;
+  collide = from->collide;
+  toxic = from->toxic;
+};
+
+CParticleExtendedMan::CParticleExtendedMan()
+{
+  super(Root, GS);
+
+  smokedesc = new CParticleExtendedDesc();
+  smokedesc->startsize = 2.0;
+  smokedesc->endsize = 2.25;
+  smokedesc->texindex = 0;
+  smokedesc->startA = 255;
+  smokedesc->endA = 35;
+  smokedesc->colorR = 128;
+  smokedesc->colorG = 128;
+  smokedesc->colorB = 128;
+  smokedesc->lifetime = 240; //in frames
+  smokedesc->lifevar = 40;
+  smokedesc->sizevar = 0.1;
+  smokedesc->gravity = -0.02;
+  smokedesc->rotspeed = 0.1;
+  smokedesc->randomrot = true;
+  smokedesc->damping = 0.995;
+  smokedesc->randomness = 0.05;
+  smokedesc->collide = true;
+  smokedesc->toxic = 0;
+
+  toxicdesc = new CParticleExtendedDesc(smokedesc);
+  toxicdesc->toxic = 2;
+  toxicdesc->colorG = 220;
+  toxicdesc->startsize = 0.75;
+  toxicdesc->endsize = 1.75;
+
+  lsmokedesc = new CParticleExtendedDesc(smokedesc);
+  lsmokedesc->lifetime = 940; //in frames
+  lsmokedesc->lifevar = 100;
+  lsmokedesc->gravity = -0.035;
+  lsmokedesc->damping = 0.998;
+
+};
+
+void CParticleExtendedMan::ParticleBoom(int n, float x, float y, float sp, float healing, float toxicDam, float maxHealthBoost, CParticleExtendedDesc* desc)
+{
+
+  healingFactor = healing;
+  toxicDamage = toxicDam;
+  maximumHealthBoost = maxHealthBoost;
+  for (local i = 0; i < n; i += 1)
+  {
+     local prtcl = new CParticleExtended(this, desc);
+     prtcl->x = x;
+     prtcl->y = y;
+     prtcl->spx = sp * srandom_b() / 2.0;
+     prtcl->spy = sp * srandom_b() / 2.0;
+  };
+};
+
+void smoke_particles_ext::FirstFrame()
+{
+  parmanExtended = new CParticleExtendedMan();
+};
+
+void smoke_particles_ext::InitGraphic()
+{
+  local f = GetAttachment("smoke.png");
+  parspritesExtended[0] = LoadSprite(f, 1, 0);
+};
+
+void ParticleExtendedMan_Render()
+{
+  parmanExtended->Render();
+};
+
+void CParticleExtendedMan::Render()
+{
+   for (local i = 0; i < Childs.Count; i+=1)
+   {
+     local obj = CParticleExtended(Childs.Objs[i]);
+     if (obj == CParticleExtended(NullObj)) continue;
+     obj->Render();
+   };
+};
+
+void CParticleExtendedMan::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+  //CParticleExtendedMan acts like a filter for particles
+
+  if (Type == M_FRAME)
+  {
+     super; //retranslate messages to childrens
+  };
+  if (Type == M_DRAWQUEUE)
+  {
+     AddCustomRender(6, "ParticleExtendedMan_Render");
+  };
+
+  if (Type == M_FRAME)
+  {
+//     local destroyed = true;
+//     while (destroyed)
+//     {
+//      destroyed = false;
+      for (i = 0; i < Childs.Count; i += 1)
+      {
+       local obj = CParticleExtended(Childs.Objs[i]);
+       if (obj == CParticleExtended(NullObj)) continue;
+       if (obj->destroyme)
+       {
+          obj->Free(true);
+          destroyed = true;
+          break;
+       };
+      };
+//     };
+  };
+};
+
+bool CParticleExtendedMan::CheckPoint(int x, int y)
+{
+//  if (x < 0) return false;
+//  if (y < 0) return false;
+//  if (x >= GS->LevelSX) return false;
+//  if (y >= GS->LevelSY) return false;
+//  if (x >= GG->land->BitMask->right || y >= GG->land->BitMask->SY) return false;
+  return GG->land->BitMask->GetPixel(x, y);
+};
+
+CParticleExtended : CObject;
+
+CParticleExtended::CParticleExtended(CParticleExtendedMan* aman, CParticleExtendedDesc* pdesc)
+{
+  man = aman;
+  super(man, GS); //lol
+  x = 0.0;
+  y = 0.0;
+  spx = 0.0;
+  spy = 0.0;
+  counter = 0;
+  gravity = pdesc->gravity;
+  wind = 0.0;
+  randomness = pdesc->randomness;
+  rotspeed = pdesc->rotspeed;
+  life = 0.0;
+  lifetime = pdesc->lifetime + pdesc->lifevar * srandom_b();
+  desc = pdesc;
+  startsize = pdesc->startsize + pdesc->sizevar * srandom_b();
+  endsize = pdesc->endsize;
+  if (pdesc->randomrot)
+  {
+    rot = srandom_p() * 6.0;
+  } else {
+    rot = 0.0;
+  };
+
+  color = ARGB(0, 255, 255, 255);
+  destroyme = false;
+};
+
+void CParticleExtended::Render()
+{
+    if (destroyme) return;
+    local part = life / lifetime;
+    local size = startsize + (endsize - startsize) * part;
+    local sindex = parspritesExtended[desc->texindex]->Index;
+    local alpha = desc->startA + (desc->endA - desc->startA) * part;
+    local col = ARGB(alpha, desc->colorR, desc->colorG, desc->colorB);
+
+    CQuad q;
+    FillSpriteQuad(&q, sindex, 0, 0);
+    TransformQuad(&q, rot, size, size, x, y);
+    q.blend = 0;
+    for (local i = 0; i < 4; i += 1) q.v[i].color = col;
+
+    RenderQuad(&q, 0);
+};
+
+void CParticleExtended::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+  if (destroyme) return;
+  if (Type == M_FRAME)
+  {
+    counter += 1;
+    if (desc->collide)
+    {
+      local trgx = x + spx;
+      local trgy = y + spy;
+      while (man->CheckPoint(trgx, trgy))  //cheap way
+      {
+         if (srandom_p() < 0.5)
+         {
+            spx = spy * -0.94;
+            spy = spx * 0.94;
+         } else {
+            spx = spy * 0.94;
+            spy = spx * -0.94;
+         };
+         trgx = x + spx;
+         trgy = y + spy;
+         if (abs(spx) < 0.1 && abs(spy) < 0.1) break;
+      };
+    };
+    if (desc->toxic > 0)
+    {
+      if (counter % 8 == 0)
+      {
+        for (i = 0; i < Env->Objs.Count; i += 1)
+        {
+          local ob = Env->Objs.Objs[i];
+          local obj = CGObject(ob);
+          if (obj == NullObj) continue;
+          if (obj->ClType != OC_Worm) continue;
+          if (abs(obj->PosX - x) < 20)
+          {
+            if (abs(obj->PosY - y) < 20)
+            {
+              mdata = new CMessageData;
+              mdata->params[0] = toxicDamage;
+              mdata->params[1] = -1;
+              mdata->params[2] = 0;
+              obj->Message(this, M_POISON, 1032, mdata);
+              delete mdata;
+              if (healingFactor > 0) {
+                 if (counter % 16 == 0) {
+                    local worm = CWorm(obj);
+                    if (GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber) <= maximumHealthBoost) {
+	               GS->Info.SetWormHealth( worm->WormTeam, worm->WormNumber, GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber)+healingFactor);
+                    }
+                 }
+              }
+            };
+          };
+        };
+      };
+    };
+    x += spx;
+    y += spy;
+    spx += wind;
+    spy += gravity;
+    rot += rotspeed;
+    life += 1.0;
+    spx = spx * desc->damping;
+    spy = spy * desc->damping;
+
+    if (randomness > 0.0)
+    {
+       spx += srandom_b() * randomness;
+       spy += srandom_b() * randomness;
+    };
+
+    if (life > lifetime)
+    {
+      destroyme = true;
+    };
+  };
+};

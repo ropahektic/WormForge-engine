@@ -1,0 +1,298 @@
+// made by 0rang3
+
+require utils;
+
+// loading sprites
+CSprite*castle;
+CSprite*cloud;
+CSprite*flag;
+CSprite*hill;
+CSprite*land;
+CSprite*mushroom;
+CSprite*platform;
+CSprite*stair;
+CSprite*stair2;
+CSprite*tube;
+
+// loading bitmaps
+CBitmap* castle_bitmap;
+CBitmap* cloud_bitmap;
+CBitmap* flag_bitmap;
+CBitmap* hill_bitmap;
+CBitmap* land_bitmap;
+CBitmap* mushroom_bitmap;
+CBitmap* platform_bitmap;
+CBitmap* stair_bitmap;
+CBitmap* stair2_bitmap;
+CBitmap* tube_bitmap;
+
+// loading sounds
+CSoundFile* brick;
+CSoundFile* mario_theme;
+
+bool MarioBuilder_Informer;
+
+void mario_builder_script::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("castle.png");			castle = LoadSprite(f, 1, 0);
+	f = GetAttachment("cloud.png");				cloud = LoadSprite(f, 1, 0);
+	f = GetAttachment("flag.png");				flag = LoadSprite(f, 1, 0);
+	f = GetAttachment("hill.png");				hill = LoadSprite(f, 1, 0);
+	f = GetAttachment("land.png");				land = LoadSprite(f, 1, 0);
+	f = GetAttachment("mushroom.png");			mushroom = LoadSprite(f, 1, 0);
+	f = GetAttachment("platform.png");			platform = LoadSprite(f, 1, 0);
+	f = GetAttachment("stair.png");				stair = LoadSprite(f, 1, 0);
+	f = GetAttachment("stair2.png");			stair2 = LoadSprite(f, 1, 0);
+	f = GetAttachment("tube.png");				tube = LoadSprite(f, 1, 0);
+
+    local spr = GetAttachment("castle.png");		castle_bitmap = LoadImage(spr);
+	local spr = GetAttachment("cloud.png");			cloud_bitmap = LoadImage(spr);
+    local spr = GetAttachment("flag.png");			flag_bitmap = LoadImage(spr);
+    local spr = GetAttachment("hill.png");			hill_bitmap = LoadImage(spr);
+    local spr = GetAttachment("land.png");			land_bitmap = LoadImage(spr);
+    local spr = GetAttachment("mushroom.png");		mushroom_bitmap = LoadImage(spr);
+    local spr = GetAttachment("platform.png");		platform_bitmap = LoadImage(spr);
+    local spr = GetAttachment("stair.png");			stair_bitmap = LoadImage(spr);
+    local spr = GetAttachment("stair2.png");		stair2_bitmap = LoadImage(spr);
+    local spr = GetAttachment("tube.png");			tube_bitmap = LoadImage(spr);
+}
+
+void mario_builder_script::FirstFrame()
+{
+   keySync->AddKey(49); // 1 button
+   keySync->AddKey(50); // 2 button
+   keySync->AddKey(51); // 3 button
+   keySync->AddKey(52); // 4 button
+   keySync->AddKey(53); // 5 button
+   keySync->AddKey(54); // 6 button
+   keySync->AddKey(55); // 7 button
+   keySync->AddKey(56); // 8 button
+   keySync->AddKey(57); // 9 button
+   keySync->AddKey(48); // 0 button
+
+   f = GetAttachment("brick.wav");	 		brick = new CSoundFile(f);
+   f = GetAttachment("mario_theme.wav");	mario_theme = new CSoundFile(f);
+
+   MarioBuilder_Informer = false;
+}
+
+// NOTE! The game draws land with left top corner of the coordinates
+// But draws sprites placing it's center on the coordinates
+// This is why we need offsets
+// offsetX is always half of width
+// offsetY is always half of height
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+if(Type == M_FRAME)
+   	{
+    if(CurWeapon->CheckName("Mario Builder (x4)") || CurWeapon->CheckName("Mario Builder (x5)"))
+      	{
+        if(MarioBuilder_Informer == true)
+         	{
+            ShowTeamMessage(7,"Choose a piece from 1-0 and click to draw",WormTeam);
+            PlayLocalSound(1, 1.0, 1.0, 1.0);
+            MarioBuilder_Informer = false;
+         	}
+
+        if(keySync->KeyPressedNow(49))
+         	{
+         	bmp = castle_bitmap;
+         	sprite = castle->Index;
+         	offsetX = 80;
+         	offsetY = 48;
+            ShowTeamMessage(7,"Castle",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(50))
+         	{
+         	bmp = cloud_bitmap;
+         	sprite = cloud->Index;
+         	offsetX = 62;
+         	offsetY = 22;
+            ShowTeamMessage(7,"Cloud",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(51))
+         	{
+         	bmp = flag_bitmap;
+         	sprite = flag->Index;
+         	offsetX = 24;
+         	offsetY = 168;
+            ShowTeamMessage(7,"Flag",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(52))
+         	{
+         	bmp = hill_bitmap;
+         	sprite = hill->Index;
+         	offsetX = 78;
+         	offsetY = 34;
+            ShowTeamMessage(7,"Hill",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(53))
+         	{
+         	bmp = land_bitmap;
+         	sprite = land->Index;
+         	offsetX = 96;
+         	offsetY = 32;
+            ShowTeamMessage(7,"Land",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(54))
+         	{
+         	bmp = mushroom_bitmap;
+         	sprite = mushroom->Index;
+         	offsetX = 48;
+         	offsetY = 64;
+            ShowTeamMessage(7,"Mushroom",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(55))
+         	{
+         	bmp = platform_bitmap;
+         	sprite = platform->Index;
+         	offsetX = 112;
+         	offsetY = 16;
+            ShowTeamMessage(7,"Platform",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(56))
+         	{
+         	bmp = stair_bitmap;
+         	sprite = stair->Index;
+         	offsetX = 64;
+         	offsetY = 64;
+            ShowTeamMessage(7,"Stair",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(57))
+         	{
+         	bmp = stair2_bitmap;
+         	sprite = stair2->Index;
+         	offsetX = 64;
+         	offsetY = 64;
+            ShowTeamMessage(7,"Stair",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+         	}
+        else if(keySync->KeyPressedNow(48))
+         	{
+         	bmp = tube_bitmap;
+         	sprite = tube->Index;
+         	offsetX = 30;
+         	offsetY = 64;
+            ShowTeamMessage(7,"Tube",WormTeam);
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+            }
+
+        LimitCursorMovement();
+      	}
+   	}
+
+if(Type == M_SETWEAPON)
+   	{
+    if(MarioBuilder_Informer == false)
+      	{
+      	// force first shape to be selected before any button was pressed
+       	bmp = castle_bitmap;
+        sprite = castle->Index;
+        offsetX = 80;
+    	offsetY = 48;
+    	ReadyForMusic = true;
+        MarioBuilder_Informer = true;
+      	}
+   	}
+
+if(Type == M_DRAWQUEUE)
+   	{
+    if(CurWeapon->CheckName("Mario Builder (x4)") || CurWeapon->CheckName("Mario Builder (x5)"))
+      	{
+      	SetColorMod(RGB(80, 80, 80), 1);
+      	// No offset is needed here, draw the shape with it's center on the cursor
+        AddSpriteEx(5, GS->landSelectX, GS->landSelectY, sprite, 0.0, 0, 1);
+        ClearColorMod();
+        }
+	}
+
+if(Type == M_TURNEND || Type == M_TURNBEGIN || Root->Timer == 0)
+   	{
+   	// force first shape to be selected before any button was pressed
+   	bmp = castle_bitmap;
+    sprite = castle->Index;
+    offsetX = 80;
+    offsetY = 48;
+   	ReadyForMusic = true;
+   	MarioBuilder_Informer = false;
+   	}
+
+if(Type == M_SPACE)
+   	{
+    if(CurWeapon->CheckName("Mario Builder (x4)") || CurWeapon->CheckName("Mario Builder (x5)"))
+      	{
+      	Root->Timer = 10000;
+        if(ObjState == WS_ROPING || ObjState == WS_BUNGEE || ObjState == WS_PARACHUTE || ObjState == WS_JETPACK)
+         	{
+         	// Multishot weapons might not work if they end turn, let's prevent using from rope/parachute/jetpack
+			ShowTeamMessage(7,"USE MAP BULIDER FROM THE GROUND!",WormTeam);
+			return;
+			}
+		}
+	}
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+CWorm *w = GetCurrentWorm();
+
+if (w != NullObj)
+    {
+    if(Weap->CheckName("Mario Builder (x4)") || Weap->CheckName("Mario Builder (x5)"))
+		{
+	    local x = SelectX/65536;
+        local y = SelectY/65536;
+        // Offset is needed here to move bitmap's center to the cursor
+        GG->land->Draw(bmp, x - offsetX, y - offsetY);
+        vol = CalculateSoundVolume(PosX,PosY);
+     	pan = CalculateSoundPan(PosX,PosY);
+        brick->Play(vol, pan, false);
+
+        if(ReadyForMusic == true)
+            {
+            mario_theme->Play(vol, pan, false);
+            ReadyForMusic = false;
+            }
+
+		// Makes a hole for anything inside of the drawn shape to prevent falling through terrain abuse
+        for(i = 0; i < Env->Objs.Count; i++)
+      		{
+          	local obj = CGObject(Env->Objs.Objs[i]);
+          	if(obj == NullObj) continue;
+          	if(obj != NullObj)
+             	{
+             	if(obj->IsInBox(x - offsetX, y - offsetY, x + offsetX, y + offsetY))                  // left, top, right, bottom
+             		{
+		            GG->land->ApplyMask(4, obj->PosX-5, obj->PosY+5);
+		            GG->land->ApplyMask(4, obj->PosX-5, obj->PosY-5);
+		            GG->land->ApplyMask(4, obj->PosX+5, obj->PosY+5);
+		            GG->land->ApplyMask(4, obj->PosX+5, obj->PosY-5);
+					}
+				}
+			}
+		}
+	}
+super;
+}
+
+void CWorm::LimitCursorMovement()
+{
+// Crude way to deal with coordinate mismatch
+
+if(GS->landSelectX >= GS->LevelSX - offsetX && GS->landSelectX < 32000) GS->landSelectX = GS->LevelSX - offsetX;
+if(GS->landSelectY >= GS->LevelSY - offsetY && GS->landSelectY < 32000) GS->landSelectY = GS->LevelSY - offsetY;
+
+if(GS->landSelectX <= offsetX || GS->landSelectX > 32000) GS->landSelectX = offsetX;
+if(GS->landSelectY <= offsetY || GS->landSelectY > 32000) GS->landSelectY = offsetY;
+}

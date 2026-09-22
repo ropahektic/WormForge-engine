@@ -1,0 +1,150 @@
+/* 
+
+Made by: DannyB, February 2023
+
+*/
+
+// This script automatically detects when players are AFK and skips their turns if they don't make a move before their turns begin.
+
+require utils;
+
+bool teams_afk[6];
+bool auto_afk_active;
+bool player_has_moved;
+bool check_afk_status;
+bool warn_afk_status;
+bool afk_status_removed;
+int aa_team_number;
+int aa_team_color;
+string aa_team_name;
+
+void Auto_AFK_SCRIPT::Init()
+{
+     // add keyboard input 
+     keySync->AddKey(2); // right mouse key
+     keySync->AddKey(9); // tab key
+     keySync->AddKey(16); // shift key
+     keySync->AddKey(27); // esc key
+     keySync->AddKey(84); // t key 
+}
+
+void Auto_AFK_SCRIPT::FirstFrame()
+{
+     // initialize array
+     for(local i = 0; i <= 5; i++)
+     {
+          teams_afk[i] = false;
+     }
+     
+     // initialize variables
+     auto_afk_active = false;
+     player_has_moved = false;
+     check_afk_status = false;
+     warn_afk_stauts = false;
+     afk_status_removed = false;
+     aa_team_number = 0;
+     aa_team_color = 0;
+     aa_team_name = "";
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{        
+     local cw = GetCurrentWorm();
+     if(auto_afk_active == true)
+     {
+          if(player_has_moved == false)
+          {
+               if(cw != NullObj)
+               {
+                    aa_team_number = Root->CurTeam;
+                    aa_team_color = GetTeamColor(cw->WormTeam);
+                    aa_team_name = GetTeamName(cw->WormTeam);
+                    
+                    if(type == M_PUP || type == M_PLEFT || type == M_PDOWN || type == M_PRIGHT || type == M_ENTER || type == M_BACKSPACE || type == M_SPACE || type == M_SETDELAY || type == M_SETDELAYB || type == M_SETBOUNCE || type == M_SETTARGET || type == M_SETWEAPON || keySync->KeyPressedNow(2) || keySync->KeyPressedNow(9) || keySync->KeyPressedNow(16) || keySync->KeyPressedNow(84) || keySync->KeyPressedNow(187) || keySync->KeyPressedNow(27))
+                    {
+                         if(teams_afk[aa_team_number] == true)
+                         {
+                              teams_afk[aa_team_number] = false;
+                              
+                              ShowTeamMessage(aa_team_color+1, "AFK status removed", cw->WormTeam);
+                              
+                              if(type == M_SETWEAPON) // seems redundant, but it is necessary because M_SETWEAPON overrides ShowMessage/ShowTeamMessage method calls
+                              {
+                                   afk_status_removed = true;
+                              }    
+                         }
+                              
+                         player_has_moved = true;
+                    }
+                    
+                    if(check_afk_status == true)
+                    {
+                         if(warn_afk_status == true)
+                         {
+                              if(teams_afk[aa_team_number] == true)
+                              {
+                                   ShowTeamMessage(aa_team_color+1, "Make a move to remove AFK status", cw->WormTeam);
+                                   ShowTeamMessage(aa_team_color+1, "Make a move to remove AFK status", cw->WormTeam);
+                                   ShowTeamMessage(aa_team_color+1, "Make a move to remove AFK status", cw->WormTeam);
+                              }
+                               
+                              warn_afk_status = false;
+                         }
+                         
+                         if(Root->IsTimerActive() == true)
+                         {
+                              if(teams_afk[aa_team_number] == true)
+                              {
+                                   Root->Timer = 0;
+                                   GG->WriteToChat(GG->curFont+aa_team_color, StrCon(aa_team_name, " was skipped due to being AFK!"), false);
+                              }
+                              
+                              check_afk_status = false;
+                         } 
+                    }
+               }
+          }
+     }
+     
+     if(afk_status_removed == true)
+     {
+          if(type == M_FRAME)
+          {
+               ShowTeamMessage(aa_team_color+1, "AFK status removed", cw->WormTeam);
+               
+               afk_status_removed = false;     
+          }
+     }
+      
+     super;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{
+     
+     
+	 if(type == M_TURNBEGIN)
+     {  
+          auto_afk_active = true;
+          player_has_moved = false;
+          check_afk_status = true;
+          warn_afk_status = true;
+          afk_status_removed = false;
+     }
+     
+     if(type == M_TURNEND)
+     {
+          if(player_has_moved == false)
+          {
+               if(teams_afk[aa_team_number] == false)
+               {
+                    teams_afk[aa_team_number] = true;
+                    GG->WriteToChat(GG->curFont+aa_team_color, StrCon(aa_team_name, " registered as AFK"), false);
+               }
+          }
+          
+          auto_afk_active = false;
+     } 
+  
+     super;
+}

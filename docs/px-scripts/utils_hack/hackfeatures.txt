@@ -1,0 +1,179 @@
+require utils;
+
+int  Hack_Magic_addr;
+int  Hack_Awesome_addr;
+int  Hack_ComeOnThen_addr;
+int  Hack_ComeOnThen_thinkingAddr1;
+int  Hack_ComeOnThen_thinkingAddr2;
+int  Hack_ComeOnThen_pickArrowsAddr;
+int  Hack_ComeOnThen_moreAnimsAddr;
+int  Hack_DrunkSheep_addr; 
+int  Hack_RopeGrowth_addr;
+int  Hack_SuperSheepSpeed_addr;
+int  Hack_NiceRoundEnd_addr;
+
+int  Hack_MissingNo_minAddr;
+int  Hack_MissingNo_maxAddr;
+int  Hack_MissingNo_iterations;
+
+bool Hack_Magic_state;
+bool Hack_Awesome_state;
+bool Hack_ComeOnThen_state;
+bool Hack_DrunkSheep_state;
+
+void hackfeatures::FirstFrame()
+{
+    Hack_Magic_addr = $4D3441;  
+    Hack_Awesome_addr = $511148; 
+    Hack_ComeOnThen_addr = $4E68AA;
+    Hack_ComeOnThen_thinkingAddr1 = $4E53C3;
+    Hack_ComeOnThen_thinkingAddr2 = $4E5E95;
+    Hack_ComeOnThen_pickArrowsAddr = $4E42D9;
+    Hack_ComeOnThen_moreAnimsAddr = $4EA2FC;
+    Hack_DrunkSheep_addr = $4E0F4E;
+    Hack_RopeGrowth_addr = $4EE3BE; 
+    Hack_SuperSheepSpeed_addr = $4E0F02;  
+    Hack_NiceRoundEnd_addr = $8B8ADC;
+    
+    Hack_MissingNo_minAddr = $4E0000;
+    Hack_MissingNo_maxAddr = $4F0000;
+    Hack_MissingNo_iterations = 1;
+    
+    Hack_SetMagic(false);
+    Hack_SetAwesome(false);
+    Hack_SetComeOnThen(false);  
+    Hack_SetRopeGrowthSpeed($140000);
+    Hack_SetSuperSheepSpeed(4);
+    WriteMemoryBool(Hack_NiceRoundEnd_addr, true);
+}
+
+// ---- Perception Magic -------------------------------------------------------
+
+void Hack_SwitchMagic()
+{
+    Hack_SetMagic(!Hack_Magic_state);
+}
+
+void Hack_SetMagic(bool enable)
+{
+    Hack_Magic_state = enable;
+    if (enable)
+        WriteMemoryBool(Hack_Magic_addr, false);
+    else
+        WriteMemoryBool(Hack_Magic_addr, true);
+}
+
+// ---- Awesome ----------------------------------------------------------------
+
+void Hack_SwitchAwesome()
+{      
+    Hack_SetAwesome(!Hack_Awesome_state);
+} 
+
+void Hack_SetAwesome(bool enable)
+{           
+    Hack_Awesome_state = enable;
+    if (enable)
+        WriteMemoryByte(Hack_Awesome_addr, $EB);
+    else
+        WriteMemoryByte(Hack_Awesome_addr, $7D);
+}
+
+// ---- Come On Then -----------------------------------------------------------
+
+void Hack_SwitchComeOnThen()
+{
+    Hack_SetComeOnThen(!Hack_ComeOnThen_state);        
+}
+
+void Hack_SetComeOnThen(bool enable)
+{
+    Hack_ComeOnThen_state = enable;
+    if (enable)
+    {  
+        WriteMemoryInt(Hack_ComeOnThen_addr, $00000000);
+        FillMemoryRange(Hack_ComeOnThen_thinkingAddr1, 10, $90);
+        FillMemoryRange(Hack_ComeOnThen_thinkingAddr2, 10, $90);
+        FillMemoryRange(Hack_ComeOnThen_pickArrowsAddr, 6, $90);
+        FillMemoryRange(Hack_ComeOnThen_moreAnimsAddr, 6, $90);
+    }
+    else
+    {
+        WriteMemoryInt(Hack_ComeOnThen_addr, $000001F4);
+        
+        WriteMemoryInt(Hack_ComeOnThen_thinkingAddr1, $01D486C7);
+        WriteMemoryInt(Hack_ComeOnThen_thinkingAddr1 + 4, $00020000);
+        WriteMemoryWord(Hack_ComeOnThen_thinkingAddr1 + 8, $0000);
+        
+        WriteMemoryInt(Hack_ComeOnThen_thinkingAddr2, $01D480C7);
+        WriteMemoryInt(Hack_ComeOnThen_thinkingAddr2 + 4, $00020000);
+        WriteMemoryWord(Hack_ComeOnThen_thinkingAddr2 + 8, $0000);
+        
+        WriteMemoryInt(Hack_ComeOnThen_pickArrowsAddr, $0378AF89);
+        WriteMemoryWord(Hack_ComeOnThen_pickArrowsAddr + 4, $0000);
+        
+        WriteMemoryInt(Hack_ComeOnThen_moreAnimsAddr, $02C59589);
+        WriteMemoryWord(Hack_ComeOnThen_moreAnimsAddr + 4, $0000);                 
+    }    
+}
+
+// ---- Drunk Sheep ------------------------------------------------------------
+
+void Hack_SwitchDrunkSheep()
+{
+    Hack_SetDrunkSheep(!Hack_DrunkSheep_state);
+}
+
+void Hack_SetDrunkSheep(bool enable)
+{
+    Hack_DrunkSheep_state = enable;
+    if (enable)
+        WriteMemoryByte(Hack_DrunkSheep_addr, $33);
+    else
+        WriteMemoryByte(Hack_DrunkSheep_addr, $0A);        
+}
+
+// ---- Rope Growth Speed ------------------------------------------------------
+
+int Hack_GetRopeGrowthSpeed()
+{
+    return ReadMemoryInt(Hack_RopeGrowth_addr);
+} 
+
+void Hack_SetRopeGrowthSpeed(int speed)
+{
+    WriteMemoryInt(Hack_RopeGrowth_addr, speed);
+}       
+
+// ---- Super Sheep Speed ------------------------------------------------------
+
+int Hack_GetSuperSheepSpeed()
+{
+    return ReadMemoryInt(Hack_SuperSheepSpeed_addr);
+}
+ 
+void Hack_SetSuperSheepSpeed(int speed)
+{
+    WriteMemoryInt(Hack_SuperSheepSpeed_addr, speed);
+}
+    
+// ---- Nice Round End ---------------------------------------------------------
+
+void Hack_NiceRoundEnd()
+{
+    WriteMemoryBool(Hack_NiceRoundEnd_addr, false);
+}
+
+// ---- MissingNo --------------------------------------------------------------
+
+void Hack_MissingNo()
+{
+    for (int i = 0; i < Hack_MissingNo_iterations; i++)
+    {
+        int address = RandomInt(Hack_MissingNo_minAddr, Hack_MissingNo_maxAddr);
+        int origByte = ReadMemoryByte(address);
+        //int newByte = RandomInt(0, 255); 
+        int newByte = origByte + 1;
+        WriteMemoryByte(address, newByte);
+    }
+}

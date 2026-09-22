@@ -1,0 +1,49 @@
+require utils;
+
+bool CamLock;
+bool CamLocked;
+bool pressd;
+
+override void CTurnGame::Message(CObject* sender, EMType type, int mSize, CMessageData* mData)
+{
+    if (type == M_FRAME)
+    {
+        CWorm* worm = GetCurrentWorm();
+        
+        if (worm != NullObj)
+        {
+            if (IsKeyPressed(36) && CamLocked && !pressd) 
+            { 
+                 CamLock = false; 
+                 pressd = true; 
+            } 
+ 
+            if (!IsKeyPressed(36) && CamLocked  && pressd) 
+            { 
+                 CamLocked = false; 
+                 pressd = false; 
+            } 
+ 
+            if (IsKeyPressed(36) && !CamLocked && !pressd) 
+            { 
+                 CamLock = true; 
+                 pressd = true; 
+            } 
+ 
+            if (!IsKeyPressed(36) && !CamLocked && pressd) 
+            { 
+                 CamLocked = true; 
+                 pressd = false; 
+            }     
+                 
+            if (CamLock && WApp->MK != 1)
+            {    
+                 GS->CameraX = worm->PosX;
+                 GS->CameraY = worm->PosY;
+                 GS->ActCameraX = worm->PosX;
+                 GS->ActCameraY = worm->PosY;
+            }   
+        }
+    }
+    super;
+}

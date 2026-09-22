@@ -1,0 +1,63 @@
+require utils;
+
+CMetalBox : CDevice;
+CSoundFile* pickupsnd;
+
+void metal_box::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("metalpickup.wav");	pickupsnd = new CSoundFile(f);
+}
+
+void metal_box::InitGraphic(){}
+
+CMetalBox::CMetalBox(CObject* parent, fixed x, fixed y)
+{
+
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+
+    ColMask = new CColMask(10,12,MakeRectMask(20,24));
+
+    Amount = 2;
+
+    CSpawnMetalPoint* Spawner = NullObj;
+}
+
+void CMetalBox::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)            // Root->GetObject(2, 16 * Team + Number);
+{
+   super;
+   if (Type == M_FRAME)
+   {
+      if (Health < 1)
+      {
+      Spawner->drop = NullObj;
+      }
+
+      MetalBoxThink();
+   }
+}
+
+void CMetalBox::MetalBoxThink()
+{
+     if(GetCurrentWorm() != NullObj)
+     {
+     local worm = GetCurrentWorm();
+     local dx = PosX - worm->PosX;
+     local dy = PosY - worm->PosY;
+     local dist = sqrt(dx*dx+dy*dy);
+           if(dist < 28 && Health != 0)
+           {
+           Health = 0;
+           pickupsnd->Play(1.0,0.0,false);
+             for(local t = 1; t<7; t++)
+             {
+                  if(worm->WormTeam == t)
+                  {
+                  MetalTm[t] = MetalTm[t] + Amount;
+                  }
+             }
+           }
+     }
+}

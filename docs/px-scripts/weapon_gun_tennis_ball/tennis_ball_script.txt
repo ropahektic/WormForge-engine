@@ -1,0 +1,24 @@
+require utils, utils_curtis;
+
+CSprite* tennisbt;
+
+void tennis_ball_script::InitGraphic()
+{
+   CFile *f;
+
+   f = GetAttachment("tennisbt.png");
+   tennisbt = LoadSprite(f, 5, 0);
+   SetSpriteOverride(720, tennisbt);
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+ {
+   if(Weap->CheckName("Tennis Ball Blaster"))
+   {
+   Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 30;
+   Desc->SpY = 30*(0.5 - FireAngle);
+   super(GetWeaponByName("Tennis Ball"), Desc);
+   return;
+   }
+ super;
+ }

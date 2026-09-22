@@ -1,0 +1,59 @@
+bool OSF_FixerActive;
+
+void OldSelectionFix_SCRIPT::Init()
+{
+   OSF_FixerActive = false;
+
+   keySync->AddKey(187);
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+   if(OSF_FixerActive == false)
+   {
+      if(Type == M_SETWEAPON || Type == M_AFTERSHOOT)
+      {
+         local cw = GetCurrentWorm();
+
+         if(cw != NullObj)
+         {
+            local wp = cw->CurWeapon;
+
+            if(wp != NullObj)
+            {
+               local ldata = wp->launch;
+
+               if(ldata.action == WAction_Homing || wp->ActivationType == AT_Strike)
+               {
+                  OSF_FixerActive = true;
+               }
+               else if(ldata.action != WAction_Homing || wp->ActivationType != AT_Strike)
+               {
+                  OSF_FixerActive = false;
+               }
+            }
+         }
+      }
+   }
+
+   if(Type == M_FRAME)
+   {
+      if(OSF_FixerActive == true)
+      {
+         local cw = GetCurrentWorm();
+
+         if(cw != NullObj)
+         {
+            if(keySync->KeyPressedNow(187))
+            {
+               local blockingweap = GetWeaponByName("None");
+               cw->WeaponN = 0;
+
+               OSF_FixerActive = false;
+            }
+         }
+      }
+   }
+
+   super;
+}

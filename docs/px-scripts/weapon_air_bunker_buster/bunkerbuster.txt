@@ -1,0 +1,676 @@
+
+require utils, pxairstrike, pxparticles, weapon_magnet;
+
+PxAirstrikeParams *BunkerBusterParams;
+CFireDesc *BunkerBusterFireDesc;
+
+//CSprite* bunkerbusterSprite;
+//CSprite* superbunkerbusterSprite;
+
+CSprite *bbIdleSprite;
+CSprite *bbDiggingSprite;
+CSprite *sbbIdleSprite;
+CSprite *sbbDiggingSprite;
+CSprite *sbbGlowSprite;
+
+CSoundFile* bunkerbusterDrillSound;
+CSoundFile* bunkerbusterFallSound;
+CColMask* MASK_BUNKERBUSTER;
+
+CMagnetResult *BunkerBusterMagnetResult;
+//CLogFile *busterLog;
+
+bool bb_repeat_sound;
+int bb_sound_timer;
+
+void bunkerbuster::FirstFrame()
+{
+	BunkerBusterParams = new PxAirstrikeParams;
+	BunkerBusterFireDesc = new CFireDesc;
+	
+	BunkerBusterFireDesc->Count = 10;
+	BunkerBusterFireDesc->UnkB = 1;
+	BunkerBusterFireDesc->Duration = 1000;
+	BunkerBusterFireDesc->UpPower = 15;
+	BunkerBusterFireDesc->Damage = 1;
+	BunkerBusterFireDesc->OwnerTeam = 0;
+	
+	MASK_BUNKERBUSTER = new CColMask(8, 8, MakeCircleMask(8));
+	
+	CFile *f;
+	f = GetAttachment("bunkbustdrill.wav");
+	bunkerbusterDrillSound = new CSoundFile(f);
+	
+	f = GetAttachment("bunkbustfall.wav");
+	bunkerbusterFallSound = new CSoundFile(f);
+	
+	BunkerBusterMagnetResult = new CMagnetResult();
+	
+	bb_repeat_sound = false;
+    bb_sound_timer = 0;
+}
+
+// Loading resources
+void bunkerbuster::InitGraphic()
+{
+	CFile *f;
+	
+	f = GetAttachment("bbuster_idle.png");
+	bbIdleSprite = LoadSprite(f, 3, 0);
+	f = GetAttachment("bbuster_digging.png");
+	bbDiggingSprite = LoadSprite(f, 3, 0);
+	f = GetAttachment("sbbuster_idle.png");
+	sbbIdleSprite = LoadSprite(f, 3, 0);
+	f = GetAttachment("sbbuster_digging.png");
+	sbbDiggingSprite = LoadSprite(f, 3, 0);
+	f = GetAttachment("sbbuster_glow.png");
+	sbbGlowSprite = LoadSprite(f, 1, 0);
+}
+
+///////////////////////////////////////////////////
+// PxBunkerBusterStrike
+
+PxBunkerBusterStrike : PxAirstrike
+
+PxBunkerBusterStrike::PxBunkerBusterStrike(CObject* Parent, CShootDesc* Desc, PxAirstrikeParams* Params, int type)
+{
+	super(Parent, Desc, Params);
+	BusterType = type;
+}
+
+void PxBunkerBusterStrike::DropBomb()
+{
+	CShootDesc SDesc;
+	zero(&SDesc);
+	
+	SDesc.Team = Team;
+	SDesc.X = PosX;
+	SDesc.Y = PosY;
+
+	SDesc.SpX = 0;
+	SDesc.SpY = 0;
+	
+	new PxBunkerBuster(GetObject(25, 0), &SDesc, BusterType);
+}
+
+void PxBunkerBusterStrike::RenderPlane()
+{
+	SetColorMod(RGB(255, 140, 0), 6); // orange plane!
+	super;
+	ClearColorMod();
+}
+
+///////////////////////////////////////////////////
+// PxBunkerBuster
+
+PxBunkerBuster : CMine;
+
+PxBunkerBuster::PxBunkerBuster(CObject* Parent, CShootDesc* Desc, int type)
+{
+	CMineParams MParams;
+	zero(&MParams);
+	MParams.Prefuse = 0;
+	MParams.Radius = 0;
+	MParams.Fuse = 1;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Damage = 0;
+	MParams.BlastPower = 0;
+	
+	super(Parent, &MParams, Desc, false, 0);
+	
+	// parameters
+	
+	DrillFuelAmount = float(880.0);
+	
+	DrillMinSpeed = float(0.5);
+	DrillMaxSpeed = float(2.0);
+	DiggingMagnetFactor = float(3.0);
+	
+	DirX = float(0.0);
+	DirY = float(1.0);
+	
+	FPosX = float(0.0);
+	FPosY = float(0.0);
+	
+	AnimSpeed = 0.08;
+	
+	ExplosionDeltaTime = 8;
+	ExplosionDistance = 40;
+	if(type == 0)
+	{
+		//Sprite = bunkerbusterSprite->Index;
+		SpriteIdle = bbIdleSprite->Index;
+		SpriteDigging = bbDiggingSprite->Index;
+		SpriteGlow = 0;
+		
+		NumExplosions = 1;
+		ExplosionBlast = 100;
+		ExplosionDamage = 38;
+	}
+	else
+	{
+		//Sprite = superbunkerbusterSprite->Index;
+		SpriteIdle = sbbIdleSprite->Index;
+		SpriteDigging = sbbDiggingSprite->Index;
+		SpriteGlow = sbbGlowSprite->Index;
+		
+		NumExplosions = 5;
+		ExplosionBlast = 80;
+		ExplosionDamage = 26;
+	}
+	
+	DrillFireMinDelta = 4;
+	DrillFireMaxDelta = 10;
+	
+	// internal - do not change
+	ClType = EObjectClass(72);
+	Dead = false;
+	Drilling = false;
+	DrillSpeed = DrillMinSpeed;
+	AnimCycle = 0.0;
+	AnimCycleDuration = 1.0;
+	ExhaustType = 0;
+	//ColMask = MASK_BUNKERBUSTER;
+	Team = Desc->Team;
+	ChangeDrillSpeedTimer = 0;
+	DrillSoundTimer = 0;
+	BusterType = type;
+	ExplosionNum = 0;
+	ExplosionTimer = 0;
+	DrillFireTimer = 0;
+	
+	Rotation = 0.0;
+	
+	ColGroupDigging = CMASK_TERRAIN
+					| CMASK_WORM_ON_TERRAIN
+					| CMASK_WORM_USING_WEAPON
+					| CMASK_WORM_IN_MIDAIR
+					| CMASK_WORM_ON_ROPE
+					| CMASK_WORM_FROZEN
+					| CMASK_GASCANISTER
+					| CMASK_MINE
+					| CMASK_CRATE
+					| CMASK_DONORCARD
+					| CMASK_OILDRUM
+					| CMASK_SKIMMING;
+					
+	ColGroupDefault = ColGroupDigging | CMASK_TERRAIN;
+	ColGroup = ColGroupDefault;
+	
+	SoundObj = CSound(NullObj);
+	bunkerbusterFallSound->Play(1.0, 0.0, false);
+	
+	MaxMagnetForce = 0.1;
+	
+	LastPosX = PosX;
+	LastPosY = PosY;
+	
+	//busterLog->Write("created");
+}
+
+void PxBunkerBuster::UpdateRotation()
+{
+	if(SpX==0.0)
+	{
+		if(SpY>0.0)
+		{
+			Rotation = 0.0;
+		}
+		else if(SpY<0.0)
+		{
+			Rotation = 3.141593;
+		}
+	}
+	else
+	{
+		Rotation = -atan2(SpX, SpY);
+	}
+}
+
+void PxBunkerBuster::StartDigging()
+{
+	if(Drilling) return;
+	
+	Drilling = true;
+	ExhaustType = 1;
+	
+	GravityFactor = 0.0;
+	ColGroup = ColGroupDigging;
+	SoundObj = bunkerbusterDrillSound->Play(1.0, 0.0, false);
+	
+	FPosX = PosX;
+	FPosY = PosY;
+	LastPosX = FPosX;
+	LastPosY = FPosY;
+	
+	bb_repeat_sound = true;
+}
+
+void PxBunkerBuster::StopDigging()
+{
+	if(Drilling == false) return;
+	
+	Drilling = false;
+	GravityFactor = 1.0;
+	ColGroup = ColGroupDefault;
+	
+	if(SoundObj != CSound(NullObj))
+	{
+		// Mute the sound
+		SoundObj->Update(0.0, 0.0);
+		bb_repeat_sound = false;
+        bb_sound_timer = 0;
+	}
+	
+	PosX = FPosX;
+	PosY = FPosY;
+}
+
+void PxBunkerBuster::Explode()
+{
+	if(Dead) return;
+	
+	SetDirection(SpX, SpY);
+	StopDigging();
+	
+	//DoExplosion(1, PosX, PosY, ExplosionBlast, ExplosionDamage, 0, 0);
+	SpX = 0.0;
+	SpY = 0.0;
+	GravityFactor = 0.0;
+	IsMaterial = false;
+	Stopped = 1;
+	
+	Dead = true;
+}
+
+void PxBunkerBuster::SetDirection(float dx, float dy)
+{
+	if(Dead) return;
+	
+	float d = sqrt(dx*dx+dy*dy);
+	
+	if(d < 0.0001 && d > -0.0001)
+	{
+		DirX = 0;
+		DirY = 1;
+	}
+	else
+	{
+		DirX = dx / d;
+		DirY = dy / d;
+	}
+}
+
+void PxBunkerBuster::Collide(CGObject* Obj, int type)
+{
+	if(Obj->ClType == OC_Landscape)
+	{
+		if(Drilling == false)
+		{
+			if(DrillFuelAmount <= 0)
+			{
+				Explode();
+				return;
+			}
+			
+			StartDigging();
+		}
+	}
+	else
+	{
+		Explode();
+	}
+}
+
+void PxBunkerBuster::DoExplosion(fixed x, fixed y, int PushPower, int Damage, int unkB, int team)
+{
+	super;
+	
+	if(BusterType > 0)
+	{
+		BunkerBusterFireDesc->Count = 6;
+		BunkerBusterFireDesc->X = x;
+		BunkerBusterFireDesc->Y = y;
+		BunkerBusterFireDesc->SpX = 0;
+		BunkerBusterFireDesc->SpY = 0;
+		
+		new CFire(GetObject(TI_FireStore, 0), BunkerBusterFireDesc, 0);
+	}
+}
+
+void PxBunkerBuster::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	// Drawing operations are done here
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Dead) return;
+		
+		if(Sinking)
+		{
+			SetColorMod(RGB(90, 90, 240), 6);
+		}
+		
+		CQuad q;
+		q.blend = 0;
+		for(int k=0 ; k<4 ; k+=1) q.v[k].color = RGB(255,255,255);
+		
+		//AddSprite(10, PosX, PosY, 0, Sprite, AnimCycle);
+		if(Drilling)
+		{
+			AddSpriteEx(10.01, PosX, PosY, SpriteDigging, AnimCycle, Rotation, 1.0);
+			//FillSpriteQuad(&q, SpriteDigging, 0, 0);
+			//TransformQuad(&q, Rotation, 1.0, 1.0, PosX, PosY);
+			//AddSpriteQ(10.01, &q, SpriteDigging, AnimCycle, 0);
+		}
+		else
+		{
+			AddSpriteEx(10.01, PosX, PosY, SpriteIdle, AnimCycle, Rotation, 1.0);
+			//FillSpriteQuad(&q, SpriteIdle, 0, 0);
+			//TransformQuad(&q, Rotation, 1.0, 1.0, PosX, PosY);
+			//AddSpriteQ(10.01, &q, SpriteIdle, AnimCycle, 0);
+		}
+		
+		if(Sinking)
+		{
+			ClearColorMod();
+		}
+		else if(SpriteGlow > 0)
+		{
+			FillSpriteQuad(&q, SpriteGlow, 0, 0);
+			TransformQuad(&q, Rotation, 1.0, 1.0, PosX, PosY);
+			q.blend = 1;
+			for(int i=0 ; i<4 ; i+=1) q.v[i].color = RGB(255,70,0);
+			AddSpriteQ(10, &q, SpriteGlow, 0, 64);
+		}
+		
+		return;
+	}
+	
+	super;
+	
+	// This is done every frame
+	if(Type == M_FRAME)
+	{
+		if(Dead)
+		{
+			if(ExplosionNum >= NumExplosions)
+			{
+				Free(true);
+				return;
+			}
+			
+			if(ExplosionTimer <= 0)
+			{
+				float dist = ExplosionDistance * ExplosionNum;
+				DoExplosion(PosX + DirY * dist, PosY - DirX * dist, ExplosionBlast, ExplosionDamage, 0, 0);
+				if(ExplosionNum > 0)
+				{
+					DoExplosion(PosX - DirY * dist, PosY + DirX * dist, ExplosionBlast, ExplosionDamage, 0, 0);
+				}
+				
+				ExplosionTimer = ExplosionDeltaTime;
+				ExplosionNum = ExplosionNum + 1;
+			}
+			ExplosionTimer = ExplosionTimer - 1;
+		}
+		
+		if(Sinking == false)
+		{
+			UpdateRotation();
+			
+			// Animation
+			AnimCycle = AnimCycle + AnimSpeed;
+			if(AnimCycle > AnimCycleDuration) AnimCycle = AnimCycle - AnimCycleDuration;
+			
+			BunkerBusterMagnetResult->Reset();
+			BunkerBusterMagnetResult->CalculateGlobalMagneticForce(PosX, PosY, 0.4);
+			
+			if(BunkerBusterMagnetResult->IsNull == false && BunkerBusterMagnetResult->ForceX == 0.0)
+			{
+				BunkerBusterMagnetResult->ForceX = 0.01;
+			}
+			
+			if(Drilling)
+			{
+	//busterLog->Write("frame: drilling 1");
+				float force = sqrt(
+					BunkerBusterMagnetResult->ForceX * BunkerBusterMagnetResult->ForceX + 
+					BunkerBusterMagnetResult->ForceY * BunkerBusterMagnetResult->ForceY
+				);
+				
+				if(force > MaxMagnetForce)
+				{
+					force = MaxMagnetForce / force;
+					BunkerBusterMagnetResult->ForceX = BunkerBusterMagnetResult->ForceX * force;
+					BunkerBusterMagnetResult->ForceY = BunkerBusterMagnetResult->ForceY * force;
+				}
+				
+				SetDirection(
+					10 * DirX + DiggingMagnetFactor * BunkerBusterMagnetResult->ForceX,
+					10 * DirY + DiggingMagnetFactor * BunkerBusterMagnetResult->ForceY
+				);
+				
+				//if(DrillSoundTimer <= 0)
+				//{
+				//	PlayLocalSound(84, 0, 1.0, 1.0, &Snd);
+				//	DrillSoundTimer = 40;
+				//}
+				//
+				//DrillSoundTimer = DrillSoundTimer - 1;
+				
+				// Change the speed of the buster every random interval
+				if(ChangeDrillSpeedTimer <= 0)
+				{
+					DrillSpeed = RandomFloat(DrillMinSpeed, DrillMaxSpeed);
+					ChangeDrillSpeedTimer = RandomInt(5, 15);
+				}
+				
+				ChangeDrillSpeedTimer = ChangeDrillSpeedTimer - 1;
+				
+				// If we're a super bunker buster, spread fire around
+				if(BusterType > 0)
+				{
+					if(DrillFireTimer <= 0)
+					{
+						BunkerBusterFireDesc->Count = 1;
+						BunkerBusterFireDesc->X = PosX;
+						BunkerBusterFireDesc->Y = PosY;
+						
+						float fire_ang = Rotation + RandomFloat(-45.0, 45.0);
+						float fire_dx = sin(fire_ang);
+						float fire_dy = -cos(fire_ang);
+						float fire_speed = RandomFloat(5.0, 15.0);
+						
+						BunkerBusterFireDesc->SpX = fire_dx * fire_speed;
+						BunkerBusterFireDesc->SpY = fire_dy * fire_speed;
+						
+						new CFire(GetObject(TI_FireStore, 0), BunkerBusterFireDesc, 0);
+						
+						DrillFireTimer = RandomInt(DrillFireMinDelta, DrillFireMaxDelta);
+					}
+					
+					DrillFireTimer = DrillFireTimer - 1;
+				}
+				
+				// Using the same mask as the Pneumatic Drill (mask 2)
+				SpX = DirX * DrillSpeed;
+				SpY = DirY * DrillSpeed;
+				
+				FPosX += DirX * DrillSpeed;
+				FPosY += DirY * DrillSpeed;
+				
+				int h_offset1 = RandomInt(6, 11);
+				int h_offset2 = RandomInt(5, 10);
+				
+				//GG->land->ApplyMask(2, PosX + OffsetX, PosY);
+				
+				GG->land->ApplyMask(1, PosX, PosY);
+				GG->land->ApplyMask(13, PosX + DirY * h_offset1, PosY - DirX * h_offset1);
+				GG->land->ApplyMask(13, PosX - DirY * h_offset2, PosY + DirX * h_offset2);
+				
+				float dx = FPosX - LastPosX;
+				float dy = FPosY - LastPosY;
+				float distance = sqrt(dx*dx + dy*dy);
+				
+				DrillFuelAmount -= distance;
+				//DrillFuelAmount -= DrillSpeed;
+				
+				LastPosX = FPosX;
+				LastPosY = FPosY;
+				
+				// Enough drilling, blow up now!
+				if(DrillFuelAmount <= 0.0)
+				{
+					Explode();
+					return;
+				}
+				
+				// If there is no more land to drill, go back to falling mode
+				if(FindInMask(this, ColMask, PosX + 10.0*DirX, PosY + 10.0*DirY, 2) == NullObj)
+				{
+					// Give it a little push if it's not drilling directly downwards
+					SpX += 2 * (1.0 - DirY) * DirX * DrillSpeed;
+					SpY += 2 * (1.0 - DirY) * DirY * DrillSpeed;
+					
+					StopDigging();
+				}
+				else
+				{
+					PosX = FPosX;
+					PosY = FPosY;
+				}
+	//busterLog->Write("frame: drilling end");
+			}
+			else
+			{
+				if(BunkerBusterMagnetResult->IsNull == false)
+				{
+					SpX += BunkerBusterMagnetResult->ForceX;
+					SpY += BunkerBusterMagnetResult->ForceY;
+				}
+				SetDirection(SpX, SpY);
+			}
+			
+			// Smoke particles
+			if(ExhaustType == 0)
+			{
+				local p = new PxParticle(131, PosX - 14 * DirX, PosY - 14 * DirY);
+				p->SetLifeTime(30);
+				p->SetRandomVelocity(0.2, 0.5);
+				p->SetAirResistance(0.5);
+				p->SetStartAlpha(255);
+				p->SetEndAlpha(255);
+				p->SetStartColor(255,255,255);
+				p->SetEndColor(255,255,255);
+			}
+			else
+			{
+				if(BusterType == 0)
+				{
+					local p = new PxParticle(131, PosX + 16 * DirY - 12 * DirX, PosY - 16 * DirX - 12 * DirY);
+					p->SetLifeTime(30);
+					p->SetRandomVelocity(0.5, 0.8);
+					p->SetAirResistance(0.5);
+					p->SetStartAlpha(140);
+					p->SetEndAlpha(140);
+					p->SetStartSize(0.5, 0.5);
+					p->SetEndSize(0.5, 0.5);
+					p->SetStartColor(200,200,200);
+					p->SetEndColor(50,50,50);
+				}
+				else
+				{
+					local p = new PxParticle(130, PosX + 16 * DirY - 12 * DirX, PosY - 16 * DirX - 12 * DirY);
+					p->SetLifeTime(30);
+					p->SetBlendMode(1);
+					p->SetRandomVelocity(0.5, 0.8);
+					p->SetAirResistance(0.5);
+					p->SetStartAlpha(255);
+					p->SetEndAlpha(255);
+					p->SetStartSize(0.5, 0.5);
+					p->SetEndSize(0.5, 0.5);
+					p->SetColor(150,150,150);
+					
+					p = new PxParticle(130, PosX - 14 * DirY - 10 * DirX, PosY + 12 * DirX - 10 * DirY);
+					p->SetLifeTime(30);
+					p->SetBlendMode(1);
+					p->SetRandomVelocity(0.5, 0.8);
+					p->SetAirResistance(0.5);
+					p->SetStartAlpha(255);
+					p->SetEndAlpha(255);
+					p->SetStartSize(0.5, 0.5);
+					p->SetEndSize(0.5, 0.5);
+					p->SetColor(150,150,150);
+				}
+			}
+		}
+
+	if(bb_repeat_sound)
+		{
+                     bb_sound_timer += 20;
+
+		     if(bb_sound_timer == 15000)
+		     {
+                          if(SoundObj != CSound(NullObj))
+                          {
+                               SoundObj->Update(0, 0);
+                          }
+
+                          SoundObj = bunkerbusterDrillSound->Play(1.0, 0.0, false);
+
+		          bb_sound_timer = 0;
+		     }
+		}
+	}
+}
+
+///////////////////////////////////////////////////
+// CWorm overrides
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Bunker Buster"))
+	{
+		BunkerBusterParams->NumBombs = 1;
+		BunkerBusterParams->BombDistance = 64;
+		BunkerBusterParams->BombSpX = 0;
+		BunkerBusterParams->BombSpY = 0;
+		new PxBunkerBusterStrike(GetObject(25, 0), Desc, BunkerBusterParams, 0);
+	}
+	else if(Weap->CheckName("Super Bunker Buster"))
+	{
+		BunkerBusterParams->NumBombs = 1;
+		BunkerBusterParams->BombDistance = 64;
+		BunkerBusterParams->BombSpX = 0;
+		BunkerBusterParams->BombSpY = 0;
+		new PxBunkerBusterStrike(GetObject(25, 0), Desc, BunkerBusterParams, 1);
+	}
+	else
+	{
+		super;
+	}
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_SPACE)
+	{
+		for(local i = 1; i < Env->Objs.Count; i+=1)
+		{
+			local obj = Env->Objs.Objs[i];
+			
+			if(obj == NullObj) continue;
+			if(obj is PxBunkerBuster)
+			{
+				local bb = PxBunkerBuster(obj);
+				if(bb->Team == WormTeam)
+				{
+					bb->Explode();
+				}
+			}
+		}
+	}
+	
+	super;
+}

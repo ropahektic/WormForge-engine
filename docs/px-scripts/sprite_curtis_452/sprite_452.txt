@@ -1,0 +1,10 @@
+CSprite* fireb_tr;
+
+void sprite_452::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("firebt.png");
+    fireb_tr = LoadSprite(f, 8, 0);
+
+    SetSpriteOverride(452, fireb_tr);
+}

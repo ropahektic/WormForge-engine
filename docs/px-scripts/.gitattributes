@@ -1,0 +1,2 @@
+# Verbatim Project X script dumps: keep the original CRLF bytes, never normalise.
+* -text

@@ -1,0 +1,57 @@
+override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+deflected = false;
+super;
+}
+
+void CMine::Deflecting()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+      if(this != obj)
+      {
+           if(obj->ClType == OC_Missile)
+           {
+           DeflectCheck(obj, obj);             
+           }
+      }
+  }
+}
+
+void CMine::DeflectCheck(CGObject *obje, CMissile *msl)
+{
+     if(DistBetweenObjs(this, obje) <= 50 && msl->deflected == false)
+     {
+     msl->SpX = msl->SpX*-1;
+     msl->SpY = msl->SpY*-1;
+     msl->deflected = true;
+     }
+}
+
+void COilDrum::Deflecting()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+      if(this != obj)
+      {
+           if(obj->ClType == OC_Missile)
+           {
+           DeflectCheck(obj, obj);             
+           }
+      }
+  }
+}
+
+void COilDrum::DeflectCheck(CGObject *obje, CMissile *msl)
+{
+     if(DistBetweenObjs(this, obje) <= 50 && msl->deflected == false)
+     {
+     msl->SpX = msl->SpX*-1;
+     msl->SpY = msl->SpY*-1;
+     msl->deflected = true;
+     }
+}

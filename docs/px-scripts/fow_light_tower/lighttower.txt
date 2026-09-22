@@ -1,0 +1,142 @@
+require utils, fow_darkness;
+
+CLightTower : CGObject;
+
+CSprite* LightTowerBody;
+CSprite* LightTowerGlow;
+
+
+void lighttower::InitGraphic()
+{
+    CFile *f;
+    
+	f = GetAttachment("lighttowerbody.png");
+    LightTowerBody = LoadSprite(f, 1, 0);
+
+    f = GetAttachment("lighttowerglow.png");
+    LightTowerGlow = LoadSprite(f, 1, 0);
+}
+
+CLightTower::CLightTower(CObject* parent, fixed x, fixed y)
+{
+    super(parent, 7, 7);
+
+    PosX          = x;
+    PosY          = y;
+    IsMaterial    = true;
+    ClType        = EObjectClass(9966);
+    ColGroup      = 4423679;
+    currentSize  = 0.01;
+    owningTeam   = 0;
+    
+    NextRecalcZPlane = 0;
+	ZPlane = 15;
+}
+
+void CLightTower::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_DRAWQUEUE)
+	{
+   	if (currentSize > 0.5) currentSize = 0.01;
+
+    AddSpriteEx(20,PosX,PosY-29,LightTowerBody->Index,0.0,0.0,1.0);
+
+    local Color = GetTeamColor(owningTeam);
+
+    if (Color == 0){SetColorMod(RGB(230, 40, 40), 8);}
+    if (Color == 1){SetColorMod(RGB(0, 135, 230), 8);}
+    if (Color == 2){SetColorMod(RGB(99, 230, 60), 8);}
+    if (Color == 3){SetColorMod(RGB(230, 230, 83), 8);}
+    if (Color == 4){SetColorMod(RGB(173, 69, 230), 8);}
+    if (Color == 5){SetColorMod(RGB(62, 230, 230), 8);}
+
+    AddSpriteEx(19,PosX,PosY - 54,LightTowerGlow->Index,0.0,0.0,currentSize);
+    ClearColorMod();
+    
+    currentSize = currentSize + 0.002;
+    
+    if (Sinking == 0)
+        {
+        if(NextRecalcZPlane <= 0)
+			{
+				local matches = 0;
+
+				for(local i = 1; i < Env->Objs.Count; i+=1)
+				{
+					local obj = Env->Objs.Objs[i];
+
+					if(obj == NullObj) continue;
+					if(obj == this) continue;
+					if(obj->ClType == EObjectClass(9966))
+					{
+						local tow = CLightTower(obj);
+
+						float dX = tow->PosX - PosX;
+						float dY = tow->PosY - PosY;
+						float r2 = dX*dX + dY*dY;
+
+						if(r2 < 900.0)
+						{
+							if(tow->ZPlane == ZPlane)
+							{
+								tow->ZPlane = tow->ZPlane + 0.1;
+							}
+							matches = matches + 1;
+						}
+					}
+				}
+
+				if(matches == 0)	ZPlane = 15;
+
+				NextRecalcZPlane = 200;
+			}
+			else
+			{
+				NextRecalcZPlane = NextRecalcZPlane - 1;
+			}
+		}
+    }
+
+if (Type == M_FRAME)
+	{
+    if (Sinking == 1) Free(true);
+    }
+}
+
+override void CDarknessControl::GenerateLSources()
+{
+super;
+for (local i = 1; i < Env->Objs.Count; i++)
+  	{
+    local obj = CGObject(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+    if (obj->ClType == EObjectClass(9966))
+		{
+    	if (obj != NullObj)
+			{
+    		if (obj->Sinking != 1)
+				{
+    			local team = CLightTower(obj)->owningTeam;
+    			if (darkControl->IsTeamVisible(team)) {SetLight(obj->PosX, obj->PosY-54, 50, 110, 0.9);}
+        		}
+        	}
+    	}
+  	}
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+    if (Weap->CheckName("Light Tower"))
+	{
+            local lt = new CLightTower(Root->GetObject(25, 0),PosX,PosY - 10);
+            local worm = CWorm(this);
+            local wteam = worm->WormTeam;
+            lt->owningTeam = wteam;
+            lt->SpY = -2;
+            if (TurnSide == 1){lt->SpX = 2;}
+			else lt->SpX = -2;
+    }
+}

@@ -1,0 +1,16 @@
+require utils;
+
+void script_skipgosurrender::Init()
+{
+     keySync->AddKey(17);
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Skip Go/Surrender"))
+		{
+		if (keySync->KeyPressed(17)) super;
+    	else Root->Message( Root, M_SKIPTURN, 0, NullObj);
+    	}
+	else super;
+}

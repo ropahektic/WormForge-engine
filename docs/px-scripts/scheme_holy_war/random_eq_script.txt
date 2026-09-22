@@ -1,0 +1,63 @@
+require utils;
+
+CSoundFile* EQWarning;
+bool EQAllowed;
+bool EQInformer;
+
+void random_eq_script::Init()
+{
+   	EQWarning = new CSoundFile(GetAttachment("eq_warning.wav"));
+	EQInformer = true;
+   	EQAllowed = true;
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+local EQcw = GetCurrentWorm();
+local EQWeap = GetWeaponByName("Earth Quake");
+local SafeWeap = GetWeaponByName("Umbrella");
+SafeWeap->EndsTurn = false;
+
+if(hw_actual_loops > 8)
+	{
+	if(EQInformer == true)
+	    {
+		GG->WriteToChat(GG->curFont," ------------------------------------------------------------------------------------------------------------ ",false);
+		GG->WriteToChat(GG->curFont," --- SEISMIC ACTIVITY WARNING! Earthquake can happen any moment now! --- ",false);
+		GG->WriteToChat(GG->curFont," ------------------------------------------------------------------------------------------------------------ ",false);
+		EQInformer = false;
+		}
+
+   	if(Root->IsTimerActive() == true && EQAllowed == true)
+   		{
+      	local EQHappening = RandomInt(1,20);
+      	if(EQHappening == 10)
+      		{
+         	if(EQcw != NullObj && EQWeap != NullObj && SafeWeap != NullObj)
+         		{
+            	EQWarning->Play(1.00, 0.0, false);
+
+	            CShootDesc sdesc;
+    	        zero(&sdesc);
+
+    	        EQcw->CurWeapon = EQWeap;
+        	    EQcw->FireFinal(EQWeap, &sdesc);
+
+	            ShowMessage("An earth quake is occuring... brace yourselves!");
+	            ShowMessage("An earth quake is occuring... brace yourselves!");
+	            ShowMessage("An earth quake is occuring... brace yourselves!");
+	            EQcw->CurWeapon = SafeWeap;
+         		}
+      		}
+
+      	EQAllowed = false;
+   		}
+    
+   	if(Type == M_TURNEND && EQAllowed == false)
+   		{
+      	EQAllowed = true;
+   		}
+	}
+
+super;
+}

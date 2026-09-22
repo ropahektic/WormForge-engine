@@ -1,0 +1,52 @@
+require utils, p_sprite_builder, utils_curtis, sprite_curtis_455;
+
+CSprite* baseballb_aiming;
+
+void baseball_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("baseballb.png");
+    baseballb_aiming = LoadSprite(f, 1, 0);
+}
+
+//---------------------------------BASEBALL BOMB------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Baseball Bomb";
+     sprite = baseballb_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -11.5;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.5;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Baseball Bomb")) {
+         if (baseballb_anim) {
+              local sprite = baseballb_aiming->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              baseballb_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  baseballb_anim = true;
+}

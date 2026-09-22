@@ -1,0 +1,107 @@
+$editor
+ $object MetalBoxSpawn
+  $origin -13 -15
+  $image "edmetal.png"
+  $func SpawnMetalP
+  $param Amount int 2
+  $param Delay int 5
+  $radius 17
+ $object_end
+$end
+
+
+CSpawnMetalPoint : CObject;
+CSpawnMetalPoint* SMPoints[501];
+int PrevTeam;
+
+void SpawnMetalBox::Init()
+{
+     for(local t = 0; t<501; t++)
+     {
+     SMPoints[t] = NullObj;
+     }
+     PrevTeam = 0;
+}
+
+
+void CSpawnMetalPoint::SpawnMetal(int x, int y, int amount, CSpawnMetalPoint* spawnpoint)
+{
+  mbox = new CMetalBox(Root->GetObject(25, 0), x, y);
+  //mbox->PosX = x;
+  //mbox->PosY = y;
+  mbox->Amount = amount;
+  mbox->Spawner = spawnpoint;
+  mbox->Health = 50;
+  mbox->AnimPhaseSpeed = 0.021;
+  mbox->ClassType = "MetalBox";
+  drop = mbox;
+  SM->MakeSpriter(x, y, mbox);
+};
+
+
+CSpawnMetalPoint::CSpawnMetalPoint(CEditorObject* aobj)
+{
+  super(Root, GS);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+  amount = aobj->GetInt("Amount");
+  DelayB = aobj->GetInt("Delay");
+  Delay = DelayB;
+  CMetalBox* drop = NullObj;
+};
+
+
+void SpawnMetalP(CEditorObject* obj)
+{
+  local t = FindEmptySlotMBox();
+  SMPoints[t] = new CSpawnMetalPoint(obj);
+};
+
+
+void CSpawnMetalPoint::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(Type == M_FRAME)
+  {
+          if(Delay <= 0)
+          {
+          SpawnMetal(PosX, PosY, amount, this);
+          Delay = DelayB;
+          }
+  }
+}
+
+
+int FindEmptySlotMBox()
+{
+ for(local i = 0; i < 501; i++)
+ {
+  if(SMPoints[i] == NullObj)
+  {
+  return i;
+  break;
+  }
+ }
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+      if(Type == M_TURNBEGIN)
+      {
+              if(PrevTeam != WormTeam)
+              {
+              PrevTeam = WormTeam;
+              for(local t = 0; t<501; t++)
+                {
+                        if(SMPoints[t] != NullObj)
+                        {
+                              if(SMPoints[t]->drop == NullObj)
+                              {
+                              SMPoints[t]->Delay = SMPoints[t]->Delay - 1;
+                              }
+                        }
+                }
+              }
+      }
+}

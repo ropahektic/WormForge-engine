@@ -1,0 +1,28 @@
+/* 
+
+Made by: DannyB, March 2023
+
+*/
+
+// This script fixes a bug, where weapons are automatically selected, when a weapon is fired or the menus are changed (the weapon setting "Remember" has to be turned off). 
+
+void Remember_Fix_SCRIPT::FirstFrame() 
+{
+     for(local i = 1; i <= 6; i++)
+     {
+          for(local j = 0; j < 71; j++)
+          {
+               local wp = GS->GetWeaponByIndex(i, j);
+               
+               if(wp == NullObj)
+               {
+                    continue;
+               }
+               
+               if(wp->Remember == true)
+               {
+                    wp->Remember = false;
+               }
+          }   
+     }
+}

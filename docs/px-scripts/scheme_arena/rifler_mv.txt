@@ -1,0 +1,116 @@
+void CAttacker::RiflerMovement()
+{
+   if(DistBetweenObjs2(Base, this) > 250)//resetting to hovering state
+           {
+           MovingX = false; MovingY = false;
+           } 
+           
+////////////////////////////////////BASE PATHFINDING////////////////////////////
+           if(DistBetweenObjs2(Base, this) < 250)    //attack the base!
+           {
+           Move(NullObj, Base);              
+           }
+           
+           if(DistBetweenObjs2(Base, this) < 25)    //base in proximity zone!
+           {
+           Explode(CurrentChallenger);
+           }
+////////////////////////////////////BASE PATHFINDING END////////////////////////         
+
+          if(ShootTimer != 0)
+          {           
+           if (MovingX == false && MovingY == false)//Hovering state
+           {
+           if(FloatDirection == 1){SpX = -1;}
+           if(FloatDirection == 2){SpY = -1;}
+           if(FloatDirection == 3){SpX = 1;}
+           if(FloatDirection == 4){SpY = 1;}
+           ShootTimer = ShootTimer - 1; 
+           }
+          }
+          else
+          {
+            SpX = 0;
+            SpY = 0;
+            if(ShootDelay != 0) ShootDelay = ShootDelay - 1;
+            if(ShootDelay == 0)
+            {
+            Fire();
+            ShootDelay = 60;
+            ShootTimer = 120;
+            }
+          }
+}
+
+void CAttacker::Fire()
+{
+  CShootDesc sdesc;
+  zero(&sdesc);
+
+  local l = DistBetweenObjs(CurrentChallenger, this);
+  local timeForShoot = l / 10 + 1;         
+  local x = CurrentChallenger->PosX - PosX;
+  local rx = x / timeForShoot;
+  local y = CurrentChallenger->PosY - PosY;
+  local ry = SolveBallistic(y, timeForShoot, Env->Gravity * CurrentChallenger->GravityFactor);
+  
+  local angToShoot = 0.0;
+  local shootdir = 0;
+  if (rx > 0)
+  {
+    angToShoot = atan2(rx, 0 - ry);
+    shootdir = 1;
+  } else {
+    angToShoot = atan2(0 - rx, 0 - ry);
+    shootdir = -1;  
+  };
+  
+  local shootPower = sqrt(rx * rx + ry * ry);
+  local ForceVar = GS->GetRandom() % 64;
+  local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+  
+  sdesc.X = PosX + sin(angToShoot) * shootdir * 14;      //
+  sdesc.Y = PosY - cos(angToShoot) * 14;                 //
+  local ShootSX = sin(angToShoot) * shootdir;
+  local ShootSY = 0.0 - cos(angToShoot);
+  
+  sdesc.SpX = ShootSX * BaseForce;          //
+  sdesc.SpY = ShootSY * BaseForce;          //
+  
+  
+  local ldata;
+  if(MissileType == 1)ldata = GetWeaponByName("Mortar");
+  if(MissileType == 2)ldata = GetWeaponByName("Mortar X");
+  if(MissileType == 3)
+  {
+  sdesc.AddX = CurrentChallenger->PosX;
+  sdesc.AddY = CurrentChallenger->PosY;
+  ldata = GetWeaponByName("Rocket X");
+  }
+  
+    
+local msl = new CMissile(Root->GetObject(25, 0), &ldata->launch, &sdesc);
+msl->Homing = true;
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+Homing = false;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+ if(Type == M_FRAME)
+ {
+          if(Homing == true)
+          {
+          if(CurrentChallenger != NullObj)
+          {
+          initdesc.AddX = CurrentChallenger->PosX;
+          initdesc.AddY = CurrentChallenger->PosY;
+          }
+          }
+ }
+}

@@ -1,0 +1,185 @@
+require utils;
+
+CColMask* NoExplosionDamage_mask250;
+
+void NoExplosionDamage_script::InitGraphic()
+{
+    NoExplosionDamage_mask250 = new CColMask(250,250,MakeCircleMask(250));
+}
+
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    NoExplosionDamage = false;
+    swimsuit = false;
+    im_kamikaze = false;
+    suicide_bool = false;
+    kamiX = 0;
+    kamiY = 0;
+    suicide_tick = 0;
+    NoExplosionDamage_timer = 0;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_GUNEXP) 
+    {
+       if (NoExplosionDamage) 
+       {
+          local sx = MData->GetParameter(3) / 65536;    // PushX
+          local sy = MData->GetParameter(4) / 65536;    // PushY 
+          SpX = sx;
+          SpY = sy;
+          return;
+       }
+//       else super; 
+    }
+    else if (Type == M_EXPLOSION) 
+    {
+       if (NoExplosionDamage) 
+       {
+           local aa = MData->GetParameter(0);          // null
+           local x = MData->GetParameter(1) / 65536;   // x
+           local y = MData->GetParameter(2) / 65536;   // y
+           local PushPower = MData->GetParameter(3);   // PushPower
+           local Damage = MData->GetParameter(4);      // Damage
+           local ee = MData->GetParameter(5);          // UnkB
+           local ff = MData->GetParameter(6);          // Team
+           local gg = MData->GetParameter(7) / 65536;  // unknown
+           local hh = MData->GetParameter(8) / 65536;  // unknown
+           
+           local dam = CheckMaskAt(this, NoExplosionDamage_mask250, x, y, -1);
+           if (dam != NullObj)
+           {
+           // my own pushing script
+               local dist = int(DistBetweenObjs(sender, this));
+               if (dist < PushPower)
+               {
+                   local sideX;
+                   local sideY;
+                   local chX = PosX - x;
+                   if (chX < 0) 
+                   {
+                       sideX = -1;
+                       chX = -chX;
+                   } else sideX = 1;
+                   local powX = Damage/(Damage + chX);
+            
+                   local chY = PosY - y;
+                   if (chY-5 < 0) sideY = -1;
+                   else sideY = 1;
+                   if (chY < 0) 
+                   {
+                       chY = -chY;
+                   }
+                   local powY = Damage/(Damage + chY) + 0.3;
+            
+                   SpX += sideX * PushPower * (1 - powX) / 10;
+                   SpY += sideY * PushPower * (powY - 0.5) / 5;
+               }
+           }
+           return;
+       }
+//       else super;
+    }
+//    else super;
+    if (Type == M_TURNBEGIN) {
+       INoExplosionDamageLayer = Layer;
+       INoExplosionDamageColGroup = ColGroup;
+    }
+    if (Type == M_FRAME)
+    {
+      if (NoExplosionDamage)
+      {
+        if (NoExplosionDamage_timer_bool)
+        {
+            if (NoExplosionDamage_timer > 5)
+            {
+                NoExplosionDamage_timer = 0;
+                NoExplosionDamage_timer_bool = false;
+                if (swimsuit)
+                {
+                   GravityFactor = 1;
+                   swimsuit = false;
+                }
+            }
+            NoExplosionDamage_timer++;
+        }
+        if ((SpY > 8.0 || SpY < -8.0 || SpX > 8.0 || SpX < -8.0) && ObjState != WS_ROPING && ObjState != WS_BUNGEE && ObjState != WS_JETPACK && ObjState != WS_AFTERROPE) SetState(WS_SLIDING);
+        if (ObjState == WS_POING) SetState (WS_SLIDING);
+        if (im_kamikaze)
+        {
+            if ((PosX+PosY) > (kamiX+kamiY+350) || (PosX+PosY) < (kamiX+kamiY-350))
+            {
+                DoExplosion(PosX, PosY, 60, 30, 0, WormTeam);
+                SetState(WS_IDLE);
+                im_kamikaze = false;
+            }
+        }
+        if (suicide_bool)
+        {
+            if (suicide_tick > 65)
+            {
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-20, 20), PosY+RandomInt(-20, 20), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                new CGas(Root, PosX+RandomInt(-40, 40), PosY+RandomInt(-40, 40), 10, WormTeam);
+                DoExplosion(PosX, PosY, 60, 30, 0, WormTeam);
+                SetState(WS_IDLE);
+                suicide_tick = 0;
+                suicide_bool = false;
+            }
+            else suicide_tick++;
+        } else suicide_tick = 0;
+      }
+    }
+    if (Type == M_TURNEND) 
+    {
+        NoExplosionDamage_timer_bool = true;
+        NoExplosionDamage = false;
+    }
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("No Explosion Damage"))
+    {
+        NoExplosionDamage = true;
+        
+        ShowMessage("No Explosion Damage: ON");
+        return;
+    }
+    if (Weap->CheckName("Swim Suit"))
+    {
+        swimsuit = true;
+    }
+    if (Weap->CheckName("Kamikaze"))
+    {
+        im_kamikaze = true;
+        kamiX = PosX;
+        kamiY = PosY;
+    }
+    if (Weap->CheckName("Kamikaze Gold"))
+    {
+        im_kamikaze = true;
+        kamiX = PosX;
+        kamiY = PosY;
+    }
+    if (Weap->CheckName("Suicide Bomber"))
+    {
+        suicide_bool = true;
+    }
+    if (Weap->CheckName("Suicide Bomber Gold"))
+    {
+        suicide_bool = true;
+    }
+    super;
+}

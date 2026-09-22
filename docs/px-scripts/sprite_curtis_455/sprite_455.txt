@@ -1,0 +1,12 @@
+CSprite* snowb_tr;
+
+void sprite_455::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("snowbt.png");
+    snowb_tr = LoadSprite(f, 7, 0);
+    //f = GetAttachment("snowballt_old.png");
+   //snowballt = LoadSprite(f, 7, 0);
+
+    SetSpriteOverride(455, snowb_tr);
+}

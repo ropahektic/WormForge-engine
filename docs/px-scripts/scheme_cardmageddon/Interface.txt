@@ -1,0 +1,77 @@
+require utils;
+         
+CBitmap32* GUI;
+CInterfaceHandler : CObject;
+string speedx;
+string speedy;
+
+
+void Interface::InitGraphic()
+{ 
+ LI  = GetAttachment("nterface.png");
+ GUI = LoadImage(LI);
+}
+
+CInterfaceHandler::CInterfaceHandler()
+{
+    super(Root, GS);  
+    GUIn = GUI;
+}
+
+void CInterfaceHandler::ListNDraw()
+{
+               int a;
+               int b;
+
+                          GUIn->Rect( 0, 0, 360, 380, 0);
+
+                                            // Text Desctiptions
+                          
+                          GS->Disp->DrawText(4, GUIn, 10, 15, "Name:", &a, &b);                            
+                          GS->Disp->DrawText(4, GUIn, 10, 30, "Amount bought:       (max 3)", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 45, "Weapons left:", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 60, "Use arrow keys to navigate menu.", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 75, "Use enter to buy weapons.", &a, &b);
+                          GS->Disp->DrawText(4, GUIn, 10, 90, "Use space to finish.", &a, &b);                           
+                          GS->Disp->DrawText(4, GUIn, 10, 120, "Description:", &a, &b);
+                                               
+                                                // Integer Parametres                                                   
+                                                    
+                          GS->Disp->DrawText(8, GUIn, 50, 15, WeaponN[Selection], &a, &b);                            
+                          GS->Disp->DrawText(8, GUIn, 90, 30, ItoA(WeaponA[Selection]), &a, &b); 
+                          GS->Disp->DrawText(8, GUIn, 80, 45, ItoA(Cash[GetCurrentWorm()->WormTeam-1]), &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 135, WeaponD[Selection], &a, &b);
+                          GS->Disp->DrawText(8, GUIn, 10, 150, WeaponD2[Selection], &a, &b);                                               
+}
+
+
+
+
+
+void Interface::FirstFrame()
+{
+ new CInterfaceHandler();
+}
+
+
+
+void CInterfaceHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(GetCurrentWorm() != NullObj && getweapons == true)
+  {
+                    if (Type == M_FRAME)
+                    {
+                    ListNDraw();
+                    }
+                    if (Type == M_DRAWQUEUE)
+                    {
+                      if(DoIKnowHim(GetCurrentWorm()) == true)
+                      {
+                       if (PlayerBought[GetCurrentWorm()->WormTeam-1] == false)
+                       {
+                       AddInterfaceBitmap(1,270,0,GUIn,360,380,1);
+                       }
+                      }
+                    }
+   }
+}

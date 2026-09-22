@@ -1,0 +1,179 @@
+require utils;
+
+bool VampireMode;
+bool VM_InfoChecker;
+bool VM_DamageToSelf;
+int VM_wormT;
+int VM_wormN;
+
+CSoundFile* vm_sound;
+
+void Vampire_Mode_SCRIPT::Init() 
+{
+   VampireMode = false;
+   VM_InfoChecker = false;
+   VM_DamageToSelf = false;
+   VM_wormT = 0;
+   VM_wormN = 0;
+   
+   vm_sound = new CSoundFile(GetAttachment("vm_sound.wav"));
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{   
+   if(VampireMode == true)
+   {      
+      local cw = GetCurrentWorm();
+      
+      if(Root->IsTimerActive() == true)
+      {
+         if(VM_InfoChecker == true)
+         {         
+            local cw = GetCurrentWorm();
+			
+			if (cw != NullObj)
+			    {
+            	VM_wormT = cw->WormTeam;
+            	VM_wormN = cw->WormNumber;
+            	}
+            
+            VM_InfoChecker = false;   
+         }
+      }
+      
+      if(Type == M_TURNBEGIN)
+      {
+         if(VM_InfoChecker == false)
+         {
+            VM_InfoChecker = true;
+         }
+         
+         if(VM_DamageToSelf == true)
+         {
+            VM_DamageToSelf = false;
+         }
+      }
+      
+      if(this != cw)
+      {
+         if(GotDamage > 0 && !wsunk && !wdamaged)
+         {
+            mydamg = GotDamage;
+            myhealth = GS->Info.GetWormHealth(WormTeam, WormNumber) + GotDamage;
+            wdamaged = true;
+         }
+         
+         if(wdamaged)
+         {
+            if(VM_DamageToSelf == false)   
+            {   
+               if(GotDamage != mydamg && GotDamage != 0)
+               {
+                  mydamg = GotDamage;
+               }
+			   
+               if(ObjState == WS_SINKING)
+               {
+                  if(mydamg > myhealth) 
+                  {
+                     mydamg = myhealth;
+                  }
+                  
+                  if(VM_wormT != 0 && VM_wormN != 0) 
+                  {
+                     GS->Info.SetWormHealth(VM_wormT, VM_wormN, GS->Info.GetWormHealth(VM_wormT, VM_wormN) + mydamg);
+                     
+                     if(cw != NullObj)
+                     {
+                        SickFlags = 0;
+                        SickDamage = 0;
+                     } 
+                  }
+                  
+                  mydamg = 0;
+                  wsunk = true;
+                  wdamaged = false;
+               }
+               
+               if(GotDamage == 0)
+               {  
+                  if(mydamg > myhealth)
+                  { 
+                     mydamg = myhealth;
+                  }
+                  
+                  if(VM_wormT != 0 && VM_wormN != 0) 
+                  {
+                     GS->Info.SetWormHealth(VM_wormT, VM_wormN, GS->Info.GetWormHealth(VM_wormT, VM_wormN) + mydamg);
+                     
+                     if(cw != NullObj)
+                     {
+                        SickFlags = 0;
+                        SickDamage = 0;
+                     }
+                  }
+                  
+                  mydamg = 0;
+                  wdamaged = false;
+               }
+            }
+            else if(VM_DamageToSelf == true)
+            {
+               wdamaged = false;
+            }
+         }
+      }
+      
+      if(Type == M_TURNEND && ObjState == WS_FLYING)
+      { 
+         VM_DamageToSelf = true;
+      }
+      else if(Type == M_TURNEND && ObjState == WS_FLYING2)
+      {
+         VM_DamageToSelf = true;
+      }
+      else if(Type == M_TURNEND && ObjState == WS_POWERFLY)
+      {
+         VM_DamageToSelf = true;
+      }
+      else if(Type == M_TURNEND && ObjState == WS_SINKING)
+      {
+         VM_DamageToSelf = true;
+      } 
+   }
+
+   if(Type == M_TURNEND || Type == M_TURNBEGIN)
+      {
+      VampireMode = false;
+      VM_InfoChecker = false;
+      }
+   
+   super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{ 
+  if(Weap->CheckName("Vampire Mode"))
+  {  
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     
+     if(VampireMode == false)
+     {
+        VampireMode = true;
+        VM_InfoChecker = true;
+        vm_sound->Play(vol, pan, false);
+        ShowMessage("Vampire Mode: ON");
+     }
+         
+     else if(VampireMode == true)
+     {                  
+        VampireMode = false;
+        VM_InfoChecker = false;
+        
+        ShowMessage("Vampire Mode: OFF");
+     }      
+  }
+  
+  super;
+}

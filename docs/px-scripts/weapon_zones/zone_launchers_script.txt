@@ -1,0 +1,537 @@
+// By PyroMan.
+
+require utils, utils_steps, utils_pyroman, p_animation, pxparticles, weapon_lightning, weapon_tazer, p_sprite_builder;
+
+CAnimationParams* SpotHiderParams;
+CAnimationParams* ZoneParams; 
+
+int SH_x;
+int SH_y;
+int SH_spriteI;
+int zone_number;
+int BlastTurns;
+int HealthTurns;
+
+float SH_scale;
+bool SH_pressing;
+bool HealthPlus;                              
+CSprite* blackMask;
+
+CAnimation* blast_anim1;
+CAnimation* blast_anim2;
+CAnimation* blast_anim3;
+
+CBlast : CObject;
+CHealthZone : CObject;
+
+CSprite* pyroman_explosion;
+
+void zone_launchers_script::FirstFrame()
+{
+    SH_scale = 4;
+    ZoneParams = new CAnimationParams;
+    SpotHiderParams = new CAnimationParams;
+    zone_number = 0;     
+    BlastTurns = 3;
+    HealthTurns = 6;
+    HealthPlus = true;
+}
+
+
+void zone_launchers_script::Init()
+{
+  keySync->AddKey(49); // 1 button
+  keySync->AddKey(50); // 2 button
+  keySync->AddKey(51); // 3 button
+  keySync->AddKey(52); // 4 button
+  keySync->AddKey(53); // 5 button
+  keySync->AddKey(189); // - button
+  keySync->AddKey(187); // + button
+} 
+
+
+void zone_launchers_script::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("black_mask.png");
+    blackMask = LoadSprite(f, 1, 0);
+    
+    f = GetAttachment("bz_exp.png");
+    pyroman_explosion = LoadSprite(f, 10, 0);
+}
+
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    HealthPlusMis = false;
+}
+
+
+CHealthZone::CHealthZone(string zoneName, int ax, int ay, int pushPowa, int Dmg, int WT, int turns_left, bool hp_status)
+{
+    super(Root, GS);
+    health_zone = CWZone(NullObj);
+    zone_name = StrSave(zoneName);
+    x = ax;
+    y = ay;
+    Healing = hp_status;
+    PushPower = pushPowa;
+    Damage = Dmg;
+    unkB = 0;
+    Team = WT;
+    worknow = true;
+    turns = turns_left;
+    Dead = false;
+    timer = 0;
+    fps = 50;
+    maxHP = 500;
+    minHP = 1;
+    active = true;
+    start_be_inactive = false;
+    inactive_timer = 0;
+    
+//_______________________________________
+
+    if (Healing) ZoneParams->sprite = 108;
+    else ZoneParams->sprite = 106;
+    ZoneParams->speed = 20;
+    ZoneParams->duration = 3;   // seconds, fade duration
+    ZoneParams->turns = turns;
+    ZoneParams->loop = true;
+    ZoneParams->backwards = true;
+    ZoneParams->rot = 180;
+    ZoneParams->scale = 1.0;
+    ZoneParams->alpha = 35;
+    ZoneParams->ZPlane = 16;
+        
+//    if (Healing) ZoneParams->color = ARGB(65, 210, 100, 100);  // red
+//    else ZoneParams->color = ARGB(65, 100, 220, 100);          // green
+
+    if (Healing) ZoneParams->color = ARGB(65, 100, 220, 100);    // red
+    else ZoneParams->color = ARGB(65, 210, 100, 100);            // green
+    
+    ZoneParams->blend_type = 6;
+    blast_anim1 = new CAnimation(Root, x, y, NullObj, ZoneParams);
+}
+
+void CHealthZone::DamageHealth()
+{
+    local worm_active;
+    if (health_zone->activator == NullObj) return;
+    if (health_zone->activator->ClType == OC_Worm)
+    {
+       worm_active = CWorm(health_zone->activator);
+
+       local worm = worm_active->WormNumber;
+       local team = worm_active->WormTeam;
+       local hp_now = GS->Info.GetWormHealth( team, worm);
+       if (hp_now > minHP) GS->Info.SetWormHealth( team, worm, hp_now - 1);
+       if (worm_active->ObjState == WS_JETPACK) worm_active->JetFuel -= 5*65536;
+    }
+}
+
+void CHealthZone::AddHealth()
+{
+    local worm_active;
+    if (health_zone->activator == NullObj) return;
+
+    if (health_zone->activator->ClType == OC_Cross)
+    {
+      if (health_zone->activator->SpX == 0 && health_zone->activator->SpY == 0)      // fixes error with moving grave, aslo errors and game crash with portals.
+      {
+       PxDeadWorm *deadworm = DW_M->DeadWormFromGrave(health_zone->activator);
+       if(deadworm != PxDeadWorm(NullObj))
+       {
+          deadworm->Resurrect(1);
+       }
+       else
+       {
+          ShowMessage("Grave has no bound worm, could not resurrect!");
+       }
+      }		    
+    }
+    else if (health_zone->activator->ClType == OC_Worm)
+    {
+       worm_active = CWorm(health_zone->activator);
+       local worm = worm_active->WormNumber;
+       local team = worm_active->WormTeam;
+       local hp_now = GS->Info.GetWormHealth( team, worm);
+       if (hp_now < maxHP) GS->Info.SetWormHealth( team, worm, hp_now + 1);
+       if (worm_active->ObjState == WS_JETPACK) worm_active->JetFuel += 5*65536;
+       if (worm_active->SickDamage > 0) worm_active->SickDamage--;  // low down sickness untill totally healthy.
+    }
+    
+}
+
+void CHealthZone::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if (Type == M_SKIPTURN) return;
+ if (Type == M_TURNEND) 
+ {
+    turns--;
+    start_be_inactive = true;
+ }
+  if (Type == M_TURNBEGIN) 
+  {
+      if (Dead == false)
+      {
+      start_be_inactive = false;       // Deactivate timer if turn started earlier then timer deactivated portal.
+      inactive_timer = 0;              // Usefull if some1 is afk. Becouse otherwise timer would disable portal`s activity on some1`s turn start :D
+      active = true;
+      }
+ }
+ if (Type == M_FRAME)
+ {
+   timer++;
+   if (turns <= 0) 
+   {
+      Dead = true;
+      active = false;
+      Free(true);
+      return;
+//      health_zone->Free(true);
+   }
+   if (timer % fps) return;
+   if (active == false) return;
+        if (health_zone == NullObj)
+        {
+            health_zone = SearchForWeapZone(zone_name);
+            return;
+        }
+        else 
+        if (health_zone->active)
+        {
+           if (health_zone->activator != NullObj)
+           {  
+             if (start_be_inactive)
+             {
+                if (health_zone->activator->SpX == 0 && health_zone->activator->SpY == 0)   // bug fixes
+                {
+                   if (Healing) AddHealth();
+                   else DamageHealth();
+                }
+             } else
+             if (Healing) AddHealth();
+             else DamageHealth();
+           }
+        }
+   if(start_be_inactive)
+   {
+      inactive_timer++;
+      if (inactive_timer > 7)  // as soon as fps = 50 (1 sec), 7 here = 7 secs.
+      {
+         active = false;         
+         start_be_inactive = false;
+         inactive_timer = 0;
+      }
+   }
+ }
+}
+
+
+CBlast::CBlast(string zoneName, int ax, int ay, int pushPowa, int Dmg, int WT, int turns_left)
+{
+    super(Root, GS);
+    blast_zone = CWZone(NullObj);
+    zone_name = StrSave(zoneName);
+    x = ax;
+    y = ay;
+    PushPower = pushPowa;
+    Damage = Dmg;
+    unkB = 0;
+    Team = WT;
+    worknow = true;
+    turns = turns_left;
+    Dead = false;
+    timer = 0;
+    fps = 5;
+    start_be_inactive = false;
+    inactive_timer = 0;
+    
+//_______________________________________
+    ZoneParams->sprite = pyroman_explosion->Index;
+    ZoneParams->speed = 35;
+    ZoneParams->duration = 3;   // seconds, fade duration
+    ZoneParams->turns = turns;
+    ZoneParams->loop = true;
+    ZoneParams->backwards = true;
+    ZoneParams->rot = 90;
+    ZoneParams->scale = 0.5;
+    ZoneParams->alpha = 35;
+        
+    if (Team == 1){                          // red
+    ZoneParams->color = ARGB(85, 210, 20, 0);}
+    else if (Team == 2){                     // blue
+    ZoneParams->color = ARGB(85, 0, 20, 220);}     
+    else if (Team == 3){                     // green
+    ZoneParams->color = ARGB(85, 0, 220, 0);}
+    else if (Team == 4){                     // yellow
+    ZoneParams->color = ARGB(85, 250, 220, 0);}
+    else if (Team == 5){                     // purple
+    ZoneParams->color = ARGB(85, 220, 0, 220);}
+    else if (Team == 6){                     // cyan
+    ZoneParams->color = ARGB(85, 0, 230, 230);}
+        
+//        ZoneParams->color = ARGB(85, 50, 135, 235);
+    ZoneParams->blend_type = 1;
+    blast_anim1 = new CAnimation(Root, x, y, NullObj, ZoneParams);
+    ZoneParams->rot = 45;
+    blast_anim2 = new CAnimation(Root, x, y, NullObj, ZoneParams);
+    ZoneParams->rot = -45;
+    blast_anim3 = new CAnimation(Root, x, y, NullObj, ZoneParams);
+}
+
+void CBlast::Boom()
+{
+    DoExplosion( x, y, PushPower, Damage, unkB, Team);
+    if (blast_zone->activator != NullObj)
+    {
+       if (blast_zone->activator->ClType == OC_Mine)
+       {
+           CMine* blast_mine = CMine(blast_zone->activator);
+           if(blast_mine->Radius > 0 && blast_mine->Active == 0 && blast_mine->Prefuse <= 0)
+           {
+              if(blast_mine->Fuse < 0)
+              {
+                 blast_mine->Fuse = RandomInt(1000, 5000);
+              }
+              blast_mine->Active = 1;
+              blast_mine->nPulses = blast_mine->Fuse / 250;
+           }
+       }
+    }
+}
+
+void CBlast::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_TURNEND) turns--;
+ 
+if (Type == M_FRAME)
+ 	{
+   	timer++;
+   	if (turns <= 0)
+   		{
+      	Dead = true;
+      	worknow = false;
+      	Free(true);
+      	return;
+   		}
+   		
+   	if (timer % fps) return;
+
+	if (blast_zone == NullObj)
+        {
+        blast_zone = SearchForWeapZone(zone_name);
+        return;
+        }
+    else if (worknow)
+        {
+        if (blast_zone->active)
+            {
+            if (blast_zone->activator != NullObj)
+              	{
+                if (blast_zone->activator->ClType == OC_Worm || blast_zone->activator->ClType == OC_OilDrum || blast_zone->activator->ClType == OC_Mine || blast_zone->activator->ClType == OC_Crate || blast_zone->activator->ClType == OC_Arrow || blast_zone->activator->ClType == OC_Missile)
+                	{
+                  	Boom();
+                  	worknow = false;
+                	}
+              	}
+            }
+        }
+
+     if (blast_zone != NullObj)
+     	{
+        if (blast_zone->active == false) worknow = true;
+     	}
+ 	}
+}
+
+
+
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    super;
+    if (weap->CheckName("Spot Hider"))
+    {
+    SpotHiderParams->useObj = false;
+    SpotHiderParams->turns = 4;
+    SpotHiderParams->sprite = blackMask->Index;
+    SpotHiderParams->scale = SH_scale;
+    SpotHiderParams->speed = 25;
+    SpotHiderParams->duration = 15;
+    SpotHiderParams->ZPlane = 4.95;
+    SpotHiderParams->color = ARGB(100, 0, 0, 0);
+    SpotHiderParams->blend_type = 6;
+    new CAnimation (Root, x, y, NullObj, SpotHiderParams);
+    return;
+    }
+    if (weap->CheckName("Blast Zone"))
+    {
+        zone_number++;
+        local number = MakeNumberString("blast_zone_", zone_number, "");
+        wzone = new CWZone(x, y, 45, 45, 2, false, number, BlastTurns, false);
+        wBlast = new CBlast(number, x, y, 30, 30, ClWT, BlastTurns);
+    }
+    if (weap->CheckName("Health Zone"))
+    {
+        zone_number++;
+        local hp_status = HealthPlusMis;
+        local number = MakeNumberString("health_zone_", zone_number, "");
+        w2zone = new CWZone(x, y, 40, 30, 2, false, number, HealthTurns, false);
+        wHealth = new CHealthZone(number, x, y, 40, 40, ClWT, HealthTurns, hp_status);
+    }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Health Zone"))
+        {
+            imCheckMis = this;
+            HealthPlusMis = HealthPlus;
+            if (not_too_much_particles) 
+            {
+               if (HealthPlusMis) do_sprite_trail_effects(108, PosX, PosY);
+               else do_sprite_trail_effects(106, PosX, PosY);
+            }
+        }
+        if (weap->CheckName("Blast Zone"))
+        {
+            imCheckMis = this;
+            if (not_too_much_particles) do_sprite_trail_effects(106, PosX, PosY);
+        }                 
+    }                                    
+    super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+local worm = GetCurrentWorm();
+
+    if (Type == M_FRAME)
+    {
+      if (worm != NullObj)
+      {
+//        if (worm->CurWeapon->CheckName("Health Zone") || worm->CurWeapon->CheckName("Blast Zone"))
+//        {
+//           if (TimeToFire < 1) CanFire = true;		//This limits how fast you can shoot to avoid spam
+//           if (TimeToFire > 0) TimeToFire--;        //But this creates bug of double shooting if "ends turn" is on
+//        }
+
+        if (worm->CurWeapon->CheckName("Blast Zone"))
+        {
+            if (keySync->KeyPressedNow(49) || keySync->KeyPressedNow(50) || keySync->KeyPressedNow(51) || keySync->KeyPressedNow(52) || keySync->KeyPressedNow(53))
+            {
+            if (SH_pressing){
+            if (keySync->KeyPressedNow(49))
+            {
+                BlastTurns = 2;                                                             // +1, for balance.
+                ShowTeamMessage(7,"Activity: 1 turn",WormTeam);
+                SH_pressing = false;
+            } 
+            else if (keySync->KeyPressedNow(50))
+            {
+                BlastTurns = 3;
+                ShowTeamMessage(7,"Activity: 2 turns",WormTeam);
+                SH_pressing = false;
+            }
+            else if (keySync->KeyPressedNow(51))
+            {
+                BlastTurns = 4;
+                ShowTeamMessage(7,"Activity: 3 turns",WormTeam);
+                SH_pressing = false;
+            }
+            else if (keySync->KeyPressedNow(52))
+            {
+                BlastTurns = 5;
+                ShowTeamMessage(7,"Activity: 4 turns",WormTeam);
+                SH_pressing = false;
+            }
+            else if (keySync->KeyPressedNow(53))
+            {
+                BlastTurns = 6;
+                ShowTeamMessage(7,"Activity: 5 turns",WormTeam);
+                SH_pressing = false;
+            }
+            }
+            }else{SH_pressing = true;}
+        }
+        if (worm->CurWeapon->CheckName("Health Zone"))
+        {
+            if (keySync->KeyPressedNow(49) || keySync->KeyPressedNow(50) || keySync->KeyPressedNow(51) || keySync->KeyPressedNow(52) || keySync->KeyPressedNow(53) || keySync->KeyPressedNow(189) || keySync->KeyPressedNow(187))
+            {
+            if (SH_pressing){
+            if (keySync->KeyPressedNow(187))
+            {
+                HealthPlus = true;
+                ShowTeamMessage(7,"Healing zone",WormTeam);
+                SH_pressing = false;
+            }
+            if (keySync->KeyPressedNow(189))
+            {
+                HealthPlus = false;
+                ShowTeamMessage(7,"Damaging zone",WormTeam);
+                SH_pressing = false;
+            }
+            if (keySync->KeyPressedNow(49))
+            {
+                HealthTurns = 2;                                                             // +1, for balance.
+                ShowTeamMessage(7,"Activity: 1 turn",WormTeam);
+                SH_pressing = false;
+            } 
+            else if (keySync->KeyPressedNow(50))
+            {
+                HealthTurns = 3;
+                ShowTeamMessage(7,"Activity: 2 turns",WormTeam);
+                SH_pressing = false;
+            }
+            else if (keySync->KeyPressedNow(51))
+            {
+                HealthTurns = 4;
+                ShowTeamMessage(7,"Activity: 3 turns",WormTeam);
+                SH_pressing = false;
+            }
+            else if (keySync->KeyPressedNow(52))
+            {
+                HealthTurns = 5;
+                ShowTeamMessage(7,"Activity: 4 turns",WormTeam);
+                SH_pressing = false;
+            }
+            else if (keySync->KeyPressedNow(53))
+            {
+                HealthTurns = 6;
+                ShowTeamMessage(7,"Activity: 5 turns",WormTeam);
+                SH_pressing = false;
+            }
+            }
+            }else{SH_pressing = true;}
+        }
+      } 
+    }
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Blast Zone"))
+    {
+        ClWT = WormTeam;
+        ClWN = WormNumber;
+        //TimeToFire = 5;           See line 433
+        //CanFire = false;
+        CheckParticlesNumber();
+    }
+    if (Weap->CheckName("Health Zone"))
+    {
+        ClWT = WormTeam;
+        ClWN = WormNumber;
+        //TimeToFire = 5;           See line 433
+        //CanFire = false;
+        CheckParticlesNumber();
+    }
+    
+    super;
+}

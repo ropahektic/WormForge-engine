@@ -1,0 +1,338 @@
+require utils;
+
+$editor
+ $object WormsSP
+  $origin -13 -15
+  $image "edspawn.png"
+  $func ArenaSpawnPoint
+  $radius 17
+ $object_end 
+ 
+ $object EnemySpawnPoint
+  $origin -13 -15
+  $image "edenemyspawn.png"
+  $func SpawnES
+  $param Direction enum 4 Left Up Right Down
+  $param Boss enum 2 No Yes
+  $radius 17
+ $object_end
+ 
+ $object BasePoint
+  $origin -13 -15
+  $image "edbase.png"
+  $func SpawnBase
+  $radius 17
+ $object_end 
+   
+$end
+
+
+//vars
+CEnemySpawn : CObject;
+CBasePoint : CObject;
+
+CSprite* BaseSprite;
+
+int SpawnPosX;
+int SpawnPosY;
+int GlobalWave;
+CWorm* CurrentChallenger;
+bool DestroyEnemies;    
+int MobNum;
+CBasePoint* Base;
+
+
+//var init
+void Arena_scr::InitGraphic()
+{
+    local spr1       = GetAttachment("base.png");             
+    BaseSprite     = LoadSprite(spr1, 1, 0); 
+} 
+
+void Arena_scr::Init()
+{
+GlobalWave = 0;  //Global progress for all objects
+CurrentChallenger = NullObj;
+SpawnPosX = 0;       //spawn pars
+SpawnPosY = 0;
+DestroyEnemies = false; //^
+MobNum = 0;
+}
+
+
+
+//scr
+
+void ArenaSpawnPoint(CEditorObject* obj)
+{
+  x = obj->PosX;
+  y = obj->PosY;
+
+  for (j = 1; j < 7; j++) //team
+  {
+    for (i = 1; i < 9; i++)     //worm
+    {
+        local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+        if (Worm != NullObj)
+        {
+          Worm->PosX = x;
+          Worm->PosY = y;
+          if(SpawnPosX == 0 && SpawnPosY == 0)
+          {
+          SpawnPosX = x;
+          SpawnPosY = y;
+          }
+          
+          x += 10;
+        };
+    };
+  };
+}; 
+
+
+
+CEnemySpawn::CEnemySpawn(CEditorObject* aobj)
+{
+  super(Root, GS);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+  CurrentWave = 0;
+  
+  if (StrCmp(aobj->GetString("Direction"), "Left"))
+  {
+    DirType = 1;      //def
+  };
+  if (StrCmp(aobj->GetString("Direction"), "Up"))
+  {
+    DirType = 2;
+  };
+  if (StrCmp(aobj->GetString("Direction"), "Right"))
+  {
+    DirType = 3;
+  };
+  if (StrCmp(aobj->GetString("Direction"), "Down"))
+  {
+    DirType = 4;
+  }; 
+  
+  if (StrCmp(aobj->GetString("Boss"), "No"))
+  {
+    BossType = false;      //def
+  };
+  if (StrCmp(aobj->GetString("Boss"), "Yes"))
+  {
+    BossType = true;
+  };
+   
+};
+
+
+
+CBasePoint::CBasePoint(CEditorObject* aobj)
+{
+  super(Root, GS);
+  PosX = aobj->PosX;
+  PosY = aobj->PosY;
+};
+
+void SpawnES(CEditorObject* obj)
+{
+  new CEnemySpawn(obj);
+};
+
+void SpawnBase(CEditorObject* obj)
+{
+  Base = new CBasePoint(obj);
+};
+
+
+///////////MESSAGES AND STUFF///////////////////////////////////////////////////
+void CBasePoint::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   local spr1 = BaseSprite->Index;
+ if(this == Base)
+ {
+         if(Type == M_DRAWQUEUE)
+         {
+         AddSprite(5,PosX,PosY,0,spr1,0.0);
+         }
+ }
+}
+
+////////////////////////////////////////////////WAVE MANAGEMENT/////////////////
+void CEnemySpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if(Type == M_FRAME)
+ {
+  if(GetCurrentWorm() != NullObj)
+  {
+      if(CurrentChallenger != NullObj) //Wave spawning
+      {
+           if(CurrentWave < GlobalWave)
+           {
+           CurrentWave = GlobalWave;
+           SpawnEnemys(PosX, PosY, CurrentWave, DirType, BossType);
+           }
+           if(CurrentWave > GlobalWave)
+           {
+           CurrentWave = GlobalWave;
+           }
+      }
+  }
+ }
+ 
+}
+
+
+void CEnemySpawn::SpawnEnemys(float x, float y, int wave, int dir, bool boss)
+{
+ if(boss == false)
+ {
+     if(wave == 1)//Simple mine
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 1;
+     enemy->Health = 5;
+     enemy->MoveSpeed = 1;
+     }
+     
+     if(wave == 2)//Speedy mine
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 1;
+     enemy->Health = 26;
+     enemy->MoveSpeed = 2;
+     }  
+     
+     if(wave == 3)//Big mine
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 2;
+     enemy->Health = 51;
+     enemy->MoveSpeed = 1;
+     }
+     
+     if(wave == 4)//Big + fast mine
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 2;
+     enemy->Health = 51;
+     enemy->MoveSpeed = 2;
+     } 
+     
+     if(wave == 5)//Ultra big mines
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 3;
+     enemy->Health = 150;
+     enemy->MoveSpeed = 1;
+     ColMask = new CColMask(8,5,MakeRectMask(16,10)); 
+     }
+     
+     if(wave == 7)//Sniper mines
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 5;
+     enemy->MType = 3;
+     enemy->Health = 51;
+     enemy->MoveSpeed = 1;
+     enemy->MissileType = 1;
+     }
+     
+     if(wave == 8)//Sniper+ mines
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 5;
+     enemy->MType = 3;
+     enemy->Health = 51;
+     enemy->MoveSpeed = 1;
+     enemy->MissileType = 2;
+     }
+     
+     if(wave == 9)//Bouncer mines
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 4;
+     enemy->MType = 2;
+     enemy->Health = 101;
+     enemy->MoveSpeed = 2;
+     enemy->BounceDir = DirType - 1;
+     if(enemy->BounceDir == 0)enemy->BounceDir = 2; 
+     }
+ }
+ 
+ if(boss == true)
+ {
+     if(wave == 6)//BOSS 1 - Bouncer
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 4;
+     enemy->MType = 2;
+     enemy->Health = 100;
+     enemy->MoveSpeed = 2;
+     ColMask = new CColMask(8,5,MakeRectMask(16,10));
+     
+     enemy->BounceDir = DirType - 1;
+     if(enemy->BounceDir == 0)enemy->BounceDir = 2; 
+     }  
+     
+     if(wave == 10)//BOSS 2 - Awesomer
+     {
+     MobNum = MobNum + 1;
+     local enemy = new CAttacker(Root->GetObject(25, 0), x, y);
+     enemy->FloatDirection = dir; 
+     enemy->AType = 6;
+     enemy->MType = 4;
+     enemy->Health = 500;
+     enemy->MoveSpeed = 2;
+     enemy->MissileType = 3;
+     enemy->CrosshairTimer = 0;
+     ColMask = new CColMask(8,5,MakeRectMask(14,10));
+     
+     enemy->BounceDir = DirType - 1;
+     if(enemy->BounceDir == 0)enemy->BounceDir = 2; 
+     }  
+ }         
+} 
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Fight") && MobNum == 0)
+  {
+  GlobalWave = GlobalWave + 1;
+  ShowMessage(MakeNumberString("Wave: ",GlobalWave,"!"));
+  }
+  super;
+}   
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(Type == M_TURNEND)
+  {
+  if(MobNum == 0)ShowMessage("Challenger skipped turn!");
+  if(MobNum != 0)ShowMessage("Challenger got hit!");
+  if(MobNum != 0)GlobalWave = GlobalWave - 1;
+  if(MobNum != 0)DestroyEnemies = true;
+  PosX = SpawnPosX;
+  PosY = SpawnPosY;
+  }
+  super;
+}

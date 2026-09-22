@@ -1,0 +1,15 @@
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_TURNBEGIN)
+         {
+                 if(WormTeam == 2)
+                 {
+                 Root->Timer = 120000;   //seekersssssssssssssssssssssssssss
+                 }
+                 else
+                 {
+                 Root->Timer = 20000;
+                 }
+         }
+super;
+}

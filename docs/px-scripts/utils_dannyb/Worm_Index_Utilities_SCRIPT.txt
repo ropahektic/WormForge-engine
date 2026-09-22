@@ -1,0 +1,79 @@
+/* 
+
+Made by: DannyB, February 2023
+
+*/
+
+// This script adds a few useful and easy to use worm related index utilities. 
+
+CWorm* Current_Worm;
+int current_worm_team;
+int current_worm_number;
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+     if(Type == M_FRAME)
+     {
+          local cw = GetCurrentWorm();
+          
+          if(cw != NullObj && cw == this)
+          {
+               Current_Worm = CWorm(cw);
+               current_worm_team = Current_Worm->WormTeam - 1;
+               current_worm_number = Current_Worm->WormNumber - 1;
+          }
+     }
+     
+     super;
+}
+
+// gets the given worm's team, using the preferred indexing
+int getWormTeam(CWorm* worm, int start_index)
+{
+     return (worm->WormTeam - 1) + start_index;     
+}
+
+// gets the given worm's number, using the preferred indexing
+int getWormNumber(CWorm* worm, int start_index)
+{
+     return (worm->WormNumber - 1) + start_index;
+} 
+
+// gets the given worm's color, using the preferred indexing
+int getWormColor(CWorm* worm, int start_index)
+{
+     return worm->LabelColor + start_index;    
+}
+
+CWeapon* Current_Weapon;
+
+// makes it easy to refer to the current weapon (no need for local variables)
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+     if(Type == M_FRAME)
+     {
+          local cwp = getCurrentWeapon();
+          
+          if(cwp != NullObj)
+          {
+               Current_Weapon = CWeapon(cwp);     
+          }
+     }
+     
+     super;
+}
+
+// gets the current weapon as an object
+CWeapon* getCurrentWeapon()
+{
+     if(Current_Worm == NullObj)
+     {
+          return NullObj;     
+     }
+     else if(Current_Worm->CurWeapon == NullObj)
+     {
+          Current_Worm->setWeapon(Current_Worm, "None", false);
+     }
+     
+     return Current_Worm->CurWeapon;
+}

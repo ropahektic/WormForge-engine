@@ -1,0 +1,13 @@
+//List of sprites
+CSprite* beetr;
+
+void bee_sprites::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("beetr.png");
+   beetr = LoadSprite(f, 9, 0);
+
+   //Let's override the sprites!
+   SetSpriteOverride(468, beetr);
+}

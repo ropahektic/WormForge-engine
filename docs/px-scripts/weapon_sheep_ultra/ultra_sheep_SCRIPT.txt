@@ -1,0 +1,48 @@
+require utils, utils_steps;
+
+CMissile* dmis;
+bool supershig;
+CSoundFile* sheepfanfare;
+
+void ultra_sheep_SCRIPT::Init()
+{
+	sheepfanfare = new CSoundFile(GetAttachment("Ultra Sheeper.wav"));
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    Sdigging = false;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (supershig) {dmis = this; dmis->Sdigging = true; supershig = false;}
+        
+        if (Sdigging)
+        {
+            if (IsFlying)
+            {
+                Dodig = true;
+                GG->land->MakeHole(15,PosX,PosY);
+                
+                if (modulef(SpX) > 8 || modulef(SpY) > 8) Sdigging = false;
+            }
+        }
+    }
+    
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Ultra Sheep"))
+    {
+        supershig = true;
+        sheepfanfare->Play(1.25, 0.0, false);
+    }
+    
+    super;
+}

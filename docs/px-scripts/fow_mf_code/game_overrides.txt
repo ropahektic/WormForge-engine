@@ -1,0 +1,422 @@
+int BoltsInAir;
+bool FastWalkNow;
+CShootDesc* tmpEditSD;
+
+override void CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+    KaozActive = false;
+    KaozActiveBeta = false; //testing always active kaos on your team side to make more action
+    UpdateWPanel = 0;
+    UpdateWPanelDelay = 0;
+
+    //duplicate from swim
+    WormAntiZed = 0.0000;
+    plophase = 0.0;
+    flophase = 0.0;
+    fmultipl = 5;
+    antisink_fail = false;
+    helicopter = false;
+    jumpin = false;
+    ghostjet = false;
+
+    WDRoutine = 0;
+    FirstSafeFrame = 25;
+
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+    if (Weap->CheckName("Fire Bolt"))
+		{
+        if(BoltsInAir < 3)
+			{
+            tmpEditSD = Desc;
+            tmpEditSD->SpY = tmpEditSD->SpY - BoltsInAir;
+            BoltsInAir++;
+            FireFinal(Weap, tmpEditSD);
+            if(BoltsInAir == 2){tmpEditSD->SpX = tmpEditSD->SpX - BoltsInAir;}
+         	}
+		else {BoltsInAir = 0;}
+     	}
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+super;
+  	if (weap->CheckName("Fire Bolt"))
+  	{
+    GG->land->MakeHole (30,x-30,y);
+    GG->land->MakeHole (30,x-20,y);
+    GG->land->MakeHole (30,x-10,y);
+    GG->land->MakeHole (30,x,y);
+    GG->land->MakeHole (30,x+10,y);
+    GG->land->MakeHole (30,x+20,y);
+    GG->land->MakeHole (30,x+30,y);
+    }
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    local windex = Weap->GetWeaponIndex();
+
+    if(windex > 0 && windex < 80)
+		{
+        if(windex != 3 && // Torch
+		   windex != 18 && // Kami
+		   windex != 26 && // Mole
+		   windex != 29 && // Far Sight
+		   windex != 32 && // BlowTorch
+		   windex != 33 && // Drill
+		   windex != 34 && // Girder
+		   windex != 38 && // Bungee
+		   windex != 39 && // Parachute
+		   windex != 57 && // Skip Go
+		   windex != 58 && // Surrender
+		   windex != 59 && // Select Worm
+		   windex != 64) // Fast Walk
+			{
+            local wamount = 0;
+            if(TeamSide == 1)
+				{
+        		wamount = WepAmountL[windex] - 1;
+                if(wamount < 0){wamount = 0;}
+                WepAmountL[windex] = wamount;
+                }
+			else
+				{
+                wamount = WepAmountR[windex] - 1;
+                if(wamount < 0){wamount = 0;}
+                WepAmountR[windex] = wamount;
+                }
+
+            //TODO: Ninja rope "37" does not fire FireFinal
+            //Two fire weapon fix TODO
+
+			/*
+            for (int i = 6; i >= 1; i-=1)
+            	{
+                for (int j = 8; j >= 1; j-=1)
+                	{
+                    local FTWorm = CWorm(Root->GetObject(2, 16 * i + j));
+                    if(FTWorm != NullObj)
+						{
+                        if(FTWorm->TeamSide == TeamSide)
+							{
+                            FTWorm->UpdateWPanel = windex;
+                            FTWorm->UpdateWPanelDelay = 50;
+                            }
+                        break;
+                        }
+                    }
+                }
+            */
+
+	        }
+        }
+
+	if(KaozActive || KaozActiveBeta)
+		{
+        Weap->EndsTurn = false;
+        super;
+        return;
+        }
+	else
+		{
+        if(windex != 3 && // Torch
+		   windex != 37 && // Ninja Rope
+		   windex != 38 && // Bungee
+		   windex != 39 && // Parachute
+		   windex != 57 && // Skip Go
+		   windex != 58 && // Surrender
+		   windex != 59 && // Select Worm
+		   windex != 62 && // Jetpack
+		   windex != 63 && // LG
+		   windex != 64 && // FW
+		   windex != 65 && // Damage x2
+		   windex != 66 && // Crate Spy
+		   windex != 70) // Crate Shower
+			{
+        	Weap->EndsTurn = true;
+        	}
+    	super;
+    	}
+}
+
+override void CGObject::LookAtMe(fixed x,fixed y,int priority)
+{
+    if(this->ClType == OC_Crate && (CCrate(this)->PositionSet == false || CCrate(this)->Freeing == true))
+	{
+    return;
+    }
+super;
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+
+	//maybe only pick map size if its not done.
+
+    if(mapsizeX < 100 || mapsizeY < 100)
+		{
+        mapsizeX = GS->LevelSX;
+        mapsizeY = GS->LevelSY;
+    	}
+
+	local mapSX = mapsizeX;
+    local mapSY = mapsizeY;
+
+    if(isAnyWormOnClouds(mapsizeY, mapsizeX) == true){ClearCloudBridge(mapsizeY, mapsizeX);}
+
+	local twep = GS->GetWeaponByIndex(1, 1);
+	local HasDoneTeamWep = false;
+
+    for (int j = 6; j >= 1; j-=1)
+    	{
+        HasDoneTeamWep = false;
+        for (int i = 8; i >= 1; i-=1)
+        	{
+            local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+            if (Worm != NullObj)
+            	{
+                Worm->KaozActive = false;
+                Worm->swimsuit = false;
+                Worm->plopready = false;
+                Worm->plopped = false;
+                Worm->wasinwater = false;
+                Worm->wfloating = false;
+                Worm->antisink_fail = false;
+                Worm->GravityFactor = 1;
+                if (!Worm->ghostjet) Worm->ColGroup = 134342 + 4194304;
+                else Worm->ColGroup = 134342;
+                }
+            }
+        }
+
+    SpawnJetCrate = SpawnJetCrate + 1; if(SpawnJetCrate > 10){SpawnJetCrate = 10;}
+
+    //spawn jetpack if right map
+
+    if(mapSX == 2200 && mapSY == 2000 && (SpawnJetCrate == 3))
+		{
+        if(JetCrateAlive == false)
+			{
+            JetCrateAlive = true;
+
+            CCrateDesc CDesc;
+            zero(&CDesc);
+
+            CDesc.X = 1096;
+            CDesc.Y = CurrWaterLvl - 636;
+
+            CDesc.type = CT_WEAPON;//cratype;
+            CDesc.wType = WCT_RANDOM;//WCT_RANDOM;
+            CDesc.weapon = 127;
+
+            local daJetCrate = new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+            daJetCrate->FixedWeapon = 62;
+            daJetCrate->PosX = 1100;
+            daJetCrate->PosY = 1373;
+            daJetCrate->X = 1100;
+            daJetCrate->Y = 1373;
+        	}
+    	}
+    	
+    if(mapSX == 2200 && mapSY == 1504 && (SpawnJetCrate == 3))
+		{
+        if(JetCrateAlive == false)
+			{
+            JetCrateAlive = true;
+
+            CCrateDesc CDesc;
+            zero(&CDesc);
+
+            CDesc.X = 1096;
+            CDesc.Y = CurrWaterLvl - 636;
+
+            CDesc.type = CT_WEAPON;//cratype;
+            CDesc.wType = WCT_RANDOM;//WCT_RANDOM;
+            CDesc.weapon = 127;
+
+            local daJetCrate = new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+            daJetCrate->FixedWeapon = 62;
+            daJetCrate->PosX = 1100;
+            daJetCrate->PosY = 1000;
+            daJetCrate->X = 1100;
+            daJetCrate->Y = 1000;
+        	}
+    	}
+    	
+    super;
+
+   	CWorm* currWormy = GetCurrentWorm();
+   	if(currWormy != NullObj)
+    	{
+        FindClosestEnemy();
+        FWormSel();
+        currWormy->JobFrame = 1; //Fast walk
+    	}
+
+    //Sometimes leave space empty with no clouds
+    if(StartTurnCounter % 5 == 0){return;} //3 is too often empty
+
+    if(mapSY == 1504 && mapSX == 2200){CaveGenExt(51,7,1,5,24,24,868,425, GS->GetRandom());}
+
+    if(mapSY == 2000 && mapSX == 2200){CaveGenExt(51,7,1,5,   107,15, 69, 10, GS->GetRandom());}
+    
+
+}
+
+void FWormSel() //Fast walk!
+{
+    CWorm* currWW = GetCurrentWorm();
+    if(currWW != NullObj)
+    	{
+    	CMessageData msgselectMole;
+        msgselectMole.params[0] = currWW->WormTeam;
+        msgselectMole.params[1] = currWW->WormNumber;
+        msgselectMole.params[2] = 64;
+        msgselectMole.params[3] = 0;
+        currWW->Message(NullObj, M_SETWEAPON, 1032, &msgselectMole);
+        CMessageData msgspaceT;
+        msgspaceT.params[0] = currWW->WormTeam;
+        currWW->Message(NullObj, M_SPACE, 1032, &msgspaceT);
+    	}
+}
+
+void FindClosestEnemy()
+{
+    NearestEnemyWorm = NullObj;
+    local currW = GetCurrentWorm();
+    local j; local i;
+    local shortestDistance = 3000;
+    if(currW == NullObj){ return; }
+
+    for (j = 6; j >= 1; j-=1)
+    	{
+        for (i = 8; i >= 1; i-=1)
+            {
+            local Worm = CWorm(Root->GetObject(2, 16 * j + i));
+            if (Worm)
+                {
+                if(Worm->TeamSide == currW->TeamSide){continue;}
+                local distX = abs(Worm->PosX - currW->PosX);
+                local distY = abs(Worm->PosY - currW->PosY);
+                local tmpdist = sqrt((distX*distX) + (distY*distY));
+
+				if(tmpdist < shortestDistance)
+					{
+                    shortestDistance = tmpdist;
+                    NearestEnemyWorm = Worm;
+                    }
+                }
+            }
+        }
+}
+
+
+
+override void CTurnGame::FinishTurn(int reason)
+{
+    //spawn extra crate
+
+    CCrateDesc CDesc;
+    local RNGt = GS->GetRandom();
+    for(int w = 0; w < 3; w++)
+		{
+        zero(&CDesc);
+
+        CDesc.X = -1000;
+        CDesc.Y = -1000;
+
+        CDesc.type = CT_WEAPON;//cratype;
+        CDesc.wType = WCT_RANDOM;//WCT_RANDOM;
+        CDesc.weapon = 127;
+
+        //CDesc.health = 25;//RandomInt(1,30);
+        local daJetCrate = new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+        daJetCrate->FixedWeapon = 0; //random wep
+        daJetCrate->PosX = -1000 + (w * 30);
+        daJetCrate->PosY = -1000;
+        daJetCrate->X = -1000;
+        daJetCrate->Y = -1000;
+        daJetCrate->PositionSet = true;
+
+        RNGt = GS->GetRandom();
+        local mzX = mapsizeX;
+        local mzY = mapsizeY;
+        GetNewCrateSpawn(mzX, mzY, RNGt);
+        if(CrateSpawnSuccess == true)
+			{
+            daJetCrate->PosX = NewCrX;
+            daJetCrate->PosY = NewCrY;
+            daJetCrate->X = NewCrX;
+            daJetCrate->Y = NewCrY;
+            daJetCrate->PositionSet = true;
+            daJetCrate->LookAtMe(NewCrX, NewCrY, 5);
+            }
+        else
+			{
+            //could not spawn crate
+            daJetCrate->PositionSet = true;
+            daJetCrate->Freeing = true;
+            daJetCrate->Free(true);
+        	}
+    }
+
+    local tcworm = GetCurrentWorm();
+
+    if(mapsizeX < 100 || mapsizeY < 100)
+		{
+        mapsizeX = GS->LevelSX;
+        mapsizeY = GS->LevelSY;
+    	}
+
+    local mSX = mapsizeX;
+    local mSY = mapsizeY;
+    local SpawnKCrateResult = 5;
+
+    if(isAnyWormOnClouds(mSY, mSX) == false){ClearCloudBridge(mSY, mSX);}
+
+    if(SpawnKCrateOverride == true)
+		{
+        SpawnKCrateOverride = false;
+        NewKCrate(NextKcrateX, mSX, mSY);
+        }
+	else
+		{
+        // A TINY BIT OF BALANCING!
+        //is one team lower health than the other by x amount?
+        if(TeamHealthDiff() > 100)
+			{
+        	//TeamLowestHealth
+        	//Do we want to spawn crate?
+
+			SpawnKCrateResult = WantToSpawnKCrate(GS->GetRandom(),GS->GetRandom(), mSX, mSY, StartTurnCounter);
+	        if(SpawnKCrateResult == 1)
+				{
+	            //is crate spawning on the low health teams turn?
+	            //its the low health teams turn next, spawn crate
+	            if(tcworm->TeamSide != TeamLowestHealth){NewKCrate(NextKcrateX, mSX, mSY);}
+	            else
+					{
+	                if(SpawnKCrateResult != 3){SpawnKCrateOverride = true;}
+	                }
+            	}
+            }
+
+		else //normal spawn
+			{
+            SpawnKCrateResult = WantToSpawnKCrate(GS->GetRandom(),GS->GetRandom(), mSX, mSY, StartTurnCounter);
+            if(SpawnKCrateResult == 1){NewKCrate(NextKcrateX, mSX, mSY);}
+            }
+        }
+
+	local whp = 0;
+
+    StartTurnCounter = StartTurnCounter + 1; // must maybe be here for desync reasons
+    CurrWaterLvl = Env->Water;
+
+super;
+}

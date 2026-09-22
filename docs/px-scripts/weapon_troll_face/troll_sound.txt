@@ -1,0 +1,15 @@
+CSoundFile* trololololo;
+ 
+void troll_sound::Init()
+{
+	trololololo       = new CSoundFile(GetAttachment("Trololololo.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Trollface"))
+  {  
+             trololololo->Play(1.5, 0.0, false);
+  }
+  super;
+}

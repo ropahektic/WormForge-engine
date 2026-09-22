@@ -1,0 +1,28 @@
+//List of sprites
+CSprite* zombiegas;
+CSoundFile* zhorde;
+
+void zombie_apocalypse_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("Zombie Old Woman.png"); 
+   zombiegas = LoadSprite(f, 0, 1);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(733, zombiegas);
+}
+
+void zombie_apocalypse_script::Init()
+{
+	zhorde       = new CSoundFile(GetAttachment("Zombie Horde.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Zombie Apocalypse"))
+  {
+             zhorde->Play(0.9, 0.0, false);
+  }
+  super;
+}

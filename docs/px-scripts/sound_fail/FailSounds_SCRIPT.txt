@@ -1,0 +1,131 @@
+require utils;
+
+// Combined script for all fail sounds and skip turn/surrender.
+// All sounds were converted to mono to save space.
+
+//bool playNow;
+
+CSoundFile* aaahh;
+CSoundFile* beep;
+CSoundFile* bruh;
+CSoundFile* carnivalm;
+CSoundFile* cartoonhead;
+CSoundFile* cartoonslip;
+CSoundFile* clownh;
+CSoundFile* claughing;
+CSoundFile* dontworry;
+
+CSoundFile* evilmorty;
+CSoundFile* gyell;
+CSoundFile* hellodarkness;
+CSoundFile* ibelieveicanfly;
+CSoundFile* jumpingrope;
+CSoundFile* mariogo;
+CSoundFile* onlyt;
+CSoundFile* sadtrombone;
+CSoundFile* sadtuba;
+
+CSoundFile* timetosaygoodbye;
+CSoundFile* titanic;
+CSoundFile* tomscream;
+CSoundFile* tragicviolin; 
+CSoundFile* whatwonderfulworld;
+CSoundFile* whistle;
+CSoundFile* windowserror; 
+
+void FailSounds_SCRIPT::Init()
+{
+		aaahh           = new CSoundFile(GetAttachment("aaahh.wav"));
+		beep            = new CSoundFile(GetAttachment("beep.wav"));
+        bruh            = new CSoundFile(GetAttachment("bruh.wav"));	
+        carnivalm       = new CSoundFile(GetAttachment("carnival music.wav"));
+        cartoonhead     = new CSoundFile(GetAttachment("cartoon head bump.wav"));
+        cartoonslip     = new CSoundFile(GetAttachment("cartoon slipping.wav"));
+        clownh          = new CSoundFile(GetAttachment("clown horn.wav"));
+		claughing       = new CSoundFile(GetAttachment("crowd laughing.wav"));
+        dontworry       = new CSoundFile(GetAttachment("don't worry be happy.wav"));
+        
+        evilmorty       = new CSoundFile(GetAttachment("evil morty theme.wav"));
+		gyell           = new CSoundFile(GetAttachment("goofy yell.wav"));
+		hellodarkness   = new CSoundFile(GetAttachment("hello darkness.wav"));
+        ibelieveicanfly = new CSoundFile(GetAttachment("i believe i can fly.wav"));
+        jumpingrope     = new CSoundFile(GetAttachment("jumping rope.wav"));
+        mariogo         = new CSoundFile(GetAttachment("mario game over.wav"));
+        onlyt           = new CSoundFile(GetAttachment("only time.wav"));
+        sadtrombone     = new CSoundFile(GetAttachment("sad trombone.wav"));
+        sadtuba         = new CSoundFile(GetAttachment("sad tuba.wav"));
+        
+		timetosaygoodbye = new CSoundFile(GetAttachment("time to say goodbye.wav"));
+		titanic          = new CSoundFile(GetAttachment("titanic theme.wav"));
+        tomscream        = new CSoundFile(GetAttachment("tom scream.wav"));
+        tragicviolin	 = new CSoundFile(GetAttachment("tragic violin.wav"));
+		whatwonderfulworld = new CSoundFile(GetAttachment("what a wonderful world.wav"));
+		whistle          = new CSoundFile(GetAttachment("whistle.wav"));
+		windowserror     = new CSoundFile(GetAttachment("windows error.wav"));
+}
+
+override void CWorm::Message( CObject *sender, EMType Type, int mSize, CMessageData *mData )
+{
+   if(Type == M_TURNEND)
+     {
+          local cw = GetCurrentWorm();  
+          
+          if(cw->ObjState == WS_FLYING)
+          {
+             local fm = RandomInt(1,5);             
+             if (fm == 1) bruh->Play(1.0, 0.0, false);
+             else if (fm == 2) cartoonhead->Play(1.00, 0.0, false);
+             else if (fm == 3) cartoonslip->Play(1.0, 0.0, false);
+             else if (fm == 4) clownh->Play(1.0, 0.0, false);
+             else if (fm == 5) jumpingrope->Play(1.0, 0.0, false);
+                  
+          }
+          else if(cw->ObjState == WS_FLYING2)
+          {
+             local fm = RandomInt(1,4);
+             if (fm == 1) carnivalm->Play(1.0, 0.0, false);
+             else if (fm == 2) claughing->Play(1.0, 0.0, false);
+             else if (fm == 3) sadtrombone->Play(1.0, 0.0, false);
+             else if (fm == 4) sadtuba->Play(1.0, 0.0, false);     
+          }
+          
+          else if(cw->ObjState == WS_POWERFLY)
+          {
+             local fm = RandomInt(1,3);
+             if      (fm == 1) ibelieveicanfly->Play(1.0, 0.0, false);
+             else if (fm == 2) gyell->Play(1.0, 0.0, false);
+             else if (fm == 3) tomscream->Play(1.0, 0.0, false);                  
+          }
+          
+          else if(cw->ObjState == WS_SINKING)
+          {
+             local fm = RandomInt(1,8);
+             if      (fm == 1) titanic->Play(1.0, 0.0, false);
+             else if (fm == 2) timetosaygoodbye->Play(1.0, 0.0, false);
+             else if (fm == 3) tragicviolin->Play(1.0, 0.0, false);
+             else if (fm == 4) onlyt->Play(1.0, 0.0, false);             
+             else if (fm == 5) whatwonderfulworld->Play(1.0, 0.0, false);
+             else if (fm == 6) dontworry->Play(1.0, 0.0, false);
+             else if (fm == 7) evilmorty->Play(1.0, 0.0, false);
+			 else if (fm == 8) aaahh->Play(1.0, 0.0, false);
+          }
+     }
+     
+   if(Type == M_SKIPTURN)
+     {
+             local fm = RandomInt(1,3);
+             if      (fm == 1) beep->Play(1.0, 0.0, false);
+             else if (fm == 2) whistle->Play(1.0, 0.0, false);
+             else if (fm == 3) windowserror->Play(1.0, 0.0, false);  
+     }
+     
+   if(Type == M_SURRENDER)
+     {
+             local fm = RandomInt(1,2);
+             if      (fm == 1) hellodarkness->Play(1.0, 0.0, false);
+             else if (fm == 2) mariogo->Play(1.0, 0.0, false);  
+     }  
+  
+super;
+}
+  

@@ -1,0 +1,77 @@
+require utils;
+
+//List of sprites
+CSprite* mineoff;
+
+void altmine::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("mineoff.png");
+   mineoff = LoadSprite(f, 1, 0);
+   
+   f = GetAttachment("w_mine1.png");
+   w_mine1 = LoadSprite(f, 10, 0);
+   
+   f = GetAttachment("w_mine2.png");
+   w_mine2 = LoadSprite(f, 10, 0);
+   
+   f = GetAttachment("w_mine3.png");
+   w_mine3 = LoadSprite(f, 10, 0);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(45, mineoff);
+   SetSpriteOverride(47, mineoff);
+   SetSpriteOverride(388, w_mine1);
+   SetSpriteOverride(389, w_mine2);
+   SetSpriteOverride(390, w_mine3);
+}
+
+override void CDDQueue::AddSprite(fixed z,fixed x,fixed y,int unk,int sprite,fixed frame)
+{
+      if(sprite == 45)
+      {
+          //SetColorMod(RGB(175,0,0),8);
+          //super;
+          //ClearColorMod();
+          local worm = GetCurrentWorm();
+          
+  if(worm){
+    local Color = GetTeamColor(worm->WormTeam);
+    
+    if (Color == 0)
+    {
+      SetColorMod(RGB(175, 0, 0), 8); //4 - diffuse color goes to smooth addition
+    }
+    if (Color == 1)
+    {
+      SetColorMod(RGB(0, 0, 180), 8);
+    }
+    if (Color == 2)
+    {
+      SetColorMod(RGB(0, 180, 0), 8);
+    }     
+    if (Color == 3)
+    {
+      SetColorMod(RGB(120, 120, 0), 8);
+    }
+    if (Color == 4)
+    {
+      SetColorMod(RGB(120, 0, 120), 8);
+    }
+    if (Color == 5)
+    {
+      SetColorMod(RGB(0, 120, 120), 8);
+    }
+  }else{
+    SetColorMod(RGB(175,0,0),8);
+  }
+    super;
+    ClearColorMod();
+    
+    
+    
+    
+      }
+      else super;  
+}

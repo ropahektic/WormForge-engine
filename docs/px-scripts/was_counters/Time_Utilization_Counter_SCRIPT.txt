@@ -1,0 +1,66 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a time utilization-counter to the game (can be used for statistical GUIs)
+
+float time_utilization_counts[6];
+float tec_start_utilization;
+int tec_turn_time;
+int tec_added_time;
+int tec_previous_time;
+
+void Time_Utilization_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          time_utilization_counts[i] = 0.0;
+     }
+     
+     tec_start_utilization = 0.0;
+     tec_turn_time = 0;
+     tec_added_time = 0;
+     tec_previous_time = 0;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{  
+     if(type == M_RESUMETIMER)
+     {
+          tec_start_utilization = time_utilization_counts[current_worm_team];
+          
+          if(tec_turn_time == 0)
+          {
+               tec_turn_time = Root->Timer;
+          }
+          
+          tec_added_time = 0;
+          
+          tec_previous_time = tec_turn_time;
+     }
+     
+     if(Root->IsTimerActive() == true)
+     {     
+          if(Root->Timer % 10000)
+          {     
+               if(Root->Timer > tec_previous_time)
+               {
+                    tec_added_time += Root->Timer - tec_previous_time;
+                    
+                    tec_previous_time = Root->Timer;
+               }
+               else
+               {
+                    tec_previous_time = Root->Timer; 
+               }
+               
+               float percentage_time_used = (1 - (Root->Timer / (tec_turn_time + tec_added_time))) * 100; 
+               
+               time_utilization_counts[current_worm_team] = ((tec_start_utilization * (turn_counts[current_worm_team] - 1)) + percentage_time_used) / turn_counts[current_worm_team];
+          }
+     }
+  
+     super;
+}

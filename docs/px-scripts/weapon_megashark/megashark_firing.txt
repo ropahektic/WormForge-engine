@@ -1,0 +1,126 @@
+//Script by redddaz/lucho, sequencing shots without (fully) using gun params
+//Set weap anim to a gun's (6 for minigun, uzi, shotgun, handgun also work)
+//Nades or zooks have no cooldown and will almost instantly fire everything
+//There's a workararound for that, an array, and for i = 0; i<19; i++ {shotCooldown[i] = [12*i], then shotFrames++ on M_FRAME and if (shotFrames==shotCooldown[shotFrames]) super;}  more or less, you can set any cooldown you want with that, but it wasn't that reliable, if ur better than me do use that. 
+require utils, utils_steps, p_sprite_builder;   
+
+CWeapon* g_megashark;
+int MS_BulletAmount;
+int nerfedMS;
+
+void megashark_firing::FirstFrame()
+{
+g_megashark = GetWeaponByName("MEGASHARK");
+keySync->AddKey(49); // 1 button
+keySync->AddKey(50); // 2 button
+keySync->AddKey(51); // 3 button
+keySync->AddKey(52); // 4 button
+keySync->AddKey(53); // 5 button
+if (nerfedMS==1)
+{
+MS_BulletAmount = 9;
+g_megashark->launch.explosion.damage = 7;
+g_megashark->launch.explosion.pushPower =600;
+g_megashark->launch.explosion.bias-20;  
+}
+else MS_BulletAmount = 12;
+}
+
+//CSprite* bulletCL;  
+CSprite* cloroBullet; 
+CSprite* bulletCLT;
+void megashark_firing::InitGraphic()
+{
+
+f = GetAttachment("clorophyte.png");
+cloroBullet = LoadSprite(f, 1, 0);
+
+f = GetAttachment("clorophyte2.png");
+bulletCLT = LoadSprite(f, 1, 0);
+SetSpriteOverride(878,bulletCLT);
+}
+
+//---------------CWorm Class Overrides---------------//
+override CWorm::CWorm(CObject * Parent, int aTeam, int aIndex, CWormParams * params)
+{
+    super;
+    MShotsFired = 0;
+    megaShooting = false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (Weap->CheckName("MEGASHARK"))
+    {
+       if (MShotsFired<=MS_BulletAmount)     //Quantity of shots
+       {            
+         for (int curShots = MShotsFired; MShotsFired==curShots; MShotsFired++) //For some reason MShotsFired++ normally doesn't work.
+         Desc->Y+18;                  //Hotfix
+         Desc->SpY+RandomInt(-6,6);  //Spread        
+         super(g_megashark, Desc);  
+         megaShooting=true;
+         return;   //Return makes it loop.
+       }
+       megaShooting=false;   //Don't reset shots here, it'll just keep looping. 
+       return;
+    }        
+    megaShooting=false; //Shouldn't be neccessary, however i'm insecure.
+    super;
+}
+  
+// --- Main Logic Loop --- //
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+  if (Type == M_FRAME)
+  {
+        if (CurWeapon != NullObj && CurWeapon->CheckName("MEGASHARK"))
+        {
+            if (!megaShooting){
+            if (keySync->KeyPressedNow(49)) // Player pressed "1"
+            {
+                bulletsPerTarget = 1;
+                ShowTeamMessage(8, "Megashark: Home 1 bullet per Target", WormTeam);
+                PlayLocalSound(92, 1.0, 1.0, 1.0);
+            }
+            else if (keySync->KeyPressedNow(50)) // Player pressed "2"
+            {
+                bulletsPerTarget = 2;
+                ShowTeamMessage(8, "Megashark: Home 2 bullets per Target", WormTeam);   
+                PlayLocalSound(92, 1.0, 1.0, 1.0);
+            }
+            else if (keySync->KeyPressedNow(51)) // Player pressed "3"
+            {
+                bulletsPerTarget = 3;
+                ShowTeamMessage(8, "Megashark: Home 3 bullets per Target", WormTeam); 
+                PlayLocalSound(92, 1.0, 1.0, 1.0);
+            }
+            else if (keySync->KeyPressedNow(52)) // Player pressed "4"
+            {
+                bulletsPerTarget = 4;
+                ShowTeamMessage(8, "Megashark: Home 4 bullets per Target", WormTeam); 
+                PlayLocalSound(92, 1.0, 1.0, 1.0);
+            }}
+        if (megaShooting)
+        {
+           // Persist animation.  
+           nShoots = 1;
+           nShooted = 0;
+        }
+     }
+  }
+  if (GetCurrentWorm()!=this) return;
+  if (Type==M_SETWEAPON)
+  {
+     if(CurWeapon!=NullObj && CurWeapon->CheckName("MEGASHARK") == true)
+     {
+     MShotsFired=0;megaShooting=false; bulletsPerTarget=3; //Reset variables
+     ShowTeamMessage(8, "MEGASHARK: Home 3 bullets per Target", WormTeam);
+     }    
+
+  } 
+   
+}
+
+//Well organized workflow oriented SPB
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){super;if(Type==M_FRAME){if(weap->CheckName("MEGASHARK")){if(megablt_anim){local sprite=cloroBullet->Index;WeapSpriteParams* Params= new WeapSpriteParams;Params->animate=true;Params->anim_speed=1.50;new WeapSprite(this,sprite,Params);weap->launch.anim.spriteIndex=0;megablt_anim=false;}}}} override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){super;megablt_anim = true;}        

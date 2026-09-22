@@ -1,0 +1,256 @@
+/*
+
+// know it is messy, I just put it together in one file quick :(
+
+CWorm* Current_Worm;
+int current_worm_team;
+int current_worm_number;
+
+float map_scale;
+bool game_over;
+
+CWeapon* Current_Weapon;
+
+bool teams_surrendered[6]; 
+
+EMType M_CRATECOLLECTED;
+EMType M_WORMDROWNED;
+EMType M_GAMEOVER;
+EMType M_FACERIGHT;
+EMType M_SURRENDER;
+EMType M_KILLWORM;
+EMType M_WORMDAMAGED;
+EMType M_WEAPONFINISHED;
+EMType M_PAUSETIMER;
+EMType M_RESUMETIMER;
+
+void needed_stuff_SCRIPT::FirstFrame()
+{
+     map_scale = 0.0;
+     game_over = false;
+     
+     int temp;
+     
+     temp = EMType(7);
+     M_CRATECOLLECTED = temp;
+     
+     temp = EMType(11);
+     M_WORMDROWNED = temp;
+     
+     temp = EMType(21);
+     M_GAMEOVER = temp;
+     
+     temp = EMType(43);
+     M_SURRENDER = temp; 
+     
+     temp = EMType(64);
+     M_KILLWORM = temp;
+     
+     temp = EMType(72);
+     M_WORMDAMAGED = temp;
+     
+     temp = EMType(74);
+     M_WEAPONFINISHED = temp;
+     
+     temp = EMType(96);
+     M_PAUSETIMER = temp;
+     
+     temp = EMType(97);
+     M_RESUMETIMER = temp;
+     
+     temp = 0;
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+     if(Type == M_FRAME)
+     {
+          local cw = GetCurrentWorm();
+          
+          if(cw != NullObj && cw == this)
+          {
+               Current_Worm = CWorm(cw);
+               current_worm_team = Current_Worm->WormTeam - 1;
+               current_worm_number = Current_Worm->WormNumber - 1;
+          }
+     }
+     
+     super;
+}
+
+// gets the given worm's team, using the preferred indexing
+int getWormTeam(CWorm* worm, int start_index)
+{
+     return (worm->WormTeam - 1) + start_index;     
+}
+
+// gets the given worm's number, using the preferred indexing
+int getWormNumber(CWorm* worm, int start_index)
+{
+     return (worm->WormNumber - 1) + start_index;
+}
+
+// gets the given worm's color, using the preferred indexing
+int getWormColor(CWorm* worm, int start_index)
+{
+     return worm->LabelColor + start_index;    
+}
+
+// makes it easy to refer to the current weapon (no need for local variables)
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+     if(Type == M_FRAME)
+     {
+          local cwp = getCurrentWeapon();
+          
+          if(cwp != NullObj)
+          {
+               Current_Weapon = CWeapon(cwp);     
+          }
+     }
+     
+     super;
+}
+
+// gets the current weapon as an object
+CWeapon* getCurrentWeapon()
+{
+     if(Current_Worm == NullObj)
+     {
+          return NullObj;     
+     }
+     else if(Current_Worm->CurWeapon == NullObj)
+     {
+          Current_Worm->setWeapon(Current_Worm, "None", false);
+     }
+     
+     return Current_Worm->CurWeapon;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{          
+     // gets the turn time setting for the scheme
+     if(type == M_RESUMETIMER)
+     {
+          if(map_scale == 0)
+          {
+               map_scale = (GS->LevelSX + GS->LevelSY) / 2;
+          }
+     }
+     
+     // checks whether the game is over by a team victory
+     if(type == M_GAMEOVER)
+     {
+          if(game_over == false)
+          {
+               game_over = true;
+          }
+     }
+     
+     super;
+}
+
+// checks whether the game is over by a draw
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{         
+     if(type == M_KILLWORM || type == M_WORMDROWNED || type == M_SURRENDER)
+     {
+          if(game_over == false)
+          {
+               for(local i = 0; i <= 5; i++)
+               {
+                    if(IsTeamAlive(i) == true)
+                    {
+                         break;
+                    }
+                    else if(i == 5)
+                    {
+                         game_over = true;
+                    }
+               }
+          }
+     }
+     
+     super;
+} 
+
+bool isTeamAlive(int team_number)
+{
+     if(Root->GetObject(TI_Team, team_number + 1) == NullObj) 
+     {
+          return false;
+     }
+     
+     if(teams_surrendered[team_number] == true)
+     {
+          return false;
+     }
+     
+     for(local i = 0; i <= 7; i++)
+     {
+          if(GS->Info.Teams[team_number].Worms[i].Health != 0) 
+          {
+               return true;
+          }
+     }
+     
+     return false;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{
+     if(type == M_SURRENDER)
+     {
+          teamSurrendered(getWormTeam(Current_Worm, 0));     
+     }
+     
+     super;
+}
+
+void teamSurrendered(int team_number)
+{
+     teams_surrendered[team_number] = true;
+} 
+
+void CWorm::setWeapon(CWorm* worm, string weapon_name, bool visibly)
+{
+     local wp = GetWeaponByName(weapon_name); 
+     
+     CMessageData set_weapon_msg;
+     
+     set_weapon_msg.params[0] = worm->WormTeam;
+     set_weapon_msg.params[1] = worm->WormNumber;
+     set_weapon_msg.params[2] = wp->GetWeaponIndex();
+     
+     if(visibly == false)
+     {
+          set_weapon_msg.params[3] = 0;
+          
+          worm->Message(NullObj, M_SETWEAPON, 1032, &set_weapon_msg);
+     }
+     else
+     {
+          set_weapon_msg.params[3] = 1;  
+          
+          worm->Message(NullObj, M_SETWEAPON, 16, &set_weapon_msg);
+     }
+}
+
+int numericalValueInteger(int number)
+{
+     if(number > 0)
+     {
+          return number;
+     }
+     else if(number < 0)
+     {
+          return -1 * number;
+     }
+     
+     return 0;
+}
+
+float calculateDistance(int x, int y)
+{
+     return sqrt(x * x + y * y); 
+}

@@ -1,0 +1,545 @@
+// By PyroMan.
+
+require utils, utils_pyroman, pxparticles, p_sprite_builder_graphics;
+
+CSprite* weaponAnimHand;
+CSprite* weaponAnimHandLower;
+CSprite* weaponAnimHandUpper;                                    
+
+//CWorm* wormParent;
+
+WormSprite : CObject;
+
+void worms_anims_script::InitGraphic()
+{
+    CFile* f;
+    f = GetAttachment("hand_rad.png");
+    weaponAnimHand = LoadSprite(f, 1, 0);
+    f = GetAttachment("hand_rad_lower.png");
+    weaponAnimHandLower = LoadSprite(f, 1, 0);
+    f = GetAttachment("hand_rad_upper.png");
+    weaponAnimHandUpper = LoadSprite(f, 1, 0);
+}
+
+
+void worms_anims_script::FirstFrame() {
+//   wormParent = CWorm(Root->GetObject( 2, 17));         // 1 + 16*1
+}
+
+ObjStates::ObjStates() {
+    idle = false;
+    walking = false;
+    aiming = true;
+    setpower = true;
+    fired = false;
+    firecont = false;
+    firepunch = false;
+    drilling = false;
+    teleporting = false;
+    roping = false;
+    blowtorch = false;
+    afterrope = false;
+    suicidebomber = false;
+    poing = false;
+    shootingrope = false;
+    jump = false;
+    bungee = false;
+    parachute = false;
+    sliding = false;
+    powerfly = false;
+    flying2 = false;
+    jumpprepare = false;
+    jetpack = false;
+    flying = false;
+    frozen = false;
+    control_weapon = false;
+    death = false;
+    repeatfire = false;
+    sinking = false;
+    dead = false;
+    all_states = false;
+    use_current_state_sprite = false;
+    use_current_state_scale = 1.0;
+    global_scale = false;
+}
+
+CWormAnimParams::CWormAnimParams() { 
+    hand_radius = 1.0; 
+    hand_rotation = 1.0;
+    hand_radial_rotation = 1.0; 
+    hand_scale = 1.0;
+    hand_type = 2; 
+    zplane = 10.0; 
+    scale = 1.0; 
+    weap_rotation = 1.0; 
+    weap_radial_rotation = 1.0; 
+    weap_radius = 1.0;
+    draw_hand = true;
+    dont_rotate_with_angle = false;  
+    ang_if_static = 0.5;
+    hand_ang_if_static = 1.0;
+    draw_worm = true;
+    objStates = new ObjStates;
+    animate = false;
+    anim_speed = 1.0;
+    fix_flip_rotation = false;
+}
+
+WormSprite::WormSprite(string wepName, int Sprite, CWormAnimParams* Params)
+{
+    super(Root, GS);
+    weapName = wepName;
+    sprite = Sprite;
+    sprite2 = sprite;
+    hand_r = -Params->hand_radius;
+    hand_rot = Params->hand_rotation;
+    handRadRot = -Params->hand_radial_rotation;
+    hand_scale = Params->hand_scale;
+    hand_scale_pick = 0.0;
+    handType = Params->hand_type;
+    wormRot = 1.0 - Params->weap_rotation;
+    wormRad = -Params->weap_radius;
+    wormRadRot = Params->weap_radial_rotation;
+    scale = Params->scale;
+    z = Params->zplane+0.2;
+    drawHand = Params->draw_hand;
+    noAngRot = Params->dont_rotate_with_angle;
+    staticAng = Params->ang_if_static * MATH_PI;
+    handStaticAng = Params->hand_ang_if_static * MATH_PI;
+    drawWorm = Params->draw_worm;
+    if (handType == 3) handSprite = weaponAnimHandUpper->Index;
+    else if (handType == 2) handSprite = weaponAnimHand->Index;
+    else if (handType == 1) handSprite = weaponAnimHandLower->Index;
+    handSprite2 = handSprite;
+    x = 0;
+    y = 0;
+    scale_pick = 0.0;
+    frame = 1.0;
+    hand_frame = 1.0;
+    rot = 0.0;
+    rotH = 0.0;
+    rotHR = 0.0;
+    rotW = 0.0;
+    rotWR = 0.0;
+    aimAng = 0.0;
+    handAng = 0.0;
+    wepPosX = 0;
+    wepPosY = 0;
+    posX = 0;
+    posY = 0;
+    rotL = rot;
+    
+    counter = 0;
+    counterMax = 20;  // 800msec
+    counterEn = 0.25;
+    counterSm = 0.45;
+    counterNo = 0.85;
+    
+    scale_pick_max = 2.7;
+    
+    smMin = 0.025;
+    
+    yMoveMax = 4;
+    
+//    readyToDrawAim = false;
+//    readyToDrawPick = false;
+    
+    handCol = ARGB(255, 255, 255, 255);
+    weapCol = ARGB(255, 255, 255, 255);
+    handBlend = 0;
+    weapBlend = 0;
+    
+    allStates = Params->objStates->all_states;
+    curSprite = Params->objStates->use_current_state_sprite;
+    wormScale = Params->objStates->use_current_state_scale;
+    globalScale = Params->objStates->global_scale;
+    if (globalScale) {
+       hand_scale = wormScale;
+       scale = wormScale;
+       scale_pick = wormScale;
+    }
+    animate = Params->animate;
+    animSpeed = Params->anim_speed;
+    ansp = animSpeed * 30;
+    ansp = float(ansp)/1000.0;
+    AnimationSpeedT = ansp;
+    AnimationPhaseT = 0.0;
+    
+    fix_flip_rotation = Params->fix_flip_rotation;
+}
+
+void WormSprite::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    local w = GetCurrentWorm();
+    if (w == NullObj) return;  
+    
+    if (Type == M_FRAME)
+    {
+//        if (w->CurWeapon->CheckName(weapName))// || allStates)
+//        {
+            if (w->CurWeapon->CheckName(weapName) && (w->ObjState == WS_AIMING || w->ObjState == WS_SETPOWER || allStates))
+            {
+                sprite = sprite2;
+                handSprite = handSprite2;
+                if (!drawWorm) w->hideWorm = true;
+                x = w->PosX;
+                y = w->PosY;
+                CalculateAngle();
+                if (counter >= counterMax)
+                {
+//                    w->SpriteBuilder->readyToDrawAim = true;
+//                    w->SpriteBuilder->readyToDrawPick = false;
+                    scale_pick = scale;
+                    hand_scale_pick = hand_scale;
+                }
+                else if (counter > int(counterMax*counterNo)) {               // 18     normalized
+                    scale_pick = scale*counter/counterMax;
+                    hand_scale_pick = hand_scale*counter/counterMax;
+                    y -= 0.01;
+                }
+                else if (counter > int(counterMax*counterSm)) {              // 15     a bit smaller
+                    scale_pick -= smMin;
+                    hand_scale_pick -= smMin;
+                    y += smMin/2;
+                }
+                else if (counter > int(counterMax*counterEn)) {               // 10     enlarged
+                    scale_pick = scale*scale_pick_max*counter/counterMax;
+                    hand_scale_pick = hand_scale*scale_pick_max*counter/counterMax;
+                    y -= yMoveMax/2*counter/counterMax;
+                }
+                else {                                                        // 0      normal
+                    scale_pick = scale*scale_pick_max*counter/counterMax;
+                    hand_scale_pick = hand_scale*scale_pick_max*counter/counterMax;
+                    y -= yMoveMax*1.5*counter/counterMax;
+                }
+                counter++;
+                w->SpriteBuilder->readyToDraw = true;
+                if (animate) CalculateFrame();
+                SetWormAnim();
+            }
+            else 
+            {
+               sprite = 0;
+               handSprite = 0;
+               if (counter != 0) SetWormAnim(); //w->SpriteBuilder->readyToDraw = false;
+               if (!drawWorm) w->hideWorm = false;
+               counter = 0;
+            }
+//        }
+//        else 
+//        {
+//           w->SpriteBuilder->readyToDrawPick = false;
+//           w->SpriteBuilder->readyToDrawAim = false;
+//           if (!drawWorm) w->hideWorm = false;
+//           counter = 0;
+//           sprite = 0;
+//        }
+    }
+    
+/*    if (Type == M_DRAWQUEUE)
+    {
+        if (readyToDrawPick)
+        {
+            if (curSprite) {
+               w->hideWorm = true;
+//               ReDrawWorm(wormScale); 
+               DrawAim(x, y, wormScale);
+               if (drawHand) DrawHand(wormScale);
+            } else {
+               DrawAim(x, y, scale_pick);
+               if (drawHand) DrawHand(hand_scale_pick);
+            }
+        }
+        else if (readyToDrawAim)
+        {
+            if (curSprite) {
+               w->hideWorm = true;
+//               ReDrawWorm(wormScale);
+               DrawAim(x, y, wormScale);
+               if (drawHand) DrawHand(wormScale);
+            } else {
+               DrawAim(x, y, scale);
+               if (drawHand) DrawHand(hand_scale);
+            }
+        }
+    }*/
+}
+
+/*
+void WormSprite::DrawAim(int x, int y, float Scale)
+{
+   local w = GetCurrentWorm();
+   if (w == NullObj) return;
+   if (w->TurnSide > 0) frame = 1.0;
+   else frame = 0.0;
+   wepPosX = x-sin(rotW)*wormRad;
+   wepPosY = y+cos(rotW)*wormRad;
+   local ang;
+   if (noAngRot) {
+      ang = staticAng;
+      if (w->TurnSide < 0) ang = -staticAng;
+   }
+   else ang = rotWR;
+   ang = MATH_TWO_PI - MATH_PI*w->FireAngle + MATH_PI*wormRot;
+   
+//   AddSpriteEx(z, wepPosX, wepPosY, sprite, frame, ang, Scale);
+   
+   CQuad q;
+    FillSpriteQuad(&q, sprite, frame, 1);
+    TransformQuad(&q, ang, Scale * w->TurnSide, Scale, wepPosX, wepPosY);
+    if (w->animatedWorm) {for (local i = 0; i < 4; i += 1) q.v[i].color = w->animColor;}
+    else {for (local i = 0; i < 4; i += 1) q.v[i].color = weapCol;}
+    q.blend = weapBlend;
+    RenderQuad(&q, 0);  
+    AddSpriteQ( z, &q, sprite, frame, 1);
+}
+
+void WormSprite::DrawHand(float Scale)
+{
+    local w = GetCurrentWorm();
+    if (w == NullObj) return;
+    local posX = x - sin(rotH)*hand_r;
+    local posY = y + cos(rotH)*hand_r;
+    local ang;
+   if (noAngRot) {
+      ang = handStaticAng;
+      if (w->TurnSide < 0) ang = -handStaticAng;
+   }
+   else ang = rotHR; 
+    AddSpriteEx(z-0.1, posX, posY, handSprite, hand_frame, ang, Scale);
+    
+//  CQuad q;
+//    FillSpriteQuad(&q, handSprite, hand_frame, 1);
+//    TransformQuad(&q, ang, Scale * -w->TurnSide, Scale , posX, posY);
+//    for (local i = 0; i < 4; i += 1) q.v[i].color = handCol;
+//    q.blend = handBlend;
+//    RenderQuad(&q, 0);  
+//    AddSpriteQ( z-0.1, &q, handSprite, hand_frame, 1);
+}
+
+void WormSprite::ReDrawWorm(float Scale) {
+//   AddSpriteEx(10.0, x, y, currentSpriteIndex, 0.0, 0.0, Scale);
+}
+*/
+
+float WormSprite::CalculateFrame() {
+   if(AnimationPhaseT > 0.99) AnimationPhaseT = 0.0;
+   else AnimationPhaseT = AnimationPhaseT + AnimationSpeedT;
+   aimFrame = AnimationPhaseT;
+   return aimFrame;
+}
+
+void WormSprite::SetWormAnim() {
+local w = GetCurrentWorm();
+if (w == NullObj) return;    
+
+    w->SpriteBuilder->curSprite = curSprite;
+    w->SpriteBuilder->drawHand = drawHand;
+  
+    w->SpriteBuilder->handX = posX;
+    w->SpriteBuilder->handY = posY;
+    w->SpriteBuilder->handZ = z-0.1;
+    w->SpriteBuilder->handSprite = handSprite;
+    w->SpriteBuilder->handScale = hand_scale_pick;
+    w->SpriteBuilder->handRot = handAng;
+    w->SpriteBuilder->handFrame = 0.0;
+    w->SpriteBuilder->handColor = handCol;
+    w->SpriteBuilder->handBlend = handBlend;
+  
+    w->SpriteBuilder->aimX = wepPosX;
+    w->SpriteBuilder->aimY = wepPosY;
+    w->SpriteBuilder->aimZ = z;
+    w->SpriteBuilder->aimSprite = sprite;
+    w->SpriteBuilder->aimScale = scale_pick;
+    w->SpriteBuilder->aimRot = aimAng;
+    w->SpriteBuilder->aimFrame = aimFrame;
+    w->SpriteBuilder->aimColor = weapCol;
+    w->SpriteBuilder->aimBlend = weapBlend;
+}
+
+void WormSprite::CalculateAngle()
+{
+    local ang;
+    local w = GetCurrentWorm();
+    if (w == NullObj) return;
+    if (noAngRot) ang = MATH_HALF_PI;
+    else ang = (1 - w->FireAngle) * MATH_PI;
+       
+//       ang = w->FireAngle * MATH_PI;
+       if (w->TurnSide < 0) ang = MATH_TWO_PI - ang;
+       rot = ang;
+       rotL = rot;
+    
+       rotH = rot + MATH_PI*handRadRot;
+       if (w->TurnSide < 0) rotH = rot - MATH_PI*handRadRot;
+    
+       rotHR = rot + MATH_PI*hand_rot;
+       if (w->TurnSide < 0) rotHR = rot - MATH_PI*hand_rot;
+    
+       rotW = rot + MATH_PI*wormRadRot;
+       if (w->TurnSide < 0) rotW = rot - MATH_PI*wormRadRot;
+    
+       rotWR = rot + MATH_PI*wormRot;                            
+       if (w->TurnSide < 0) rotWR = rot - MATH_PI*wormRot;
+       
+    wepPosX = x-sin(rotW)*wormRad;
+    wepPosY = y+cos(rotW)*wormRad;
+    posX = x - sin(rotH)*hand_r;
+    posY = y + cos(rotH)*hand_r;
+    
+    if (noAngRot) {
+      aimAng = staticAng;
+      handAng = handStaticAng;
+      if (w->TurnSide < 0) {
+         aimAng = MATH_TWO_PI-staticAng;
+         handAng = -handStaticAng;
+      }
+    }
+    else {
+       if (w->TurnSide < 0) 
+       {
+//          if (fix_flip_rotation) aimAng = MATH_TWO_PI + MATH_PI*w->FireAngle + MATH_PI*wormRot;
+//          else 
+          aimAng = MATH_PI + MATH_PI*w->FireAngle + MATH_PI*wormRot;      // MATH_PI + MATH_PI*w->FireAngle + MATH_PI*wormRot;
+       }
+       else aimAng = MATH_PI - MATH_PI*w->FireAngle - MATH_PI*wormRot;  // MATH_TWO_PI - MATH_PI*w->FireAngle + MATH_PI*wormRot;
+       handAng = rotHR;
+    }
+}
+
+void CWorm::DoAnimParticleEffects(int sprite, int Rad, int RelX, int RelY, int lifeTime, float animSpeed, float veloMin, float veloMax, int startAlpha, int endAlpha, float windFactor, float startSize, float endSize, float angleMin, float angleMax, float randomMotion, float grav)
+{
+  local w = GetCurrentWorm();
+  if (w == NullObj) return;
+  local posx;
+  local posy;
+  
+  posx = PosX - sin(FireAngle*MATH_PI*-TurnSide)*(-Rad+RelX);
+  posy = PosY + cos(FireAngle*MATH_PI*-TurnSide)*(-Rad+RelY);
+  
+  if (lifeTime == 0) lifeTime = 40; // defining default values.
+//  if (animSpeed == 0) animSpeed = 0.05;
+//  if (veloMin == 0) veloMin = -3.0;
+//  if (veloMax == 0) veloMax = -7.0;
+  if (startAlpha == 0 && endAlpha == 0) { startAlpha = 255; endAlpha = 50; }
+  
+  if (posy < Env->Water)
+  {
+   p0 = new PxParticle(sprite, posx, posy);
+   p0->SetAnimSpeed(animSpeed);
+   p0->SetBlendMode(1);
+   p0->SetStartColor(160,160,160);
+   p0->SetEndColor(0,0,0);
+   p0->SetLifeTime(lifeTime);
+   p0->SetRandomVelocity(veloMin, veloMax);
+   p0->SetAlpha(startAlpha);
+   p0->SetAirResistance(1.0);
+   p0->SetEndAlpha(endAlpha);
+   p0->SetWindFactor( windFactor);
+   p0->SetStartSize(SpriteBuilder->aimScale * startSize, SpriteBuilder->aimScale * startSize);
+   p0->SetEndSize(SpriteBuilder->aimScale * endSize, SpriteBuilder->aimScale * endSize);
+   p0->SetMotionRandomness( randomMotion);
+   p0->GravityFactor(grav);
+   r = RandomFloat(angleMin, angleMax);
+   p0->SetAngle( r);
+  }
+}
+
+
+void CWorm::DrawAim()
+{
+   local w = GetCurrentWorm();
+   if (w == NullObj) return;
+   
+   local spr = SpriteBuilder->aimSprite;
+   if (TurnSide < 0) spr = SpriteBuilder->aimSprite + 262144;
+   
+   AddSpriteEx(SpriteBuilder->aimZ, SpriteBuilder->aimX, SpriteBuilder->aimY, spr, SpriteBuilder->aimFrame, SpriteBuilder->aimRot, SpriteBuilder->aimScale*WAP->Size);
+
+/*
+   CQuad q;
+    FillSpriteQuad(&q, SpriteBuilder->aimSprite, SpriteBuilder->aimFrame, -1);
+    TransformQuad(&q, SpriteBuilder->aimRot, SpriteBuilder->aimScale * TurnSide, SpriteBuilder->aimScale, SpriteBuilder->aimX, SpriteBuilder->aimY);
+    if (animatedWorm) {for (local i = 0; i < 4; i += 1) q.v[i].color = animColor;}
+    else {
+       for (local i = 0; i < 4; i += 1) {
+          q.v[i].color = SpriteBuilder->aimColor;
+          if (i == 0 && Invisible) q.v[0].color = 120;
+       }
+    }
+    q.blend = SpriteBuilder->aimBlend;
+    RenderQuad(&q, -1);  
+    AddSpriteQ( SpriteBuilder->aimZ, &q, SpriteBuilder->aimSprite, SpriteBuilder->aimFrame, 0);
+*/    
+}
+
+void CWorm::DrawHand()
+{
+    local w = GetCurrentWorm();
+    if (w == NullObj) return;
+
+    local spr = SpriteBuilder->handSprite;
+    if (TurnSide < 0) spr = SpriteBuilder->handSprite + 262144;
+    AddSpriteEx(SpriteBuilder->handZ, SpriteBuilder->handX, SpriteBuilder->handY, spr, SpriteBuilder->handFrame, SpriteBuilder->handRot, SpriteBuilder->handScale*WAP->Size);
+    
+/*
+  CQuad q;
+    FillSpriteQuad(&q, SpriteBuilder->handSprite, SpriteBuilder->handFrame, -1);
+    TransformQuad(&q, SpriteBuilder->handRot, SpriteBuilder->handScale, SpriteBuilder->handScale , SpriteBuilder->handX, SpriteBuilder->handY);
+    for (local i = 0; i < 4; i += 1) {
+       q.v[i].color = SpriteBuilder->handColor;
+       if (i == 0 && Invisible) q.v[0].color = 120;
+    }
+    q.blend = SpriteBuilder->handBlend;
+    RenderQuad(&q, -1);  
+    AddSpriteQ( SpriteBuilder->handZ, &q, SpriteBuilder->handSprite, SpriteBuilder->handFrame, 0);
+*/
+}
+
+
+CWormAnim::CWormAnim() {
+  readyToDraw = false;
+//  readyToDrawAim = false;
+  curSprite = false;
+  drawHand = true;
+  
+  handX = 0.0;
+  handY = 0.0;
+  handZ = 10.0;
+  handSprite = 0;
+  handScale = 1.0;
+  handRot = 0.0;
+  handFrame = 0.0;
+  handColor = ARGB(255, 255, 255, 255);
+  handBlend = 0;
+  
+  aimX = 0.0;
+  aimY = 0.0;
+  aimZ = 10.0;
+  aimSprite = 0;
+  aimScale = 1.0;
+  aimRot = 0.0;
+  aimFrame = 0.0;
+  aimColor = ARGB(255, 255, 255, 255);
+  aimBlend = 0;                                          
+}
+
+override void CWorm::RenderWorm()     // all rendering functions placed into RenderWorm() for Invisibility campatibility.
+{
+local w = GetCurrentWorm();
+if (w != NullObj && w == this)
+	{
+  	if (SpriteBuilder->readyToDraw)
+	  	{
+     	DrawAim();
+     	if (SpriteBuilder->drawHand) DrawHand();
+  		}
+	}
+else SpriteBuilder->readyToDraw = false;
+super;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params) {
+  SpriteBuilder = new CWormAnim;
+  super;
+}

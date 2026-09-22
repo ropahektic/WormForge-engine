@@ -1,0 +1,33 @@
+/* 
+
+Made by: DannyB, May 2023
+
+*/
+
+// This script adds a specialities used-counter to the game (can be used for statistical GUI's)
+
+int specialities_used_counts[6];
+
+void Specialities_Used_Counter_SCRIPT::FirstFrame()
+{
+     for(local i = 0; i <= 5; i++)
+     {
+          specialities_used_counts[i] = 0;
+     }
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{  
+     if(type == M_WEAPONFINISHED)
+     {
+          if(Current_Weapon != NullObj)
+          {
+               if(GS->Info.Stores[current_worm_team].Count[Current_Weapon->GetWeaponIndex() + 2] == 99)
+               {
+                    specialities_used_counts[current_worm_team]++;
+               }
+          }
+     }
+  
+     super;
+}

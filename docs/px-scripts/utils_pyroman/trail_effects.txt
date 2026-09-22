@@ -1,0 +1,140 @@
+
+void CMissile::do_sprite_trail_effects(int sprite, fixed PosX, fixed PosY)
+{
+  if (PosY < Env->Water)
+  {
+   local hi;
+   local hi2;
+   p0 = new PxParticle(sprite, PosX, PosY);
+   p0->SetAnimSpeed(0.05);
+   p0->SetBlendMode(1);
+   p0->SetStartColor(120,120,120);
+   p0->SetEndColor(0,0,0);
+   p0->SetLifeTime(40);
+   p0->SetRandomVelocity(-3.0, -7.0);
+   p0->SetAirResistance(0.5);
+   p0->SetAlpha(255);
+   p0->SetEndAlpha(50);
+   p0->SetWindFactor( 2.0);
+//   r = RandomFloat(-3.0, 3.0);
+//   p0->SetVelocity( r, 0);
+   p0->SetStartSize(1.0,1.0);
+   p0->SetEndSize(0.3,0.3);
+//   r = RandomFloat(0.5, 3.5);
+//   p0->SetMotionRandomness( r);
+   r = RandomFloat(0.0, 2.31);
+   p0->SetAngle( r);
+   if (hi == false && hi2) {hi = true; hi2 = false;}
+
+   if (hi)   // do glow effect each 2 frames, against 1.
+   {
+     p0 = new PxParticle(tazer_lightningGlowSprite->Index, PosX, PosY);
+     p0->SetBlendMode(1);
+     p0->SetStartColor(120,120,120);
+     p0->SetEndColor(0,0,0);
+     p0->SetLifeTime(10);
+     p0->SetRandomVelocity(0, 0);
+     p0->SetAirResistance(1.0);
+     p0->SetAlpha(150);
+     p0->SetStartSize(0.3,0.3);
+     p0->SetEndSize(0.15,0.15);
+     if (hi == false) hi2 = true;
+     else hi = false;
+   }
+  }
+}
+
+void CMissile::do_fire_trail_effects()
+{
+   if (PosY < Env->Water)
+   {
+   p0 = new PxParticle(fireball4->Index, PosX, PosY);
+   p0->SetAnimSpeed( 40);
+   p0->SetBlendMode(1);
+   p0->SetStartColor(120,120,120);
+   p0->SetEndColor(0,0,0);
+   p0->SetLifeTime(40);
+   p0->SetRandomVelocity(-3.0, -7.0);
+   p0->SetAirResistance(1.0);
+   p0->SetAlpha(150);
+   p0->SetEndAlpha(0);
+   p0->SetWindFactor( 4.0);
+//   r = RandomFloat(-3.0, 3.0);
+//   p0->SetVelocity( r, 0);
+   p0->SetStartSize(1.0,1.0);
+   p0->SetEndSize(0.2,0.2);
+//   r = RandomFloat(0.5, 3.5);
+//   p0->SetMotionRandomness( r);
+   r = RandomFloat(0.0, 2.31);
+   p0->SetAngle( r);
+
+   p0 = new PxParticle(tazer_lightningGlowSprite->Index, PosX, PosY);
+   p0->SetBlendMode(1);
+   p0->SetStartColor(240,120,40);
+   p0->SetEndColor(0,0,0);
+   p0->SetLifeTime(10);
+   p0->SetRandomVelocity(0, 0);
+   p0->SetAirResistance(1.0);
+   p0->SetAlpha(150);
+   p0->SetStartSize(0.3,0.3);
+   p0->SetEndSize(0.15,0.15);
+   }
+}
+
+void CMissile::do_zip_trail_effects()
+{
+   if (PosY < Env->Water)
+   {
+   p0 = new PxParticle(tazer_lightningBeamSprite->Index, PosX, PosY);
+   p0->SetBlendMode(1);
+   p0->SetStartColor(35,35,120);
+   p0->SetEndColor(0,0,0);
+   p0->SetLifeTime(20);
+   p0->SetRandomVelocity(1.0, 3.0);
+   p0->SetAirResistance(1.0);
+   p0->SetAlpha(220);
+   p0->SetStartSize(0.2,0.2);
+   p0->SetEndSize(0.05,0.05);
+   r = RandomFloat(0.5, 3.5);
+   p0->SetMotionRandomness( r);
+   r = RandomFloat(0.0, 2.31);
+   p0->SetAngle( r);
+
+   p0 = new PxParticle(tazer_lightningGlowSprite->Index, PosX, PosY);
+   p0->SetBlendMode(1);
+   p0->SetStartColor(50,40,240);
+   p0->SetEndColor(0,0,0);
+   p0->SetLifeTime(20);
+   p0->SetRandomVelocity(0, 0);
+   p0->SetAirResistance(1.0);
+   p0->SetAlpha(150);
+   p0->SetStartSize(0.3,0.3);
+   p0->SetEndSize(0.15,0.15);
+   }
+}
+
+void CMissile::do_sparks_fuse_effects(int sprite)
+{
+  if (PosY < Env->Water)
+  {
+   p0 = new PxParticle(sprite, PosX, PosY);
+   p0->SetAnimSpeed( 40);
+   p0->SetBlendMode(1);
+   p0->SetStartColor(120,120,120);
+   p0->SetEndColor(0,0,0);
+   p0->SetLifeTime(40);
+   p0->SetRandomVelocity(-3.0, -7.0);
+   p0->SetAirResistance(0.5);
+   p0->SetAlpha(255);
+   p0->SetEndAlpha(50);
+   p0->SetWindFactor( 2.0);
+//   r = RandomFloat(-3.0, 3.0);
+//   p0->SetVelocity( r, 0);
+   p0->SetStartSize(1.0,1.0);
+   p0->SetEndSize(0.3,0.3);
+//   r = RandomFloat(0.5, 3.5);
+//   p0->SetMotionRandomness( r);
+   r = RandomFloat(0.0, 2.31);
+   p0->SetAngle( r);
+  }
+}

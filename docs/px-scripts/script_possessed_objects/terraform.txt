@@ -1,0 +1,11 @@
+void CMine::Terraform()
+{
+local bmp = ShieldBitmap;
+GG->land->Draw(bmp, PosX-60, PosY-60));
+}
+
+void COilDrum::Terraform()
+{
+local bmp = ShieldBitmap;
+GG->land->Draw(bmp, PosX-60, PosY-60));
+}

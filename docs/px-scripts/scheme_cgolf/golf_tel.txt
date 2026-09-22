@@ -1,0 +1,60 @@
+require utils;
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+
+if (weap->CheckName("Driver.T"))
+{
+CWorm * w = GetCurrentWorm();
+if(w == NullObj) return;
+int rowX = 0;
+int colY = 0;
+int limitX = 9;
+int limitY = 9;
+int teleX =  x;
+int teleY =  y;
+
+CGObject * o = Env->CheckCollision(w, teleX, teleY);
+
+if(o == NullObj)
+{
+w->PosX = teleX;
+w->PosY = teleY;
+return;
+}
+else
+{
+teleX =  x - limitX/2;
+teleY =  y - limitY/2;
+}
+
+while(1)
+{
+CGObject * obj = Env->CheckCollision(w, teleX, teleY);
+
+if(obj == NullObj)
+{
+w->PosX = teleX;
+w->PosY = teleY;
+return;
+}
+else
+{
+if(rowX <= limitX)
+{
+teleX++;
+rowX++;
+}
+else if(colY <= limitY)
+{
+teleY++;
+colY++;
+teleX = x - limitX/2;
+rowX = 0;
+}
+else return;
+}
+}
+}
+else super;
+}

@@ -1,0 +1,95 @@
+require utils;
+
+CColMask* col_gbl;
+
+void golf_col::Init()
+{
+}
+
+void golf_col::FirstFrame()
+{
+col_gbl = new CColMask(8,8,MakeCircleMask(8));
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+Cgbl = false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+super;
+if(Weap->CheckName("Driver")
+|| Weap->CheckName("Driver.T")
+|| Weap->CheckName("Golf Ball"))
+{
+CGObject *gblo;
+CMissile *gblm;
+gblo = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+if(gblo != NullObj)
+if(gblo->ClType == OC_Missile)
+{
+gblm = gblo;
+gblm->GCgbl = true;
+}
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(GCgbl == true)
+{
+if(Type == M_FRAME)
+{
+GBLCol(15.0);
+}
+}
+super;
+}
+
+void CMissile::GBLCol(float Speed)
+{
+CGObject *gblob;
+
+for(int i = 0; i < Env->Objs.Count; i += 1)
+{
+gblob = CGObject(Env->Objs.Objs[i]);
+if(gblob == this) continue;
+if(gblob == NullObj) continue;
+if(GetCurrentWorm() != NullObj)
+{
+if(gblob == GetCurrentWorm()) continue;
+}
+if(gblob->ClType == OC_Worm 
+|| gblob->ClType == OC_Mine 
+|| gblob->ClType == EObjectClass(70)
+|| gblob->ClType == EObjectClass(71)
+|| gblob->ClType == EObjectClass(73))
+{
+if(col_gbl->Check(PosX, PosY, gblob->ColMask, gblob->PosX, gblob->PosY))
+{
+float ForceX = gblob->PosX - PosX;
+float ForceY = gblob->PosY - PosY;
+float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+
+if(dist > 0)
+{
+ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+
+CMessageData msg;
+msg.params[0]	= 0;
+msg.fparams[1]	= PosX;
+msg.fparams[2]	= PosY;
+msg.fparams[3]	= ForceX;
+msg.fparams[4]	= ForceY;
+msg.params[5]	= 0;
+msg.params[6]	= 0;
+
+gblob->Message(this, M_GUNEXP, 1032, &msg);
+}
+}
+}
+}
+}

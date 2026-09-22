@@ -1,0 +1,49 @@
+require p_sprite_builder;
+
+CSprite* darkside_killer_aiming;
+                                                
+                                                                                 
+void darkside_killer_anim::InitGraphic() {
+    CFile* f;                                                                    
+    f = GetAttachment("dk_aiming.png");                             
+    darkside_killer_aiming = LoadSprite(f, 1, 0);                                                            
+}                                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Darkside Killer";                                               
+     sprite = darkside_killer_aiming->Index;                                                                  
+     Params->zplane = 14.01;  // slightly behind worm
+                                                                                                    
+     local WA = new WormSprite(weapName, sprite, Params);
+     
+     weapName = "Underwater Attack";  
+     local WA = new WormSprite(weapName, sprite, Params);
+    }                                                                           
+  }                                                                              
+}                                                                                
+
+/*
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;                                                                          
+  if (Type == M_FRAME){                                                          
+     if (weap->CheckName("DarkSide Killer")) {                                
+         if (darkside_killer_anim2) {                                              
+            local sprite = darkside_killer_aiming->Index;                      
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);               
+            weap->launch.anim.spriteIndex = 0;
+            darkside_killer_anim2 = false;                                         
+         } 
+     }                                                                                                                                                                                                                          
+  }                                                                              
+}                                                                                
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           
+  darkside_killer_anim2 = true;                                                    
+} */                                                                               

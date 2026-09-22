@@ -1,0 +1,547 @@
+require utils, p_sprite_builder, weapon_magnet;
+
+CSprite* sawImgIn;   
+CSprite* sawImgInB;
+CSprite* sawImgOut;
+CSprite* sawImgOutB;
+CSprite* sawImgOutB2;
+
+CSoundFile* saw_cut_1;
+CSoundFile* saw_cut_2;
+CSoundFile* saw_cut_3;
+CSoundFile* saw_cut_4;
+
+#CSaw
+
+void saw_script::FirstFrame()
+{
+	CFile *f;
+	f = GetAttachment("saw_cut_1.wav");		saw_cut_1 = new CSoundFile(f);
+	f = GetAttachment("saw_cut_2.wav");		saw_cut_2 = new CSoundFile(f);
+	f = GetAttachment("saw_cut_3.wav");		saw_cut_3 = new CSoundFile(f);
+	f = GetAttachment("saw_cut_4.wav");		saw_cut_4 = new CSoundFile(f);
+}
+
+void saw_script::InitGraphic()
+{
+    CFile* f;
+    
+    f = GetAttachment("sawin.png");    sawImgIn = LoadSprite(f, 1, 0);      
+    f = GetAttachment("sawinb.png");   sawImgInB = LoadSprite(f, 1, 0);   
+    
+    f = GetAttachment("sawout.png");   sawImgOut = LoadSprite(f, 1, 0);
+    f = GetAttachment("sawoutb.png");  sawImgOutB = LoadSprite(f, 1, 0);
+    f = GetAttachment("sawoutb2.png"); sawImgOutB2 = LoadSprite(f, 1, 0);   
+}                                                                            
+
+CSaw : CMine;
+CSawSpawn : CObject;
+
+override void CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
+{  
+ super; 
+  
+ sawhitlimit = 0;
+}
+
+override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+ super;
+ 
+ sawhitlimit = 0;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+  if (Type == M_PRETURNSTART) sawhitlimit = 0; 
+} 
+
+override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  super;
+  if (Type == M_PRETURNSTART) sawhitlimit = 0; 
+}
+
+CSaw::CSaw(CObject* Parent, CShootDesc* Desc)
+{
+    CMineParams MParams;
+	zero(&MParams);
+	MParams.Prefuse = 0;
+	MParams.Radius = 0;
+	MParams.Fuse = 70;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Damage = 0;
+	MParams.BlastPower = 0;
+
+    SetLayerOverride(LAYER_OILDRUM);
+    OwnerTeam = Desc->Team;
+	
+    transition1 = 0;
+    isMagnetic = false;
+    
+    rotationFactor = RandomFloat(-0.125, -0.08);
+    sawRotation = 23.0;
+    
+    scaleToHitboxRatio = 0.65;
+    sawScale = 1.0; // 200x200 px
+    
+    hitboxSize = sawScale * 200 * scaleToHitboxRatio - 2; //Scale, Pixel Size, ratio and minus 2 for good game design
+
+    timesCollided = 0; // For blood
+
+    sawInsideIndex = sawImgIn->Index;  
+    sawInsideIndexB = sawImgInB->Index;
+    
+    sawOutsideIndex = sawImgOut->Index;
+    sawOutsideIndexB = sawImgOutB->Index;
+    sawOutsideIndexB2 = sawImgOutB2->Index;
+    
+    super(Parent, &MParams, Desc, false, 0);
+    ClType = EObjectClass(99);
+    
+    SawCollisionUnit = 0;
+	ColMask = new CColMask(SawCollisionUnit, SawCollisionUnit, MakeCircleMask(SawCollisionUnit));
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+   super;
+   dmgDIVIDER = 0.0; //Armor Vest
+   hitFrame = 6;    //Hit Cooldown
+   Endure = false;  
+   invincible = false;
+   timesSliced = 0;    //Hit limit
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ super;  
+ if (Type == M_PRETURNSTART)
+     timesSliced = 0;
+ if (Type == M_FRAME)
+     { 
+     if (hitFrame<7) hitFrame++;
+     if (Root->IsTimerActive() == true && GS->Info.GetWormHealth(WormTeam, WormNumber) == 0 && GetCurrentWorm() == this && !died)
+     if (ObjState == WS_IDLE || ObjState == WS_WALKING ) // self fastdeath
+     {
+         SetState(WS_DEATH);   
+         IsStatic  = false;    
+         fastdying = true;  
+         firstdied = true;
+          dieframe = gframe;
+              died = true;
+     }
+     }
+}   
+
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////MESSAGE/////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+
+
+void CSaw::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+ if (Type == M_GUNEXP) return;
+ if (Type == M_EXPLOSION) return;
+ super;
+
+ if (Type == M_DRAWQUEUE) {Draw();}
+ if (Type == M_FRAME)
+ {
+   SpX = 0;
+   SpY = 0;
+   GravityFactor = 0;  
+   
+   sawRotation = sawRotation - rotationFactor;
+   
+   if (sawRotation <= -125000 || sawRotation >= 125000) sawRotation = 21;      
+   
+   if (timesCollided >=8 && transition == 0)
+   {
+        rotationFactor = rotationFactor - 0.05;  
+        transition = 1;
+   }
+   
+   CSawCollission();
+ }
+}
+
+////////////////////////////////////////////CODE////////////////////////////////////////////
+void CSaw::DoSound()
+{
+  vol = CalculateSoundVolume(PosX,PosY);
+  pan = CalculateSoundPan(PosX,PosY);
+  
+  local i = RandomInt(1, 4);
+  if      (i == 1) saw_cut_1->Play(vol, pan, false);
+  else if (i == 2) saw_cut_2->Play(vol, pan, false);
+  else if (i == 3) saw_cut_3->Play(vol, pan, false);
+  else if (i == 3) saw_cut_4->Play(vol, pan, false);
+               
+  local j = RandomInt(1, 4);
+  if      (i == 1) PlayLocalSound(165, 5, 1.0, 1.0);
+  else if (i == 2) PlayLocalSound(166, 5, 1.0, 1.0);
+  else if (i == 3) PlayLocalSound(167, 5, 1.0, 1.0);
+  else if (i == 3) PlayLocalSound(168, 5, 1.0, 1.0);
+}
+
+void CSaw::CSawCollission()
+{
+    local damage = 15;
+    w = findWorm(this);
+    if (w == NullObj) return;
+    if (w is CWorm == false) return;
+
+    if (w!=NullObj && w->hitFrame >= 7)
+    {                                   
+        w->timesSliced = w->timesSliced + 1; //should go up always, gets reset at sturn start anyways
+        if (w->timesSliced <= 20)
+        {
+            damage = ApplySawKnockback(w, PosX, PosY, 0.77);
+        
+            DoSound();
+        
+              
+            timesCollided = timesCollided + 1;
+        }
+        else if (w->timesSliced == 20) ShowMessage("Damn boy!");       
+        
+        if (w->ObjState!=WS_FROZEN)
+           if (!w->invincible)
+              DamageWorm(w, damage);
+        w->hitFrame = 0;
+     }
+}
+
+void CSaw::DamageWorm(CWorm* w, int calc)
+{
+       local team = w->WormTeam;
+       local worm = w->WormNumber;
+       local hp_now = GS->Info.GetWormHealth(team, worm);
+
+       if (w->dmgDIVIDER != 0.0) calc / w->dmgDIVIDER;   //Armor Vest adjustment.
+       
+       if (w->timesSliced <= 25) //Higher cap than knockback in case worm is still alive
+       {
+       int rnd = RandomInt(1,3);
+
+       if (rnd == 1) w->SetState( WS_FLYING ); if (rnd == 2) w->SetState( WS_FLYING2 ); if (rnd == 3) w->SetState( WS_POWERFLY );
+       }
+       if (w->invincible) return;
+
+       if (hp_now <= 15 && w->Endure)
+       {
+       GS->Info.SetWormHealth(team, worm, 15);
+       return;
+       }
+       if (hp_now - calc <= 15 && w->Endure)
+       {
+         GS->Info.SetWormHealth(team, worm, 15);
+         return;
+       }
+
+       if (hp_now - calc <= 0)
+       {
+         GS->Info.SetWormHealth(team, worm, 0);
+         return;
+       }
+
+       if (hp_now > 1) GS->Info.SetWormHealth(team, worm, hp_now - calc);
+}
+
+int CSaw::ApplySawKnockback(CGObject* worm, fixed sawX, fixed sawY, float sawSizeFactor)
+{
+    if (worm == NullObj) return 0;
+
+    // Directional Math (Away from Saw Center)
+    float dx = worm->PosX - sawX;
+    float dy = worm->PosY - sawY;
+    float dist = sqrt(dx*dx + dy*dy);
+    if (dist < 0.1) dist = 0.1;
+
+    float nx = dx / dist;
+    float ny = dy / dist;
+
+    // Incoming Speed Dynamics
+    float vx = worm->SpX;
+    float vy = worm->SpY;
+    float speedIn = sqrt(vx*vx + vy*vy);
+
+    // Return Force (Conservation of Energy)
+    // Takes 75% of incoming speed and adds a gentle base push
+    float basePush = 1.5 + (sawSizeFactor * 1.5);
+    float bounceStrength = basePush + (speedIn * 0.75);
+
+    // Dot Product Reduction
+    float dot = vx * nx + vy * ny;
+    if (dot > 0.0)
+    {
+        bounceStrength = bounceStrength * 0.5; // Properly lowers force if already moving away
+    }
+
+    // Velocity Assembly
+    // Keep 80% of tangential sliding velocity for smooth arcs
+    float tangentX = vx - (dot * nx);
+    float tangentY = vy - (dot * ny);
+
+    float finalSpX = (nx * bounceStrength) + (tangentX * 0.8);
+    float finalSpY = (ny * bounceStrength) + (tangentY * 0.8);
+
+    float total = sqrt(finalSpX*finalSpX + finalSpY*finalSpY);
+
+    // Enforce a Gradual Minimum
+    // If the final speed is too weak, scale it up to 4.0
+    if (total < 4.0 && total > 0.01)
+    {
+        finalSpX = (finalSpX / total) * 4.0;
+        finalSpY = (finalSpY / total) * 4.0;
+        total = 4.0;
+    }
+    else if (total <= 0.01) // If completely stationary
+    {
+        finalSpX = nx * 4.0;
+        finalSpY = ny * 4.0;
+        total = 4.0;
+    }
+
+    // Dynamic Speed Capping
+    maxAllowed = 12.5;
+    if (worm is CWorm == false) maxAllowed = 17.5;
+
+    if (total > maxAllowed)
+    {
+        finalSpX = (finalSpX / total) * maxAllowed;
+        finalSpY = (finalSpY / total) * maxAllowed;
+        total = maxAllowed;
+    }
+
+    worm->SpX = finalSpX;
+    worm->SpY = finalSpY;
+
+    // Damage Calculation
+    dmg = int((speedIn * 1.2) + (sawSizeFactor * 6.0));
+    if (dmg > 33) dmg = 33;
+    if (dmg < 15) dmg = 15;
+    return dmg;
+}
+
+void CSaw::Render()
+{
+  return;
+}
+
+void CSaw::Draw()
+{           
+    if(timesCollided <= 14)
+    AddSpriteEx(10.1, PosX, PosY, sawInsideIndex, 0, 0, sawScale); 
+    else if(timesCollided >= 14)    
+    AddSpriteEx(10.1, PosX, PosY, sawInsideIndexB, 0, 0, sawScale);
+    
+    if(timesCollided < 7)
+    AddSpriteEx(10.2, PosX, PosY, sawOutsideIndex, 0, sawRotation, sawScale);
+    
+    if(timesCollided >= 7 && timesCollided < 14)
+    AddSpriteEx(10.2, PosX, PosY, sawOutsideIndexB, 0, sawRotation, sawScale);
+
+    else if(timesCollided >= 14)
+    AddSpriteEx(10.2, PosX, PosY, sawOutsideIndexB2, 0, sawRotation, sawScale);
+
+}
+
+CWorm* CSaw::findWorm(CSaw* missile)    //Sentry copy paste, thanks entuser i guess
+{
+    CWorm* bestTarget = NullObj;
+
+    for (int i = 0; i < Env->Objs.Count; i++)
+    {
+        CGObject* obj = CGObject(Env->Objs.Objs[i]);  
+        
+        if (obj == NullObj) continue;
+        
+        if (obj is CSaw) continue;
+        
+        objtargetX = obj->PosX;                 
+        objtargetY = obj->PosY; 
+        
+        float objdist = sqrt((PosX - objtargetX) * (PosX - objtargetX) + (PosY - objtargetY) * (PosY - objtargetY));   //proximity
+        
+        if (objdist<hitboxSize)
+        {
+        if (obj is CMissile)
+        {
+             CMissile* miss = CMissile(obj);
+
+             if (miss->launchdata.action == WAction_Bounce)
+                {
+                    if (miss->sawhitlimit>20) { continue; }
+                    else
+                    {
+                        ApplySawKnockback(miss, PosX, PosY, 0.67); 
+                    
+                        miss->sawhitlimit = miss->sawhitlimit+1;
+                    
+                        continue;
+                    }
+                } 
+             else 
+                {
+                    miss->ExplodeAt(miss->PosX, miss->PosY);
+                    miss->Free(true);     
+                    continue;
+                }
+        }
+        if (obj is CMine) 
+        {      
+             CMine* mine = CMine(obj);
+             if (mine->sawhitlimit >20)
+                 { continue; }
+             else
+             {
+             mine->sawhitlimit = mine->sawhitlimit + 1;
+             ApplySawKnockback(mine, PosX, PosY, 0.5);    
+             continue;
+             }
+        }
+        if (obj is COilDrum || obj is CCrate)  
+        {
+             expobj = CGObject(obj);        
+             DoExplosion(expobj->PosX, expobj->PosY, 0, 5, 5, 0);                             
+             continue;
+        }
+        if (obj is CArrow || obj is icya)
+        {
+             arrobj = CArrow(obj);
+             PlayLocalSound(28,5, 1.0, 1.0);
+             arrobj->Free(true);
+        }
+        }
+        if (objdist>hitboxSize) continue;  
+        if (obj is CWorm == false) continue;
+        // Only consider worm objects
+        if (obj == NullObj || obj->ClType != OC_Worm)
+            continue;
+
+        //distT = abs(obj->PosX - PosX);    //proximity
+
+        CWorm* worm = CWorm(obj);
+
+        float targetX = worm->PosX;
+        float targetY = worm->PosY;
+        float missileX = PosX;
+        float missileY = PosY;
+        float dist = sqrt((missileX - targetX) * (missileX - targetX) + (missileY - targetY+2) * (missileY - targetY+2));   //proximity
+        if (dist > hitboxSize) continue;   
+        // Comprehensive validity check
+        if (worm == NullObj ||
+            worm->ObjState == WS_SINKING ||
+            worm->ObjState == WS_DEATH ||
+            worm->TargHealth <= 0)
+        {
+            continue;
+        }
+                    //bestScore = score;
+           bestTarget = worm;
+
+    }
+    return bestTarget;
+}     
+////////////////////////////////////////////////////////////////////////////
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    int counter = 0;
+    if(weap->CheckName("Saw Grenade") || weap->CheckName("Place Saw"))
+    {
+        if(true)
+        {
+                local w = GetCurrentWorm();
+
+                CShootDesc SDesc;
+                zero(&SDesc);
+
+                SDesc.X = x;
+                SDesc.Y = y;
+                
+                GG->land->ApplyMask(4,SDesc.X,SDesc.Y);
+                GG->land->ApplyMask(4,SDesc.X,SDesc.Y-10);
+                GG->land->ApplyMask(4,SDesc.X,SDesc.Y-15);
+
+                vol = CalculateSoundVolume(PosX,PosY);
+  				pan = CalculateSoundPan(PosX,PosY);
+				saw_cut_1->Play(vol, pan, false);
+				saw_cut_2->Play(vol, pan, false);
+  
+                saw = new CSaw(Root->GetObject( 25, 0), &SDesc);
+                
+                SawCollisionUnit = 40;
+                saw->sawScale = 0.4;
+                saw->ColMask = new CColMask(SawCollisionUnit, SawCollisionUnit, MakeCircleMask(SawCollisionUnit));
+                saw->hitboxSize = saw->sawScale * 200 * saw->scaleToHitboxRatio - 2;
+        }
+    }
+    super;
+}
+
+////////////////////////////////////////////////////////////////////////////
+///////////////////////////// MAP OBJECT ///////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+
+
+$editor
+ $object Saw
+  $origin -15 -15
+  $image "saw_ed.png"
+  $func SpawnSaw
+  $radius 19
+  $param SawSize radius 100
+ $object_end
+$end
+
+CSawSpawn::CSawSpawn(CEditorObject* obj)
+{
+   super(Root, GS);
+
+   bx = obj->PosX;
+   by = obj->PosY;
+   SawRadius = obj->GetInt("SawSize");
+
+   DidSpawn = false;
+}
+
+void CSawSpawn::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if (DidSpawn == false)
+     {
+      if (Type == M_FRAME)
+      {
+       DoSpawn();
+       DidSpawn = true;
+      }
+     }
+}  
+
+void CSawSpawn::DoSpawn()
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+
+     SDesc.Team = 0;
+     SDesc.X = bx;
+     SDesc.Y = by;
+     SDesc.SpX = 0;
+     SDesc.SpY = 0;
+
+     saw = new CSaw(GetObject(25, 0), &SDesc);
+
+     SawCollisionUnit = SawRadius;
+     saw->sawScale = SawRadius / 100;
+     saw->ColMask = new CColMask(SawCollisionUnit, SawCollisionUnit, MakeCircleMask(SawCollisionUnit));
+     saw->hitboxSize = saw->sawScale * 200 * saw->scaleToHitboxRatio - 2;
+}
+
+void SpawnSaw(CEditorObject* obj)
+{
+  sawobj = new CSawSpawn(obj);
+};

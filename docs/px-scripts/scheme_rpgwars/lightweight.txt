@@ -1,0 +1,48 @@
+void lightweight::InitGraphic()
+{
+}
+
+void lightweight::Init()
+{
+}
+
+void lightweight::FirstFrame()
+{
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+//Lightweight fields
+IsLightweight = false;
+IsHeavyweight = false;
+NewLightGravityF = 0.9;
+NewHeavyGravityF = 1.2;
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_TURNBEGIN)
+         {
+           if(IsLightweight == true || IsHeavyweight == true)
+           {
+             if(IsLightweight == true)
+             {
+             GravityFactor = NewLightGravityF;
+             }
+
+             if(IsHeavyweight == true)
+             {
+             GravityFactor = NewHeavyGravityF;
+             DumpingC = 0.4; //this is friction with floors and ceilings
+             }
+             //local t = Env->Gravity * 100000;
+             //GG->WriteToChat( 1, ItoA(t), false);
+           }
+           else
+           {
+           GravityFactor = 1.0;
+           }
+         }
+super;
+}

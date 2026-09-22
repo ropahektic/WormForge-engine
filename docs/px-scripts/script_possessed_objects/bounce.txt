@@ -1,0 +1,85 @@
+override void CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
+{
+bouncecounter = 15;
+super;
+}
+
+override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_TURNBEGIN)
+         {
+         bouncecounter = 15;
+         }
+super;
+}
+
+override void COilDrum::COilDrum(CObject* Parent,fixed X,fixed Y,bool Snap)
+{
+bouncecounter = 15;
+super;
+}
+
+override void COilDrum::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_TURNBEGIN)
+         {
+         bouncecounter = 15;
+         }
+super;
+}
+
+void CMine::Bounce()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+      if(this != obj)
+      {
+           if(obj->ClType == OC_Worm || obj->ClType == OC_Missile || obj->ClType == OC_Crate || obj->ClType == OC_OilDrum || obj->ClType == OC_Mine)
+           {
+           BounceCheck(obj);             
+           }
+      }
+  }
+}
+
+
+
+void CMine::BounceCheck(CGObject *obje)
+{
+     if(DistBetweenObjs(this, obje) <= 40 && bouncecounter > 0)
+     {
+     bouncecounter = bouncecounter - 1;
+     obje->SpY = obje->SpY-3;
+       if(obje->SpX == 0){obje->SpX = RandomInt(-3,3);}
+     }
+}
+
+void COilDrum::Bounce()
+{
+  for(local i = 1; i < Env->Objs.Count; i+=1)
+  {
+    local obj = Env->Objs.Objs[i];
+    if(obj == NullObj) continue;
+      if(this != obj)
+      {
+           if(obj->ClType == OC_Worm || obj->ClType == OC_Missile || obj->ClType == OC_Crate || obj->ClType == OC_OilDrum || obj->ClType == OC_Mine)
+           {
+           BounceCheck(obj);             
+           }
+      }
+  }
+}
+
+
+
+void COilDrum::BounceCheck(CGObject *obje)
+{
+     if(DistBetweenObjs(this, obje) <= 40 && bouncecounter > 0)
+     {
+     bouncecounter = bouncecounter - 1;
+     obje->SpY = obje->SpY-3;
+       if(obje->SpX == 0){obje->SpX = RandomInt(-3,3);}
+     }
+}

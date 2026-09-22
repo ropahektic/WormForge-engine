@@ -1,0 +1,914 @@
+require utils, pxparticles, pxbullet, wosc_lib;
+
+CSprite* sentryBaseSprite;
+CSprite* sentryBodySprite;
+CSprite* sentryBarrelSprite;
+CSprite* sentryBarrelSprite2;
+CSprite* sentryMuzzleSprite;
+
+CSoundFile* sentryPlaceSound;
+CSoundFile* sentryRotateSound;
+CSoundFile* sentryRotateStartSound;
+CSoundFile* sentryRotateEndSound;
+CSoundFile* sentryShootSound;
+CSoundFile* sentryShootEndSound;
+CSoundFile* sentryAlertSound;
+
+PxBulletDesc* SentryBulletDesc;
+
+#WEAPON_KSENTRY
+
+CColMask* MASK_SENTRYGUN;
+
+void sentrygun::FirstFrame()
+{
+	MASK_SENTRYGUN = new CColMask(6, 12, MakeRectMask(6, 12));
+	
+	CFile *f;
+	
+	f = GetAttachment("sentryplace.wav");		sentryPlaceSound = new CSoundFile(f);
+	f = GetAttachment("sentryservoloop.wav");	sentryRotateSound = new CSoundFile(f);
+	f = GetAttachment("sentryservostart.wav");	sentryRotateStartSound = new CSoundFile(f);
+	f = GetAttachment("sentryservoend.wav");	sentryRotateEndSound = new CSoundFile(f);
+	f = GetAttachment("sentryfireloop.wav");	sentryShootSound = new CSoundFile(f);
+	f = GetAttachment("sentryfireend.wav");		sentryShootEndSound = new CSoundFile(f);
+	f = GetAttachment("sentrybeeps2.wav");		sentryAlertSound = new CSoundFile(f);
+	
+	SentryBulletDesc = new PxBulletDesc;
+}
+
+// Loading resources
+void sentrygun::InitGraphic()
+{
+	CFile *f;
+	
+	f = GetAttachment("sentry_base.png");			sentryBaseSprite 	= LoadSprite(f, 1, 0);
+	f = GetAttachment("sentry_body.png");			sentryBodySprite 	= LoadSprite(f, 1, 0);
+	f = GetAttachment("sentry_gun.png");			sentryBarrelSprite 	= LoadSprite(f, 1, 0);
+	f = GetAttachment("sentry_gun_firing.png");		sentryBarrelSprite2	= LoadSprite(f, 2, 0);
+	f = GetAttachment("sentry_muzzle.png");			sentryMuzzleSprite	= LoadSprite(f, 1, 0);
+}
+
+///////////////////////////////////////////////////
+// PxSentryGun class
+
+PxSentryGun : CMine;
+
+PxSentryGun::PxSentryGun(CObject* Parent, CShootDesc* Desc)
+{
+	// Maximum distance between a worm and the sentry for it to be detected
+	SensorRadius = 360.0;
+	//SensorLoseRadius = 500.0;
+	
+	// Gun parameters
+	GunAmmunition = 20;
+	GunDamage = 2;
+	GunPush = 1;
+	GunSpread = 0.05;
+	GunFramesPerShot = 6;
+	
+	// Turret parameters
+	TurretRotationSpeedIdle = 0.5;
+	TurretRotationSpeedActive = 1.5;
+	TurretIdleSweepAngle = 10.0;
+	TurretOffsetX = 0;
+	TurretOffsetY = -15;
+	
+	// Health parameters
+	MaxHealth = 50;
+	Health = MaxHealth;
+	ExplosionDamage = 50;
+	ExplosionBlast = 100;
+	
+	// Physics parameters
+	//DumpingA = -1.0;
+	//DumpingB = -1.0;
+	//DumpingC = -1.0;
+	BounceMultiplierX = 0.0;
+	BounceMultiplierY = 1.0;
+	
+	// Number of frames to wait after activating before being able to fire
+	DelayBeforeFiring = 60;
+	
+	// INTERNAL PARAMETERS
+	
+	TurretScale = 0.8;
+	
+	// Sprites
+	SpriteBase = sentryBaseSprite->Index;
+	SpriteBody = sentryBodySprite->Index;
+	SpriteBarrel = sentryBarrelSprite->Index;
+	SpriteBarrel2 = sentryBarrelSprite2->Index;
+	SpriteMuzzle = sentryMuzzleSprite->Index;
+	AnimSpeed = 0.2;
+	
+	// Private
+	StunTurnsRemaining = 0;
+	SensorRadiusSqr = 0.0;
+	
+	AnimCycle = 0.0;
+	
+	BaseOffsetX = 0;
+	BaseOffsetY = 2;
+	BarrelOffsetX = 17;
+	BarrelOffsetY = 0;
+	MuzzleOffsetX = 14;
+	MuzzleOffsetY = 0;
+	
+	SweepDir = 1;
+	
+	Ammo = GunAmmunition;
+	TurretActive = true;
+	Target = NullObj;
+	ShootTimer = 0;
+	ActivateTimer = 0;
+	SentryBeepTimer = 0;
+	
+	SentryBeepMinDelay = 60;
+	
+	Planted = false;
+	Removed = false;
+	Firing = false;
+	LongRotation = false;
+	
+	LostTarget = false;
+	LastTargetX = 0.0;
+	LastTargetY = 0.0;
+	
+	//      180
+	//       |
+	// 270 - + - 90
+	//       |
+	//       0
+	
+	if(Desc->SpX < 0)
+	{
+		BaseSide = -1;
+	}
+	else
+	{
+		BaseSide = 1;
+	}
+	TurretSide = BaseSide;
+	IdleTargetAngle = 180.0 - 90.0 * TurretSide;
+	DisabledTargetAngle = IdleTargetAngle - 45.0 * TurretSide;
+	TurretAngle = IdleTargetAngle;
+	TargetAngle = IdleTargetAngle;
+	RotationSpeed = TurretRotationSpeedIdle;
+	
+	NextRecalcZPlane = 0;
+	ZPlane = 10.0;
+	
+	OwnerTeam = Desc->Team;
+	
+	CMineParams MParams;
+	zero(&MParams);
+
+	MParams.Prefuse = 0;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Radius = 0;
+	MParams.Fuse = 70;
+	MParams.Damage = 48;
+	MParams.BlastPower = 100;
+	
+	SetLayerOverride(LAYER_OILDRUM);
+	SetMaskIndexOverride(3);
+	
+	super(Parent, &MParams, Desc, false, 0);
+	ClType = EObjectClass(73);
+	
+	//Layer = LAYER_OILDRUM;
+	//ColGroup = CMASK_DEFAULT_COLLIDEABLE;
+	
+	ShootSoundObj = CSound(NullObj);
+	RotateSoundObj = CSound(NullObj);
+	RotateStartSoundObj = CSound(NullObj);
+	
+	//ColMask = MASK_SENTRYGUN;
+}
+
+// Placeholder for CMagnetMissile
+void PxSentryGun::Collide(CGObject* Obj, int type)
+{
+	if(Obj->ClType == OC_Landscape && Planted == false)
+	{
+		SpX = 0;
+		SpY = 0;
+		Planted = true;
+		
+		sentryPlaceSound->Play(1.0, 0.0, false);
+		
+		return;
+	}
+	
+	SpX = SpX * BounceMultiplierX;
+	SpY = SpY * BounceMultiplierY;
+	
+	super;
+}
+
+void PxSentryGun::Stun(int turns)
+{
+	StunTurnsRemaining = turns;
+	if(turns > 0) TurretActive = false;
+}
+
+// Applies blast damage
+// x, y : origin of the explosion
+// dmg : maximum damage the explosion should do
+void PxSentryGun::TakeExplosionDamage(fixed x, fixed y, int dmg)
+{
+	if(dmg == 0) return;
+	
+	float fdmg = dmg;
+	float dx = PosX - x;
+	float dy = PosY - y;
+	
+	float distsqr = dx*dx + dy*dy;
+	float fdmgsqr = fdmg*fdmg*4.0;
+	
+	fdmg = (1.0 - distsqr/fdmgsqr) * fdmg;
+	dmg = fdmg;
+	
+	if(dmg > 0) TakeDamage(0, dmg);
+}
+
+// Applies direct damage (without any further calculation)
+// type should be always 0 (10 is for percentage-based damage and is reserved to the Battle Axe)
+void PxSentryGun::TakeDamage(int type, int dmg)
+{
+	if(type == 10)
+	{
+		fixed fdmg = dmg;
+		fdmg = Health * fdmg / 100.0;
+		dmg = fdmg;
+	}
+	
+	Health -= dmg;
+	
+	TurretActive = false;
+}
+
+void PxSentryGun::StartFiring()
+{
+	if(Firing) return;
+	
+	Firing = true;
+	ShootTimer = 0;
+	
+	ShootSoundObj = sentryShootSound->Play(1.0, 0.0, true);
+}
+
+void PxSentryGun::StopFiring()
+{
+	if(Firing == false) return;
+	
+	Firing = false;
+	
+	if(ShootSoundObj != CSound(NullObj))
+	{
+		ShootSoundObj->Stop();
+		ShootSoundObj = CSound(NullObj);
+	}
+	sentryShootEndSound->Play(1.0, 0.0, false);
+}
+
+void PxSentryGun::StartRotatingSound()
+{
+	if(LongRotation) return;
+	
+	LongRotation = true;
+	
+	RotateStartSoundObj = sentryRotateStartSound->Play(0.95, 0.0, false);
+	//RotateSoundObj = sentryRotateSound->Play(1.0, 0.0, true);
+}
+
+void PxSentryGun::StopRotatingSound()
+{
+	if(LongRotation == false) return;
+	
+	LongRotation = false;
+	
+	if(RotateStartSoundObj != CSound(NullObj))
+	{
+		RotateStartSoundObj->Stop();
+		RotateStartSoundObj = CSound(NullObj);
+	}
+	if(RotateSoundObj != CSound(NullObj))
+	{
+		RotateSoundObj->Stop();
+		RotateSoundObj = CSound(NullObj);
+	}
+	sentryRotateEndSound->Play(0.95, 0.0, false);
+}
+
+// Called when the object is destroyed
+void PxSentryGun::Explode()
+{
+	if(Removed) return;
+	
+	DoExplosion(PosX,PosY-20, ExplosionBlast, ExplosionDamage, 0, 0);
+	
+	SpeedDivider = 1000;
+	SpX = 0.0;
+	SpY = 0.0;
+	GravityFactor = 0.0;
+	IsMaterial = false;
+	Stopped = 1;
+	
+	if(ShootSoundObj != CSound(NullObj))
+	{
+		ShootSoundObj->Stop();
+		ShootSoundObj = CSound(NullObj);
+	}
+	if(RotateStartSoundObj != CSound(NullObj))
+	{
+		RotateStartSoundObj->Stop();
+		RotateStartSoundObj = CSound(NullObj);
+	}
+	if(RotateSoundObj != CSound(NullObj))
+	{
+		RotateSoundObj->Stop();
+		RotateSoundObj = CSound(NullObj);
+	}
+}
+
+// Renders the object
+void PxSentryGun::Draw()
+{
+	int baseX = PosX + BaseOffsetX;
+	int baseY = PosY + BaseOffsetY;
+	
+	// Base
+	if(BaseSide < 0)
+	{
+		AddSpriteEx(ZPlane+0.03, baseX, baseY, 262144 + SpriteBase, 0, 0, TurretScale);
+	}
+	else
+	{
+		AddSpriteEx(ZPlane+0.03, baseX, baseY, SpriteBase, 0, 0, TurretScale);
+	}
+	
+	// Body
+	float ang = (90 - TurretAngle) * 3.141593 / 180.0;
+	
+	float r;
+	float g;
+	float b;
+	
+	int TeamColor;
+	
+	if (OwnerTeam < 1)
+	{
+		TeamColor = 0;
+	}
+	else
+	{
+		TeamColor = GetTeamColor(OwnerTeam) + 1;
+	}
+	
+	if (TeamColor == 1)
+	{       
+		r = 0.65; 
+		g = 0.15;
+		b = 0.15;
+	}
+	else if (TeamColor == 2)
+	{       
+		r = 0.15; 
+		g = 0.15;
+		b = 0.65;
+	}
+	else if (TeamColor == 3)
+	{       
+		r = 0.15; 
+		g = 0.65;
+		b = 0.15;
+	}
+	else if (TeamColor == 4)
+	{       
+		r = 0.55; 
+		g = 0.55;
+		b = 0.15;
+	}
+	else if (TeamColor == 5)
+	{       
+		r = 0.55; 
+		g = 0.15;
+		b = 0.55;
+	}
+	else if (TeamColor == 6)
+	{       
+		r = 0.15; 
+		g = 0.55;
+		b = 0.55;
+	}
+	else
+	{       
+		r = 0.5; 
+		g = 0.5;
+		b = 0.5;
+	}
+	
+	if(Sinking)
+	{
+		r = r * (90.0 / 255.0);
+		g = g * (90.0 / 255.0);
+		b = b * (240.0 / 255.0);
+		ClearColorMod();
+	}
+	
+	SetColorMod(RGB(r * 255.0, g * 255.0, b * 255.0), 6);
+	
+	if(TurretSide < 0)
+		AddSpriteEx(ZPlane, baseX+TurretScale*TurretOffsetX, baseY+TurretScale*TurretOffsetY, SpriteBody, 0, ang, TurretScale);
+	else
+		AddSpriteEx(ZPlane, baseX+TurretScale*TurretOffsetX, baseY+TurretScale*TurretOffsetY, 262144 + SpriteBody, 0, ang+3.141593, TurretScale);
+	
+	ClearColorMod();
+	
+	if(Sinking)
+	{
+		SetColorMod(RGB(90, 90, 240), 6);
+	}
+	
+	// Barrels
+	float realBarrelOffsetX = BarrelOffsetX;
+	if(Firing)
+	{
+		realBarrelOffsetX = realBarrelOffsetX + 2.0 * sin(0.5 * GS->Tick);
+	}
+	
+	float barrelX = baseX + TurretScale*(TurretOffsetX + cos(ang)*realBarrelOffsetX - sin(ang)*BarrelOffsetY);
+	float barrelY = baseY + TurretScale*(TurretOffsetY + sin(ang)*realBarrelOffsetX - cos(ang)*BarrelOffsetY);
+	
+	if(Firing)
+	{
+		AddSpriteEx(ZPlane+0.02, barrelX, barrelY, SpriteBarrel2, AnimCycle, ang, TurretScale);
+		
+		if(AnimCycle < 0.5)
+		{
+			barrelX += TurretScale * (cos(ang)*MuzzleOffsetX - sin(ang)*MuzzleOffsetY);
+			barrelY += TurretScale * (sin(ang)*MuzzleOffsetX - cos(ang)*MuzzleOffsetY);
+			
+			//AddSpriteEx(ZPlane+0.01, barrelX, barrelY, SpriteMuzzle, 0, ang, 1);
+			
+			CQuad q;
+			FillSpriteQuad(&q, SpriteMuzzle, 0, 0);
+			TransformQuad(&q, ang, TurretScale, TurretScale, barrelX, barrelY);
+			q.blend = 1;
+			for(int i=0 ; i<4 ; i+=1) q.v[i].color = RGB(255,255,255);
+			AddSpriteQ(ZPlane+0.01, &q, SpriteMuzzle, 0, 64);
+		}
+	}
+	else
+	{
+		AddSpriteEx(ZPlane+0.02, barrelX, barrelY, SpriteBarrel, 0, ang, TurretScale);
+	}
+}
+
+bool PxSentryGun::IsTargetVisible(CGObject *target)
+{
+	int hitX;
+	int hitY;
+	if(TraceLine(this, PosX + BaseOffsetX + TurretScale*TurretOffsetX, PosY + BaseOffsetY + TurretScale*TurretOffsetY,
+		target->PosX, target->PosY, 2, &hitX, &hitY) == NullObj)
+		return true;
+	else
+		return false;
+}
+
+void PxSentryGun::TurretThink()
+{
+	int turretX = PosX + BaseOffsetX + TurretScale*TurretOffsetX;
+	int turretY = PosY + BaseOffsetY + TurretScale*TurretOffsetY;
+	int hitX;
+	int hitY;
+	
+	if(TurretActive)
+	{
+		// Looking for targets
+		if(Target == NullObj)
+		{
+			if(SensorRadiusSqr == 0.0)
+				SensorRadiusSqr = SensorRadius * SensorRadius;
+			
+			float best_distance;
+			
+			for(int i = 1; i < Env->Objs.Count; i+=1)
+			{
+				local obj = CGObject(Env->Objs.Objs[i]);
+				
+				if(obj == NullObj) continue;
+				
+				// if it's a worm...
+				if(obj->ClType == OC_Worm)
+				{
+					CWorm *worm = CWorm(obj);
+					// if it's not friendly...
+					if((OwnerTeam < 1 || GetTeamColor(worm->WormTeam) != GetTeamColor(OwnerTeam)) && worm->isInvisible != true)
+					{
+						// if it's moving...
+						if(obj->ObjState == WS_WALKING || obj->ObjState == WS_JUMP || obj->SpX != 0 || obj->SpY != 0)
+						{
+						    // if not in water...
+						    if(obj->PosY < Env->Water)
+						    {
+								float dx = obj->PosX - turretX;
+								float dy = obj->PosY - turretY;
+								float d = dx*dx + dy*dy;
+							
+								// if it's inside the sentry's detection radius...
+								if(d <= SensorRadiusSqr)
+								{
+									// if it's visible...
+								
+									if(IsTargetVisible(obj))
+									{
+										// -> potential target
+										if(Target == NullObj || d < best_distance)
+										{
+											// in the end, only the closest potential target will be selected
+											Target = obj;
+											best_distance = d;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			if(Target != NullObj)
+			{
+				// Got a target, make a beeping sound
+				//PlayLocalSound(88, 5, 2.0, 1.0, &Snd);
+				if(SentryBeepTimer <= 0)
+				{
+					sentryAlertSound->Play(1.0, 0.0, false);
+					SentryBeepTimer = SentryBeepMinDelay;
+				}
+				
+				ActivateTimer = DelayBeforeFiring;
+			}
+		}
+		
+		if(Target == NullObj)
+		{
+			// Idle
+			TargetAngle = IdleTargetAngle + SweepDir * TurretIdleSweepAngle;
+			LostTarget = false;
+			RotationSpeed = TurretRotationSpeedIdle;
+		}
+		else
+		{
+			// Tracking (TODO)
+			if(IsTargetVisible(Target))
+			{
+				LostTarget = false;
+				TargetAngle = (atan2(Target->PosX - turretX, Target->PosY - turretY) * 180.0) / 3.141593;
+			}
+			else
+			{
+				if(LostTarget == false)
+				{
+					LastTargetX = Target->PosX;
+					LastTargetY = Target->PosY;
+					StopFiring();
+				}
+				LostTarget = true;
+				TargetAngle = (atan2(LastTargetX - turretX, LastTargetY - turretY) * 180.0) / 3.141593;
+			}
+			if(TargetAngle < 0.0) TargetAngle += 360.0;
+			if(TargetAngle > 360.0) TargetAngle -= 360.0;
+			RotationSpeed = TurretRotationSpeedActive;
+		}
+	}
+	else
+	{
+		// Disabled
+		TargetAngle = DisabledTargetAngle;
+		Target = NullObj;
+		StopFiring();
+		RotationSpeed = TurretRotationSpeedIdle;
+	}
+	
+	// Rotate the turret towards the target angle
+	float speed = TargetAngle - TurretAngle;
+	
+	if(RotateStartSoundObj != CSound(NullObj) && RotateStartSoundObj->isAlive() == false)
+	{
+		RotateStartSoundObj->Stop();
+		RotateStartSoundObj = CSound(NullObj);
+		
+		RotateSoundObj = sentryRotateSound->Play(0.95, 0.0, true);
+	}
+	
+	if(TurretActive && Target != NullObj)
+	{
+		if(speed >= 2*RotationSpeed || speed <= -2*RotationSpeed)
+		{
+			StartRotatingSound();
+		}
+		else
+		{
+			StopRotatingSound();
+		}
+	}
+	else
+	{
+		StopRotatingSound();
+	}
+	
+	if(ActivateTimer > 0) ActivateTimer = ActivateTimer - 1;
+	if(SentryBeepTimer > 0) SentryBeepTimer = SentryBeepTimer - 1;
+	
+	if(speed >= RotationSpeed)
+	{
+		TurretAngle += RotationSpeed;
+		StopFiring();
+	}
+	else if(speed <= -RotationSpeed)
+	{
+		TurretAngle -= RotationSpeed;
+		StopFiring();
+	}
+	else
+	{
+		TurretAngle = TargetAngle;
+		
+		if(TurretActive)
+		{
+			if(Target == NullObj)
+			{
+				// If the target angle has been reached while the turret is idle, reverse the sweep direction
+				// so it looks like the sentry is scanning the area
+				SweepDir = -SweepDir;
+			}
+			else
+			{
+				if(LostTarget)
+				{
+					Target = NullObj;
+				}
+				else
+				{
+					if(ActivateTimer <= 0) StartFiring();
+				}
+				// Got focus on the target, is it visible?
+				//if(IsTargetVisible(obj))
+				//{
+				//StartFiring();
+				//}
+				//else
+				//{
+				//	StopFiring();
+				//}
+			}
+		}
+	}
+	
+	// Turret rotated over itself, change the sentry's idle target angle so the turret faces the other way when it goes back to idle
+	if((180 - TurretAngle) * TurretSide < 0)
+	{
+		TurretSide = -TurretSide;
+		IdleTargetAngle = 180.0 - 90.0 * TurretSide;
+		DisabledTargetAngle = IdleTargetAngle - 45.0 * TurretSide;
+	}
+	
+	// Firing
+	if(Firing)
+	{
+		AnimCycle = AnimCycle + AnimSpeed;
+		if(AnimCycle >= 1.0) AnimCycle -= 1.0;
+			
+		if(ShootTimer <= 0)
+		{
+			float ang = (90 - TurretAngle) * 3.141593 / 180.0;
+			
+			CShootDesc SDesc;
+			zero(&SDesc);
+			
+			SDesc.Team = 0;
+			SDesc.X = turretX;
+			SDesc.Y = turretY+1; // +1 is needed to prevent standing on turret abuse
+
+			SDesc.SpX = cos(ang);
+			SDesc.SpY = sin(ang);
+			
+			SentryBulletDesc->Damage = GunDamage;
+			SentryBulletDesc->Push = GunPush;
+			SentryBulletDesc->Count = 1;
+			
+			if(RandomInt(1, 5) == 1)
+				SentryBulletDesc->Spread = 0.0; // 20% probability to fire a bullet at pin-point accuracy
+			else
+				SentryBulletDesc->Spread = GunSpread;
+			
+			FireBullets(this, &SDesc, SentryBulletDesc);
+			
+			// Shell ejection
+			PxParticle *p = new PxParticle(115, turretX, turretY);
+			p->SetAnimSpeed(0.1);
+			p->SetLifeTime(100);
+			
+			float eject_ang = ang - TurretSide * 1.570797 + RandomFloat(-0.3, 0.3);
+			float eject_vel = RandomFloat(2.0, 3.0);
+			
+			p->SetVelocity(eject_vel * cos(eject_ang), eject_vel * sin(eject_ang));
+			p->SetAirResistance(0.0);
+			p->GravityFactor(1.0);
+			p->SetAlpha(255);
+			p->SetSize(1.0, 1.0);
+			
+			//PlayLocalSound(78, 5, 1.0, 1.0, &Snd);
+			
+			ShootTimer = GunFramesPerShot;
+			Ammo = Ammo - 1;
+			if(Ammo <= 0)
+			{
+				StopFiring();
+				TurretActive = false;
+			}
+		}
+		ShootTimer = ShootTimer - 1;
+	}
+}
+
+// Called when a new turn begins
+void PxSentryGun::OnTurnBegin(int Team)
+{
+	// Reload the turret and activate it
+	Target = NullObj;
+	
+	if(StunTurnsRemaining > 0)
+	{
+		if(Team == OwnerTeam) StunTurnsRemaining = StunTurnsRemaining - 1;
+	}
+	else
+	{
+		TurretActive = true;
+		Ammo = GunAmmunition;
+	}
+}
+
+void PxSentryGun::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	// Drawing operations are done here
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Removed) return;
+		
+		if(Sinking)	SetColorMod(RGB(90, 90, 240), 6);
+		
+		Draw();
+		
+		if(Sinking) ClearColorMod();
+		
+		// Recalculate Z plane periodically to make sure magnets are drawn properly when overlapping each other
+		if(NextRecalcZPlane <= 0)
+		{
+			local matches = 0;
+			
+			for(local i = 1; i < Env->Objs.Count; i+=1)
+			{
+				local obj = Env->Objs.Objs[i];
+				
+				if(obj == NullObj) continue;
+				if(obj == this) continue;
+				if(obj is PxSentryGun)
+				{
+					local sentry = PxSentryGun(obj);
+							
+					float dX = sentry->PosX - PosX;
+					float dY = sentry->PosY - PosY;
+					float r2 = dX*dX + dY*dY;
+						
+					if(r2 < 900.0)
+					{
+						if(sentry->ZPlane == ZPlane)
+						{
+							sentry->ZPlane = sentry->ZPlane + 0.1;
+						}
+						matches = matches + 1;
+					}
+				}
+			}
+			
+			if(matches == 0)	ZPlane = 10;
+			
+			NextRecalcZPlane = 200;
+		}
+		else
+		{
+			NextRecalcZPlane = NextRecalcZPlane - 1;
+		}
+		
+		return;
+	}
+	
+	// Damage handling
+	if(Removed==false)
+	{
+		if(Type == M_EXPLOSION)
+		{
+			TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]);
+		}
+		else if(Type == M_GUNEXP)
+		{
+			TakeDamage(MData->params[0], MData->params[5]);
+		}
+		
+		/*else if(Type == EMType(1000)) lightning strike
+		{
+			if(MData->params[0] == 0)
+			{
+				// Changes sentry teams
+				OwnerTeam = MData->params[1];
+				TurretActive = false;
+			}
+		}*/
+		
+	}
+	
+	super;
+	
+	// This is done every frame (derp)
+	if(Type == M_FRAME)
+	{
+		if(Removed)
+		{
+			Free(true);
+			return;
+		}
+		else
+		{
+			if(Sinking)
+			{
+				TurretActive = false;
+			}
+			
+			TurretThink();
+			
+			if(Health <= 0)
+			{
+				Explode();
+				Removed = true;
+			}
+		}
+	}
+}
+
+///////////////////////////////////////////////////
+// CTurnGame overrides
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+	super;
+	
+	for(local i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = Env->Objs.Objs[i];
+		
+		if(obj == NullObj) continue;
+		if(obj is PxSentryGun)
+		{
+			PxSentryGun *sentry = PxSentryGun(obj);
+			sentry->OnTurnBegin(Team);
+		}
+	}
+}
+
+///////////////////////////////////////////////////
+// CWorm overrides
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Sentry Gun"))
+	{
+		local ang = (1 - FireAngle) * 3.14159;
+		if (TurnSide < 0)
+		{
+			ang = 6.28318 - ang;
+		}
+		
+		CShootDesc SDesc;
+		zero(&SDesc);
+
+		local BaseForce = 0.3;
+		
+		SDesc.Team = WormTeam;
+		SDesc.X = PosX;
+		SDesc.Y = PosY;
+		SDesc.SpX = SpX * 0.5 + TurnSide * BaseForce;
+		SDesc.SpY = SpY * 0.5 - 0.15;
+		
+		new PxSentryGun(GetObject(25, 0), &SDesc);
+	}
+	else
+	{
+		super;
+	}
+}

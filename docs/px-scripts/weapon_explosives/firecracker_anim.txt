@@ -1,0 +1,33 @@
+require p_sprite_builder;
+
+CSprite* Firecracker_Aiming;                                                
+
+void firecracker_anim::InitGraphic()                                  
+{   CFile* f;
+    f = GetAttachment("Firecracker nonfusing.png");                             
+    Firecracker_Aiming = LoadSprite(f, 1, 0);                                
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Firecracker";                                              
+     sprite = Firecracker_Aiming->Index;                                    
+     Params->hand_radius = 15.0;
+     Params->hand_rotation = 1.0;
+     Params->hand_radial_rotation = 1.0;
+     Params->weap_radial_rotation = 0.9;
+     Params->weap_rotation = -1.0;
+     Params->weap_radius = 12.0;
+     Params->hand_type = 2;     
+     Params->hand_scale = 0.8;  
+//     Params->zplane = 10.0;   
+//     Params->scale = 1.0;     
+//
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

@@ -1,0 +1,1121 @@
+
+require utils, pxparticles, utility_hangglider_render;
+
+#WEAPON_FAN
+
+CSprite* fanBodySprite;
+CSprite* fanBodyVSprite;
+CSprite* fanBladeSprite;
+CSprite* fanBladeIdleSprite;
+CSprite* fanGrateSprite;
+CSprite* fanArrowSprite;
+
+CColMask* MASK_FAN;
+CColMask* MASK_FANBLADE_DMG;
+CColMask* MASK_FANBLADEV_DMG;
+
+CSoundFile* fanStart;
+CSoundFile* fanBreak;
+CSoundFile* fanWhirl;
+
+int WEAPONINDEX_FAN;
+
+//CLogFile *fanLog;
+
+PxWindManager : CObject;
+PxFan : CMine;
+
+PxWindManager *WIND_M;
+
+void fan::FirstFrame()
+{
+	MASK_FAN = new CColMask(6, 12, MakeRectMask(6, 12));
+	MASK_FANBLADE_DMG = new CColMask(12, 28, MakeRectMask(12, 28));
+	MASK_FANBLADEV_DMG = new CColMask(28, 12, MakeRectMask(28, 12));
+	
+	WIND_M = new PxWindManager();
+	//fanLog = new CLogFile("fan_log.txt");
+	
+	WEAPONINDEX_FAN = -1;
+}
+
+// Loading resources
+void fan::InitGraphic()
+{
+	CFile *f;
+	
+	f = GetAttachment("fan_body.png");			fanBodySprite 		= LoadSprite(f, 1, 0);
+	f = GetAttachment("fan_body_vertical.png");	fanBodyVSprite 		= LoadSprite(f, 1, 0);
+	f = GetAttachment("fan_blade.png");			fanBladeSprite 		= LoadSprite(f, 4, 0);
+	f = GetAttachment("fan_blade_idle.png");	fanBladeIdleSprite 	= LoadSprite(f, 1, 0);
+	f = GetAttachment("fan_grate.png");			fanGrateSprite 		= LoadSprite(f, 1, 0);
+	f = GetAttachment("fan_arrow.png");			fanArrowSprite 		= LoadSprite(f, 1, 0);
+}
+
+void fan::Init()
+{
+    fanStart = new CSoundFile(GetAttachment("fan_start.wav"));
+    fanBreak = new CSoundFile(GetAttachment("fan_break.wav"));
+    fanWhirl = new CSoundFile(GetAttachment("fan_whirl.wav"));
+}
+
+///////////////////////////////////////////////////
+// PxWindManager class
+
+PxWindManager::PxWindManager()
+{
+	super(Root, GS);
+	
+	InitialWind = 0.0;		// The wind at the beginning of the turn
+	ShouldRecalcWind = false;	// Should we recalculate the total wind from every active fan?
+}
+
+void PxWindManager::InitWind()
+{
+	InitialWind = GS->env->Wind;
+}
+
+void PxWindManager::RecalculateWind()
+{
+	ShouldRecalcWind = false;
+	float wind = InitialWind;
+	
+	for(local i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = Env->Objs.Objs[i];
+		
+		if(obj == NullObj) continue;
+		if(obj is PxFan)
+		{
+			local obj_fan = PxFan(obj);
+			wind += obj_fan->GetWindForce();
+		}
+	}
+	
+	if(wind > 0.34)		wind = 0.34;
+	if(wind < -0.34)	wind = -0.34;
+	
+	GS->env->Wind = wind;
+	
+	CMessageData msg;
+	msg.fparams[0] = wind;
+	Root->Message(Root, M_UPDATEWIND, 1032, &msg);
+}
+
+void PxWindManager::UpdateWind()
+{
+	ShouldRecalcWind = true;
+}
+
+void PxWindManager::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		if(ShouldRecalcWind)
+		{
+			RecalculateWind();
+		}
+	}
+	
+	if(Type == M_DRAWQUEUE)
+	{
+		return;
+	}
+	
+	super;
+}
+
+///////////////////////////////////////////////////
+// PxFan class
+
+PxFan::PxFan(CObject* Parent, CShootDesc* Desc, int force, int mode, int side)
+{
+	// Health parameters
+	//if(mode == 0)
+		MaxHealth = 55;
+	//else
+	//	MaxHealth = 40;
+	
+	Health = MaxHealth;
+	
+	if(#GLIDER_RACE)
+	{
+		ExplosionDamage = 0;
+		ExplosionBlast = 0;
+		DestroyOnExpire = true;
+	}
+	else
+	{
+		ExplosionDamage = 25;
+		ExplosionBlast = 50;
+		DestroyOnExpire = false;
+	}
+	
+	DamagePerBladeHit = 14;
+	DamageReductionPerHit = 4; // 14+10+6+2+1+1+1...
+	DamageTakenPerBladeHit = 3;
+	BladeHitForce = 5.0;
+	BladeCooldown = 5;
+	
+	// Physics parameters
+	BounceMultiplierX = 0.0;
+	BounceMultiplierY = 1.0;
+	
+	// INTERNAL PARAMETERS
+	//FanMode = mode;
+	FanMode = 0;
+	FanDirection = mode;
+	FanForce = force;
+	TurretScale = 0.6;
+	
+	// Sprites
+	
+	if(FanDirection == 0)
+	{
+		SpriteBody = fanBodySprite->Index;
+	}
+	else
+	{
+		SpriteBody = fanBodyVSprite->Index;
+	}
+	
+	SpriteBlade = fanBladeSprite->Index;
+	SpriteBladeIdle = fanBladeIdleSprite->Index;
+	SpriteGrate = fanGrateSprite->Index;
+	SpriteArrow = fanArrowSprite->Index;
+	
+	// Private
+	AnimCycle = 0.0;
+	
+	// Arrow animation
+	NumArrows = 0;
+	Arrows = new int[6];
+	for(local i=0 ; i<6 ; i+=1) Arrows[i] = 0;
+	NextArrow = 0;
+	
+	ArrowSpeed = 2 + FanForce * 3;
+	ArrowPeriod = 40 / FanForce;
+	ArrowDistance = 6 + FanForce * 12;
+	ArrowScale = 1.0 + FanForce * 0.1;
+	
+	AnimSpeed = 0.0;
+	MaxAnimSpeed = 0.06 + FanForce * 0.025;
+	TargetAnimSpeed = MaxAnimSpeed;
+	AnimAccel = 0.006;
+	
+	NextBladeCooldown = 30;
+	
+	BaseOffsetX = 0;
+	BaseOffsetY = -1;
+	
+	if(FanDirection == 0)
+	{
+		BladeOffsetX = 10;
+		BladeOffsetY = -14;
+		GrateOffsetX = 10;
+		GrateOffsetY = -14;
+	}
+	else
+	{
+		BladeOffsetX = 0;
+		BladeOffsetY = -10;
+		GrateOffsetX = 0;
+		GrateOffsetY = -10;
+	}
+	
+	Planted = false;
+	Removed = false;
+	
+	TurnsRemaining = 7 - FanForce;
+	
+	//if(Desc->SpX < 0)
+	if(side < 0)
+	{
+		BaseSide = -1;
+	}
+	else
+	{
+		BaseSide = 1;
+	}
+	
+	NextRecalcZPlane = 0;
+	ZPlane = 10.0;
+	
+	OwnerTeam = Desc->Team;
+	
+	BladePosX = PosX;
+	BladePosY = PosY;
+	
+	CMineParams MParams;
+	zero(&MParams);
+
+	MParams.Prefuse = 0;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Radius = 0;
+	MParams.Fuse = 71;
+	MParams.Damage = 48;
+	MParams.BlastPower = 100;
+	
+	SetLayerOverride(LAYER_OILDRUM);
+	SetMaskIndexOverride(3);
+	
+	super(Parent, &MParams, Desc, false, 0);
+	ClType = EObjectClass(74);
+	
+	//Layer = LAYER_OILDRUM;
+	//ColGroup = CMASK_DEFAULT_COLLIDEABLE;
+	
+	ColMask = MASK_FAN;
+	
+	WIND_M->UpdateWind();
+}
+
+bool PxFan::IsActive()
+{
+	return (Removed == false) && (TurnsRemaining > 0);
+}
+
+void PxFan::Recharge()
+{
+	if(Removed) return;
+	
+	if(TurnsRemaining <= 0)
+	{
+		NextArrow = 0;
+	}
+	
+	TurnsRemaining = 7 - FanForce;
+	
+	WIND_M->UpdateWind();
+}
+
+void PxFan::OnTurnBegin(int Team)
+{
+	if(TurnsRemaining>0)
+	{
+		if(Team == OwnerTeam) TurnsRemaining = TurnsRemaining - 1;
+		if(DestroyOnExpire && TurnsRemaining <= 0)
+		{
+			Explode();
+		}
+	}
+}
+
+float PxFan::GetWindForce()
+{
+	if(Removed || (IsActive() == false) || FanDirection == 1) return 0.0;
+	
+	return 0.07 * FanForce * BaseSide;
+}
+
+void PxFan::UpdateBladePosition()
+{
+	if(BaseSide < 0)
+		BladePosX = PosX + BaseOffsetX - TurretScale*BladeOffsetX;
+	else
+		BladePosX = PosX + BaseOffsetX + TurretScale*BladeOffsetX;
+	
+	BladePosY = PosY + BaseOffsetY + TurretScale*BladeOffsetY;
+}
+
+void PxFan::Collide(CGObject* Obj, int type)
+{
+	if(Obj->ClType == OC_Landscape && Planted == false)
+	{
+		SpX = 0;
+		SpY = 0;
+		Planted = true;
+		
+		return;
+	}
+	
+	SpX = SpX * BounceMultiplierX;
+	SpY = SpY * BounceMultiplierY;
+	
+	super;
+}
+
+// Applies blast damage
+// x, y : origin of the explosion
+// dmg : maximum damage the explosion should do
+void PxFan::TakeExplosionDamage(fixed x, fixed y, int dmg)
+{
+	if(dmg == 0) return;
+	
+	float fdmg = dmg;
+	float dx = PosX - x;
+	float dy = PosY - y;
+	
+	float distsqr = dx*dx + dy*dy;
+	float fdmgsqr = fdmg*fdmg*4.0;
+	
+	fdmg = (1.0 - distsqr/fdmgsqr) * fdmg;
+	dmg = fdmg;
+	
+	if(dmg > 0) TakeDamage(0, dmg);
+}
+
+// Applies direct damage (without any further calculation)
+// type should be always 0 (10 is for percentage-based damage and is reserved to the Battle Axe)
+void PxFan::TakeDamage(int type, int dmg)
+{
+	if(type == 10)
+	{
+		fixed fdmg = dmg;
+		fdmg = Health * fdmg / 100.0;
+		dmg = fdmg;
+	}
+	
+	Health -= dmg;
+	
+	
+	if(FanMode == 0)
+	{
+		// Not fire or blowtorch damage, and if it's an explosion, more than 10 damage
+		if(type != 1 && type != 7 && (type != 0 || dmg > 10.0))
+		{
+			FanMode = 1; // Knock the safety grate off
+			
+			local p = PxParticle(NullObj);
+			int baseX = PosX + BaseOffsetX;
+			int baseY = PosY + BaseOffsetY;
+			
+			if(FanDirection == 1)
+			{
+				p = new PxParticle(SpriteGrate, baseX, baseY+TurretScale*GrateOffsetY);
+				p->SetSize(TurretScale, TurretScale);
+				p->SetAngle(-MATH_HALF_PI);
+			}
+			else if(BaseSide < 0)
+			{
+				p = new PxParticle(SpriteGrate, baseX-TurretScale*GrateOffsetX, baseY+TurretScale*GrateOffsetY);
+				p->SetSize(-TurretScale, TurretScale);
+			}
+			else
+			{
+				p = new PxParticle(SpriteGrate, baseX+TurretScale*GrateOffsetX, baseY+TurretScale*GrateOffsetY);
+				p->SetSize(TurretScale, TurretScale);
+			}
+			
+			p->SetLifeTime(100);
+			
+			float eject_ang = RandomFloat(-0.4, 0.4);
+			float eject_vel = RandomFloat(4.0, 7.0);
+			
+			p->SetVelocity(eject_vel * sin(eject_ang), -eject_vel * cos(eject_ang));
+			p->SetAirResistance(0.0);
+			p->GravityFactor(1.0);
+			p->SetAlpha(255);
+			p->SetAngleSpeed(0.6);
+			
+			fanBreak->Play(2.0, 0.0, false);
+		}
+	}
+}
+
+// Called when the object is destroyed
+void PxFan::Explode()
+{
+	if(Removed) return;
+	
+	DoExplosion(PosX,PosY-20, ExplosionBlast, ExplosionDamage, 0, 0);
+	SpeedDivider = 1000;
+	SpX = 0.0;
+	SpY = 0.0;
+	GravityFactor = 0.0;
+	IsMaterial = false;
+	WIND_M->UpdateWind();
+}
+
+void PxFan::PushArrow()
+{
+	if(NumArrows<6)
+	{
+		Arrows[NumArrows] = 0;
+		NumArrows = NumArrows + 1;
+	}
+}
+
+void PxFan::PopArrow()
+{
+	if(NumArrows>0)
+	{
+		NumArrows = NumArrows - 1;
+		for(int i = 0; i < NumArrows; i+=1)
+		{
+			Arrows[i] = Arrows[i+1];
+		}
+	}
+}
+
+// Renders the object
+void PxFan::Draw()
+{
+	int baseX = PosX + BaseOffsetX;
+	int baseY = PosY + BaseOffsetY;
+	
+	// Body
+	if(BaseSide < 0)
+	{
+		AddSpriteEx(ZPlane+0.03, baseX, baseY, 262144 + SpriteBody, 0, 0, TurretScale);
+	}
+	else
+	{
+		AddSpriteEx(ZPlane+0.03, baseX, baseY, SpriteBody, 0, 0, TurretScale);
+	}
+	
+	// Blades
+	float r;
+	float g;
+	float b;
+	
+	int TeamColor;
+	
+	if (OwnerTeam < 1)
+	{
+		TeamColor = 0;
+	}
+	else
+	{
+		TeamColor = GetTeamColor(OwnerTeam) + 1;
+	}
+	
+	if (TeamColor == 1)
+	{       
+		r = 0.55; 
+		g = 0.15;
+		b = 0.15;
+	}
+	else if (TeamColor == 2)
+	{       
+		r = 0.15; 
+		g = 0.15;
+		b = 0.55;
+	}
+	else if (TeamColor == 3)
+	{       
+		r = 0.15; 
+		g = 0.55;
+		b = 0.15;
+	}
+	else if (TeamColor == 4)
+	{       
+		r = 0.50; 
+		g = 0.50;
+		b = 0.15;
+	}
+	else if (TeamColor == 5)
+	{       
+		r = 0.50; 
+		g = 0.15;
+		b = 0.50;
+	}
+	else if (TeamColor == 6)
+	{       
+		r = 0.15; 
+		g = 0.50;
+		b = 0.50;
+	}
+	else
+	{       
+		r = 0.4; 
+		g = 0.4;
+		b = 0.4;
+	}
+	
+	if(Sinking)
+	{
+		r = r * (90.0 / 255.0);
+		g = g * (90.0 / 255.0);
+		b = b * (240.0 / 255.0);
+		ClearColorMod();
+	}
+	
+	SetColorMod(RGB(r * 255.0, g * 255.0, b * 255.0), 6);
+	
+	float turretX = 0;
+	float turretY = baseY+TurretScale*BladeOffsetY;
+	
+	local bladespr = SpriteBlade;
+	if(AnimSpeed <= 0.0) bladespr = SpriteBladeIdle;
+	
+	local bladescale = TurretScale;
+	if(FanMode > 0) bladescale = bladescale * 1.25;
+	
+	if(FanDirection == 1)
+	{
+		turretX = baseX;
+		AddSpriteEx(ZPlane+0.02, turretX, turretY, bladespr, AnimCycle, -MATH_HALF_PI, bladescale);
+	}
+	else if(BaseSide < 0)
+	{
+		turretX = baseX-TurretScale*BladeOffsetX;
+		AddSpriteEx(ZPlane+0.02, turretX, turretY, 262144 + bladespr, AnimCycle, 0, bladescale);
+	}
+	else
+	{
+		turretX = baseX+TurretScale*BladeOffsetX;
+		AddSpriteEx(ZPlane+0.02, turretX, turretY, bladespr, AnimCycle, 0, bladescale);
+	}
+	
+	ClearColorMod();
+	
+	// Arrows
+	if(NumArrows>0)
+	{
+		CQuad q;
+		
+		local scale = TurretScale * ArrowScale;
+		
+		for(local i = 0; i < NumArrows; i+=1)
+		{
+			float dist = Arrows[i] * 0.1;
+			float alpha = 255.0 * (-4 * dist * (dist - ArrowDistance)) / (ArrowDistance * ArrowDistance);
+			
+			FillSpriteQuad(&q, SpriteArrow, 0, 0);
+			if(FanDirection == 1)
+			{
+				TransformQuad(&q, -MATH_HALF_PI, scale * 1.4, scale * 0.8, turretX, turretY - dist);
+			}
+			else if(BaseSide < 0)
+			{
+				TransformQuad(&q, 0, -scale, scale, turretX + BaseSide * dist, turretY);
+			}
+			else
+			{
+				TransformQuad(&q, 0, scale, scale, turretX + BaseSide * dist, turretY);
+			}
+			
+			for(int k=0 ; k<4 ; k+=1) q.v[k].color = ARGB(alpha,255,200,40);
+			q.blend = 1;
+			
+			AddSpriteQ(ZPlane+0.01, &q, SpriteArrow, 0, 64);
+		}
+	}
+	
+	// Grate
+	if(FanMode == 0)
+	{
+		if(FanDirection == 1)
+		{
+			AddSpriteEx(ZPlane, baseX, baseY+TurretScale*GrateOffsetY, SpriteGrate, 0, -MATH_HALF_PI, TurretScale);
+		}
+		else if(BaseSide < 0)
+		{
+			AddSpriteEx(ZPlane, baseX-TurretScale*GrateOffsetX, baseY+TurretScale*GrateOffsetY, 262144 + SpriteGrate, 0, 0, TurretScale);
+		}
+		else
+		{
+			AddSpriteEx(ZPlane, baseX+TurretScale*GrateOffsetX, baseY+TurretScale*GrateOffsetY, SpriteGrate, 0, 0, TurretScale);
+		}
+	}
+}
+
+void PxFan::DoAnimation()
+{
+	if(Removed) return;
+	
+	// Animating arrows
+	if(NumArrows>0)
+	{
+		for(local i = 0; i < NumArrows; i+=1)
+		{
+			Arrows[i] += ArrowSpeed;
+		}
+		if(Arrows[0] >= (ArrowDistance*10)) PopArrow();
+	}
+	
+	if(IsActive())
+	{
+		if(TargetAnimSpeed <= 0.0)
+		{
+			TargetAnimSpeed = MaxAnimSpeed;
+		}
+		
+		if(NextArrow <= 0)
+		{
+			PushArrow();
+			NextArrow = ArrowPeriod;
+		}
+		else
+		{
+			NextArrow = NextArrow - 1;
+		}
+	}
+	else
+	{
+		if(TargetAnimSpeed > 0.0)
+		{
+			TargetAnimSpeed = 0.0;
+		}
+	}
+	
+	// Spinning blades
+	
+	if(AnimSpeed > (TargetAnimSpeed + AnimAccel))
+	{
+		AnimSpeed -= AnimAccel;
+	}
+	else if(AnimSpeed < (TargetAnimSpeed - AnimAccel))
+	{
+		AnimSpeed += AnimAccel;
+	}
+	else
+	{
+		AnimSpeed = TargetAnimSpeed;
+	}
+	
+	AnimCycle = AnimCycle + AnimSpeed;
+	if(AnimCycle >= 1.0) AnimCycle -= 1.0;
+}
+
+void PxFan::CheckBladeCollision()
+{
+	if(FanMode == 0) return;
+	if(IsActive() == false) return;
+	
+	if(NextBladeCooldown > 0)
+	{
+		NextBladeCooldown -= 1;
+		return;
+	}
+	
+	CGObject *obj;
+	
+	for(i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		
+		bool hit = false;
+		
+		if(FanDirection == 0)
+		{
+			hit = MASK_FANBLADE_DMG->Check(BladePosX+5*BaseSide+6, BladePosY+14, obj->ColMask, obj->PosX, obj->PosY);
+		}
+		else
+		{
+			hit = MASK_FANBLADEV_DMG->Check(BladePosX+14, BladePosY-4+6, obj->ColMask, obj->PosX, obj->PosY);
+		}
+		
+		if(hit)
+		{
+			float damage = 0;
+			hit = false;
+			
+			if(obj->ClType == OC_Worm)
+			{
+				local worm = CWorm(obj);
+				// Reduce damage taken from consecutive hits to prevent worms from taking too much damage when stuck between a wall and a fan
+				damage = DamagePerBladeHit - worm->FanDamageReducer;
+				if(damage < 1)
+					damage = 1;
+				else
+					worm->FanDamageReducer += DamageReductionPerHit;
+				
+				hit = true;
+			}
+			else if(obj->ClType == OC_Missile)
+			{
+				hit = true;
+			}
+			else if(obj->ClType == OC_Mine)
+			{
+				damage = DamagePerBladeHit;
+				hit = true;
+			}
+			else if(obj->Layer == LAYER_MINE || obj->Layer == LAYER_OILDRUM)
+			{
+				damage = DamagePerBladeHit;
+				hit = true;
+			}
+			else if(obj is CMagnet)
+			{
+				damage = DamagePerBladeHit;
+				hit = true;
+			}
+			else if(obj->ClType == OC_OilDrum)
+			{
+				damage = 100;
+				hit = true;
+			}
+			else if(obj->ClType == OC_Crate)
+			{
+				damage = 100;
+				hit = true;
+			}
+			
+			if(hit)
+			{
+				float ang = RandomFloat(-1.57079, 1.57079);
+				
+				if(FanDirection == 1)
+					ang += MATH_HALF_PI;
+				else if(BaseSide < 0)
+					ang += MATH_PI;
+				
+				float ForceX = cos(ang) * BladeHitForce;
+				float ForceY = -sin(ang) * BladeHitForce;
+				
+				if(damage > 0)
+				{
+					CMessageData msg;
+					msg.params[0]	= 0;
+					msg.fparams[1]	= PosX;
+					msg.fparams[2]	= PosY;
+					msg.fparams[3]	= ForceX;
+					msg.fparams[4]	= ForceY;
+					msg.params[5]	= damage;
+					msg.params[6]	= 0;
+					
+					obj->Message(this, M_GUNEXP, 1032, &msg);
+				}
+				else
+				{
+					obj->SpX += ForceX;
+					obj->SpY += ForceY;
+				}
+				
+				local p = new PxParticle(81, BladePosX, BladePosY);
+				p->SetLifeTime(15);
+				p->SetVelocity(0,0);
+				p->SetStartAlpha(255);
+				p->SetEndAlpha(255);
+				
+				PlayLocalSound(85, 5, 1.0, 1.0);
+				
+				TakeDamage(1, DamageTakenPerBladeHit);
+				
+				NextBladeCooldown = BladeCooldown;
+			}
+		}
+	}
+}
+
+void PxFan::CheckWindPush()
+{
+	for(i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		
+		local windfactor = obj->WindFactor;
+		if(obj->ClType == OC_Fire) windfactor = 1.0;
+		if(obj->ClType == OC_Flame) windfactor = 1.0;
+		if(obj->ObjState == WS_PARACHUTE) windfactor = 1.0;
+		
+		if((windfactor > 0.0) && (obj->PosX > PosX - 15) && (obj->PosX < PosX + 15) && (obj->PosY < PosY))
+		{
+			float dist = (PosY - obj->PosY) / (FanForce * 64.0);
+			if(dist < 0.0) dist = 0.0;
+			if(dist > 1.0) dist = 1.0;
+			
+			float force = Lerp(dist * dist, 0.5 + 0.1 * FanForce, 0.0) * windfactor;
+			
+			obj->SpY -= force;
+			if(obj->ClType != OC_Worm && (obj->SpX < 0.001) && (obj->SpX > -0.001))
+			{
+				if(obj->PosX > PosX) obj->SpX = 0.1;
+				else obj->SpX = -0.1;
+			}
+			
+			if(obj->ClType == OC_Worm)
+			{
+				local worm = CWorm(obj);
+				if(worm != NullObj && worm->Glider->Deployed)
+				{
+					worm->Glider->ParaSpY -= force;
+				}
+			}
+		}
+	}
+}
+
+void PxFan::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	// Drawing operations are done here
+	if(Type == M_DRAWQUEUE)
+	{
+		//if(Removed) return;
+		
+		if(Sinking)	SetColorMod(RGB(90, 90, 240), 6);
+		
+		Draw();
+		
+		if(Sinking) ClearColorMod();
+		
+		// Recalculate Z plane periodically to make sure magnets are drawn properly when overlapping each other
+		if(NextRecalcZPlane <= 0)
+		{
+			local matches = 0;
+			
+			for(local i = 1; i < Env->Objs.Count; i+=1)
+			{
+				local obj = Env->Objs.Objs[i];
+				
+				if(obj == NullObj) continue;
+				if(obj == this) continue;
+				if(obj is PxFan)
+				{
+					local fanobj = PxFan(obj);
+							
+					float dX = fanobj->PosX - PosX;
+					float dY = fanobj->PosY - PosY;
+					float r2 = dX*dX + dY*dY;
+						
+					if(r2 < 900.0)
+					{
+						if(fanobj->ZPlane == ZPlane)
+						{
+							fanobj->ZPlane = fanobj->ZPlane + 0.1;
+						}
+						matches = matches + 1;
+					}
+				}
+			}
+			
+			if(matches == 0)	ZPlane = 10;
+			
+			NextRecalcZPlane = 200;
+		}
+		else
+		{
+			NextRecalcZPlane = NextRecalcZPlane - 1;
+		}
+		
+		return;
+	}
+	
+	// Damage handling
+	if(Removed==false)
+	{
+		if(Type == M_EXPLOSION)
+		{
+			TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]);
+			//fanWhirl->Play(2.0, 0.0, false);
+		}
+		if(Type == M_GUNEXP)
+		{
+			TakeDamage(MData->params[0], MData->params[5]);
+			//fanWhirl->Play(2.0, 0.0, false);
+		}
+	}
+	
+	super;
+	
+	// This is done every frame (derp)
+	if(Type == M_FRAME)
+	{
+		UpdateBladePosition();
+		DoAnimation();
+		
+		if(Removed)
+		{
+			//if(NumArrows <= 0) Free(true);
+			Free(true);
+			return;
+		}
+		else
+		{
+			if(Sinking)
+			{
+				if(IsActive())
+				{
+					TurnsRemaining = 0;
+					WIND_M->UpdateWind();
+				}
+			}
+			
+			if(IsActive())
+			{
+				if(FanMode > 0)
+				{
+					CheckBladeCollision();
+				}
+				
+				if(FanDirection == 1)
+				{
+					CheckWindPush();
+				}
+			}
+			
+			if(Health <= 0)
+			{
+				Explode();
+				Removed = true;
+			}
+		}
+	}
+}
+
+///////////////////////////////////////////////////
+// CTurnGame overrides
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+	super;
+	
+	// Call OnTurnBegin on all fans
+	for(local i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = Env->Objs.Objs[i];
+		
+		if(obj == NullObj) continue;
+		if(obj->ClType == OC_Worm)
+		{
+			// Reset damage reducer for all worms
+			CWorm *w = CWorm(obj);
+			w->FanDamageReducer = 0;
+		}
+		else if(obj is PxFan)
+		{
+			PxFan *fanobj = PxFan(obj);
+			fanobj->OnTurnBegin(Team);
+		}
+	}
+	
+	// Resetting wind
+	WIND_M->InitWind();
+	WIND_M->UpdateWind();
+	
+	// Undoing permanent fan delays set up after placing a safe fan
+	if(WEAPONINDEX_FAN >= 0)
+	{
+		local team = GetTeamColor(Team);
+		GS->Info.Stores[team].Delay[WEAPONINDEX_FAN] = 0;
+	}
+}
+
+///////////////////////////////////////////////////
+// CWorm overrides
+
+override CWorm::CWorm(CObject* Parent, int aTeam, int aIndex, CWormParams* params)
+{
+	super;
+	FanForce = 3;
+	FanMode = 0;
+	FanDamageReducer = 0;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Fan"))
+	{
+		local ang = (1 - FireAngle) * 3.14159;
+		if (TurnSide < 0)
+		{
+			ang = 6.28318 - ang;
+		}
+		
+		CShootDesc SDesc;
+		zero(&SDesc);
+
+		local BaseForce = 0.3;
+		
+		SDesc.Team = WormTeam;
+		SDesc.X = PosX;
+		SDesc.Y = PosY;
+		SDesc.SpX = SpX * 0.5 + TurnSide * BaseForce;
+		SDesc.SpY = SpY * 0.5 - 0.15;
+		
+		new PxFan(GetObject(25, 0), &SDesc, FanForce, FanMode, TurnSide);
+		
+		pan = CalculateSoundPan(PosX,PosY);
+		fanStart->Play(2.0, pan, false);
+		
+		//PrintMessage(GS->Info.Stores[WormTeam-1].Count[index]);
+		if(FanMode == 0)
+		{
+			// Give the weapon a 1 turn delay so that you can't drop more than one fan in the same turn
+			local index = Weap->GetWeaponIndex()+2;
+			WEAPONINDEX_FAN = index;
+			
+			local team = GetTeamColor(WormTeam);
+			GS->Info.Stores[team].Delay[index] = -1;
+		}
+	}
+	else
+	{
+		super;
+	}
+}
+
+void ShowFanMessage(int mode, int force)
+{
+	if(#GLIDER_RACE)
+	{
+		ShowMessage(MakeNumberString("Fan, Force ", force, ""));
+	}
+	else if(mode)
+	{
+		ShowMessage(MakeNumberString("Fan, Force ", force, ", VERTICAL Mode"));
+	}
+	else
+	{
+		ShowMessage(MakeNumberString("Fan, Force ", force, ", HORIZONTAL Mode"));
+	}
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		if (CurWeapon->CheckName("Fan"))
+		{
+			local Team = CTeam(GetObject(21, WormTeam));
+			Team->AllowSelectBounce = true;
+			Team->AllowSelectDelay = true;
+			
+			if(true)
+			{
+				// heh...
+				CurWeapon->EndsTurn = false;
+			}
+			else if(FanMode == 0)
+			{
+				// Placing a fan in safe mode does not end turn
+				CurWeapon->EndsTurn = false;
+			}
+			else
+			{
+				// Placing a fan in unsafe mode ends the current turn because it can potentially deal damage
+				CurWeapon->EndsTurn = true;
+			}
+		}
+	}
+	else if (Type == M_SETBOUNCE)
+	{
+		if (CurWeapon->CheckName("Fan"))
+		{
+			if(#GLIDER_RACE)
+			{
+			
+			}
+			else
+			{
+				if(MData->GetParameter(1) != WormNumber) return;
+				local mode = MData->GetParameter(2);
+				FanMode = mode;
+				ShowFanMessage(FanMode, FanForce);
+				
+				return;
+			}
+		}
+	}
+	else if(Type == M_SETDELAY)
+	{
+        if (CurWeapon->CheckName("Fan"))
+		{
+			if(MData->GetParameter(1) != WormNumber) return;
+			local force = MData->GetParameter(2)+1;
+			FanForce = force;
+			ShowFanMessage(FanMode, FanForce);
+			return;
+		}
+	}
+	
+	super;
+}

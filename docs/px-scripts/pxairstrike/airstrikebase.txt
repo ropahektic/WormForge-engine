@@ -1,0 +1,191 @@
+
+PxAirstrikeParams::PxAirstrikeParams()
+{
+	Sprite = 86;
+	Sound = 52;
+	
+	NumBombs = 5;
+	BombDistance = 32;
+	FramesBetweenBombs = 1;
+	BombSpX = 0;
+	BombSpY = 0;
+	
+	SpeedCompensation = 3.0;
+	
+	PlaneAppearXOffset = 16;
+	PlaneAppearYOffset = -128;
+}
+
+///////////////////////////////////////////////////
+// PxAirstrike
+
+PxAirstrike : CMine;
+
+PxAirstrike::PxAirstrike(CObject* Parent, CShootDesc* Desc, PxAirstrikeParams* Params)
+{
+	CMineParams MParams;
+	zero(&MParams);
+	
+	MParams.Prefuse = 0;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Radius = 1;
+	MParams.Fuse = 10;
+	MParams.Damage = 48;
+	MParams.BlastPower = 100;
+	
+	super(Parent, &MParams, Desc, false, 0);
+	
+	SpeedDivider = 1000.0;
+	GravityFactor = 0.0;
+	
+	ClType = OC_AirStrike;
+	
+	Sprite = Params->Sprite;
+	Sound = Params->Sound;
+	ShouldPlaySound = true;
+	
+	//Direction = Params->Direction;
+	Direction = Desc->SpX;
+	Team = Desc->Team;
+	Worm = Desc->Worm;
+	
+	NumBombs = Params->NumBombs;
+	BombDistance = Params->BombDistance;
+	FramesBetweenBombs = Params->FramesBetweenBombs;
+	PlaneAppearXOffset = Params->PlaneAppearXOffset;
+	PlaneAppearYOffset = Params->PlaneAppearYOffset;
+	SpeedCompensation = Params->SpeedCompensation;
+	
+	BombSpX = Params->BombSpX;
+	BombSpY = Params->BombSpY;
+	
+	PosX = 0.0;
+	PosY = 0.0;
+	FSpY = 0.0;
+	BombDrop = 0;
+	
+	if(Direction >= 0)
+	{
+		// Left to right
+		Direction = 1;
+		FSpX = BombDistance / FramesBetweenBombs;
+	}
+	else
+	{
+		// Right to left
+		Direction = -1;
+		FSpX = -BombDistance / FramesBetweenBombs;
+		BombSpX = -BombSpX;
+	}
+	
+	// Position the airplane on the horizontal axis
+	
+	PosX = Desc->AddX;
+	PosY = PlaneAppearYOffset;
+	
+	// Speed compensation for directional strikes depending on AddY
+	int DiffY = Desc->AddY - PosY;
+	if(DiffY < 0) DiffY = 0;
+	
+	float fPosX = SpeedCompensation * BombSpX * sqrt(DiffY);
+	fPosX = PosX - fPosX;
+	
+	PosX = fPosX;
+	
+	BombDrop = NumBombs / 2;
+	
+	if(BombDrop * 2 == NumBombs)
+	{
+		// Even number of bombs
+		PosX = PosX - (Direction * BombDistance) / 2;
+	}
+	else
+	{
+		// Odd number of bombs
+		BombDrop = BombDrop + 1;
+	}
+	
+	if(Direction == 1)
+	{
+		while(PosX > 0 - PlaneAppearXOffset && BombDrop > -10)
+		{
+			PosX = PosX - FramesBetweenBombs * BombDistance;
+			BombDrop = BombDrop - 1;
+		}
+	}
+	else
+	{
+		while(PosX < GS->LevelSX + PlaneAppearXOffset && BombDrop > -10)
+		{
+			PosX = PosX + FramesBetweenBombs * BombDistance;
+			BombDrop = BombDrop - 1;
+		}
+	}
+	
+	FrameCounter = 0;
+}
+
+void PxAirstrike::DropBomb()
+{
+}
+
+void PxAirstrike::RenderPlane()
+{
+	if(Direction > 0)
+	{
+		AddSprite(10, PosX, PosY, 0, 262144 + Sprite, 0);
+	}
+	else
+	{
+		AddSprite(10, PosX, PosY, 0, Sprite, 0);
+	}
+}
+
+void PxAirstrike::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	// Drawing operations are done here
+	if(Type == M_DRAWQUEUE)
+	{
+		RenderPlane();
+		return;
+	}
+	
+	super;
+	
+	// This is run every frame
+	if(Type == M_FRAME)
+	{
+		if(ShouldPlaySound)
+		{
+			ShouldPlaySound = false;
+			PlayLocalSound(Sound, 5, 1.0, 1.0);
+		}
+		
+		FrameCounter = FrameCounter + 1;
+		if(FrameCounter >= FramesBetweenBombs)
+		{
+			FrameCounter = 0;
+			if(BombDrop > 0 && BombDrop <= NumBombs)
+			{
+				DropBomb();
+			}
+			
+			BombDrop = BombDrop + 1;
+		}
+		
+		SpX = 0;
+		SpY = 0;
+		PosX = PosX + FSpX;
+		PosY = PosY + FSpY;
+		
+		if(Direction > 0 && PosX > GS->LevelSX + PlaneAppearXOffset)
+		{
+			Free(true);
+		}
+		else if(Direction < 0 && PosX < 0 - PlaneAppearXOffset)
+		{
+			Free(true);
+		}
+	}
+}

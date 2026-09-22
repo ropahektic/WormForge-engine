@@ -1,0 +1,51 @@
+require utils;
+
+CSoundFile* EQWarning;
+bool EarthQuakesAllowed;
+
+void random_eq_script::Init()
+{
+   EQWarning = new CSoundFile(GetAttachment("eq_warning.wav"));
+   
+   EarthQuakesAllowed = true;
+}
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{
+   if(Root->IsTimerActive() == true && EarthQuakesAllowed == true)
+   {
+      local EQHappening = RandomInt(1,30);
+      if(EQHappening == 15)
+      {
+         local cw = GetCurrentWorm();
+         local EQuakeWeap = GetWeaponByName("Earth Quake");
+         local SafeWeap = GetWeaponByName("Umbrella");
+           
+         if(cw != NullObj && EQuakeWeap != NullObj && SafeWeap != NullObj)
+         {  
+            EQWarning->Play(1.00, 0.0, false);
+            
+            CShootDesc sdesc;
+            zero(&sdesc);
+              
+            cw->CurWeapon = EQuakeWeap;
+            cw->FireFinal(EQuakeWeap, &sdesc);
+            
+            ShowMessage("An earth quake is occuring... brace yourselves!");
+            ShowMessage("An earth quake is occuring... brace yourselves!");
+            ShowMessage("An earth quake is occuring... brace yourselves!");
+            
+            cw->CurWeapon = SafeWeap;
+         }
+      }
+      
+      EarthQuakesAllowed = false;
+   } 
+   
+   if(Type == M_TURNBEGIN && EarthQuakesAllowed == false)
+   {
+      EarthQuakesAllowed = true;
+   }     
+         
+   super;
+}

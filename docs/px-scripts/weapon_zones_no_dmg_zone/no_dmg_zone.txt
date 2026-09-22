@@ -1,0 +1,145 @@
+// Add this to your scheme if you don't want health zone have damaging effect
+require utils, weapon_zones;
+
+override CHealthZone::CHealthZone(string zoneName, int ax, int ay, int pushPowa, int Dmg, int WT, int turns_left, bool hp_status)
+{
+	super(Root, GS);
+    health_zone = CWZone(NullObj);
+    zone_name = StrSave(zoneName);
+    x = ax;
+    y = ay;
+    Healing = hp_status;
+    PushPower = pushPowa;
+    Damage = Dmg;
+    unkB = 0;
+    Team = WT;
+    worknow = true;
+    turns = turns_left;
+    Dead = false;
+    timer = 0;
+    fps = 50;
+    maxHP = 350;
+    minHP = 1;
+    active = true;
+    start_be_inactive = false;
+    inactive_timer = 0;
+
+//_______________________________________
+
+    if (Healing) ZoneParams->sprite = 108;
+    else ZoneParams->sprite = 108;
+    ZoneParams->speed = 20;
+    ZoneParams->duration = 3;   // seconds, fade duration
+    ZoneParams->turns = turns;
+    ZoneParams->loop = true;
+    ZoneParams->backwards = true;
+    ZoneParams->rot = 180;
+    ZoneParams->scale = 1.0;
+    ZoneParams->alpha = 35;
+    ZoneParams->ZPlane = 16;
+
+    if (Team == 1){
+    ZoneParams->color = ARGB(65, 150, 100, 100);}             // red
+    else ZoneParams->color = ARGB(65, 100, 100, 150);         // blue
+
+    ZoneParams->blend_type = 6;
+    blast_anim1 = new CAnimation(Root, x, y, NullObj, ZoneParams);
+}
+
+override void CHealthZone::DamageHealth()
+{
+    local worm_active;
+    if (health_zone->activator == NullObj) return;
+    if (health_zone->activator->ClType == OC_Cross)
+    {
+      if (health_zone->activator->SpX == 0 && health_zone->activator->SpY == 0)      // fixes error with moving grave, aslo errors and game crash with portals.
+      {
+       PxDeadWorm *deadworm = DW_M->DeadWormFromGrave(health_zone->activator);
+       if(deadworm != PxDeadWorm(NullObj))
+       {
+          deadworm->Resurrect(1);
+       }
+       else
+       {
+          ShowMessage("Grave has no bound worm, could not resurrect!");
+       }
+      }
+    }
+    else if (health_zone->activator->ClType == OC_Worm)
+    {
+       worm_active = CWorm(health_zone->activator);
+       local worm = worm_active->WormNumber;
+       local team = worm_active->WormTeam;
+       local hp_now = GS->Info.GetWormHealth( team, worm);
+       if (hp_now < maxHP) GS->Info.SetWormHealth( team, worm, hp_now + 1);
+       if (worm_active->ObjState == WS_JETPACK) worm_active->JetFuel += 5*65536;
+       if (worm_active->SickDamage > 0) worm_active->SickDamage--;  // low down sickness untill totally healthy.
+    }
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+local worm = GetCurrentWorm();
+
+    if (Type == M_FRAME)
+    {
+      if (worm != NullObj)
+      {
+        if (worm->CurWeapon->CheckName("Health Zone"))
+        {
+            if (keySync->KeyPressedNow(49) || keySync->KeyPressedNow(50) || keySync->KeyPressedNow(51) || keySync->KeyPressedNow(52) || keySync->KeyPressedNow(53) || keySync->KeyPressedNow(189) || keySync->KeyPressedNow(187))
+            {
+            if (SH_pressing)
+				{
+            	if (keySync->KeyPressedNow(187))
+            		{
+                	HealthPlus = true;
+                	ShowTeamMessage(7,"Healing zone",WormTeam);
+                	SH_pressing = false;
+            		}
+            	if (keySync->KeyPressedNow(189))
+            		{
+	                HealthPlus = true;
+                	ShowTeamMessage(7,"Healing zone",WormTeam);
+                	SH_pressing = false;
+            		}
+            	
+            	if (keySync->KeyPressedNow(49))
+            		{
+                	HealthTurns = 2;                                                             // +1, for balance.
+                	ShowTeamMessage(7,"Activity: 1 turn",WormTeam);
+                	SH_pressing = false;
+            		}
+            	else if (keySync->KeyPressedNow(50))
+            		{
+                	HealthTurns = 3;
+                	ShowTeamMessage(7,"Activity: 2 turns",WormTeam);
+                	SH_pressing = false;
+            		}
+		            else if (keySync->KeyPressedNow(51))
+        		    {
+                	HealthTurns = 4;
+	                ShowTeamMessage(7,"Activity: 3 turns",WormTeam);
+    	            SH_pressing = false;
+        		    }
+            	else if (keySync->KeyPressedNow(52))
+		            {
+        	        HealthTurns = 5;
+            	    ShowTeamMessage(7,"Activity: 4 turns",WormTeam);
+                	SH_pressing = false;
+            		}
+	            else if (keySync->KeyPressedNow(53))
+    		        {
+            	    HealthTurns = 6;
+                	ShowTeamMessage(7,"Activity: 5 turns",WormTeam);
+                	SH_pressing = false;
+            		}
+            	}
+            }
+
+			else{SH_pressing = true;}
+        }
+      }
+    }
+    super;
+}

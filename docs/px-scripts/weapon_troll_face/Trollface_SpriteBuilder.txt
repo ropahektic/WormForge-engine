@@ -1,0 +1,46 @@
+require p_sprite_builder;
+
+CSprite* Trollface_Aiming;
+
+void Trollface_SpriteBuilder::InitGraphic()
+{   CFile* f;                              
+    f = GetAttachment("Trollface_Aiming.png");
+    Trollface_Aiming = LoadSprite(f, 1, 0);   
+}                                             
+                                              
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                       
+  if (Type == M_FRAME) {                      
+    if (gframe == 1) {                        
+     local weapName; local sprite;
+
+	 CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Trollface";
+     sprite = Trollface_Aiming->Index;
+     Params->hand_radius = 24.0;                                                 
+     Params->hand_rotation = 1.0;     
+     Params->hand_radial_rotation = 1.0;
+     Params->weap_radial_rotation = 0.9;     
+     Params->weap_rotation = -1.0;
+     Params->weap_radius = 12.0;
+     Params->hand_type = 1;     
+     Params->hand_scale = 0.8;  
+//     Params->zplane = 10.0;   
+//     Params->scale = 1.0;     
+
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }  
+}
+
+/*override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("Trollface")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+//DoAnimParticleEffects( sprite, Rad, RelX, RelY, lifeTime, animSpeed, veloMin, veloMax, startAlpha, endAlpha, windFactor, startSize, endSize, angleMin, angleMax, randomMotion, grav);
+            DoAnimParticleEffects(608, 1, 20, -13, 20, 0.03, 1.0, 7.0, 255, 255, 0, 1.0, 0.5, 0.0, 2.31, 0.0, 1.0);
+        }
+    }
+}*/

@@ -1,0 +1,459 @@
+//- Buffalo Of Lies v1.1 15/10/14
+// --------------------------------------------------------------------------------------------
+//- Determined to dish out some underground destruction; the Buffalo charges forwards, 
+//- destroying all in its path. Every time the Buffalo reaches an object, it cannot  
+//- pass it and will cause an explosion and tries to get through by force! - worms.wikia.com
+//- Pressing 1: Buffalo goes in straight direction after explosion.
+//- Pressing 2: Buffalo goes in opposite direction after explosion.
+//- Pressing 3: Buffalo goes in random direction after explosion.
+// --------------------------------------------------------------------------------------------
+//- made by rafa``2
+
+//- v1.1 25/09/15 fixed wrong message on top after selecting delay with another weapon.
+//- v1.2 03/01/16 fixed wrong sprite drawing at aiming.
+                                                                                             
+require utils, utils_steps, p_sprite_builder;
+
+#BUFFALO_OF_LIES
+
+CSoundFile * BuffaloStart;
+CSoundFile * BuffaloWalk;
+CSoundFile * BuffaloRoar1;
+CSoundFile * BuffaloRoar2;
+CSprite* buffalo_spr;
+
+enum BuffaloExpType = (STRAIGHT, OPPOSITE, RANDOM);
+
+void buffalo_s::FirstFrame()
+{                 
+    BuffaloStart = new CSoundFile(GetAttachment("buffalostart.wav"));
+    BuffaloWalk  = new CSoundFile(GetAttachment("buffaloride.wav"));
+    BuffaloRoar1 = new CSoundFile(GetAttachment("buffaloroar1.wav"));
+    BuffaloRoar2 = new CSoundFile(GetAttachment("buffaloroar2.wav"));    
+}
+
+void buffalo_s::InitGraphic()
+{   
+    buffalo_spr = LoadSprite(GetAttachment("buffalo.png"), 20, 1);
+}
+
+CBuffaloManager:CObject
+CBuffalo:CMissile
+
+CBuffaloManager::CBuffaloManager(CWeaponLaunch *ldata, CShootDesc *sdata, BuffaloExpType ExpType)
+{
+    super(Root, GS);
+    
+    BL_Team            = sdata->Team;
+    BL_Worm            = sdata->Worm;
+    BL_Exp_Type        = ExpType;
+    
+    BL_FirstX          = sdata->X;
+    BL_FirstY          = sdata->Y;
+    BL_FirstSpX        = sdata->SpX;
+    BL_FirstSpY        = sdata->SpY;
+    BL_LastPosX        = 0;
+    BL_LastPosY        = 0;
+    BL_LastSide        = 0;
+    
+    BL_FirstBuffalo    = true;
+    BL_Exploded        = false;
+    BL_Dead            = false;
+    
+    BL_Initial_Side    = 0;
+    BL_Amount_Default  = 3;
+    BL_Amount          = BL_Amount_Default;
+    BL_Amount_Actual   = 0;
+    BL_RoarTime        = RandomInt(60, 80);
+    BL_LaunchData      = ldata;
+    BL_ZPlaneBase      = 5.0;
+    BL_ZPlane          = BL_ZPlaneBase + RandomFloat(0.1, 0.9);
+    
+    BL_Current_Buffalo = CBuffalo(NullObj);
+    
+    BuffaloStartObj = CSound(NullObj);
+    BuffaloWalkObj  = CSound(NullObj);
+    BuffaloRoar1Obj = CSound(NullObj);
+    BuffaloRoar2Obj = CSound(NullObj);
+}
+
+CBuffalo::CBuffalo(CBuffaloManager * Manager)
+{    
+    BL_Manager = Manager;
+    
+    if(BL_Manager == NullObj)
+        return; 
+    
+    CShootDesc desc;
+    zero(&desc);
+            
+    desc.Team = BL_Manager->BL_Team;
+    desc.Worm = BL_Manager->BL_Worm;
+    
+    if(BL_Manager->BL_FirstBuffalo)
+    {
+        desc.X    = BL_Manager->BL_FirstX;
+        desc.Y    = BL_Manager->BL_FirstY;
+        desc.SpX  = BL_Manager->BL_FirstSpX * 0.25;
+        desc.SpY  = BL_Manager->BL_FirstSpY * 0.25;
+    }
+    else
+    {
+        desc.X    = BL_Manager->BL_LastPosX;
+        desc.Y    = BL_Manager->BL_LastPosY;
+        desc.SpX  = RandomFloat(2.0, 3.25) * -BL_Manager->BL_LastSide;
+        desc.SpY  = RandomFloat(2.0, 3.25) * -1.0; 
+    }
+    
+    super(Root->GetObject(25,0), BL_Manager->BL_LaunchData, &desc);
+    
+    BL_Sinking    = false;
+    
+    BL_FrameSpr   = 0.0;
+    BL_RotSpr     = 0.0;
+    BL_RotSpeed   = 0.05;
+    BL_FrameSpeed = 1.600;
+    BL_FrameSpeedSinking = 0.725;
+    BL_Manager->BL_LastSide = Side;
+    BL_ZPlane     = BL_Manager->BL_ZPlaneBase + (BL_Manager->BL_Amount_Actual + 1) * 0.01;
+    
+    if(BL_Manager->BL_FirstBuffalo)
+    {
+        BL_Manager->BL_Initial_Side = Side;
+    }
+    
+    weap = GetWeaponByName("Buffalo of Lies");
+    ClType = OC_Missile;
+    version = 1.2;                                                                     
+}
+
+void CBuffaloManager::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Type == M_FRAME)
+    {
+        if(BL_Dead)
+        {
+           BL_SelectDelay(false);
+           BuffaloStopSound();
+           Free(true);
+        }     
+        
+        if(BL_Exploded || BL_FirstBuffalo)
+        {
+            if(BL_Current_Buffalo == NullObj)
+            {
+                BL_Current_Buffalo = new CBuffalo(this);
+                BuffaloStartSound();  
+                BL_Amount_Actual++;
+                BL_FirstBuffalo = false;
+                BL_Exploded = false;
+            }
+        }
+        
+         BuffaloWalkSound();
+        
+        if(BL_Current_Buffalo != NullObj && BL_Current_Buffalo->BL_Sinking)
+        {
+            BL_Dead = true;
+        }
+    }
+    
+    if(Type == M_EXPLOSION)
+    {
+        if(sender is CBuffalo)
+        {
+            if(BL_Current_Buffalo != NullObj&& BL_Current_Buffalo == CBuffalo(sender) && BL_Current_Buffalo->BL_Manager == this)
+            {
+                if(BL_Amount_Actual >= BL_Amount)                                                                         
+                {
+                    BL_Dead = true;
+                }
+                else 
+                {
+                    BL_Exploded = true;
+                    BL_LastPosX = BL_Current_Buffalo->PosX;
+                    BL_LastPosY = BL_Current_Buffalo->PosY;
+                    BL_LastSide = BL_Current_Buffalo->Side;
+                        
+                    if(BL_Exp_Type == STRAIGHT)
+                        BL_Initial_Side = BL_Current_Buffalo->Side;
+                    else if(BL_Exp_Type == OPPOSITE)
+                        BL_Initial_Side = -BL_Current_Buffalo->Side;
+                     else if(BL_Exp_Type == RANDOM)
+                        BL_Initial_Side = BL_Current_Buffalo->Side * SignEx(RandomInt(-1,1));
+                }
+            }
+        }
+    }
+}
+
+void CBuffaloManager::BuffaloStartSound()
+{
+    if(BL_FirstBuffalo && BuffaloStartObj == CSound(NullObj))
+    {
+        BuffaloStartObj = BuffaloStart->Play(0.85, 0.0, false);
+    }
+}
+
+void CBuffaloManager::BuffaloWalkSound()
+{
+    if(BuffaloStartObj != CSound(NullObj) && (BuffaloStartObj->isAlive()) == false)
+    {                                                                          
+        BuffaloStartObj->Stop();
+        BuffaloStartObj = CSound(NullObj);
+       
+        BuffaloWalkObj = BuffaloWalk->Play(0.85, 0.0, true);
+    }
+    
+    if(BuffaloStartObj == CSound(NullObj) && BuffaloWalkObj != NullObj && (BuffaloWalkObj->isAlive()) == true)
+    {
+          BuffaloRoarSound();
+    }
+}
+
+void CBuffaloManager::BuffaloStopSound() 
+{   
+    if(BuffaloStartObj != CSound(NullObj) && BuffaloStartObj->isAlive() == true)
+    {
+        BuffaloStartObj->Stop();
+        BuffaloStartObj = CSound(NullObj);
+    }
+    
+    if(BuffaloWalkObj != CSound(NullObj) && BuffaloWalkObj->isAlive() == true)
+    {
+        BuffaloWalkObj->Stop();
+        BuffaloWalkObj = CSound(NullObj);
+    }
+    
+    if(BuffaloRoar1Obj != CSound(NullObj) && BuffaloRoar1Obj->isAlive() == true)
+    {
+        BuffaloRoar1Obj->Stop();
+        BuffaloRoar1Obj = CSound(NullObj);
+    }
+    
+    if(BuffaloRoar2Obj != CSound(NullObj) && BuffaloRoar2Obj->isAlive() == true)
+    {
+        BuffaloRoar2Obj->Stop();
+        BuffaloRoar2Obj = CSound(NullObj);
+    }
+}
+
+void CBuffaloManager::BuffaloRoarSound()
+{
+    if(gframe % BL_RoarTime != 0) return;
+    if(BL_Current_Buffalo == NullObj) return;
+    
+    int RandomRoar = BL_Current_Buffalo->PosX;
+    
+    if(RandomRoar % 2 == 0)
+    {
+        if(BuffaloRoar1Obj == CSound(NullObj))
+        {
+            BuffaloRoar1Obj = BuffaloRoar1->Play(1.15, 0.0, false);    
+        }
+        else if(BuffaloRoar1Obj != CSound(NullObj) && (BuffaloRoar1Obj->isAlive()) == false)
+        {
+           BuffaloRoar1Obj->Stop();
+           BuffaloRoar1Obj = CSound(NullObj);
+        }
+    }
+    else
+    {
+        if(BuffaloRoar2Obj == CSound(NullObj))
+        {
+            BuffaloRoar2Obj = BuffaloRoar2->Play(1.15, 0.0, false);
+        }
+        else if(BuffaloRoar2Obj != CSound(NullObj) && (BuffaloRoar2Obj->isAlive()) == false)
+        {
+           BuffaloRoar2Obj->Stop();
+           BuffaloRoar2Obj = CSound(NullObj);
+        }
+    } 
+}
+
+void BL_SelectDelay(bool AllowDelay)
+{
+    local Team = CTeam(Root->GetObject(TI_Team, Root->CurTeam));
+            
+    if(Team != NullObj)
+    {
+        Team->AllowSelectDelay = AllowDelay;
+    }
+}
+
+void CBuffalo::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Type == M_DRAWQUEUE)
+    {
+        if(BL_Sinking)
+            SetColorMod(RGB(85, 85, 240), 6);
+            
+        local index;
+        
+            if(Side > 0) 
+                index = buffalo_spr->Index;
+            else 
+                index = buffalo_spr->Index + 262144;
+        
+        //if(BL_Sinking)
+        //    index += 524288; 
+         
+        AddSpriteEx(BL_ZPlane, PosX , PosY-10, index, BL_FrameSpr, BL_RotSpr, 1.0);
+        
+        if(BL_Sinking)
+            ClearColorMod();  
+    }
+    else if(Type == M_FRAME)
+    {
+        super;
+        
+        if(BL_Manager != NullObj)
+            Side = BL_Manager->BL_Initial_Side;
+        
+        if(PosY > Env->Water  + 15)
+            BL_Sinking = true;
+        
+        if(BL_Sinking)
+        {
+            BL_FrameSpr += 0.001 * 20.0 * BL_FrameSpeedSinking;
+            
+            BL_RotSpr+= BL_RotSpeed*-Side;
+            
+            if(abs(BL_RotSpr) >= MATH_HALF_PI) 
+                BL_RotSpr = MATH_HALF_PI*-Side;
+        }
+        else
+        { 
+            BL_FrameSpr += 0.001 * 20.0 * BL_FrameSpeed;
+        }
+        
+        if(BL_FrameSpr > 1.0)
+            BL_FrameSpr = 0.0;
+              
+    }
+    else super;
+}
+
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    BuffaloExpTypeSelected = STRAIGHT;
+    BuffaloDamage = 50;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Type == M_EXPLOSION)
+    {
+        if(sender is CBuffalo)
+        {
+             if(MData != NullObj)
+             {
+                 MData->params[4] = BuffaloDamage;
+             }
+        }
+    }
+    
+    super;
+    
+    if(GetCurrentWorm() != this)
+        return;
+    
+    if(CurWeapon != NullObj && CurWeapon->CheckName("Buffalo of Lies"))
+    {
+        if(Type == M_SETWEAPON || ObjState == WS_AIMING)
+        {
+            BL_SelectDelay(true);
+        }
+         
+        if(Type == M_SETDELAY)
+        {
+            if(MData == NullObj) return;
+        
+            if(MData->GetParameter(2) == 0)
+            {
+                BuffaloExpTypeSelected = STRAIGHT;
+                ShowTeamMessage(7,"Buffalo of Lies, Straight direction",WormTeam);
+            }
+            else if(MData->GetParameter(2) == 1)
+            {
+                BuffaloExpTypeSelected = OPPOSITE;
+                ShowTeamMessage(7,"Buffalo of Lies, Opposite direction",WormTeam);
+            }
+            else if(MData->GetParameter(2) == 2)
+            {
+                BuffaloExpTypeSelected = RANDOM;
+                ShowTeamMessage(7,"Buffalo of Lies, Random direction",WormTeam);
+            }    
+        }   
+    }    
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if(Weap->CheckName("Buffalo of Lies"))
+    {
+        new CBuffaloManager(&Weap->launch, Desc, BuffaloExpTypeSelected);
+    }
+    else super;
+}                                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{ 
+    super;
+                                                                           
+    if (Type == M_FRAME) 
+    {                                              
+        if (gframe == 1)
+        {                                                          
+            local weapName; 
+            local sprite;
+            
+            CWormAnimParams* Params = new CWormAnimParams;
+            weapName = "Buffalo of Lies";               
+            sprite = buffalo_spr->Index;
+                                     
+            Params->hand_radius = -10.0;                                                 
+            Params->hand_rotation = 0.0;
+            Params->hand_radial_rotation = -0.13;
+            Params->weap_radial_rotation = 0.22;     
+            Params->weap_rotation = 0.5;
+            Params->weap_radius = -18.0;
+            Params->hand_type = 1;
+            Params->hand_scale = 1.0;
+            Params->dont_rotate_with_angle = true;
+            Params->ang_if_static = -0.075;
+            Params->hand_ang_if_static = 0.45;
+            
+            new WormSprite(weapName, sprite, Params);
+        }                               
+    }                                 
+}
+
+int CBuffaloManager::SignEx(int n)
+{
+   if(n > 0) 
+       return 1;
+   else 
+       return -1;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    
+    if(Type == M_TURNBEGIN)
+    {
+        for(int i=0; i<Root->Childs.Count; i++)
+        {
+            local obj = CObject(Root->Childs.Objs[i]);
+            
+            if(obj == NullObj) continue;
+            if((obj is CBuffaloManager) == false) continue;
+            
+            CBuffaloManager * BM = CBuffaloManager(obj);
+            BM->BuffaloStopSound();
+            BM->BL_Dead = true;
+        }
+    }
+}

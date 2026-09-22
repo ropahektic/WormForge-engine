@@ -1,0 +1,75 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/* Made by: DannyB, March 2023 */ 
+
+int host_team;
+int turn_time;
+float map_scale;
+bool game_over;
+
+void turn_utilities_SCRIPT::FirstFrame()
+{
+     host_team = 0;
+     turn_time = 0;
+     map_scale = 0.0;
+     game_over = false;
+}
+
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{          
+     // gets the turn time setting for the scheme
+     if(type == M_RESUMETIMER)
+     {
+          if(turn_time == 0)
+          {
+               turn_time = Root->Timer;
+               map_scale = (GS->LevelSX + GS->LevelSY) / 2;
+          }
+     }
+     
+     // checks whether the game is over by a team victory
+     if(type == M_GAMEOVER)
+     {
+          if(game_over == false)
+          {
+               game_over = true;
+          }
+     }
+     
+     super;
+}
+
+// checks whether the game is over by a draw
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{         
+     if(type == M_KILLWORM || type == M_WORMDROWNED || type == M_SURRENDER)
+     {
+          if(game_over == false)
+          {
+               for(local i = 0; i <= 5; i++)
+               {
+                    if(IsTeamAlive(i) == true)
+                    {
+                         break;
+                    }
+                    else if(i == 5)
+                    {
+                         game_over = true;
+                    }
+               }
+          }
+     }
+     
+     super;
+} 
+
+// ends the turn and gives the player a reason for it
+void endTurnWithReasoning(string reason)
+{
+     showTeamMessage(reason, 3, getWormTeam(Current_Worm, 1), 1);
+
+     Root->Message(Root, M_SKIPTURN, 0, NullObj);
+     
+     Current_Worm->PlayLocalSound(93, 5, 2.5, 1.0);  
+}  

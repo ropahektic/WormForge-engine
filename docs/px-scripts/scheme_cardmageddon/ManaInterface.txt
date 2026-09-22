@@ -1,0 +1,64 @@
+int Center;
+int Center2;
+
+CManaInterface : CObject;
+CBitmap* GUIBitmap;
+
+void ManaInterface::InitGraphic()
+   { 
+   GUIBitmap = MakeBitmap(50,50);
+   }
+
+void ManaInterface::FirstFrame()
+   {
+   local DeIn = new CManaInterface(Root);
+   DeIn->CalculatePosition();
+   }
+
+CManaInterface::CManaInterface(CObject* parent)
+   {
+   super(parent,GS);   
+   ManaUI = GUIBitmap;    
+   }
+
+void CManaInterface::CalculatePosition()
+   {
+   PositionX = 0 - GS->Disp->xRes / 2 + 120;
+   PositionY = 0 + GS->Disp->yRes / 2 - 35;
+   }
+
+void CManaInterface::DrawBitmap()
+   {
+   AddInterfaceBitmap(0,PositionX ,PositionY,ManaUI,50,50,0);
+   }
+
+void CManaInterface::DrawBackground()
+   {
+   ManaUI->Rect(0,0,50,50,ARGB(255,0,0,0));
+   }
+
+void CManaInterface::DrawText()
+   {           			 
+   local a = 1;
+   local b = 1;	
+   GS->Disp->DrawText(14,ManaUI, 6, 5, "Mana:" , &a, &b);	
+  	
+   GS->Disp->DrawText(22,ManaUI, Center, 22, ItoA(CurrentMana), &a, &b);	
+   }
+
+void CManaInterface::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+   {
+   if (Type == M_FRAME)
+       {
+       CurrentMana =  GS->Info.Stores[Root->CurTeam-1].Count[62+2];
+       if( CurrentMana < 10) Center = 20;
+       else Center = 15;
+                   
+       DrawBackground();
+       DrawText();    
+       }
+   if (Type == M_DRAWQUEUE)
+       {
+       DrawBitmap();
+       }
+   }

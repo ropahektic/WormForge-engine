@@ -1,0 +1,47 @@
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) {
+  if (Weap->CheckName("Invisibility")) {
+     if (Invisible) Invisible = false;
+     else Invisible = true;
+  } else if (Weap->CheckName("Ninja Rope") || Weap->CheckName("Jet Pack") || Weap->CheckName("Prod") || Weap->CheckName("Bungee") || Weap->CheckName("Skip Go") || Weap->CheckName("Low Gravity") || Weap->CheckName("Fast Walk") || Weap->CheckName("Laser Sign") || Weap->CheckName("Swim Suit") || Weap->CheckName("Helicopter") || Weap->CheckName("Anti FallDamage") || Weap->CheckName("God Mode") || Weap->CheckName("Jump")  || Weap->CheckName("Parkour Mode") || Weap->CheckName("Climb") || Weap->CheckName("Small Worm") || Weap->CheckName("Fat Worm")) {
+     if (Invisible) {}
+  } else {
+     Invisible = false;
+  }
+  if (Weap->CheckName("Fast Walk")) {
+     if (FastWalking) FastWalking = false;
+     else FastWalking = true;
+  }     
+  if(Weap->CheckName("Damage*2"))
+  {
+     damageX2 = true;
+  }                                  
+  super;
+  
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+super;
+local w = GetCurrentWorm();
+if (w == NullObj) return;
+  if (Type == M_FRAME) {
+//     if (Invisible) {
+//        hideWorm = true;
+//        GS->Disp->RenderSprite( PosX, PosY, currentSpriteIndex, 1.0);// currentSpriteFrame);
+//     } else hideWorm = false;
+//  if (gframe % 20) {}
+//  else 
+  if (Invisible) {
+//   GS->DQueue->AddSprite( 10, PosX, PosY - 20, 0, currentSpriteIndex, currentSpriteFrame);
+//    GS->Disp->RenderSprite (PosX - 20, PosY - 20, currentSpriteIndex, currentSpriteFrame);
+//    GS->Disp->RenderBitmap( PosX, PosY, MyFile, 250, 250, 400, 400);
+//      local a = ItoA(DispSpriteI);
+//      local b = ItoA(DispSpriteF);
+//      GG->WriteToChat(1 , a, false);
+//      GG->WriteToChat(2, b, false);
+  }
+  }
+  if (Type == M_TURNEND)
+  {
+     if (damageX2) damageX2 = false;
+  }
+}

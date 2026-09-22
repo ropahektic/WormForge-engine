@@ -1,0 +1,75 @@
+require utils;
+
+CSoundFile* fart1;
+CSoundFile* fart2;
+CSoundFile* fart3;
+CSoundFile* fart4;
+
+CSoundFile* fart5;
+CSoundFile* fart6;
+CSoundFile* fart7;
+CSoundFile* fart8;
+
+CSoundFile* fart9;
+CSoundFile* fart10;
+CSoundFile* fart11;
+
+
+void fart_script::Init()
+{
+    fart1 = new CSoundFile(GetAttachment("fart1.wav"));
+    fart2 = new CSoundFile(GetAttachment("fart2.wav"));
+    fart3 = new CSoundFile(GetAttachment("fart3.wav"));
+    fart4 = new CSoundFile(GetAttachment("fart4.wav"));
+    
+    fart5 = new CSoundFile(GetAttachment("fart5.wav"));
+    fart6 = new CSoundFile(GetAttachment("fart6.wav"));
+    fart7 = new CSoundFile(GetAttachment("fart7.wav"));
+    fart8 = new CSoundFile(GetAttachment("fart8.wav"));
+    
+    fart9 = new CSoundFile(GetAttachment("fart9.wav"));
+    fart10 = new CSoundFile(GetAttachment("fart10.wav"));
+    fart11 = new CSoundFile(GetAttachment("fart11.wav"));
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+if (weap->CheckName("Fart"))
+	{
+	w = GetCurrentWorm();
+	if (w != NullObj)
+	    {
+		g = new CGas(Root->GetObject(25, 0), x, y, 1, w->WormTeam);
+		g = new CGas(Root->GetObject(25, 0), x, y, 1, w->WormTeam);
+		g = new CGas(Root->GetObject(25, 0), x, y, 1, w->WormTeam);
+		}
+	}
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Fart"))
+    {
+		w = GetCurrentWorm();
+        g = new CGas(Root->GetObject(25, 0), w->PosX-(14*TurnSide), w->PosY+2, 1, w->WormTeam);
+        g = new CGas(Root->GetObject(25, 0), w->PosX-(15*TurnSide), w->PosY+3, 1, w->WormTeam);
+        g = new CGas(Root->GetObject(25, 0), w->PosX-(16*TurnSide), w->PosY+4, 1, w->WormTeam);
+        
+		local i = RandomInt(1, 11);
+        if      (i == 1) fart1->Play(2.0, 0.0, false);
+        else if (i == 2) fart2->Play(2.0, 0.0, false);
+        else if (i == 3) fart3->Play(2.0, 0.0, false);
+        else if (i == 4) fart4->Play(2.0, 0.0, false);
+
+        else if (i == 5) fart5->Play(2.0, 0.0, false);
+        else if (i == 6) fart6->Play(2.0, 0.0, false);
+        else if (i == 7) fart7->Play(2.0, 0.0, false);
+        else if (i == 8) fart8->Play(2.0, 0.0, false);
+         
+        else if (i == 9) fart9->Play(2.0, 0.0, false);
+        else if (i == 10) fart10->Play(2.0, 0.0, false);
+        else if (i == 11) fart11->Play(2.0, 0.0, false);
+    }
+	super;
+}

@@ -1,0 +1,1327 @@
+require utils, utils_pyroman, utils_steps, p_weapgraphics, p_weapsounds, pxparticles, pxtexbeam, weapon_lightning, p_portal2;
+
+CSprite* gg_glow_sprite;
+CSprite* gg_light_sprite;
+CSprite* gg_beam1;
+CSoundFile* gg_drop_s;
+CSoundFile* gg_dryfire_s;
+CSoundFile* gg_hold_loop_s;
+CSoundFile* gg_pickup_s;
+CSoundFile* gg_possible_hit_s;
+CSoundFile* gg_small_zap2_s;
+CSoundFile* gg_throw_s;
+CSoundFile* gg_claws_s;
+
+#GRAVITY_GUN
+
+void gravity_gun_s::InitGraphic()
+{
+        CFile *f;
+	f = GetAttachment("portal_gun_glow.png");	gg_glow_sprite = LoadSprite(f, 1, 0);
+	f = GetAttachment("lightning_glow.png");	gg_light_sprite = LoadSprite(f, 1, 0);
+	f = GetAttachment("gg_beam1.png");			gg_beam1 = LoadSprite(f, 1, 0);
+	
+	f = GetAttachment("gg_drop.wav");			gg_drop_s = new CSoundFile(f);
+	f = GetAttachment("gg_dryfire.wav");		gg_dryfire_s = new CSoundFile(f);
+	f = GetAttachment("gg_hold_loop.wav");		gg_hold_loop_s = new CSoundFile(f);
+	f = GetAttachment("gg_pickup.wav");			gg_pickup_s = new CSoundFile(f);
+	f = GetAttachment("gg_possible_hit.wav");	gg_possible_hit_s = new CSoundFile(f);
+	f = GetAttachment("gg_small_zap2.wav");		gg_small_zap2_s = new CSoundFile(f);
+	f = GetAttachment("gg_throw.wav");			gg_throw_s = new CSoundFile(f);
+	f = GetAttachment("gg_claws.wav");			gg_claws_s = new CSoundFile(f);
+}
+
+void gravity_gun_s::Init()
+{
+    keySync->AddKey(32);   // spacebar
+    keySync->AddKey(16);   // Shift
+    keySync->AddKey(17);   // Ctrl
+    keySync->AddKey(18);   // Alt
+    keySync->AddKey(37);
+    keySync->AddKey(38);
+    keySync->AddKey(39);
+    keySync->AddKey(40);
+    keySync->AddKey(13);   // Enter
+}
+
+void gravity_gun_s::FirstFrame()
+{
+    GGWorms = 0;
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    
+    // parameters that can be overrided remotely, to control ggun behavior:
+    gg_stop_radius = 40;
+    gg_push_powa = 8.5;
+    gg_suck_speed = 5.0; 
+    gg_unhold_timer = 75;  // 50 = 1sec
+    gg_throw_distance = 250;
+    gg_canfire_timer = 15;   // 0 = don`t make any delay
+    gg_wall_push_miltiplier = 5.0; // control how strong worm bounces of the ground when shooting with grav. gun
+    gg_superworm = false;  // lel. ;)
+    gg_disablesuperworm_each_turn = true;
+    gg_hold_worm_when_super = true;
+    gg_disable_each_turn = true;  // dont touch this one. its for future realtime modes. xddd
+    gg_bounce_of_landscape = true;
+    gg_ignore_worms = false;
+    gg_ignore_superworms = false;
+    gg_racing_mode = false;
+    gg_advanced_keys_mode = true;
+    gg_racing_prepare_low_ang = true;
+    
+    // unchangable variables, that used by script:
+    ggun_used = false;
+    gg_prev_px = 0.0;
+    gg_prev_py = 0.0;
+    gg_first_hit = false;
+    gg_hold = false;
+    holded_obj = CGObject(NullObj);
+    gg_timer = gg_unhold_timer;
+    gg_active_holder = false;
+    gg_hold_loop_timer = 4;
+    gg_play_if_possible = true;
+    gg_play_if_pickup = true;
+    gg_ungg_timer = 2;
+    GG_ang_x = 0.0;
+    GG_ang_y = 0.0;
+    gg_used_gg = false;
+    gg_draw_ghost_ggun = false;
+    gg_last_ang = 0.0;
+    gg_last_turnside = 0; 
+    gg_just_opened_holder = true; 
+    gg_canfire_timer_now = 0;
+    gg_alive_worms = 1;
+    gg_last_fireangle = 0.0;
+    gg_worms_multi = 1.0;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+//    local w = GetCurrentWorm();
+//    if (w != NullObj)              // we don`t rly need this.
+//    {
+      if (Weap->CheckName("Gravity Gun"))
+      {
+        if (ObjState == WS_ROPING || ObjState == WS_JETPACK || ObjState == WS_AFTERROPE)
+        {
+            return;
+        }
+        local f_a = FireAngle;
+        GS->Info.AddWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);
+        FireAngle = f_a;
+        ggun_used = true;
+        gg_first_hit = true;       
+        if (!keySync->KeyPressed(16) && !keySync->KeyPressed(17))
+        {
+           gg_claws_s->Play(1.0, 0.0, false);
+        }
+        gg_used_gg = true;
+//        SetState(WS_AIMING);
+        return;
+      }
+      else 
+      {
+         super;
+      }
+//    }
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;                                                                             
+//    local w = GetCurrentWorm();
+//    if (w == this)      // don`t need this!
+//    {
+      if (CurrentWorm != this) {return;} 
+        if (Type == M_FRAME)
+        {
+          if (CurWeapon->CheckName("Gravity Gun"))        
+          {  
+            if (ObjState != WS_AIMING) GG_WS->CalculateAngle();
+            if (GG_CanFire())
+            {
+              gg_ungg_timer = 2;
+              gg_draw_ghost_ggun = false;
+              if (keySync->KeyPressedNow(13) && (ObjState == WS_ROPING || ObjState == WS_JETPACK))
+              {
+                  gg_used_gg = false;
+                  gg_drop_s->Play( 1.0, 0.0, false);                       
+                  DisableGGun();              
+              }              
+              local fa = FireAngle;
+              if (keySync->KeyPressed(32) && ObjState == WS_AIMING && !GameChatOpened)
+              {
+                  GG_calculate_angle();
+                  DoGGLightEffect(0.35, PosX + GG_ang_x*25, PosY + GG_ang_y*25, 2, 240);
+              }
+              if (gg_active_holder) 
+              {
+                 if (ObjState == WS_AIMING)
+                 {
+                    GGOpenHolder();
+                 }
+              } else 
+              {
+                 if (gg_superworm)
+                 {
+                    GG_WS->sprite = gravity_gun_aiming_s->Index;
+                    GG_WS->sprite2 = gravity_gun_aiming_s->Index;                 
+                 } else
+                 {
+                    GG_WS->sprite = gravity_gun_aiming->Index;
+                    GG_WS->sprite2 = gravity_gun_aiming->Index;
+                 }
+              }
+              if (ObjState == WS_AIMING) CheckPossibleSuck(); 
+              
+              if (gg_hold)
+              {
+                if(holded_obj != NullObj) 
+                {
+                   HoldObject(holded_obj, gg_stop_radius);
+                   GGPlayHoldingSound(true);
+                   if (ObjState != WS_AIMING) gg_draw_ghost_ggun = true;
+                } else DisableGGun();
+                if (keySync->KeyPressedNow(32) && !GameChatOpened)
+                  {
+                    if (keySync->KeyPressed(16) || keySync->KeyPressed(17))
+                    {
+                        gg_drop_s->Play( 1.0, 0.0, false);
+                        DisableGGun();
+                    } else DisableGGun();
+                    GG_ResetFireCounter();
+                }
+              } else             
+              if (ggun_used)
+              {
+                if (keySync->KeyPressed(32) && !GameChatOpened)
+                {
+                    if (keySync->KeyPressedNow(16) || keySync->KeyPressedNow(17))
+                    {
+                        GG_ReadAdvancedKeys();
+                        ThrowObject();
+                        FireAngle = fa;
+                        DisableGGun();
+                        GG_ResetFireCounter();
+                    }
+                    else if (!keySync->KeyPressed(16) && !keySync->KeyPressed(17))
+                    {
+                       SuckObject();
+                    }
+                } else 
+                {
+                   ggun_used = false;
+                }
+              }
+            } // canfire end
+          } else 
+          {
+             if (gg_used_gg && !Root->TimerDisabled)     // to avoid unnecessary script work when Gravity Gun never used even
+             {
+                 if (GotDamage > 0)     // hell yeah
+                 {
+                     gg_used_gg = false;
+                     gg_draw_ghost_ggun = false;
+                     DisableGGun();                 
+                 }
+                 if (gg_hold)
+                 {
+                     if (holded_obj != NullObj)
+                     {
+                         if (holded_obj != NullObj && holded_obj->ClType != OC_Worm)
+                         {
+                            HoldObject(holded_obj, gg_stop_radius);
+                            gg_draw_ghost_ggun = true;
+                         } else
+                         if (holded_obj != NullObj && holded_obj->ClType == OC_Worm && gg_just_opened_holder)
+                         {
+                            HoldObject(holded_obj, gg_stop_radius);
+                            gg_draw_ghost_ggun = true;
+                            gg_just_opened_holder = false;
+                         } else
+                         if (holded_obj != NullObj && holded_obj->ClType == OC_Worm && gg_hold_worm_when_super && gg_superworm)
+                         {
+                            HoldObject(holded_obj, gg_stop_radius);
+                            gg_draw_ghost_ggun = true;                            
+                         } else
+                         {
+                            gg_used_gg = false;
+                            gg_draw_ghost_ggun = false;
+                            DisableGGun();
+                         }
+                         if (gg_just_opened_holder) gg_just_opened_holder = false;
+                     } else 
+                     {
+                        gg_used_gg = false;
+                        gg_draw_ghost_ggun = false;
+                        DisableGGun();
+                     }                 
+                 } 
+                 else if (gg_ungg_timer == 0) 
+                 {
+                     DisableGGun();
+                     gg_ungg_timer = 2;
+                     gg_just_opened_holder = false;
+                 }
+                 else gg_ungg_timer--;
+             }
+          }
+        }
+//    }      
+        if (Type == M_ENTER)
+        {
+           if (CurWeapon->CheckName("Gravity Gun"))
+           {   
+              if (gg_canfire_timer_now >= gg_canfire_timer)
+              {
+                  if (ObjState == WS_ROPING || ObjState == WS_JETPACK || ObjState == WS_AFTERROPE)
+                  {
+//                      if (keySync->KeyPressed(13))
+//                      {
+                          gg_used_gg = false;
+                          gg_draw_ghost_ggun = false;                          
+                          DisableGGun();
+//                      }
+                  }
+              }
+           }        
+        }
+        if (Type == M_SPACE)
+        {
+          if (CurWeapon->CheckName("Gravity Gun"))
+          {
+            if (ObjState == WS_ROPING || ObjState == WS_JETPACK || ObjState == WS_AFTERROPE) return;
+            local fa = FireAngle;
+            if (gg_canfire_timer_now >= gg_canfire_timer)
+            {
+              if (gg_racing_mode)      // reverse keys mode
+              {
+//                    if (keySync->KeyPressedNow(32) && !GameChatOpened)
+//                    {
+                            if (keySync->KeyPressed(16) || keySync->KeyPressed(17))
+                            {
+                                SuckObject();
+                            } else
+                            if (gg_superworm && !gg_hold) 
+                            {
+                                GG_ReadAdvancedKeys();
+                                SuperThrowObject();
+                                FireAngle = fa;
+                            } else 
+                            {
+                                GG_ReadAdvancedKeys();
+                                ThrowObject();
+                                FireAngle = fa;
+                            }
+                            DisableGGun();
+                            GG_ResetFireCounter();
+//                    }              
+              } else
+              if (keySync->KeyPressed(16) || keySync->KeyPressed(17))
+              {
+//                    if (keySync->KeyPressedNow(32) && !GameChatOpened)
+//                    {
+                        if (gg_superworm && !gg_hold) 
+                        {
+                           GG_ReadAdvancedKeys();
+                           SuperThrowObject();
+                           FireAngle = fa;
+                        } else 
+                        {
+                           GG_ReadAdvancedKeys();
+                           ThrowObject();
+                           FireAngle = fa;
+                        }
+                        DisableGGun();
+                        GG_ResetFireCounter();
+//                    }
+              }
+            }
+          }        
+        }
+        if (Type == M_TURNEND || Type == M_SKIPTURN)
+        {
+            if (gg_disablesuperworm_each_turn) gg_superworm = false;
+            if (gg_disable_each_turn) 
+            {
+               gg_used_gg = false;
+               gg_draw_ghost_ggun = false;
+               DisableGGun();
+            }
+            CheckObjExist(holded_obj);
+        }
+        if (Type == M_DRAWQUEUE)
+        {
+            if (gg_draw_ghost_ggun)
+            {
+               DrawDimmedGG();
+            }
+        }
+}
+
+bool CWorm::GG_CanFire()
+{
+    if (gg_canfire_timer_now >= gg_canfire_timer)
+    {
+        return true;
+    } else
+    {
+        gg_canfire_timer_now++;
+        return false;
+    }
+}
+
+void CWorm::GG_ResetFireCounter()
+{
+    if (gg_canfire_timer_now == gg_canfire_timer) gg_canfire_timer_now = 0;
+}
+
+void CWorm::DisableGGun()
+{
+                 ggun_used = false;
+                 gg_active_holder = false;
+                 gg_hold = false;
+                 gg_draw_ghost_ggun = false;
+                 gg_just_opened_holder = false;
+                 if (holded_obj != NullObj) holded_obj = CGObject(NullObj); 
+}
+
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+    if (CurWeapon->CheckName("Gravity Gun"))
+    {
+        if (sound == 140 || sound == 194) return;      // muting "fire" sounds fpr different soundbanks
+        else if (sound == 177 || sound == 231) return; // muting "watch this" sounds
+        else super;                                    
+    } else
+    {
+        super;
+    }
+}
+
+void CWorm::CheckObjExist(CGObject* obj)
+{
+    if (obj == NullObj && obj == holded_obj)
+    {
+        DisableGGun();
+        holded_obj = NullObj;
+        gg_draw_ghost_ggun = false;
+        gg_used_gg = false;
+    }
+    for (local i = 1; i < Env->Objs.Count; i++)
+    {
+        local ob = CGObject(Env->Objs.Objs[i]);
+        if (ob == obj) 
+        {
+            if (!ob->IsValid())               
+            {
+                obj = NullObj;      
+               if (obj == holded_obj) 
+               {
+                   DisableGGun();
+                   holded_obj = NullObj;
+                   gg_draw_ghost_ggun = false; 
+                   gg_used_gg = false;               
+               }
+            }
+            return;
+        }
+    }
+    if (holded_obj != NullObj)
+    {
+        DisableGGun();
+        gg_draw_ghost_ggun = false; 
+        gg_used_gg = false;      
+    }
+}
+
+void CWorm::GG_calculate_angle()
+{
+    if (CurWeapon->CheckName("Gravity Gun"))
+    {
+        float ang = (1 - FireAngle) * MATH_PI;
+	if (TurnSide < 0) ang = MATH_TWO_PI - ang;       
+	GG_ang_x = sin(ang);
+	GG_ang_y = -cos(ang);
+        if (!gg_draw_ghost_ggun)
+	{
+		gg_last_ang = GG_WS->aimAng*TurnSide;
+		if (TurnSide < 0) gg_last_ang = MATH_PI - gg_last_ang;
+	}
+	else if (abs(FireAngle) >= 0.8)
+	{
+//		if (ObjState == WS_AIMING) 
+                gg_last_ang = GG_WS->aimAng*TurnSide;
+		if (TurnSide < 0) gg_last_ang = MATH_PI - gg_last_ang;	
+	}
+	gg_last_turnside = Sign(TurnSide);       
+    }                                                      
+}
+
+void CWorm::SuckObject()
+{
+//	local w = GetCurrentWorm();
+//	if (w == NullObj || w != this) return;
+        GG_calculate_angle();
+
+	float endX = PosX + GG_ang_x * gg_throw_distance*3;
+	float endY = PosY + GG_ang_y * gg_throw_distance*3;      
+    
+	int hitX; int hitY; 
+	CGObject *hitObject = TraceLine(this, PosX, PosY, endX, endY, 2+4+8+16+32+64+128+256+512+1024+2048+4096+8192+16384+32768+65536+131072+262144+524288, &hitX, &hitY);
+
+	if(hitObject != NullObj)
+	{
+                        for(i = 1; i < Env->Objs.Count; i += 1)
+			{
+				obj = CGObject(Env->Objs.Objs[i]);
+				if(obj == NullObj) continue;
+				if(obj->ClType == OC_Landscape) continue;
+				if(gg_ignore_worms && obj is CWorm) 
+				{
+					if (!gg_superworm) {continue;}
+					else if (gg_ignore_superworms) {continue;}
+				}
+				
+				if (obj == hitObject)
+				{
+					gg_prev_px = obj->PosX - obj->SpX;       // !
+					gg_prev_py = obj->PosY - obj->SpY; 
+					local coef = 6;
+					local hit1 = CheckMaskAt(obj, obj->ColMask, hitX+GG_ang_x*obj->MaskIndex, hitY, 2); // checking landscape collision only
+                                        
+                                        float dx = PosX - hitX;
+					float dy = PosY - hitY;
+					float dsqr = dx*dx+dy*dy;
+				
+					if (#WEAPON_BOWLINGBALL)
+                                        {
+                                            if (obj is CBowlingBall)
+                                            {
+                                        	CBowlingBall* m = CBowlingBall(obj);
+                                        	m->Wake(); 
+                                        	m->SpX = 0.0;
+                                        	m->SpY = 0.0;
+                                            }
+                                        } 
+					local g = obj->GravityFactor;
+					obj->GravityFactor = 0.0;  
+                                        
+                                        local dist = sqrt(dsqr);                                      
+					
+/*                                        if (dist < (gg_stop_radius-0.5))
+					{
+						obj->SpX	= GG_ang_x * gg_suck_speed;
+						obj->SpY	= GG_ang_y * gg_suck_speed;
+						gg_active_holder = true;	
+						gg_play_if_pickup = true;
+					} else
+*/					if (dist <= (gg_stop_radius + 0.5))
+					{
+						gg_play_if_pickup = true;
+						gg_active_holder = true;
+                                                gg_hold = true;
+                                                ggun_used = false;
+						holded_obj = obj;
+						gg_just_opened_holder = true;
+					} else
+					if (dist <= gg_throw_distance/2)
+					{
+						if (hit1 == NullObj)// && hit2 == NullObj && hit3 == NullObj && hit4 == NullObj)
+						{
+//							obj->PosX = hitX+GG_ang_x*obj->MaskIndex;
+//							obj->PosY = hitY+GG_ang_y*obj->MaskIndex;
+							TeleportObject(obj,hitX+GG_ang_x*obj->MaskIndex,hitY+GG_ang_y*obj->MaskIndex,obj->MaskIndex,false,2);
+						}
+                                                obj->SpX	= -GG_ang_x * gg_suck_speed*2.5;
+						obj->SpY	= -GG_ang_y * gg_suck_speed*2.5;
+						if (gg_play_if_pickup)
+						{
+						    gg_pickup_s->Play( 1.0, 0.0, false);
+                                                    gg_play_if_pickup = false;
+						}
+                                                gg_active_holder = true;					
+					}
+                                         else 
+                                        {
+						gg_play_if_pickup = true;
+						if (hit1 == NullObj)// && hit2 == NullObj && hit3 == NullObj && hit4 == NullObj)
+						{
+//							obj->PosX = hitX+GG_ang_x*obj->MaskIndex;
+//							obj->PosY = hitY+GG_ang_y*obj->MaskIndex;
+							TeleportObject(obj,hitX+GG_ang_x*obj->MaskIndex,hitY+GG_ang_y*obj->MaskIndex,obj->MaskIndex,false,2);
+						}                                                
+                                                obj->SpX	= -GG_ang_x * gg_suck_speed;
+						obj->SpY	= -GG_ang_y * gg_suck_speed;
+						gg_active_holder = false;
+					}
+					
+/*					if (!gg_first_hit)
+					{
+						obj->SpX = (hitX - CWLastPosX)/10;
+						obj->SpY = (hitY - CWLastPosY)/10;
+					}
+					
+					if (gg_first_hit) gg_first_hit = false;
+*/					
+					if (obj->PosX == gg_prev_px && obj->PosY == gg_prev_py) 
+					{
+//						if (hit1 == NullObj && hit2 == NullObj && hit3 == NullObj && hit4 == NullObj)
+//						{
+//							obj->PosX = hitX+GG_ang_x*obj->MaskIndex;
+//							obj->PosY = hitY+GG_ang_y*obj->MaskIndex;
+//						}						
+                                                obj->SpY += RandomFloat(-5.0, 0.0);
+						obj->SpX += RandomFloat(-5.0, 5.0);
+					} 
+					
+					obj->GravityFactor = g; 
+					return;
+					
+                                }				
+			}	
+	}
+}
+
+void CWorm::ThrowObject()
+{
+//	local w = GetCurrentWorm();
+//	if (w == NullObj || w != this) return;
+        GG_calculate_angle();
+
+	float endX = PosX + GG_ang_x * gg_throw_distance;
+	float endY = PosY + GG_ang_y * gg_throw_distance;      
+    
+	int hitX; int hitY; 
+	CGObject *hitObject = TraceLine(this, PosX, PosY, endX, endY, 2+4+8+16+32+64+128+256+512+1024+2048+4096+8192+16384+32768+65536+131072+262144+524288, &hitX, &hitY);
+
+	if(hitObject != NullObj)
+	{
+                        float dsqr;
+                        for(i = 1; i < Env->Objs.Count; i += 1)
+			{
+				obj = CGObject(Env->Objs.Objs[i]);
+				if(obj == NullObj) continue;
+				
+                                        float dx = PosX - hitX;
+					float dy = PosY - hitY;
+					dsqr = dx*dx+dy*dy;				
+                                				
+				if(obj->ClType == OC_Landscape) 
+                                {
+                                   gg_dryfire_s->Play(1.0, 0.0, false);
+                                   continue;
+                                }
+				if(gg_ignore_worms && obj is CWorm) 
+				{
+					if (!gg_superworm) {continue;}
+					else if (gg_ignore_superworms) {continue;}
+				}                                                 
+				
+				if (obj == hitObject)
+				{
+				        local Weap = GetWeaponByName("Gravity Gun");
+                                        GS->Info.AddWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), -1);
+				
+					if (#WEAPON_BOWLINGBALL)
+                                        {
+                                            if (obj is CBowlingBall)
+                                            {
+                                        	CBowlingBall* m = CBowlingBall(obj);
+                                        	m->Zap(1);
+//                                        	m->GravityFactor = 1;
+                                            }
+                                        } 
+                                        
+                                        obj->SpX	= GG_ang_x * gg_push_powa * ExplosionFactor; 
+					obj->SpY	= GG_ang_y * gg_push_powa * ExplosionFactor;
+					
+					DoGGTrailBeam(hitX, hitY, sqrt(dsqr));
+					
+					gg_throw_s->Play(0.75, 0.0, false);
+					return;
+										
+                                }				
+			}
+			if (gg_bounce_of_landscape)
+			{
+				GG_BounceOfWall(0.1);
+                                DoGGTrailBeam(hitX, hitY, sqrt(dsqr));
+                                gg_throw_s->Play(0.40, 0.0, false);			
+			}
+			else
+			{
+				gg_dryfire_s->Play(1.0, 0.0, false);
+			}	
+	} else
+	{
+	    gg_dryfire_s->Play(1.0, 0.0, false);
+	}
+}
+
+void CWorm::CheckPossibleSuck()
+{
+//	local w = GetCurrentWorm();
+//	if (w == NullObj || w != this) return;
+	GG_calculate_angle();
+
+	float endX = PosX + GG_ang_x * gg_throw_distance*3;
+	float endY = PosY + GG_ang_y * gg_throw_distance*3;      
+    
+	int hitX; int hitY; 
+	CGObject *hitObject = TraceLine(this, PosX, PosY, endX, endY, 2+4+8+16+32+64+128+256+512+1024+2048+4096+8192+16384+32768+65536+131072+262144+524288, &hitX, &hitY);
+
+	if(hitObject != NullObj)
+	{
+                        for(i = 1; i < Env->Objs.Count; i += 1)
+			{
+				obj = CGObject(Env->Objs.Objs[i]);
+				if(obj == NullObj) continue;
+				if(obj->ClType == OC_Landscape) continue;
+				if(gg_ignore_worms && obj is CWorm) 
+				{
+					if (!gg_superworm) {continue;}
+					else if (gg_ignore_superworms) {continue;}
+				}				
+				
+                                if (obj == hitObject)
+				{
+				
+					gg_active_holder = true;
+					if (gg_play_if_possible) 
+                                        {
+                                           gg_possible_hit_s->Play(1.0, 0.0, false);
+                                           gg_play_if_possible = false;
+                                        }
+					return;
+										
+                                }				
+			}	
+			gg_active_holder = false;
+			gg_play_if_possible = true;
+	} else 
+        {
+           gg_active_holder = false;
+           gg_play_if_possible = true;
+        }
+}
+
+void CWorm::HoldObject(CGObject* obj, int stop_radius2)
+{
+//	local w = GetCurrentWorm();
+//	if (w == NullObj || w != this) return;
+	local last_gg_x;
+	local last_gg_y;
+	local last_turnside;
+	local work;
+//	if (gframe % 25) {} else {CheckObjExist(obj);}      // check if object exist
+	CheckObjExist(obj);          // we need check this each frame, tho. or it can crash the game
+        if (obj == NullObj || holded_obj == NullObj) 
+        {
+           DisableGGun();
+           gg_draw_ghost_ggun = false; 
+           gg_used_gg = false; 
+           holded_obj = CGObject(NullObj);
+           return;
+        }
+				if(gg_ignore_worms && obj is CWorm) 
+				{
+					if (!gg_superworm) return;
+					else if (gg_ignore_superworms) return;
+				}
+        last_gg_x = GG_ang_x;
+        last_gg_y = GG_ang_y;
+        last_turnside = gg_last_turnside;
+        
+	GG_calculate_angle();
+
+	float endX = PosX + GG_ang_x * stop_radius2;                                                                                                                                 
+	float endY = PosY + GG_ang_y * stop_radius2; 
+        
+        if (gg_hold_work2)
+        {
+           endX = PosX + GG_ang_x * stop_radius;
+           endY = PosY + GG_ang_y * stop_radius; 
+        } else stop_radius = stop_radius2; 
+	
+        if (last_turnside != gg_last_turnside)
+        {
+		if ((abs(GG_ang_x - last_gg_x) < 0.3 && abs(GG_ang_y - last_gg_y) < 0.3) || portal_just_teleported)
+		{
+			work = true;
+		} 
+		else	work = false;
+        }
+        else 	work = true;
+	
+        if (ObjState == WS_AIMING) 
+        {
+           DoGGLightEffect(0.7, PosX + GG_ang_x*25, PosY + GG_ang_y*25, 2, 240);
+        }
+        if (obj != NullObj && holded_obj != NullObj) DoGGLightEffect(0.7, obj->PosX, obj->PosY, 2, 240);   
+	
+	local hit = CheckMaskAt(obj, obj->ColMask, endX, endY, -1);
+	if (!work)
+	{
+	    Spark_a_bit(10, obj->PosX, obj->PosY);
+            DisableGGun();
+            gg_draw_ghost_ggun = false; 
+            gg_used_gg = false;
+            obj = CGObject(NullObj);
+            holded_obj = CGObject(NullObj);
+            gg_small_zap2_s->Play(1.5, 0.0, false);
+            return;
+	}
+        if (hit != NullObj) 
+        {
+            gg_hold_work2 = true;
+            gg_timer--;
+            if (gg_timer <= 0)
+            {
+               DisableGGun();
+               gg_draw_ghost_ggun = false; 
+               gg_used_gg = false;
+               obj = CGObject(NullObj);
+               gg_hold_work2 = false;
+            } else
+            {
+                if (stop_radius > 6) stop_radius -= 3;
+                else stop_radius = stop_radius2;
+                if(gg_timer % 5){}
+                else 
+                {
+                   if (obj != NullObj && holded_obj != NullObj) Spark_a_bit(2, obj->PosX, obj->PosY);
+                   gg_small_zap2_s->Play(1.0, 0.0, false);
+                }
+            }
+        } else
+        {
+            if (work)
+            {
+		local endX1;	local endY1;
+                if (stop_radius != gg_stop_radius)
+		{
+			endX1 = PosX + GG_ang_x * gg_stop_radius;
+			endY1 = PosY + GG_ang_y * gg_stop_radius;
+			local hit1 = CheckMaskAt(obj, obj->ColMask, endX1, endY1, -1);
+			if (hit1 == NullObj) 
+			{
+				stop_radius = gg_stop_radius;
+				gg_hold_work2 = false;
+			}
+		}
+		float dx = obj->PosX - endX;	float dy = obj->PosY - endY;
+		float dsqr2 = dx * dx + dy * dy;
+		float dist = sqrt(dsqr2);
+		if ((stop_radius + 15 - abs(dist)) > 0 || portal_just_teleported)
+		{
+			gg_timer = gg_unhold_timer;
+//			obj->PosX = endX;
+//			obj->PosY = endY;
+			TeleportObject(obj,endX,endY,obj->MaskIndex,false,2);
+			obj->SpX = 0.0;
+			obj->SpY = 0.0;
+		}
+		else
+		{
+		    work = false;
+		}
+            }
+        }  
+}
+
+void CWorm::Spark_a_bit(int k, float x, float y)
+{
+    for(int i=0 ; i<k ; i += 1)
+	{
+		p = new PxParticle(gg_glow_sprite->Index, x, y);
+		
+                p->SetAngle( 1.23);
+                p->SetAngleSpeed( 25.0);
+                p->SetLifeTime(40);
+		p->GravityFactor(1);
+		p->SetRandomVelocity(1.5, 3.8);
+		p->SetAirResistance(0.05);
+		p->SetAlpha(255);
+		s = RandomFloat(0.3,0.6);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.01, 0.01);
+		p->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		p->SetStartColor(255,255 - s,0);
+		p->SetEndColor(255,80 - s,0);
+		
+		p->SetMotionRandomness(0.2);
+	}
+}
+
+void CWorm::DoGravEffect(int k, float x, float y)
+{
+    for(int i=0 ; i<k ; i += 1)
+	{
+		p = new PxParticle(gg_glow_sprite->Index, x, y);
+		
+                p->SetAngle( 1.23);
+                p->SetAngleSpeed( 15.0);
+                p->SetLifeTime(20);
+		p->GravityFactor(0.3);
+		p->SetRandomVelocity(1.0, 2.8);
+		p->SetAirResistance(0.05);
+		p->SetAlpha(255);
+		s = RandomFloat(0.5,0.9);
+		p->SetStartSize(s, s);
+		p->SetEndSize(0.03, 0.06);
+		p->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		p->SetStartColor(240,220 - s,0);
+		p->SetEndColor(200,80 - s,30);
+		
+		p->SetMotionRandomness(0.2);
+	}
+}
+
+void CWorm::DoGGLightEffect(float size, float x, float y, int life, int alpha)
+{
+		p = new PxParticle(gg_light_sprite->Index, x, y);  
+		
+                p->SetAngle( 1.23);
+                p->SetAngleSpeed( 15.0);
+                p->SetLifeTime(life);
+		p->GravityFactor(0.0);
+//		p->SetRandomVelocity(1.0, 2.8);
+		p->SetStartAlpha(alpha);
+		p->SetEndAlpha(0);
+		p->SetStartSize(size, size);
+		p->SetEndSize(0.1, 0.1);
+                p->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		if (gg_superworm)
+		{
+		    p->SetColor(0,240,240);
+		    p->SetEndColor(30,160 - s,220);
+                } else
+                {
+		    p->SetColor(240,240,0);
+		    p->SetEndColor(220,160 - s,30);
+                }
+}
+
+void CWorm::DoGGBeamEffect(float x, float y, int life, float ang)
+{
+		p = new PxParticle(gg_beam1->Index, x, y);    
+		
+                p->SetAngle(ang);
+                p->SetLifeTime(life);
+		p->GravityFactor(0.0);
+		p->SetStartAlpha(255);
+		p->SetEndAlpha(20);
+		p->SetEndSize(1.0, 1.0);
+                p->SetBlendMode(1);
+		s = RandomInt(0, 50);
+		if (gg_superworm)
+		{
+		    p->SetColor(0,240,240);
+		    p->SetEndColor(30,160 - s,220);
+                } else
+                {
+		    p->SetColor(240,240,0);
+		    p->SetEndColor(220,160 - s,30);
+                }
+}
+
+void CWorm::GGOpenHolder()
+{
+//	local w = GetCurrentWorm();
+//	if (w == NullObj || w != this) return;
+    if (gg_superworm)
+    {
+       GG_WS->sprite2 = gravity_gun_aiming2_s->Index;
+       GG_WS->sprite = gravity_gun_aiming2_s->Index;    
+    } else
+    {
+       GG_WS->sprite2 = gravity_gun_aiming2->Index;
+       GG_WS->sprite = gravity_gun_aiming2->Index;
+    }
+    if (gframe %10){}
+    else 
+    {
+	GG_calculate_angle();
+
+	float endX = PosX + GG_ang_x * 25;
+	float endY = PosY + GG_ang_y * 25;
+        DoGravEffect(1, endX, endY); 
+    }
+}
+
+void CWorm::GGPlayHoldingSound(bool play)                                      
+{
+//	local w = GetCurrentWorm();
+//	if (w == NullObj || w != this) return;
+   if (play)
+   {  
+     if (gg_hold_loop_timer2 == gg_hold_loop_timer) 
+     {
+        gg_hold_loop_s->Play( 0.8, 0.0, false);
+        gg_hold_loop_timer2--;
+     }
+     else if (gg_hold_loop_timer2 >= 0) gg_hold_loop_timer2--;
+     else gg_hold_loop_timer2 = gg_hold_loop_timer; 
+   }
+}
+
+void CWorm::SuperThrowObject()
+{
+//	local w = GetCurrentWorm();
+//	if (w == NullObj || w != this) return;
+	GG_calculate_angle();
+
+	float endX = PosX + GG_ang_x * gg_throw_distance*8;
+	float endY = PosY + GG_ang_y * gg_throw_distance*8;      
+    
+	int hitX; int hitY; 
+	CGObject *hitObject = TraceLine(this, PosX, PosY, endX, endY, 2+4+8+16+32+64+128+256+512+1024+2048+4096+8192+16384+32768+65536+131072+262144+524288, &hitX, &hitY);
+
+	if(hitObject != NullObj)
+	{
+                        float dsqr;
+                        for(i = 1; i < Env->Objs.Count; i += 1)
+			{
+				obj = CGObject(Env->Objs.Objs[i]);
+				if(obj == NullObj) continue;
+				
+					float dx = PosX - hitX;
+					float dy = PosY - hitY;
+					dsqr = dx*dx+dy*dy;				
+				
+				if(obj->ClType == OC_Landscape) 
+                                {
+                                   gg_dryfire_s->Play(1.0, 0.0, false);
+                                   continue;
+                                }
+				if(gg_ignore_worms && obj->ClType == OC_Worm && gg_ignore_superworms)
+				{
+					gg_dryfire_s->Play(1.0, 0.0, false);
+					continue;                                
+				}                                				
+				
+				if (obj == hitObject)
+				{
+				        local Weap = GetWeaponByName("Gravity Gun");
+                                        GS->Info.AddWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), -1);
+                                        
+                                        local do_throw;
+					
+                                        if (#WEAPON_BOWLINGBALL)
+                                        {
+                                            if (obj is CBowlingBall)
+                                            {
+                                        	CBowlingBall* m = CBowlingBall(obj);
+                                        	m->Zap(0);
+                                        	do_throw = false;
+                                            }
+                                        } 
+                                        if (#WEAPON_MAGNET)
+                                        {
+                                            if (obj is CMagnet)
+                                            {
+                                                CMagnet* m = CMagnet(obj);
+                                                m->Recharge();
+                                                do_throw = true;
+                                            }
+                                        }
+                                        if(#WEAPON_FAN)
+                                        {
+                                            if(obj is PxFan)
+                                            {
+                                                local fanobj = PxFan(obj);
+                                                fanobj->Recharge();
+                                                do_throw = true;
+                                            }
+                                        }
+                                        if(#WEAPON_KSENTRY)
+                                        {
+                                            if(obj is PxSentryGun)
+                                            {
+                                                local sentry = PxSentryGun(obj);
+                                                sentry->OwnerTeam = WormTeam;
+                                                sentry->TurretActive = false;
+                                                do_throw = true;
+                                            }
+                                        }
+					if (obj is CMine)
+					{
+                                                if (obj is CMagnet){}
+                                                else {
+                                                CMine* mine = CMine(obj);
+						if(mine->Radius > 0 && mine->Active == 0 && mine->Prefuse <= 0)
+						{
+							if(mine->Fuse < 0)
+							{
+								mine->Fuse = RandomInt(1000, 5000);
+							}
+							mine->Active = 1;
+							mine->nPulses = mine->Fuse / 250;
+						}						
+						do_throw = true;
+						}
+					} else
+					if (obj is CCrate || obj is COilDrum)
+					{
+						if (sqrt(dsqr) < (gg_stop_radius + 20))
+                                                {
+                                                    do_throw = true;
+                                                } else
+                                                {
+                                                    DoExplosion(obj->PosX, obj->PosY, 1, 1, 0, WormTeam);
+						    do_throw = false;
+		                                }
+					} else
+					{
+						do_throw = true;
+					}
+				
+					if (do_throw)
+					{
+        	                                obj->SpX	= GG_ang_x * gg_push_powa * ExplosionFactor * 1.5; 
+						obj->SpY	= GG_ang_y * gg_push_powa * ExplosionFactor * 1.5;
+					}
+					gg_throw_s->Play(0.75, 0.0, false);
+					DoGGTrailBeam(hitX, hitY, sqrt(dsqr));
+					return;
+										
+                                }				
+			}
+			if (gg_bounce_of_landscape)
+			{
+				GG_BounceOfWall(0.15);
+                                DoGGTrailBeam(hitX, hitY, sqrt(dsqr));
+                                gg_throw_s->Play(0.40, 0.0, false);			
+			}
+			else
+			{
+				gg_dryfire_s->Play(1.0, 0.0, false);
+			}                        	
+	} else
+	{
+	    gg_dryfire_s->Play(1.0, 0.0, false);
+	}
+}
+
+void CWorm::DoGGTrailBeam(float hitX, float hitY, float dist)
+{
+    local num_sprites = abs(dist/10);
+    if (num_sprites < 2) num_sprites = 2;
+    local last_px;
+    local last_py;
+    for (i = 1; i <= num_sprites; i++)
+    {
+        if (i == 1 || i == num_sprites)
+        {
+            last_px = 0;
+            last_py = 0;       
+        }
+        
+        float px = last_px + PosX + GG_ang_x*i*10;
+        float py = last_py + PosY + GG_ang_y*i*10;
+        
+        local rx = RandomFloat(-5.0, 5.0)*abs(GG_ang_x);
+        local ry = RandomFloat(-5.0, 5.0)*abs(GG_ang_y);
+        
+        local rx1 = RandomFloat(-20.0, 20.0)*abs(GG_ang_x);
+        local ry1 = RandomFloat(-20.0, 20.0)*abs(GG_ang_y);
+        
+        if (i != 1 || i != num_sprites)
+        {
+            rx = 0;
+            ry = 0;
+        }
+        
+//        DoGGBeamEffect(px + rx, py + ry, 50, ang);
+        local alpha = 255 - 255*i/num_sprites;
+        local alpha2 = 255 - 200*i/num_sprites;
+        if (i%2){} else DoGGLightEffect(RandomFloat(0.3, 0.5), px + rx1, py + ry1, 40, alpha2);
+        DoGGLightEffect(0.1, px + rx, py + ry, 40, alpha);
+    }
+}
+
+void CWorm::GG_ReadAdvancedKeys()
+{
+              if (gg_advanced_keys_mode && (ObjState == WS_SLIDING || ObjState == WS_JUMPPREPARE || ObjState == WS_JUMP || ObjState == WS_FLYING2 || ObjState == WS_FLYING || ObjState == WS_POWERFLY))
+              {
+                    if (keySync->KeyPressed(40) || keySync->KeyPressed(39) || keySync->KeyPressed(38) || keySync->KeyPressed(37))
+                    {
+                         if (keySync->KeyPressed(38) && keySync->KeyPressed(37)) {FireAngle = 0.75; TurnSide = -1;}
+                    else if (keySync->KeyPressed(38) && keySync->KeyPressed(39)) {FireAngle = 0.75; TurnSide = 1;} 
+                    else if (keySync->KeyPressed(40) && keySync->KeyPressed(37)) {FireAngle = 0.175; TurnSide = -1;}       
+                    else if (keySync->KeyPressed(40) && keySync->KeyPressed(39)) {FireAngle = 0.175; TurnSide = 1;}
+                    else if (keySync->KeyPressed(39)) {FireAngle = 0.5; TurnSide = 1;}
+                    else if (keySync->KeyPressed(37)) {FireAngle = 0.5; TurnSide = -1;}
+                    else if (keySync->KeyPressed(40)) FireAngle = 0.0;
+                    else if (keySync->KeyPressed(38)) FireAngle = 1.0;
+                    }
+              }
+              if (gg_racing_mode) SetState(WS_FLYING2);
+}
+
+
+void CWorm::GG_BounceOfWall(float multi)
+{
+        if (CurrentWorm == this)
+	{
+				if (gg_bounce_of_landscape)
+				{
+					ReadAliveWorms(); 
+//					if (gg_scheme_related_worms) ReadAliveWorms();
+//					else gg_alive_worms = 20;
+                                        if (IsMoving())
+					{
+						SpX	-= GG_ang_x * gg_worms_multi * multi * gg_wall_push_miltiplier;
+						SpY	-= GG_ang_y * gg_worms_multi * multi * gg_wall_push_miltiplier;
+//						SpX	-= gg_power_x * gg_wall_push_miltiplier;					
+//						SpY	-= gg_power_y * gg_wall_push_miltiplier;                                                
+					}
+					else
+					{
+						SpX	-= GG_ang_x * gg_worms_multi * multi * gg_wall_push_miltiplier;
+						SpY	-= GG_ang_y * gg_worms_multi * multi * gg_wall_push_miltiplier;
+//						SpX	-= gg_power_x * gg_wall_push_miltiplier / 2;
+//						SpY	-= gg_power_y * gg_wall_push_miltiplier / 2;                                                                                                			
+					}
+				}
+	}
+}
+
+int CWorm::ReadAliveWorms()
+{
+    gg_alive_worms = 0;
+/*    for (local i = 1; i <= 6; i++) {         // teams
+       for (local j = 1; j <= 8; j++) {      // worms
+          if (GS->Info.Teams[i-1].Worms[j-1].Health > 0) {    // if worm alive
+                 gg_alive_worms++;                                                            
+          }
+       }                // disabled coz make game forever lag. very buggy loop
+    }
+*/    for (local i = 1; i < Env->Objs.Count; i++)
+    {
+        local w = CWorm(Env->Objs.Objs[i]);
+        if (w == NullObj) continue;
+        if (w is CWorm)
+        {
+            gg_alive_worms++;
+        }
+    }
+    local n = gg_alive_worms;
+//    local n = GGWorms;
+/*
+          if (n == 1) gg_worms_multi = 7.4;
+     else if (n == 2) gg_worms_multi = 3.65;
+     else if (n == 3) gg_worms_multi = 2.45;
+     else if (n == 4) gg_worms_multi = 1.8;
+     else if (n == 5) gg_worms_multi = 1.5;
+     else if (n == 6) gg_worms_multi = 1.25;
+     else if (n == 7) gg_worms_multi = 1.12;
+     else if (n == 8) gg_worms_multi = 1.05;
+     else if (n == 9) gg_worms_multi = 0.92;
+    else if (n == 10) gg_worms_multi = 0.81;
+    else if (n == 11) gg_worms_multi = 0.7;
+    else if (n == 12) gg_worms_multi = 0.625;
+    else if (n == 13) gg_worms_multi = 0.58;
+    else if (n == 14) gg_worms_multi = 0.53;
+    else if (n == 15) gg_worms_multi = 0.49;
+    else if (n == 16) gg_worms_multi = 0.45;
+    else if (n == 17) gg_worms_multi = 0.415;
+    else if (n == 18) gg_worms_multi = 0.38;
+    else if (n == 19) gg_worms_multi = 0.355;
+    else if (n == 20) gg_worms_multi = 0.32;
+    else if (n == 21) gg_worms_multi = 0.3;
+    else if (n == 22) gg_worms_multi = 0.285;
+    else if (n == 23) gg_worms_multi = 0.27;
+    else if (n == 24) gg_worms_multi = 0.257;
+    else if (n == 25) gg_worms_multi = 0.245;
+    else if (n == 26) gg_worms_multi = 0.231;
+    else if (n == 27) gg_worms_multi = 0.22;
+    else if (n == 28) gg_worms_multi = 0.21;
+    else if (n == 29) gg_worms_multi = 0.205;
+    else if (n == 30) gg_worms_multi = 0.195;
+    else if (n == 31) gg_worms_multi = 0.19;
+    else if (n == 32) gg_worms_multi = 0.185;
+    else if (n == 33) gg_worms_multi = 0.181;
+    else if (n == 34) gg_worms_multi = 0.176;
+    else if (n == 35) gg_worms_multi = 0.172;
+    else if (n == 36) gg_worms_multi = 0.169;
+    else if (n == 37) gg_worms_multi = 0.166;
+    else if (n == 38) gg_worms_multi = 0.16;
+    else if (n == 39) gg_worms_multi = 0.157;
+    else if (n == 40) gg_worms_multi = 0.154;
+    else if (n == 41) gg_worms_multi = 0.151;
+    else if (n == 42) gg_worms_multi = 0.149;
+    else if (n == 43) gg_worms_multi = 0.147;
+    else if (n == 44) gg_worms_multi = 0.145;
+    else if (n == 45) gg_worms_multi = 0.143;
+    else if (n == 46) gg_worms_multi = 0.141;
+    else if (n == 47) gg_worms_multi = 0.139;
+    else if (n == 48) gg_worms_multi = 0.137;
+    else gg_worms_multi = 0.0;
+*/
+/////// formula is: e^((24-n)/24); //////////
+    float deg = (24-n)/24;
+    gg_worms_multi = math_exp(deg);  
+//    if (n == 1) gg_worms_multi = gg_worms_multi * 0.9;
+//    if (n > 10)
+//    {
+        local k = 1.0;
+        if (n > 24) k = (1.375 - n/64);
+        local dd = k - (48-n)/48;
+        gg_worms_multi += dd*4;
+//    }
+//    return gg_alive_worms;
+    return gg_alive_worms;
+}
+
+void CWorm::DrawDimmedGG()
+{
+    local sprite;
+    if (gg_superworm) sprite = gravity_gun_aiming2_s_ghost->Index;
+    else sprite = gravity_gun_aiming2_ghost->Index;
+    AddSpriteEx( 13.99, PosX, PosY, sprite, 1.0, gg_last_ang, WAP->Size);    
+    AddSpriteEx( 13.98, PosX, PosY, sprite, 1.0, gg_last_ang, WAP->Size);
+}
+
+override void PxLightningStrike::LightningHit(CGObject *obj)
+{
+        super;
+        local w = GetCurrentWorm();
+        if(obj != NullObj && obj->ClType == OC_Worm)
+	{
+		// Make a super worm with super Gravity Gun
+		CWorm *worm = CWorm(obj);
+//		if (w != NullObj && obj is w)
+//		{
+//		  if (worm is w)
+//                  {
+                     worm->gg_superworm = true;
+//                  }
+//                }
+  	}                                                                                  
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+        if (gframe == 5)
+        {
+            if (gg_racing_mode && gg_racing_prepare_low_ang)
+            {
+                FireAngle = 0.0;    // bottom
+            }
+        }
+    }
+}

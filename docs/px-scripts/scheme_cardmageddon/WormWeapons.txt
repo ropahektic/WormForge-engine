@@ -1,0 +1,979 @@
+bool lockworms2;
+string HasWeapons[6400]; //each 800 for each team in which each 100 for each worm
+int PrinceCount[7];
+int PrinceIndex[7];
+int Prince2Index[7];
+int Prince3Index[7];
+int teleportrange;
+       
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_TURNBEGIN)
+    {
+        lockworms2 = false;
+    }
+    
+super;
+}       
+   
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if(Type == M_FRAME && !isPlacing && teleportrange != 0)
+  {
+    if(CurWeapon->CheckName("Teleport") || CurWeapon->CheckName("Extra Teleport") ||
+	   CurWeapon->CheckName("Bazooka Worm") || CurWeapon->CheckName("Shotgun Worm") ||
+	   CurWeapon->CheckName("Haste Worm") || CurWeapon->CheckName("Tanky Worm") ||
+	   CurWeapon->CheckName("Rope Worm") || CurWeapon->CheckName("Melee Worm") ||
+	   CurWeapon->CheckName("Fat Worm") || CurWeapon->CheckName("Mine Worm") ||
+	   CurWeapon->CheckName("Sniper Worm") || CurWeapon->CheckName("Minigun Worm")||
+	   CurWeapon->CheckName("Prince")|| CurWeapon->CheckName("Infected Worm") ||
+	   CurWeapon->CheckName("Necromancer")|| CurWeapon->CheckName("Flying Zombie") ||
+	   CurWeapon->CheckName("Spawn 3 Zombies") || CurWeapon->CheckName("Spawn Zombie"))
+    {
+      local dx = PosX - GS->landSelectX;  local dy = PosY - GS->landSelectY;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+      local dist = sqrt(dx*dx + dy*dy);
+   
+      if(dist > teleportrange)
+      {
+        local angle = atan2(dx, dy);
+        GS->landSelectX = PosX-teleportrange*sin(angle);  GS->landSelectY = PosY-teleportrange*cos(angle);
+      }
+    }
+  }
+  super;
+}   
+       
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (GetFreeWormIndex(Root->CurTeam) > 8 || GetFreeWormIndex(Root->CurTeam) < 1)
+        {
+            lockworms2 = true;
+        }    
+        
+        
+    }
+    
+    if (Type == M_DISABLECONTROL)
+    {
+        lockworms2 = false;
+    }
+    
+    super;
+}       
+
+     
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{      
+        if (Weap->CheckName("Bazooka Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam); 
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);         
+            return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Bazooka";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                 
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Bazooka Worm", 50);
+	
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+              
+                Reinfwormie->ActionPoints = 0  ;
+              
+                
+                for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                      RemoveDelays();
+                      PersonalDelayCheck(); 
+                      DelayCheck();
+                      
+                
+            }
+	    
+	}
+        
+        
+	
+	else if (Weap->CheckName("Shotgun Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Shotgun";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Shotgun Worm", 60);
+	
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+               
+                Reinfwormie->ActionPoints = 0  ;
+               
+                
+                for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays();
+                  PersonalDelayCheck(); 
+                  DelayCheck();
+                
+            }
+	    
+	}
+	
+        else if (Weap->CheckName("Melee Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Fire Punch";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                 
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Melee Worm", 60);
+	
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+                Reinfwormie->ActionPoints = 0  ;
+               
+                
+                
+                 for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays();
+                  PersonalDelayCheck(); 
+                  DelayCheck();
+                
+            }
+	    
+	}
+	
+	else if (Weap->CheckName("Flying Zombie"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Jet Pack";
+                 HasWeapons[multipl+1] = 0;
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                 
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Flying Zombie", 40);
+	
+	        Reinfwormie->TFclass = "Special Zombie";
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+               
+                Reinfwormie->ActionPoints = 0  ;
+                
+                
+                 for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays(); 
+                  PersonalDelayCheck();
+                  DelayCheck();
+                
+            }
+	    
+	}
+	
+	else if (Weap->CheckName("Spawn 3 Zombies"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+              if(ShotgunCheck[WormTeam] == 0) 
+              { GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+                ShotgunCheck[WormTeam]++;
+              }
+               
+              else if (ShotgunCheck[WormTeam] == 1)
+                         { 
+                          
+                           ShotgunCheck[WormTeam]++; 
+                           }
+                           else if (ShotgunCheck[WormTeam] == 2)
+                           { 
+                           
+                           ShotgunCheck[WormTeam] = 0; }
+                           
+            return;}
+            else
+            {
+            
+                 local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Fire Punch";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                 
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Zombie", 30);
+	
+	        Reinfwormie->TFclass = "Zombie";
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+                
+                Reinfwormie->ActionPoints = 0  ;
+                
+                
+                
+                 for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   { 
+                      
+                         if (ShotgunCheck[WormTeam] == 0)
+                          { 
+                           
+                            
+                             if (ShotgunCheck[WormTeam] == 0) 
+                               {  GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                                  ShotgunCheck[WormTeam]++; 
+                               }
+                           
+                          }    
+                          
+                          
+                          else if (ShotgunCheck[WormTeam] == 1)
+                           { 
+                          
+                           ShotgunCheck[WormTeam]++; 
+                           }
+                           else if (ShotgunCheck[WormTeam] == 2)
+                           { 
+                           
+                           ShotgunCheck[WormTeam] = 0; 
+                           }
+                                         
+                     
+                   }
+                  }
+                  RemoveDelays();
+                  PersonalDelayCheck(); 
+                  DelayCheck();
+                
+            }
+	    
+	}
+	
+	else if (Weap->CheckName("Necromancer"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Handgun";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = "Spawn Zombie";
+                 HasWeapons[multipl+3] = 0;
+                 
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Necromancer", 50);
+	
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+               
+                Reinfwormie->ActionPoints = 0  ;
+               
+                
+                
+                 for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays(); 
+                  PersonalDelayCheck();
+                  DelayCheck();
+                
+            }
+	    
+	}
+	
+	else if (Weap->CheckName("Spawn Zombie"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam); return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Fire Punch";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                 
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Zombie", 30);
+	
+	        Reinfwormie->TFclass = "Zombie";
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+               
+                Reinfwormie->ActionPoints = 0  ;
+               
+                
+                
+                 for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponName[x]))                         
+                   {                       
+                     ActionPoints = ActionPoints - 200; 
+                   }
+                  }
+                  RemoveDelays(); 
+                  PersonalDelayCheck();
+                  DelayCheck();
+                
+            }
+	    
+	}
+	
+	else if (Weap->CheckName("Infected Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Uzi";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                 
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Infected Worm", 30);
+	
+	        Reinfwormie->TFclass = "Infected";
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+             
+                Reinfwormie->ActionPoints = 0  ;
+               
+                
+                
+                 for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays(); 
+                  PersonalDelayCheck();
+                  DelayCheck();
+                
+            }
+	    
+	}
+	
+        else if (Weap->CheckName("Prince"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                 
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Bazooka";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;                   
+                                                             
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Prince", 100);
+                
+                if(PrinceCount[WormTeam] == 2) 
+                {
+                Reinfwormie->TFclass = "Prince3"; 
+                PrinceCount[WormTeam]++;
+                Prince3Index[WormTeam] = Index;
+                }
+                
+                if(PrinceCount[WormTeam] == 1) 
+                {
+                Reinfwormie->TFclass = "Prince2"; 
+                PrinceCount[WormTeam]++;
+                Prince2Index[WormTeam] = Index;
+                }
+               
+                if(PrinceCount[WormTeam] == 0) 
+                {
+                Reinfwormie->TFclass = "Prince"; 
+                PrinceCount[WormTeam]++;
+                PrinceIndex[WormTeam] = Index;
+                }
+                
+                
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+              
+                Reinfwormie->ActionPoints = 0  ;
+                               
+                
+                 for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays();
+                  PersonalDelayCheck(); 
+                  DelayCheck();
+                
+            }
+	    
+	}
+	
+	else if (Weap->CheckName("Sniper Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Sniper Rifle";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Sniper Worm", 40);
+	
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+               
+                Reinfwormie->ActionPoints = 0  ;
+              
+                
+                
+                 for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays(); 
+                  PersonalDelayCheck();
+                  DelayCheck();
+                
+            }
+	    
+	}
+        
+        else if (Weap->CheckName("Mine Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {
+            
+                local Index = GetFreeWormIndex(WormTeam); 
+                
+              
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                                             
+                 HasWeapons[multipl] = "Mine Launcher";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                  
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Mine Worm", 40);
+	
+                 
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                
+                Reinfwormie->ActionPoints = 0  ;
+               
+                
+                for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays(); 
+                  PersonalDelayCheck();
+                  DelayCheck();
+                
+            }
+	    
+	}
+        
+            else if (Weap->CheckName("Haste Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {               
+                local Index = GetFreeWormIndex(WormTeam); 
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                 HasWeaponsNum = 2;        
+                 HasWeapons[multipl] = "Fire Punch";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                 
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Haste Worm", 30);
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+  
+                
+                for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays();
+                  PersonalDelayCheck(); 
+                DelayCheck();
+            }                                      
+	}
+        
+            else if (Weap->CheckName("Fat Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {               
+                local Index = GetFreeWormIndex(WormTeam); 
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                 HasWeaponsNum = 2;        
+                 HasWeapons[multipl] = "Sheep Launcher";
+                 HasWeapons[multipl+1] = "BlowTorch";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                 
+                      
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Fat Worm", 120);
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+                
+                Reinfwormie->ActionPoints = 0  ;
+                
+                                
+              
+                
+                for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays();
+                  PersonalDelayCheck(); 
+                  DelayCheck();
+            }
+	}
+	
+
+	
+	else if (Weap->CheckName("Tanky Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {               
+                local Index = GetFreeWormIndex(WormTeam); 
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                 HasWeaponsNum = 2;        
+                 HasWeapons[multipl] = "Uzi";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Tanky Worm", 130);
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                Reinfwormie->ActionPoints = 0  ;
+                
+                
+                for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays(); 
+                  PersonalDelayCheck();
+                  DelayCheck();
+            }
+	}
+	
+
+	else if (Weap->CheckName("Rope Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {               
+                local Index = GetFreeWormIndex(WormTeam); 
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                 HasWeaponsNum = 2;        
+                 HasWeapons[multipl] = "Ninja Rope";
+                 HasWeapons[multipl+1] = "Handgun";
+                 HasWeapons[multipl+2] = "Teleport";
+                 HasWeapons[multipl+3] = 0;
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Rope Worm", 40);
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+                
+                Reinfwormie->ActionPoints = 0  ;
+               
+                for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  RemoveDelays(); 
+                  PersonalDelayCheck();
+                  DelayCheck();
+            }
+	}
+	
+	
+	
+	
+	else if (Weap->CheckName("Minigun Worm"))
+        { 
+           
+            if (lockworms2) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam);
+            GS->Info.SetWeaponEx(WormTeam, Weap->GetWeaponIndex(), Weap->GetPageIndex(), GS->Info.Stores[WormTeam-1].Count[Weap->GetWeaponIndex()+2] +1);
+            return;}
+            else
+            {               
+                local Index = GetFreeWormIndex(WormTeam); 
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*Index - 100;
+                 multipl = teamN+wormN; 
+                 HasWeaponsNum = 2;        
+                 HasWeapons[multipl] = "Minigun";
+                 HasWeapons[multipl+1] = "Teleport";
+                 HasWeapons[multipl+2] = 0;
+                 HasWeapons[multipl+3] = 0;
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Minigun Worm", 80);
+		Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = SelectY/65536;
+               
+                Reinfwormie->ActionPoints = 0  ;
+               
+                
+                for(local x = 0; x < 71; x++)
+                  {  
+                  if(Weap->CheckName(WeaponN[x]))                         
+                   {                       
+                     GS->Info.Stores[WormTeam-1].Count[62+2] = GS->Info.Stores[WormTeam-1].Count[62+2] - WeaponC[x]; 
+                   }
+                  }
+                  
+                RemoveDelays(); 
+                PersonalDelayCheck();
+                DelayCheck();
+            }
+	}
+	
+  else super;
+        
+}                     
+                    
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_TURNBEGIN)
+         {
+                
+                  
+         }
+         
+         if(Type == M_TURNEND)
+         {
+                 RemoveWormWeapons();
+                 RemoveZombieWeapons();
+                
+                 
+         }
+         
+         if(Type == M_FRAME)
+         {
+           if(GS->Info.GetWormHealth(WormTeam, WormNumber) == 0 && dead == false)
+                 {
+                 dead = true;
+                                   
+                        if(CurW == this && CurW != NullObj && CurW->dead == true)
+                        {
+                           RemoveWormWeapons(); 
+                           RemoveZombieWeapons(); 
+                        }
+                 } 
+         }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{  
+   if(Weap->CheckName("Kamikaze"))
+   {  
+   dead = true;       
+   RemoveWormWeapons();
+   }
+super;
+}
+void CWorm::GiveWormWeapons()
+{
+                 for(local t = 0;t<4;t++)
+                 {
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*WormNumber - 100;
+                 multipl = teamN+wormN;
+                 local wep = GS->GetWeaponByName(HasWeapons[multipl+t]);                   
+                 if(wep == NullObj) continue;
+                 GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), -1);
+                 
+                 }
+}
+
+void CWorm::GiveZombieWeapons()
+{
+                
+     local wep1 = GS->GetWeaponByName("Fire Punch");
+     if(wep1 != NullObj){GS->Info.SetWeaponEx(WormTeam, wep1->GetWeaponIndex(), wep1->GetPageIndex(), -1);}
+     
+     local wep2 = GS->GetWeaponByName("Teleport");
+     if(wep2 != NullObj){GS->Info.SetWeaponEx(WormTeam, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+              
+                 
+}
+
+void CWorm::GiveZombieSuperWeapons()
+{
+                
+     local wep1 = GS->GetWeaponByName("Super Punch");
+     if(wep1 != NullObj){GS->Info.SetWeaponEx(WormTeam, wep1->GetWeaponIndex(), wep1->GetPageIndex(), -1);}
+     
+     local wep2 = GS->GetWeaponByName("Teleport");
+     if(wep2 != NullObj){GS->Info.SetWeaponEx(WormTeam, wep2->GetWeaponIndex(), wep2->GetPageIndex(), -1);} 
+              
+                 
+}
+
+void CWorm::GiveAllWeapons()
+{
+   if(Zombie == true)
+                  {
+                  AddDelays();
+                  GiveZombieWeapons();
+                    if(SpecialZombie == true)  {GiveWormWeapons();}
+                    
+                  }     
+                  else{GiveWormWeapons();}
+}                  
+
+void CWorm::RemoveZombieWeapons()
+{
+                
+     local wep1 = GS->GetWeaponByName("Fire Punch");
+     if(wep1 != NullObj){GS->Info.SetWeaponEx(WormTeam, wep1->GetWeaponIndex(), wep1->GetPageIndex(), 0);}
+     
+     local wep2 = GS->GetWeaponByName("Teleport");
+     if(wep2 != NullObj){GS->Info.SetWeaponEx(WormTeam, wep2->GetWeaponIndex(), wep2->GetPageIndex(), 0);} 
+     
+     local wep3 = GS->GetWeaponByName("Super Punch");
+     if(wep3 != NullObj){GS->Info.SetWeaponEx(WormTeam, wep3->GetWeaponIndex(), wep3->GetPageIndex(), 0);} 
+                
+}
+
+void CWorm::RemoveWormWeapons()
+{
+                 for(local t = 0;t<4;t++)
+                 {
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*WormNumber - 100;
+                 multipl = teamN+wormN;
+                
+                 local wep = GS->GetWeaponByName(HasWeapons[multipl+t]);
+                 if(wep == NullObj) continue;
+                 GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 0); 
+                 }
+                 
+}

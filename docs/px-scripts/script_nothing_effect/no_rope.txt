@@ -1,0 +1,2 @@
+override void CWorm::RenderRope(int rClrA,int rClrB){}
+override void CWorm::RenderRopeShot(){}

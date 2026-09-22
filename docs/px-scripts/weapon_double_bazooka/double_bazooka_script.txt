@@ -1,0 +1,91 @@
+// By PyroMan.
+
+require utils, utils_steps, utils_pyroman, pxparticles;
+
+void double_bazooka_script::FirstFrame()
+{
+}
+
+void CMissile::DoubleZooka(int ClPosX, int ClPosY, int SPX, int SPY)
+{
+     CShootDesc SDesc;
+     zero(&SDesc);
+     SDesc.Team = ClWT;
+     SDesc.Worm = ClWN;
+     SDesc.X = ClPosX;
+     SDesc.Y = ClPosY;
+     SDesc.Delay = 5;
+     local memory;
+     local ldata;
+     local weapon;
+     ldata = GetWeaponByName("Double Bazooka");
+     // Let`s remember everything to avoid glitches
+     memory = ldata;
+     local remember = ldata->launch.timeBeforeExplosion;
+     ldata->launch.explosion.damage = 40;
+     ldata->launch.anim.spriteIndex = 54;
+     ldata->launch.anim.trailIndex = 131;
+     ldata->launch.anim.trailPower = 20;
+     ldata->launch.anim.trailSpeed = 100;
+     ldata->launch.countdownFrom = 0;
+     ldata->launch.timeBeforeExplosion = 5000;
+     SDesc.SpX = SPX;
+     SDesc.SpY = SPY;
+     weapon = new CMissile(Root->GetObject(25, 0), &ldata->launch, &SDesc);
+     ldata->launch.timeBeforeExplosion = remember;
+     ldata = memory;
+}
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    super;
+    if (weap->CheckName("Double Bazooka"))
+    {
+        local bah = this;
+        if (bah->imCheckMis != this) {
+           DoExplosion( x, y, 50, 35, 0, ClWT);
+           return;
+        }
+        local w = GetCurrentWorm();
+        if (w != NullObj)
+        {
+          if (bah != NullObj && bah->PosX != w->PosX && bah->PosY != w->PosY)
+          {
+            GG->land->MakeHole(50, x, y);
+            DoubleZooka(x, y, bah->SpX, bah->SpY);
+          }
+        }
+        else if (bah != NullObj)
+        {
+            GG->land->MakeHole(50, x, y);
+            DoubleZooka(x, y, bah->SpX, bah->SpY);
+        }
+    }
+}
+
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Double Bazooka"))
+        {
+            imCheckMis = this;
+            if (not_too_much_particles) do_zip_trail_effects();
+        }
+    }                                    
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Double Bazooka"))
+    {
+        ClWT = WormTeam;
+        ClWN = WormNumber;
+        CheckParticlesNumber();
+    }
+    
+    super;
+}

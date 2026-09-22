@@ -1,0 +1,174 @@
+require utils;
+
+string Weapons[100];   //0 - 99
+string NotWeapons[100];
+string HasWeapons[6400]; //each 800 for each team in which each 100 for each worm
+CWorm* CurW;
+
+void highlander::InitGraphic()    
+{
+}
+
+void highlander::Init()    
+{
+                 for(local t = 0;t<6400;t++)
+                 {
+                 HasWeapons[t] = "Bazooka";
+                 }
+
+Weapons[0] = "Super Gravedigger";
+Weapons[1] = "Homing Pigeon";
+Weapons[2] = "Dynamite";
+Weapons[3] = "Gravler";
+Weapons[4] = "Aqua Sheep";
+Weapons[5] = "Grenade";
+Weapons[6] = "Igniter";
+Weapons[7] = "Mad Cow";
+Weapons[8] = "Burst Rifle";
+Weapons[9] = "Real Shotgun";
+Weapons[10] = "Pillager";
+Weapons[11] = "Sheep Launcher";
+Weapons[12] = "Mine";
+Weapons[13] = "Bowling Ball Strike";
+Weapons[14] = "Sticky Bomb";
+Weapons[15] = "Homing Air Strike";
+Weapons[16] = "Thumper Nade Strike";
+Weapons[17] = "Sniper Rifle";
+Weapons[18] = "Multi-Bolt";
+Weapons[19] = "Gravler Strike";
+Weapons[20] = "Holy Hand-Grenade";
+Weapons[21] = "Flame Thrower";
+Weapons[22] = "Remote Roller";
+Weapons[23] = "Old Woman";
+Weapons[24] = "Laser Gun";
+Weapons[25] = "Remote Roller Strike";
+Weapons[26] = "Blaster Worm";
+Weapons[27] = "Double Bazooka";
+Weapons[28] = "Valyrian Fire";
+Weapons[29] = "Pogo Sheep";
+Weapons[30] = "Mole Bomb";
+
+NotWeapons[0] = "BlowTorch";
+NotWeapons[1] = "Hang-Glider";
+NotWeapons[2] = "Ninja Rope";
+NotWeapons[3] = "Anti Fall Damage";
+NotWeapons[4] = "Tele Arrow";
+NotWeapons[5] = "Portal Gun";
+NotWeapons[6] = "Health Zone";
+NotWeapons[7] = "Helicopter";
+NotWeapons[8] = "Sentry Gun";
+NotWeapons[9] = "Magnetic Missile";
+NotWeapons[10] = "Lightning Strike";
+NotWeapons[11] = "Jump";
+NotWeapons[12] = "Electromagnet";
+NotWeapons[13] = "Gravity Gun";
+NotWeapons[14] = "Super Drill";
+NotWeapons[15] = "Fire Punch";
+NotWeapons[16] = "Dragon Ball";
+NotWeapons[17] = "Baseball Bat";
+NotWeapons[18] = "Low Gravity";
+NotWeapons[19] = "Sentry Laser";
+NotWeapons[20] = "Hoverboard";
+}
+
+void highlander::FirstFrame()
+{
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+      HasWeaponsNum = 0;
+      teamN = 800*WormTeam - 800;
+      wormN = 100*WormNumber - 100;
+      multipl = teamN+wormN; // yeah baby
+      dead = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(Type == M_TURNBEGIN)
+         {
+                 if(CurW != NullObj){CurW->RemoveWeapons();}
+                 CurW = this;
+                 GiveWeapons();
+         }
+         
+         if(Type == M_TURNEND)
+         {
+                 RemoveWeapons();
+                 //GG->WriteToChat(1, "turnend", false);
+         }
+         
+         if(Type == M_FRAME)
+         {
+                 if(HasWeaponsNum == 0)
+                 {
+                 teamN = 800*WormTeam - 800;
+                 wormN = 100*WormNumber - 100;
+                 multipl = teamN+wormN; 
+                 HasWeaponsNum = 2;
+                 HasWeapons[multipl] = Weapons[RandomInt(0,30)];
+                 HasWeapons[multipl+1] = NotWeapons[RandomInt(0,20)];
+                 }
+         
+                 if(GS->Info.GetWormHealth(WormTeam, WormNumber) == 0 && dead == false)
+                 {
+                 dead = true;
+                        if(CurW != this && CurW != NullObj && CurW->dead != true)
+                        {
+                        //GG->WriteToChat(WormTeam, "Weapons were stolen!", false);
+                        StealWeapons(CurW);
+                        }
+                        
+                        if(CurW == this && CurW != NullObj && CurW->dead == true)
+                        {
+                        RemoveWeapons();  
+                        }
+                 }
+         }
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{  
+   if(Weap->CheckName("Kamikaze"))
+   {  
+   dead = true;       
+   RemoveWeapons();
+   }
+super;
+}
+void CWorm::GiveWeapons()
+{
+                 for(local t = 0;t<HasWeaponsNum;t++)
+                 {
+                 local wep = GS->GetWeaponByName(HasWeapons[multipl+t]);
+                 GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);
+                 }
+}
+
+void CWorm::RemoveWeapons()
+{
+                 for(local t = 0;t<HasWeaponsNum;t++)
+                 {
+                 local wep = GS->GetWeaponByName(HasWeapons[multipl+t]);
+                 GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 0);
+                 }
+}
+
+void CWorm::StealWeapons(CWorm* stealer)
+{              
+                 for(local t = 0;t<HasWeaponsNum;t++)
+                 {
+                 local wep = GS->GetWeaponByName(HasWeapons[multipl+t]);
+                 GS->Info.SetWeaponEx(stealer->WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);
+                 }
+
+                 for(local t = 0;t<HasWeaponsNum;t++)
+                 {
+                 HasWeapons[stealer->multipl+stealer->HasWeaponsNum+t] = HasWeapons[multipl+t];
+                 }
+                 
+                 stealer->HasWeaponsNum = stealer->HasWeaponsNum + HasWeaponsNum;
+}

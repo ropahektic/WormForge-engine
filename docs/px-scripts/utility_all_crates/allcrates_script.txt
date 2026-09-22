@@ -1,0 +1,705 @@
+require utils, utils_steps;
+
+// This script combines many crate-related weapons and utilities by Steps and Rafa''2
+// Custom animations, bug fixes, selectable crate and crate grabber by 0rang3
+
+int CrateShowerMode;
+int selcratype;
+int selboobytrap_distance;
+
+CBoobyTrap:CObject;
+
+ECrateType cratype;
+
+ECrateType crtypestr;
+ECrateType crtypestr2;
+ECrateType crtypestr3;
+
+CSprite* wcpp;
+CSprite* wcpu;
+CSprite* wcpd;
+CSprite* ucpp;
+CSprite* ucpu;
+CSprite* ucpd;
+CSprite* hcpp;
+CSprite* hcpu;
+CSprite* hcpd;
+
+void allcrates_script::Init() 
+{
+CrateShowerMode = 0;
+
+keySync->AddKey(48); // 0 button
+keySync->AddKey(49); // 1 button
+keySync->AddKey(50); // 2 button
+keySync->AddKey(51); // 3 button
+keySync->AddKey(52); // 4 button
+keySync->AddKey(53); // 5 button
+}
+
+void allcrates_script::InitGraphic() 
+{
+CFile *f;
+	
+f = GetAttachment("wcpp.png");	wcpp = LoadSprite(f, 10, 24);
+f = GetAttachment("wcpu.png");	wcpu = LoadSprite(f, 10, 24);
+f = GetAttachment("wcpd.png");	wcpd = LoadSprite(f, 10, 24);
+
+f = GetAttachment("ucpp.png");	ucpp = LoadSprite(f, 10, 24);
+f = GetAttachment("ucpu.png");	ucpu = LoadSprite(f, 10, 24);
+f = GetAttachment("ucpd.png");	ucpd = LoadSprite(f, 10, 24);
+
+f = GetAttachment("hcpp.png");	hcpp = LoadSprite(f, 10, 24);
+f = GetAttachment("hcpu.png");	hcpu = LoadSprite(f, 10, 24);
+f = GetAttachment("hcpd.png");	hcpd = LoadSprite(f, 10, 24);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//   OVERRIDE THIS METHOD IN YOUR SCHEME TO CHANGE BOOBY-TRAP PROBABILITY   //
+//////////////////////////////////////////////////////////////////////////////
+
+void CCrate::SetBoobyTrapConfig()
+{
+     // When a random weapon crate appears, it has x probability to be a booby-trap
+     // 1 -> 100%      // 4 -> 25%     // 7 -> 14%    // 10 -> 10%
+     // 2 -> 50%       // 5 -> 20%     // 8 -> 12%    // 50 -> 2%
+     // 3 -> 33%       // 6 -> 16%     // 9 -> 11%    //100 -> 1%
+     
+     boobytrap_random = false;          //Spawn auto boobytrap crates
+     boobytrap_probability = 100;        //Default 20 % probability
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//                     END OF METHOD TO BE OVERRIDE                         //
+//////////////////////////////////////////////////////////////////////////////
+
+CBoobyTrap::CBoobyTrap(CCrate * crate_parent)
+{
+     if(crate_parent == NullObj) return;
+     
+     super(Root->GetObject(25,0), GS);
+     boobytrap_crateparent = crate_parent;
+     boobytrap_explode = false;
+     boobytrap_mine = CMine(NullObj);
+     boobytrap_dwalking = 42;
+     boobytrap_dairing = 50;
+     
+     CMineParams MParams;
+     zero(&MParams);
+     
+     MParams.Prefuse = 0;
+     MParams.Flags = 4+8+16+32+64+256+512+4096+32768+65536;   //1024
+     MParams.Bias = 30; 
+     MParams.Damage = 40;  
+     MParams.BlastPower = 70;
+     MParams.Fuse = 0;
+     MParams.Radius = 30;
+	
+     CShootDesc MDesc;
+     zero(&MDesc);
+     MDesc.Team = 0;
+     MDesc.Worm = 0;
+     MDesc.X = boobytrap_crateparent->PosX;
+     MDesc.Y = boobytrap_crateparent->PosY;
+     MDesc.SpX = boobytrap_crateparent->SpX;
+     MDesc.SpY = boobytrap_crateparent->SpY;
+        
+     boobytrap_mine = new CMine(Root->GetObject(25, 0), &MParams, &MDesc, false, 0);
+     boobytrap_mine->PosX = boobytrap_crateparent->PosX;
+     boobytrap_mine->PosY = boobytrap_crateparent->PosY;
+     boobytrap_mine->boobytrap_explodedbyworm = false;
+     boobytrap_mine->ClType = EObjectClass(80081);
+     boobytrap_mine->GravityFactor = 0;                                     
+}
+
+override void CCrate::CCrate(CObject* Parent,CCrateDesc* desc,EDropType type)
+{
+     boobytrap_asweapon = desc->highlight;
+     desc->highlight = false;
+     
+     super;
+     
+     boobytrap_random = true;
+     boobytrap_enable = false;
+     boobytrap_probability = 5;
+     
+     if(desc->type == CT_WEAPON || desc->type == CT_UTILITY || desc->type == CT_HEALTH || desc->type == CT_MWEAPON)
+     {
+          if(boobytrap_asweapon)
+          {
+               boobytrap_probability = 1;
+          }
+          else
+          {
+               SetBoobyTrapConfig();
+          }
+          
+          if(int(boobytrap_probability) <= 0)
+          {
+               boobytrap_probability = 5;
+          }
+          
+          if( RandomInt(1, boobytrap_probability) == 1)
+          {
+               if(boobytrap_random)
+               {
+					LayerBackup = Layer;
+                    ColGroupBackup = ColGroup;
+                    MaskIndexBackup = MaskIndex;
+               
+                    boobytrap = new CBoobyTrap(this);
+                    
+                    boobytrap_enable = true;
+                    Layer = 0;
+                    MaskIndex = 0;
+                    ColGroup = 2+2048+4194304;
+               }
+          }
+     }
+}
+
+void CBoobyTrap::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     if(Type == M_FRAME)
+     {
+          if(boobytrap_crateparent != NullObj && boobytrap_mine != NullObj)
+          {
+               boobytrap_mine->PosX = boobytrap_crateparent->PosX;
+               boobytrap_mine->PosY = boobytrap_crateparent->PosY;
+               boobytrap_mine->SpX = boobytrap_crateparent->SpX;
+               boobytrap_mine->SpY = boobytrap_crateparent->SpY;
+               
+               local cworm = GetCurrentWorm();
+               
+               if(cworm != NullObj)
+               {              
+                   if(cworm->ObjState == WS_ROPING || cworm->ObjState == WS_BUNGEE)
+                   {
+                        boobytrap_mine->Radius = boobytrap_dairing;
+                   }
+                   else
+                   {
+                        boobytrap_mine->Radius = boobytrap_dwalking;                                                
+                   }
+              }
+          }
+          else
+          {
+               Free(true);
+          }
+     }
+     
+     if(Type == M_DRAWQUEUE) {}
+} 
+
+////////////////////////////////////////////////////////////////////////////////
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   CWorm* w = GetCurrentWorm();
+   
+   if(CurWeapon->CheckName("Crate Shower Mode") && ObjState == WS_FIRED)
+   {
+      local wep = GS->GetWeaponByName("Crate Shower");
+      GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);   
+   }
+   
+   if(CrateShowerMode == 1)
+   {
+      if(Type == M_TURNEND)
+      {
+         local wep = GS->GetWeaponByName("Crate Shower");
+         GS->Info.SetWeaponEx(WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 0);
+         CrateShowerMode == 0;   
+      }
+   }      
+   
+   if(Type == M_FRAME)
+   {
+      if(CurWeapon->CheckName("Select Crate"))
+      {
+         if(keySync->KeyPressedNow(49))
+         {
+            selcratype = 0; 
+            ShowMessage("Weapon Crate");
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+            if(AnimCanChangeCrateType)
+	    {
+	    Anim->SetAnim(362);
+	    }
+         }
+         else if(keySync->KeyPressedNow(50))
+         {
+            selcratype = 1;
+            ShowMessage("Utility Crate");
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+            if(AnimCanChangeCrateType)
+	    {
+	    Anim->SetAnim(362);
+	    }
+         } 
+         else if(keySync->KeyPressedNow(51))
+         {
+            selcratype = 2;
+            ShowMessage("Health Crate");
+            PlayLocalSound(92, 1.0, 1.0, 1.0);
+            if(AnimCanChangeCrateType)
+	    {
+	    Anim->SetAnim(362);
+	    }
+         } 
+      }
+      
+      if(CurWeapon->CheckName("Trap Crate"))
+         {
+         local worm = GetCurrentWorm();
+        
+         if(keySync->KeyPressedNow(49))
+            {
+            selboobytrap_distance = 200; 
+            ShowTeamMessage(7,"200 pixels distance",worm->WormTeam);
+            }
+         else if(keySync->KeyPressedNow(50))
+            {
+            selboobytrap_distance = 300;
+            ShowTeamMessage(7,"300 pixels distance",worm->WormTeam);
+            } 
+         else if(keySync->KeyPressedNow(51))
+            {
+            selboobytrap_distance = 400;
+            ShowTeamMessage(7,"400 pixels distance",worm->WormTeam);
+            }
+         else if(keySync->KeyPressedNow(52))
+            {
+            selboobytrap_distance = 500;
+            ShowTeamMessage(7,"500 pixels distance",worm->WormTeam);
+            } 
+         else if(keySync->KeyPressedNow(53))
+            {
+            selboobytrap_distance = 600;
+            ShowTeamMessage(7,"600 pixels distance",worm->WormTeam);
+            }         
+         }            
+   }
+   
+   super;
+}
+
+override void CCrate::Free(bool FreeMem)
+{
+     if(boobytrap_enable)
+     {
+		  Layer = LayerBackup;
+          ColGroup = ColGroupBackup;
+          MaskIndex = MaskIndexBackup;
+     }
+         
+     super;
+}
+
+override void CMine::PlayLocalSound(int SIndex,int Unk,fixed Volume,fixed Pan)
+{
+     if(ClType == EObjectClass(80081))
+     {
+         if(SIndex == 90)
+         {
+             Active = 1;
+         }
+     }
+     else super;
+}
+
+void CBoobyTrap::Free(bool FreeMem)
+{
+    if(FreeMem)
+    {
+        if(boobytrap_mine != NullObj)
+        {
+             boobytrap_mine->Free(true);
+        }
+        super;
+    }
+}
+
+override CGObject * CMine::GetTarget(int Radius)
+{
+    if(ClType == EObjectClass(80081))
+    {
+         CGObject * cobj = super;
+         
+         if(cobj is CWorm)
+         {
+              boobytrap_explodedbyworm = true;
+         }
+    }
+    super;
+}
+
+override void CMine::Explosion()
+{
+     if(ClType == EObjectClass(80081) && boobytrap_explodedbyworm)
+     {
+     ShowMessage("** Booby Trapped **");
+     }
+     super;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+                                                                             
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+CWorm *w = GetCurrentWorm();
+
+if (w != NullObj)
+    {
+    local x = w->PosX - 40;
+    local y = w->PosY;
+             
+    if (TurnSide > 0){x = PosX + 40;}
+        
+    if (Weap->CheckName("Weapon Crate"))
+    	{
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = x;
+	    CDesc.Y = y;
+        CDesc.type = CT_WEAPON;
+        CDesc.wType = WCT_RANDOM;
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+		}
+	
+	else if (Weap->CheckName("Utility Crate"))
+        {       
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = x;
+	    CDesc.Y = y;
+        CDesc.type = CT_UTILITY;
+        CDesc.wType = WCT_RANDOM;
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+		}
+	
+	else if (Weap->CheckName("Health Crate (25)"))
+        {       
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = x;
+	    CDesc.Y = y;
+        CDesc.type = CT_HEALTH;
+        CDesc.wType = WCT_DEFINED;
+	    CDesc.health = 25;
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+		}
+	
+	else if (Weap->CheckName("Health Crate (50)"))
+        {       
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = x;
+	    CDesc.Y = y;
+        CDesc.type = CT_HEALTH;
+        CDesc.wType = WCT_DEFINED;
+	    CDesc.health = 50;
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+		}
+	
+	else if (Weap->CheckName("Health Crate (100)"))
+        {       
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = x;
+	    CDesc.Y = y;
+        CDesc.type = CT_HEALTH;
+        CDesc.wType = WCT_DEFINED;
+	    CDesc.health = 100;
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+		}
+	
+	else if (Weap->CheckName("Random Crate"))
+        {       
+        local i = RandomInt(1,3);
+	    if      (i == 1) cratype = CT_WEAPON;
+        else if (i == 2) cratype = CT_UTILITY;
+        else if (i == 3) cratype = CT_HEALTH;
+        	
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = x;
+	    CDesc.Y = y;
+        CDesc.type = cratype;
+        CDesc.wType = WCT_RANDOM;
+        CDesc.health = RandomInt(25,40);
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+		}
+	
+	else if (Weap->CheckName("Weap/Util Crate"))
+        {       
+        local i = RandomInt(1,2);
+	    if      (i == 1) cratype = CT_WEAPON;
+        else if (i == 2) cratype = CT_UTILITY;
+        	
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = x;
+	    CDesc.Y = y;
+        CDesc.type = cratype;
+        CDesc.wType = WCT_RANDOM;
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+		}
+        
+        else if (Weap->CheckName("Crate Strike"))
+        {   
+        local i = RandomInt(1,3);
+	    if      (i == 1) crtypestr = CT_WEAPON;
+        else if (i == 2) crtypestr = CT_UTILITY;
+        else if (i == 3) crtypestr = CT_HEALTH;
+        	
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = SelectX/65536;
+	    CDesc.Y = -50;
+        CDesc.type = crtypestr;
+        CDesc.wType = WCT_RANDOM;
+	    CDesc.health = RandomInt(20,40);
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_CHUTE);
+            
+        local i2 = RandomInt(1,3);
+	    if      (i2 == 1) crtypestr2 = CT_WEAPON;
+        else if (i2 == 2) crtypestr2 = CT_UTILITY;
+        else if (i2 == 3) crtypestr2 = CT_HEALTH;
+        	
+        CDesc.X = CDesc.X - 50;
+	    CDesc.Y = -50;
+        CDesc.type = crtypestr2;
+        CDesc.wType = WCT_RANDOM;
+	    CDesc.health = RandomInt(40,60);
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_CHUTE);
+            
+        local i3 = RandomInt(1,3);
+	    if      (i3 == 1) crtypestr3 = CT_WEAPON;
+        else if (i3 == 2) crtypestr3 = CT_UTILITY;
+        else if (i3 == 3) crtypestr3 = CT_HEALTH;
+        	
+        CDesc.X = CDesc.X + 100;
+	    CDesc.Y = -50;
+        CDesc.type = crtypestr3;
+        CDesc.wType = WCT_RANDOM;
+	    CDesc.health = RandomInt(60,80);
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_CHUTE);
+        }
+        
+        else if(Weap->CheckName("Crate Shower Mode"))
+        {  
+            if(CrateShowerMode == 0)
+            {
+            CrateShowerMode = 1;
+            ShowMessage("Crate Shower Mode: ON");
+            } 
+            else if(CrateShowerMode == 1)
+            {
+            CrateShowerMode = 0;
+            ShowMessage("Crate Shower Mode: OFF");
+            }      
+        }
+        
+        else if (Weap->CheckName("Trap Crate"))
+        {
+	    local worm = GetCurrentWorm();
+        local boobytrap_asweapon = true;
+            
+        if(selboobytrap_distance == 0) // If no additional keys were pressed
+            {
+	    	selboobytrap_distance = 200;
+	       	}
+            	    
+        local boobytrap_distance = selboobytrap_distance;
+            
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = PosX + boobytrap_distance * TurnSide;
+	    CDesc.Y = PosY;
+            
+        local i = RandomInt(1,3);
+	    if      (i == 1) CDesc.type = CT_WEAPON;
+        else if (i == 2) CDesc.type = CT_UTILITY;
+        else if (i == 3) CDesc.type = CT_HEALTH;
+            
+        CDesc.wType = WCT_UNKNOWN;
+        CDesc.highlight = boobytrap_asweapon;
+		
+        local crate = new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+	}
+	
+	else if (Weap->CheckName("Random Trap Crate"))
+        {
+	    local boobytrap_asweapon = true;
+		
+	    CCrateDesc CDesc;
+	    zero(&CDesc);
+	    
+	    CDesc.X = -1000;
+	    CDesc.Y = -1000;
+		/*
+        local i = RandomInt(1,3);
+	    if      (i == 1) CDesc.type = CT_WEAPON;
+        else if (i == 2) CDesc.type = CT_UTILITY;
+        else if (i == 3) CDesc.type = CT_HEALTH;
+		*/
+		CDesc.type = CT_WEAPON;
+        CDesc.wType = WCT_UNKNOWN;
+        CDesc.highlight = boobytrap_asweapon;
+
+        local crate = new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+	    
+	    int trcrX = GS->LevelSX / 5;
+		int trcrY = GS->LevelSY / 5;
+		int starttrcrX = GS->GetRandom() % trcrX;
+		int starttrcrY = GS->GetRandom() % trcrY;
+
+		for (int n = 0; n < (trcrX * trcrY); n++)
+			{
+			int newtrcrX = ((starttrcrX + (n % trcrX)) % trcrX) * 5;
+			int newtrcrY = ((starttrcrY + (n / trcrY)) % trcrY) * 5;
+			CGObject * trcrcol = Env->CheckCollision(crate, newtrcrX, newtrcrY);
+			if (trcrcol == NullObj)
+				{
+				int hitX = 0;
+				int hitY = 0;
+				if (TraceMask(crate, crate->ColMask, newtrcrX, newtrcrY, newtrcrX, newtrcrY + 1000, 4332670, &hitX, &hitY) != NullObj)
+					{
+					crate->PosX = newtrcrX;
+					crate->PosY = newtrcrY;
+					crate->X = newtrcrX;
+					crate->Y = newtrcrY;
+					return true; // found a spawn point, return. This means exit this entire function.
+					}
+				}
+			}
+		crate->Free(true); // we did not find a spawn point, lets destroy the crate we have created
+		return false;
+		
+	}
+	
+	else if (Weap->CheckName("Select Crate"))
+        {   
+	    if      (selcratype == 0) cratype = CT_WEAPON;
+        else if (selcratype == 1) cratype = CT_UTILITY;
+        else if (selcratype == 2) cratype = CT_HEALTH;
+        	
+        CCrateDesc CDesc;
+	    zero(&CDesc);
+		
+        CDesc.X = x;
+	    CDesc.Y = y;
+        CDesc.type = cratype;
+        CDesc.wType = WCT_RANDOM;
+        CDesc.health = 50;
+		
+        new CCrate(Root->GetObject(25, 0), &CDesc, DT_TELEPORT);
+	}
+	
+	else if(Weap->CheckName("Crate Grabber"))
+	{
+	    local x = SelectX/65536;
+        local y = SelectY/65536;
+        local obj = SCFindCrate(x-12, x+12, y-12, y+12);
+            
+        if(obj != NullObj)
+            {
+            PlayLocalSound(67, 3, 1.0, 1.0); // teleport           
+            obj->PosX = w->PosX;
+            obj->PosY = w->PosY - 10;
+            }
+        else
+            {
+            PlayLocalSound(120, 3, 1.0, 1.0); // beep
+            local wepGC = GS->GetWeaponByName("Crate Grabber");
+            GS->Info.AddWeapon(w->WormTeam, wepGC->GetWeaponIndex(), 1);   // adding one weapon back
+            ShowMessage("No crate found!");
+			}
+	}
+	
+	else super;
+     }
+     	
+     else super;   
+}
+
+CGObject * CWorm::SCFindCrate(int l, int r, int t, int b)     // left, right, top, bottom
+{
+      for(int i = 0; i < Env->Objs.Count; i++)
+      {
+          local obj = CGObject(Env->Objs.Objs[i]);
+          if(obj == NullObj) continue;     
+          if(obj->ClType == OC_Crate)
+             {             
+             if(obj->IsInBox( l, t, r, b))                    // left, top, right, bottom
+             return obj;
+             }          
+      }
+      return CGObject(NullObj);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+override void CGObject::PlayLocalSound(int SIndex,int Unk,fixed Volume,fixed Pan)
+{
+     CWorm* w = GetCurrentWorm();
+     
+     if (w != NullObj)
+     {
+         if (w->CurWeapon->CheckName("Crate Grabber") && (SIndex == 149 || SIndex == 164 ||
+                                                          SIndex == 203 || SIndex == 218 ||
+                                                          SIndex == 257 || SIndex == 272 ||
+                                                          SIndex == 311 || SIndex == 326 ||
+                                                          SIndex == 365 || SIndex == 380 ||
+                                                          SIndex == 419 || SIndex == 434))       // muting the "incoming" and "order" speech
+         {                     
+         }
+     
+         else super;
+     }     
+     else super;     
+}
+
+override void CSpriteAnim::SetAnimEx(int sindex, fixed frame)
+{
+	if(GS->Tick >= 1)
+	{
+		CWorm *w = GetCurrentWorm();
+		if(w != NullObj && w->Anim == this)
+		{
+			if(sindex == 362 && w->CurWeapon->CheckName("Select Crate")) //prod deploy
+			{
+				if(selcratype == 0)
+				{
+				super(wcpp->Index, frame);
+				}
+				else if(selcratype == 1)
+				{
+				super(ucpp->Index, frame);
+				}
+				else if(selcratype == 2)
+				{
+				super(hcpp->Index, frame);
+				}
+				w->AnimCanChangeCrateType = true;
+				return;
+			}
+			else
+			{
+				w->AnimCanChangeCrateType = false;
+			}			
+		}
+	}	
+	super;
+}

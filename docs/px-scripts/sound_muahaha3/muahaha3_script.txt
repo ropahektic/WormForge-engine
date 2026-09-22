@@ -1,0 +1,262 @@
+require utils;
+
+CSoundFile* applause;
+CSoundFile* bullseye;
+CSoundFile* cunt;                            
+CSoundFile* denied;
+CSoundFile* epicphail;
+CSoundFile* fart;
+CSoundFile* fuckaduck;
+CSoundFile* fuckmymouth;
+CSoundFile* fuckyou;
+CSoundFile* fuckyouandyou;
+CSoundFile* fuckyourownface;
+CSoundFile* kwakkwakkwak;
+CSoundFile* laughtrack;
+CSoundFile* loveyourdick;
+CSoundFile* surprisemotherfucker;
+CSoundFile* wahwahwaaaaah2;
+CSoundFile* coonalert;
+CSoundFile* muaHaha;
+CSoundFile* headShot;
+CSoundFile* iWin;
+CSoundFile* fuck;
+CSoundFile* dieBitch;
+CSoundFile* winning;
+CSoundFile* bitchNigga;
+CSoundFile* shadap;
+CSoundFile* allofurDead;
+CSoundFile* timetoHide;
+CSoundFile* gangnamStyle;
+CSoundFile* shit;
+CSoundFile* jesusChrist;
+
+void muahaha3_script::Init()
+{
+    keySync->AddKey(18);  // Alt
+    keySync->AddKey(96);  // NumPad 0
+    keySync->AddKey(97);  // NumPad 1
+    keySync->AddKey(98);  // NumPad 2
+    keySync->AddKey(99);  // NumPad 3
+    keySync->AddKey(100); // NumPad 4
+    keySync->AddKey(101); // NumPad 5
+    keySync->AddKey(102); // NumPad 6
+    keySync->AddKey(103); // NumPad 7
+    keySync->AddKey(104); // NumPad 8
+    keySync->AddKey(105); // NumPad 9
+    keySync->AddKey(106); // NumPad *
+    keySync->AddKey(107); // NumPad +
+    keySync->AddKey(109); // NumPad -
+    keySync->AddKey(110); // NumPad .
+    keySync->AddKey(111); // NumPad /
+    
+    CFile *f;
+    f = GetAttachment("applause.wav");	        applause = new CSoundFile(f);
+    f = GetAttachment("bullseye.wav");          bullseye = new CSoundFile(f);
+    f = GetAttachment("cunt.wav");        	cunt = new CSoundFile(f);
+    f = GetAttachment("denied.wav");	        denied = new CSoundFile(f);
+    f = GetAttachment("epicphail.wav");         epicphail = new CSoundFile(f);
+    f = GetAttachment("fart.wav");              fart = new CSoundFile(f);
+    f = GetAttachment("fuckaduck.wav");         fuckaduck = new CSoundFile(f);
+    f = GetAttachment("fuckmymouth.wav");	fuckmymouth = new CSoundFile(f);
+    f = GetAttachment("fuckyou.wav");	        fuckyou = new CSoundFile(f);
+    f = GetAttachment("fuckyouandyou.wav");	fuckyouandyou = new CSoundFile(f);
+    f = GetAttachment("fuckyourownface.wav");	fuckyourownface = new CSoundFile(f);
+    f = GetAttachment("kwakkwakkwak.wav");	kwakkwakkwak = new CSoundFile(f);
+    f = GetAttachment("laughtrack.wav");	laughtrack = new CSoundFile(f);
+    f = GetAttachment("loveyourdick.wav");	loveyourdick = new CSoundFile(f);
+    f = GetAttachment("surprisemotherfucker.wav");	surprisemotherfucker = new CSoundFile(f);
+    f = GetAttachment("wahwahwaaaaah2.wav");	wahwahwaaaaah2 = new CSoundFile(f);
+    f = GetAttachment("coonalert.wav");	        coonalert = new CSoundFile(f);     
+    f = GetAttachment("evil_laugh.wav");	muaHaha = new CSoundFile(f);
+    f = GetAttachment("boom_headshot.wav");     headShot = new CSoundFile(f);
+    f = GetAttachment("i_win.wav");        	iWin = new CSoundFile(f);
+    f = GetAttachment("fuck.wav");	        fuck = new CSoundFile(f);
+    f = GetAttachment("diebitch.wav");          dieBitch = new CSoundFile(f);
+    f = GetAttachment("winning.wav");           winning = new CSoundFile(f);
+    f = GetAttachment("bitchnigga.wav");        bitchNigga = new CSoundFile(f);
+    f = GetAttachment("shadap.wav");	        shadap = new CSoundFile(f);
+    f = GetAttachment("allofurdead.wav");	allofurDead = new CSoundFile(f);
+    f = GetAttachment("timetohide.wav");	timetoHide = new CSoundFile(f);
+    f = GetAttachment("gangnam_style.wav");	gangnamStyle = new CSoundFile(f);
+    f = GetAttachment("shit.wav");	        shit = new CSoundFile(f);
+    f = GetAttachment("jesuschrist.wav");	jesusChrist = new CSoundFile(f);
+    
+    int randomsound;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Muahaha 3"))
+    {
+        if (!keySync->KeyPressed(18))
+        {
+
+			if (keySync->KeyPressed(96))
+    	    {
+        	    surprisemotherfucker->Play(2.0, 0.0, false);
+            	ShowMessage("Surprise, motherfucker.");
+        	}
+	        else if (keySync->KeyPressed(97))
+    	    {
+        	    laughtrack->Play(1.2, 0.0, false);
+            	ShowMessage("Ahahahahahahaha!");
+        	}
+	        else if (keySync->KeyPressed(98))
+	        {
+	            bullseye->Play(1.2, 0.0, false);
+	            ShowMessage("BULLSEYE");
+	        }
+	        else if (keySync->KeyPressed(99))
+	        {
+	            applause->Play(2.0, 0.0, false);
+	            ShowMessage("Bravo...");
+	        }
+	        else if (keySync->KeyPressed(100))
+	        {
+	            fuckyou->Play(1.2, 0.0, false);
+	            ShowMessage("FU");
+	        }
+	        else if (keySync->KeyPressed(101))
+	        {
+	            fuckyouandyou->Play(1.2, 0.0, false);
+	            ShowMessage("Fuck You.");
+	            ShowMessage("Fuck You.");
+	            ShowMessage("And Fuck You.");
+	        }
+	        else if (keySync->KeyPressed(102))
+	        {
+	            fuckyourownface->Play(1.2, 0.0, false);
+	            ShowMessage("Fuck your own face!");
+	        }
+	        else if (keySync->KeyPressed(103))
+	        {
+	            denied->Play(1.2, 0.0, false);
+	            ShowMessage("DENIED!");
+	        }
+	        else if (keySync->KeyPressed(104))
+	        {
+	            epicphail->Play(1.2, 0.0, false);
+	            ShowMessage("PHAIL!");
+	        }
+	        else if (keySync->KeyPressed(105))
+	        {
+	            fart->Play(1.2, 0.0, false);
+	            ShowMessage("It wasn't me!");
+	        }
+	        else if (keySync->KeyPressed(106))
+	        {
+	            coonalert->Play(2.0, 0.0, false);
+	            ShowMessage("Coon and Friends Alert!");
+	        }
+	        else if (keySync->KeyPressed(107))
+	        {
+	            kwakkwakkwak->Play(1.2, 0.0, false);
+	        }
+	        else if (keySync->KeyPressed(109))
+	        {
+	            fuckaduck->Play(1.2, 0.0, false);
+	            ShowMessage("Fuck.");
+	            ShowMessage("A.");
+	            ShowMessage("Duck.");
+	        }
+	        else if (keySync->KeyPressed(110))
+	        {
+	            cunt->Play(2.2, 0.0, false);
+	            ShowMessage("You stupid. Fucking. Cunt.");
+	        }
+	        else if (keySync->KeyPressed(111))
+	        {
+	            wahwahwaaaaah2->Play(2.2, 0.0, false);
+	            ShowMessage("Phaaaaaaaaaaaaaail =P");
+	        }
+        
+        }
+        
+        
+        if (keySync->KeyPressed(18))
+        {
+	        if (keySync->KeyPressed(96))
+	        {
+	            fuckmymouth->Play(2.2, 0.0, false);
+	        }
+	        else if (keySync->KeyPressed(97))
+	        {
+	            loveyourdick->Play(2.2, 0.0, false);
+	        }
+	        else if (keySync->KeyPressed(98))
+	        {
+	            timetoHide->Play(1.2, 0.0, false);
+	            ShowMessage("Time to hide, cowards!!");
+	        }
+	        else if (keySync->KeyPressed(99))
+	        {
+	            muaHaha->Play(1.2, 0.0, false);
+	            ShowMessage("Muahahahahahahaha!");
+	        }
+	        else if (keySync->KeyPressed(100))
+	        {
+	            headShot->Play(1.4, 0.0, false);
+	            ShowMessage("BOOOOOOOOOOOOM! Headshot :P");
+	        }
+	        else if (keySync->KeyPressed(101))
+	        {
+	            iWin->Play(4.0, 0.0, false);
+	            ShowMessage("I win =)");
+	        }
+	        else if (keySync->KeyPressed(102))
+	        {
+	            fuck->Play(1.2, 0.0, false);
+	            ShowMessage("FUCK !");
+	        }
+	        else if (keySync->KeyPressed(103))
+	        {
+	            dieBitch->Play(1.2, 0.0, false);
+	            ShowMessage("Die, bitch.");
+	        }
+	        else if (keySync->KeyPressed(104))
+	        {
+	            winning->Play(1.2, 0.0, false);
+	            ShowMessage("Winning.");
+	        }
+	        else if (keySync->KeyPressed(105))
+	        {
+	            bitchNigga->Play(1.2, 0.0, false);
+	            ShowMessage(":P");
+	        }
+	        else if (keySync->KeyPressed(106))
+	        {
+	            shadap->Play(3.0, 0.0, false);
+	            ShowMessage("STFU");
+	        }
+	        else if (keySync->KeyPressed(107))
+	        {
+	            allofurDead->Play(1.2, 0.0, false);
+	            ShowMessage("Yer all gonna die");
+	        }
+	        else if (keySync->KeyPressed(109))
+	        {
+	            gangnamStyle->Play(1.2, 0.0, false);
+	            ShowMessage("GANGNAM STYLE!");
+	            ShowMessage("Op");
+	            ShowMessage("Op");
+	        }
+	        else if (keySync->KeyPressed(110))
+	        {
+	            shit->Play(1.2, 0.0, false);
+	            ShowMessage("Shit.");
+	        }
+	        else if (keySync->KeyPressed(111))
+	        {
+	            jesusChrist->Play(2.2, 0.0, false);
+	            ShowMessage("Jesus. Fucking.");
+	            ShowMessage("Christ.");
+	        }
+        }
+        
+        else super;
+        
+    }
+    
+    else super;
+}

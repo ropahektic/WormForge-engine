@@ -1,0 +1,119 @@
+/* 
+
+Made by: DannyB, July 2022
+
+*/
+
+// This script displays which weapon menu the game is currently at (can easily be adapted to work with schemes other than those of WAS).
+
+require utils, utils_dannyb;
+
+CMenuInformerHandler : CObject;
+CBitmap32* GUI_Menu_Informer;
+string speedx_Menu_Informer;
+string speedy_Menu_Informer;
+int Menu_Informer_PosX;
+int Menu_Informer_PosY;
+
+int MI_Current_Menu;
+
+void Menu_Informer_SCRIPT::FirstFrame()
+{
+     new CMenuInformerHandler();
+     
+     Weapon_Informer_PosX = 0;
+     Weapon_Informer_PosY = 0;
+     
+     MI_Current_Menu = 1;
+   
+     keySync->AddKey(187); // + key (change menus)
+}
+
+void Menu_Informer_SCRIPT::InitGraphic()
+{ 
+     MI_Background  = GetAttachment("menu informer background.png");
+     GUI_Menu_Informer = LoadImage(MI_Background);
+}  
+
+CMenuInformerHandler::CMenuInformerHandler()
+{
+     super(Root, GS);  
+     
+     GUI_Menu_Informer_n = GUI_Menu_Informer;
+}
+
+// This displays the menu information on the 'Menu Informer Background'
+void CMenuInformerHandler::ListAndDraw()
+{
+     int a;
+     int b;
+
+     GUI_Menu_Informer_n->Rect(0, 0, 162, 30, 0);
+     
+     // Gets the team color for the current team
+     local cw = GetCurrentWorm();
+     local Team_Color = getWormColor(cw, 0) + 9;
+
+     // Displays what the current menu is
+     if(MI_Current_Menu == 1)
+     {                  
+          GS->Disp->DrawText(Team_Color, GUI_Menu_Informer_n, 56, 6, "Menu 1", &a, &b); 
+     }
+     else if(MI_Current_Menu == 2)
+     {                  
+          GS->Disp->DrawText(Team_Color, GUI_Menu_Informer_n, 56, 6, "Menu 2", &a, &b); 
+     }
+     else if(MI_Current_Menu == 3)
+     {                  
+          GS->Disp->DrawText(Team_Color, GUI_Menu_Informer_n, 56, 6, "Menu 3", &a, &b); 
+     }
+     else if(MI_Current_Menu == 4)
+     {                  
+          GS->Disp->DrawText(Team_Color, GUI_Menu_Informer_n, 56, 6, "Menu 4", &a, &b); 
+     }
+     else if(MI_Current_Menu == 5)
+     {                  
+          GS->Disp->DrawText(Team_Color, GUI_Menu_Informer_n, 56, 6, "Menu 5", &a, &b); 
+     }
+     else if(MI_Current_Menu == 6)
+     {                  
+          GS->Disp->DrawText(Team_Color, GUI_Menu_Informer_n, 56, 6, "Menu 6", &a, &b); 
+     }                               
+}
+
+// This activates the menu informer when a turn is active
+void CMenuInformerHandler::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+     local cw = GetCurrentWorm();
+   
+     if(cw != NullObj)
+     {
+          if(Type == M_FRAME)
+          {
+               ListAndDraw();
+          }
+      
+          if(Type == M_DRAWQUEUE)
+          {
+               Menu_Informer_PosX = 0 + GS->Disp->xRes / 2 - 92;
+               Menu_Informer_PosY = 0 - GS->Disp->yRes / 2 + 26;
+         
+               AddInterfaceBitmap(15, Menu_Informer_PosX, Menu_Informer_PosY, GUI_Menu_Informer_n, 162, 30, 1);
+          }
+     } 
+}
+
+// This is where the information about the current menu is gathered
+override void CTurnGame::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{        
+     // Starts the checking process everytime the menu is changed  
+     if(Current_Weapon != NullObj)
+     {
+          if(keySync->KeyPressedNow(187))
+          {    
+               MI_Current_Menu = Current_Weapon->GetPageIndex();
+          }
+     }
+     
+     super;         
+}

@@ -1,0 +1,2272 @@
+// Core of code taken from "traps.pxl" library. Thanks to authors for great job!
+// modifications to work as Portals for Portal Gun made by PyroMan ;D
+
+require utils, utils_steps, utils_pyroman, p_animation, pxparticles, p_weapgraphics, p_weapsounds;
+
+#PORTAL
+
+CPortal : CObject;
+CSprite* tele_glowish;
+CSoundFile* portal_teleportation;
+CColMask* portal_mask_50;
+
+
+void portal_script::InitGraphic()
+{
+     CFile* f;
+     f = GetAttachment("lightning_glow.png");
+     tele_glowish = LoadSprite(f, 1, 0);
+     
+     f = GetAttachment("portal_teleport.wav");       portal_teleportation = new CSoundFile(f);
+     portal_mask_50 = new CColMask(20, 20, MakeRectMask(40,40));
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    portal_readed = false;
+}
+
+CPortal::CPortal(int type, int x, int y, int sizeX, int sizeY, int TurnSide, int spy, bool ExitOnly, bool LandTele, string linkedTo, string name, bool trap, int ang_type)
+{
+  super(Root, GS);
+  
+  p_mask = portal_mask_50;
+  
+  teleMissiles = true;
+  teleWorms = true;
+  teleMines = true;
+  teleCrates = true;
+  teleDrums = true;
+  teleBowl = true;
+  teleArrow = true;
+  teleCross = true;
+  teleMagnets = true;
+  
+  timer_to_deactivate = 150;
+  
+  memX = 0;
+  memY = 0;
+
+  isBlue = false;
+  isOrange = false;
+  if (type == 1) isOrange = true;
+  if (type == 2) isBlue = true;
+  
+  Disabled = false;
+  Px = x;
+  Py = y;
+  pr_x1 = x - sizeX/2;
+  pr_x2 = x + sizeX/2;
+  pr_y1 = y - sizeY/2;
+  pr_y2 = y + sizeY/2;
+  
+  xSize = sizeX;
+  ySize = sizeY;
+  
+  spx1 = 0;
+  spy1 = 0;
+  
+////////////////////////////////////  
+  portal_angle_type = ang_type;
+  
+  isSide = false;
+  isRight = false;
+  isLeft = false;
+  isBottom = false;
+  isTopRight = false;
+  isTopLeft = false;
+  isBottomRight = false;
+  isBottomLeft = false;
+  isAngled = false;
+  isTop = false;
+  isUP = false;
+  if (portal_angle_type == 3) {             // was : 4 3 2 1 5 6 7 8
+      isRight = true; isSide = true;
+      spx1 = 1; spy1 = 0;
+  }
+  else if (portal_angle_type == 7){
+      isLeft = true; isSide = true;
+      spx1 = -1; spy1 = 0;
+  }
+  else if (portal_angle_type == 5) { 
+      isBottom = true; isUP = true;
+      spx1 = 0; spy1 = -1;
+  }
+  else if (portal_angle_type == 1) { 
+      isTop = true; isUP = true;
+      spx1 = 0; spy1 = 1;
+  }
+  else if (portal_angle_type == 2) { 
+      isTopRight = true; isAngled = true;
+      spx1 = -1; spy1 = 1;
+  }
+  else if (portal_angle_type == 6) { 
+      isBottomLeft = true; isAngled = true;
+      spx1 = 1; spy1 = -1;
+  }
+  else if (portal_angle_type == 8) { 
+      isTopLeft = true; isAngled = true;
+      spx1 = 1; spy1 = 1;
+  }
+  else if (portal_angle_type == 4) { 
+      isBottomRight = true; isAngled = true;
+      spx1 = -1; spy1 = -1;
+  }
+  else 
+  {
+    isUp = true;                                        // alternative rough reading, but script will never get this place :D
+    if (TurnSide > 0) {
+      isRight = true; isLeft = false;
+    }
+    else {
+      isRight = false; isLeft = true;
+    }
+    if (spy > 15) {
+      isUP = true; isBottom = true; isTop = false;
+    }
+    else if (spy < -15) {
+      isUP = true; isBottom = false; isTop = true;
+    }
+    else {
+      isSide = true; 
+      isUP = false;
+    }
+  }   
+////////////////////////////////////
+    
+  isExit = ExitOnly;
+  tpMissiles = true; 
+  trapTeleport = trap;  
+  landTeleport = LandTele;
+  // 1 - top
+  // 2 - bottom
+  // 3 - left
+  // 4 - right 
+  
+  if (isExit) landTeleport = false;
+                                                           // Setting point of teleportation (to be out of wall)
+  if (isSide)
+  {
+    if (isRight) tp_x = int(pr_x1);
+    if (isLeft) tp_x = int(pr_x2);
+  } else tp_x = int(pr_x1 + (pr_x2 - pr_x1) / 2);
+  
+  if (isUP)
+  { 
+    if (isBottom) tp_y = int(pr_y1);  // 5 - let`s call it "gravity speed factor". re really need it to be more top :P
+    if (isTop) tp_y = int(pr_y2);
+  } else tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 2);
+  
+  if (isAngled)
+  {
+    if (isTopRight)   // x: min, y: 2/3
+    {
+      tp_x = int(pr_x1 + 5);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 3 * 2);
+    }
+    if (isTopLeft)   // x: max, y: 2/3
+    {
+      tp_x = int(pr_x1 + (pr_x2 - pr_x1) - 5);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 3 * 2);
+    }
+    if (isBottomRight)   // x: min, y: 1/3
+    {
+      tp_x = int(pr_x1 + 5);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 3);
+    }
+    if (isBottomLeft)   // x: max, y: 1/3
+    {
+      tp_x = int(pr_x1 + (pr_x2 - pr_x1) - 5);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 3);
+    }
+  } else {
+      tp_x = int(pr_x1 + (pr_x2 - pr_x1) / 2);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 2);
+  } 
+  timer = 0;
+  waiting = false;
+  active = true;
+  start_be_inactive = false;
+  active_timer = 0;
+  LinkedTo = linkedTo;
+  t_name = StrSave(name);
+  linked = CPortal(NullObj);
+  
+  timer2 = 0;
+  anim_fps = 500;
+  
+  if (landTeleport)
+  {
+    touchSensor = new CTouchSensor(this, pr_x1, pr_y1, pr_x2 - pr_x1, pr_y2 - pr_y1);
+  }
+};
+
+
+
+// we don`t need new portals, we can use old ones with just updated parameters. Less portal objects - faster gameplay :P
+// i wish i could update only x, y parameters :D We need update them all, coz they all connected to each other.
+
+void CPortal::Update(int type, int x, int y, int sizeX, int sizeY, int TurnSide, int spy, bool ExitOnly, bool LandTele, string linkedTo, string name, bool trap, int ang_type)
+{ 
+    
+  teleMissiles = true;
+  teleWorms = true;
+  teleMines = true;
+  teleCrates = true;
+  teleDrums = true;
+  teleBowl = true;
+  teleArrow = true;
+  teleCross = true;
+  teleMagnets = true;
+  
+  p_mask = portal_mask_50;
+  
+  timer_to_deactivate = 150;
+  
+  Disabled = false;
+  Px = x;
+  Py = y;
+
+  isBlue = false;
+  isOrange = false;
+  if (type == 1) isOrange = true;
+  if (type == 2) isBlue = true;
+  
+  pr_x1 = x - sizeX/2;
+  pr_x2 = x + sizeX/2;
+  pr_y1 = y - sizeY/2;
+  pr_y2 = y + sizeY/2;
+  
+  xSize = sizeX;
+  ySize = sizeY;
+  
+  spx1 = 0;
+  spy1 = 0;
+  
+////////////////////////////////////
+  portal_angle_type = ang_type;
+  
+  isSide = false;
+  isRight = false;
+  isLeft = false;
+  isBottom = false;
+  isTopRight = false;
+  isTopLeft = false;
+  isBottomRight = false;
+  isBottomLeft = false;
+  isAngled = false;
+  isTop = false;
+  isUP = false;
+  if (portal_angle_type == 3) {             // was : 4 3 2 1 5 6 7 8
+      isRight = true; isSide = true;
+      spx1 = 1; spy1 = 0;
+  }
+  else if (portal_angle_type == 7){
+      isLeft = true; isSide = true;
+      spx1 = -1; spy1 = 0;
+  }
+  else if (portal_angle_type == 5) { 
+      isBottom = true; isUP = true;
+      spx1 = 0; spy1 = -1;
+  }
+  else if (portal_angle_type == 1) { 
+      isTop = true; isUP = true;
+      spx1 = 0; spy1 = 1;
+  }
+  else if (portal_angle_type == 2) { 
+      isTopRight = true; isAngled = true;
+      spx1 = -1; spy1 = 1;
+  }
+  else if (portal_angle_type == 6) { 
+      isBottomLeft = true; isAngled = true;
+      spx1 = 1; spy1 = -1;
+  }
+  else if (portal_angle_type == 8) { 
+      isTopLeft = true; isAngled = true;
+      spx1 = 1; spy1 = 1;
+  }
+  else if (portal_angle_type == 4) { 
+      isBottomRight = true; isAngled = true;
+      spx1 = -1; spy1 = -1;
+  }
+  else 
+  {
+    isUp = true;
+    if (TurnSide > 0) {
+      isRight = true; isLeft = false;
+    }
+    else {
+      isRight = false; isLeft = true;
+    }
+    if (spy > 15) {
+      isUP = true; isBottom = true; isTop = false;
+    }
+    else if (spy < -15) {
+      isUP = true; isBottom = false; isTop = true;
+    }
+    else {
+      isSide = true; 
+      isUP = false;
+    }
+  }   
+////////////////////////////////////
+     
+  isExit = ExitOnly;
+  tpMissiles = true; 
+  trapTeleport = trap;  
+  landTeleport = LandTele;
+  // 1 - top
+  // 2 - bottom
+  // 3 - left
+  // 4 - right 
+  
+  if (isExit) landTeleport = false;
+
+  if (isSide)
+  {
+    if (isRight) tp_x = int(pr_x1);
+    if (isLeft) tp_x = int(pr_x2);
+  } else tp_x = int(pr_x1 + (pr_x2 - pr_x1) / 2);
+  
+  if (isUP)
+  { 
+    if (isBottom) tp_y = int(pr_y1);
+    if (isTop) tp_y = int(pr_y2);
+  } else tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 2);
+  
+  if (isAngled)
+  {
+    if (isTopRight)   // x: min, y: 2/3
+    {
+      tp_x = int(pr_x1 + 5);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 3 * 2);
+    }
+    if (isTopLeft)   // x: max, y: 2/3
+    {
+      tp_x = int(pr_x1 + (pr_x2 - pr_x1) - 5);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 3 * 2);
+    }
+    if (isBottomRight)   // x: min, y: 1/3
+    {
+      tp_x = int(pr_x1 + 5);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 3);
+    }
+    if (isBottomLeft)   // x: max, y: 1/3
+    {
+      tp_x = int(pr_x1 + (pr_x2 - pr_x1) - 5);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 3);
+    }
+  } else {
+      tp_x = int(pr_x1 + (pr_x2 - pr_x1) / 2);
+      tp_y = int(pr_y1 + (pr_y2 - pr_y1) / 2);
+  } 
+   
+  timer = 0;
+  waiting = false;
+  LinkedTo = linkedTo;
+  t_name = StrSave(name);
+  linked = CPortal(NullObj);
+  
+  timer2 = 0;
+  
+  if (landTeleport)
+  {
+    touchSensor = new CTouchSensor(this, pr_x1, pr_y1, pr_x2 - pr_x1, pr_y2 - pr_y1);
+  }
+}
+
+
+void CPortal::TeleportObject(CGObject* obj)
+{ 
+if (Disabled == false && active)
+{              
+ if (obj->ColMask->Check(linked->tp_x, linked->tp_y, CGObject(Env->Objs.Objs[0])->ColMask, 0, 0))
+ {
+    GG->land->MakeHole( 15, linked->tp_x, linked->tp_y);  // this can happen in veeeery limited situations 
+//    GG->land->ApplyMask( 15, linked->tp_x, linked->tp_y);
+ }
+ if (obj != NullObj)
+ {
+ if (obj->ClType == OC_Worm) 
+ {
+  waiting = true;
+  linked->waiting = true;
+        
+  local worm = CWorm(obj);
+  local prepare_state;
+  
+  if (worm->ObjState == WS_WALKING) worm->SetState(WS_IDLE);    
+  if (worm->ObjState == WS_ROPING) worm->SetState(WS_AFTERROPE);
+//  if (worm->ObjState == WS_BLOWTORCH) {worm->SetState(WS_IDLE); prepare_state = 1;}    // seems glitchy.
+//  if (worm->ObjState == WS_DRILLING) {worm->SetState(WS_IDLE); prepare_state = 2;}
+        
+  worm->PosX = linked->tp_x;
+  worm->PosY = linked->tp_y;
+  memX = worm->SpX;
+  memY = worm->SpY;
+  
+  worm->portal_just_teleported = true;
+  
+  if (prepare_state != 0)
+  {
+    if (prepare_state == 1) 
+    {
+      worm->SetState(WS_BLOWTORCH);
+    }
+    else if (prepare_state == 2) 
+    {
+      worm->SetState(WS_DRILLING);
+    }
+    prepare_state = 0;
+  }
+///////////////////////////////////////////////////////////////////
+////////    Here is where Magic begins ;D    //////////////////////
+///////////////////////////////////////////////////////////////////  
+  if (isSide)
+  {
+    if (isRight)                                                                //  Right, worm
+    {
+        if (isRight == linked->isRight)
+        {
+            worm->SpX = -memX;
+            if (worm->SpX > 2) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isRight == linked->isLeft)
+        {
+            worm->SpX = memX;
+            if (worm->SpX < 2) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isRight == linked->isBottom)
+        {
+            worm->SpX = memY;
+            worm->SpY = memX;
+            if(worm->SpY > 2) worm->SpY = -worm->SpY;
+            else if (worm->SpY > -2) worm->SpX = -2;
+        }
+        else if (isRight == linked->isTop)
+        {
+            worm->SpX = memY;
+            worm->SpY = memX;
+            if(worm->SpY < -2) worm->SpY = -worm->SpY;
+            else if(worm->SpY < 2) worm->SpY = 2;
+        }
+        else if (isRight == linked->isTopRight)
+        {
+            worm->SpX = -memX / 2;
+            worm->SpY = -memY + memX / 2;
+            if(worm->SpX > 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isRight == linked->isTopLeft)
+        {
+            worm->SpX = memX / 2;
+            worm->SpY = memY + memX / 2;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isRight == linked->isBottomRight)
+        {
+            worm->SpX = -memX / 2 + memY;
+            worm->SpY = -memX;
+            if(worm->SpX > 0) worm->SpX = -worm->SpX;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isRight == linked->isBottomLeft)
+        {
+            worm->SpX = -memX / 2;
+            worm->SpY = -memY - memX / 2;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+    }
+    else if (isLeft)                                                               // Left, worm
+    {
+        if (isLeft == linked->isLeft) 
+        {   
+            worm->SpX = memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isLeft == linked->isRight) 
+        {   
+            worm->SpX = memX;
+            if (worm->SpX > 2) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isLeft == linked->isBottom)
+        {
+            worm->SpX = memY;
+            worm->SpY = memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isLeft == linked->isTop)
+        {
+            worm->SpX = memY;
+            worm->SpY = memX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+        }
+        else if (isLeft == linked->isTopRight)
+        {
+            worm->SpX = memX / 2;
+            worm->SpY = memY + memX / 2;
+            if(worm->SpX > 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isLeft == linked->isTopLeft)
+        {
+            worm->SpX = -memX / 2;
+            worm->SpY = memY - memX / 2;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isLeft == linked->isBottomRight)
+        {
+            worm->SpX = memX / 2;
+            worm->SpY = -memY + memX / 2;
+            if(worm->SpX > 0) worm->SpX = -worm->SpX;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isLeft == linked->isBottomLeft)
+        {
+            worm->SpX = memX / 2;
+            worm->SpY = -memY - memX / 2;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+    }
+  }
+  else if (isUP)
+  {
+    if (isBottom)                                                                   // Bottom, worm
+    {
+        if (isBottom == linked->isBottom)
+        {
+            worm->SpY = -memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpY > -2 && worm->SpY < 0) worm->SpY = -2;
+        }
+        else if (isBottom == linked->isTop)
+        {
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            
+        }
+        else if (isBottom == linked->isRight)
+        {
+            worm->SpX = -memY;
+            worm->SpY = -memX;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2) worm->SpX = -2;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottom == linked->isLeft)
+        {
+            worm->SpX = -memY;
+            worm->SpY = -memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX < 2 && worm->SpX > 0) worm->SpX = 2;
+            if (worm->SpY < 2 && worm->SpY > 0) worm->SpY = 2;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottom == linked->isTopRight)
+        {
+            worm->SpX = -memX + memY / 2;
+            worm->SpY = memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2) worm->SpX = -2;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpY > 0 && worm->SpY < 2) worm->SpY = 2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottom == linked->isTopLeft)
+        {
+            worm->SpX = -memX - memY / 2;
+            worm->SpY = -memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX < 2) worm->SpX = 2;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpY < 2 && worm->SpY > 0) worm->SpY = 2;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottom == linked->isBottomRight)
+        {
+            worm->SpX = -memX + memY / 2;
+            worm->SpY = memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2) worm->SpX = -2;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpY > -2 && worm->SpY < 2) worm->SpY = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottom == linked->isBottomLeft)
+        {
+            if (memX < 0) memX = -memX;
+            worm->SpX = memY / 2;
+            worm->SpY = memY / 2 + memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX < 2) worm->SpX = 2;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpY > -2 && worm->SpY < 2) worm->SpY = -2;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+    }
+    else if (isTop)                                                                   // Top, worm
+    {
+        if (isTop == linked->isTop)
+        {
+            worm->SpY = -memY;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpY < 2) worm->SpY = 2;
+        }
+        else if (isTop == linked->isBottom)
+        {
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isTop == linked->isRight)
+        {
+            worm->SpX = memY;
+            worm->SpY = -memX;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTop == linked->isLeft)
+        {
+            worm->SpX = -memY;
+            worm->SpY = -memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTop == linked->isTopRight)
+        {
+            worm->SpX = -memY / 2;
+            worm->SpY = -memY / 2 - memX;
+            if(worm->SpX > 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTop == linked->isTopLeft)
+        {
+            worm->SpX = -memY / 2;
+            worm->SpY = -memX - memY / 2;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTop == linked->isBottomRight)
+        {
+            worm->SpX = memY / 2;
+            worm->SpY = memY / 2 - memX;
+            if(worm->SpX > 0) worm->SpX = -worm->SpX;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTop == linked->isBottomLeft)
+        {
+            worm->SpX = -memY / 2;
+            worm->SpY = memY / 2 - memX;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+     }
+  }
+     /////////////////////// ANGLED ////////////////////////
+  else if (isAngled)
+  {
+     if (isBottomLeft)                                                            // Bottom-Left, worm
+     {
+        if (isBottomLeft == linked->isBottomLeft)
+        {
+            worm->SpY = -memY;
+            worm->SpX = -memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomLeft == linked->isTopRight)
+        {
+            worm->SpX = -memX;
+            worm->SpY = memY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomLeft == linked->isBottomRight)
+        {
+            worm->SpY = -memY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomLeft == linked->isTopLeft)
+        {
+            worm->SpX = -memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomLeft == linked->isRight)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = -memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomLeft == linked->isLeft)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomLeft == linked->isTop)
+        {
+            worm->SpY = memY / 2 + memX;
+            worm->SpX = memY / 2 + memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomLeft == linked->isBottom)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = -memY / 2 + memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+     }
+     else if (isBottomRight)                                                        // Bottom-right, worm
+     {
+        if (isBottomRight == linked->isBottomRight)
+        {
+            worm->SpY = -memY;
+            worm->SpX = -memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        if (isBottomRight == linked->isBottomLeft)
+        {
+            worm->SpY = -memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomRight == linked->isTopRight)
+        {
+            worm->SpX = -memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomRight == linked->isTopLeft)
+        {
+            worm->SpX = memX;
+            worm->SpY = memY;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomRight == linked->isRight)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = -memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomRight == linked->isLeft)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomRight == linked->isTop)
+        {
+            worm->SpY = memY / 2 - memX;
+            worm->SpX = memY / 2 + memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isBottomRight == linked->isBottom)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = -memY / 2 + memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+     }
+     else if (isTopLeft)                                                            // Top-left, worm
+     {
+        if (isTopLeft == linked->isTopLeft)
+        {
+            worm->SpY = -memY;
+            worm->SpX = -memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopLeft == linked->isTopRight)
+        {
+            worm->SpY = -memY;
+            worm->SpX = memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopLeft == linked->isBottomRight)
+        {
+            worm->SpX = memX;
+            worm->SpY = memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopLeft == linked->isBottomLeft)
+        {
+            worm->SpX = -memX;
+            worm->SpY = memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopLeft == linked->isRight)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = -memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopLeft == linked->isLeft)
+        {
+            worm->SpY = memY / 2 - memX;
+            worm->SpX = memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopLeft == linked->isTop)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = memY / 2 + memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopLeft == linked->isBottom)
+        {
+            worm->SpY = memY / 2 + memX;
+            worm->SpX = -memY / 2 + memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+     }
+     else if (isTopRight)                                                          // Top-right, worm
+     {
+        if (isTopRight == linked->isTopRight)
+        {
+            worm->SpY = -memY;
+            worm->SpX = -memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        if (isTopRight == linked->isTopLeft)
+        {
+            worm->SpY = -memY;
+            worm->SpX = memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        if (isTopRight == linked->isBottomRight)
+        {
+            worm->SpX = -memX;
+            worm->SpY = memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopRight == linked->isBottomLeft)
+        {
+            worm->SpX = memX;
+            worm->SpY = memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopRight == linked->isRight)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = -memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopRight == linked->isLeft)
+        {
+            worm->SpY = memY / 2 + memX;
+            worm->SpX = memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide < 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopRight == linked->isTop)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = memY / 2 + memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+        else if (isTopRight == linked->isBottom)
+        {
+            worm->SpY = memY / 2 - memX;
+            worm->SpX = -memY / 2 + memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->TurnSide > 0) worm->TurnSide = -worm->TurnSide;
+        }
+     }
+  }
+
+//////////////////////////////////////////////
+////////// For Other Objects /////////////////
+//////////////////////////////////////////////  
+  } else 
+  {
+     local worm = obj;        // becouse i`m gonna copy that huge worm`s script and lazy to rename each "worm" to "obj" :P
+     worm->PosX = linked->tp_x;
+     worm->PosY = linked->tp_y;
+     memX = worm->SpX;
+     memY = worm->SpY;
+  if (isSide)
+  {
+    if (isRight)
+    {                                                                             // Right, Obj
+        if (isRight == linked->isRight)
+        {
+            worm->SpX = -memX;
+            if (worm->SpX > 2) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isRight == linked->isLeft)
+        {
+            worm->SpX = memX;
+            if (worm->SpX < 2) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isRight == linked->isBottom)
+        {
+            worm->SpX = memY;
+            worm->SpY = memX;
+            if(worm->SpY > 2) worm->SpY = -worm->SpY;
+            else if (worm->SpY > -2) worm->SpX = -2;
+        }
+        else if (isRight == linked->isTop)
+        {
+            worm->SpX = memY;
+            worm->SpY = memX;
+            if(worm->SpY < -2) worm->SpY = -worm->SpY;
+            else if(worm->SpY < 2) worm->SpY = 2;
+        }
+        else if (isRight == linked->isTopRight)
+        {
+            worm->SpX = -memX / 2;
+            worm->SpY = -memY + memX / 2;
+            if(worm->SpX > 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isRight == linked->isTopLeft)
+        {
+            worm->SpX = memX / 2;
+            worm->SpY = memY + memX / 2;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isRight == linked->isBottomRight)
+        {
+            worm->SpX = -memX / 2 + memY;
+            worm->SpY = -memX / 2;
+            if(worm->SpX > 0) worm->SpY = -worm->SpY;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isRight == linked->isBottomLeft)
+        {
+            worm->SpX = -memX / 2;
+            worm->SpY = -memY - memX / 2;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+    }
+    else if (isLeft)                                                             // Left, Obj
+    {
+        if (isLeft == linked->isLeft) 
+        {   
+            worm->SpX = memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isLeft == linked->isRight) 
+        {   
+            worm->SpX = memX;
+            if (worm->SpX > 2) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isLeft == linked->isBottom)
+        {
+            worm->SpX = memY;
+            worm->SpY = memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isLeft == linked->isTop)
+        {
+            worm->SpX = memY;
+            worm->SpY = memX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+        }
+        else if (isLeft == linked->isTopRight)
+        {
+            worm->SpX = memX / 2;
+            worm->SpY = memY + memX / 2;
+            if(worm->SpX > 0) worm->SpY = -worm->SpY;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isLeft == linked->isTopLeft)
+        {
+            worm->SpX = -memX / 2;
+            worm->SpY = memY - memX / 2;
+            if(worm->SpX < 0) worm->SpY = -worm->SpY;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isLeft == linked->isBottomRight)
+        {
+            worm->SpX = memX / 2;
+            worm->SpY = -memY - memX / 2;
+            if(worm->SpX > 0) worm->SpY = -worm->SpY;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isLeft == linked->isBottomLeft)
+        {
+            worm->SpX = -memX / 2;
+            worm->SpY = -memY - memX / 2;
+            if(worm->SpX < 0) worm->SpY = -worm->SpY;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+    }
+  }
+  else if (isUP)
+  {
+    if (isBottom)                                                                  // Bottom, Obj
+    {
+        if (isBottom == linked->isBottom)
+        {
+            worm->SpY = -memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpY > -2 && worm->SpY < 0) worm->SpY = -2;
+        }
+        else if (isBottom == linked->isTop)
+        {
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            
+        }
+        else if (isBottom == linked->isRight)
+        {
+            worm->SpX = -memY;
+            worm->SpY = -memX;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2) worm->SpX = -2;
+            if (worm->SpY > -2 && worm->SpY < 0) worm->SpY = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isBottom == linked->isLeft)
+        {
+            worm->SpX = -memY;
+            worm->SpY = -memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX < 2) worm->SpX = 2;
+            if (worm->SpY < 2 && worm->SpY > 0) worm->SpY = 2;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isBottom == linked->isTopRight)
+        {
+            worm->SpX = -memX + memY / 2;
+            worm->SpY = memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2) worm->SpX = -2;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpY > 0 && worm->SpY < 2) worm->SpY = 2;
+        }
+        else if (isBottom == linked->isTopLeft)
+        {
+            worm->SpX = -memX - memY / 2;
+            worm->SpY = -memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX < 2) worm->SpX = 2;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpY < 2 && worm->SpY > 0) worm->SpY = 2;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isBottom == linked->isBottomRight)
+        {
+            worm->SpX = -memX + memY / 2;
+            worm->SpY = memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2) worm->SpX = -2;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpY > -2 && worm->SpY < 0) worm->SpY = -2;
+        }
+        else if (isBottom == linked->isBottomLeft)
+        {
+            if (memX < 0) memX = -memX;
+            worm->SpX = memY / 2;
+            worm->SpY = memY / 2 + memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpY > -2 && worm->SpY < 2) worm->SpY = -2;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+    }
+    else if (isTop)                                                                 // Top, Obj
+    {
+        if (isTop == linked->isTop)
+        {
+            worm->SpY = -memY;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpY < 2) worm->SpY = 2;
+        }
+        else if (isTop == linked->isBottom)
+        {
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpY > -2 && worm->SpY < 0) worm->SpY = -2;
+        }
+        else if (isTop == linked->isRight)
+        {
+            worm->SpX = memY;
+            worm->SpY = -memX;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isTop == linked->isLeft)
+        {
+            worm->SpX = -memY;
+            worm->SpY = -memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isTop == linked->isTopRight)
+        {
+            worm->SpX = -memY / 2;
+            worm->SpY = -memY / 2 - memX;
+            if(worm->SpX > 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isTop == linked->isTopLeft)
+        {
+            worm->SpX = -memY / 2;
+            worm->SpY = -memX - memY / 2;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isTop == linked->isBottomRight)
+        {
+            worm->SpX = memY / 2;
+            worm->SpY = memY / 2 - memX;
+            if(worm->SpX > 0) worm->SpX = -worm->SpX;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isTop == linked->isBottomLeft)
+        {
+            worm->SpX = -memY / 2;
+            worm->SpY = memY / 2 - memX;
+            if(worm->SpX < 0) worm->SpX = -worm->SpX;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+     }
+  }
+     /////////////////////// ANGLED ////////////////////////     For Objects ;D
+  else if (isAngled)
+  {
+     if (isBottomLeft)                                                             // Bottom-Left, Obj
+     {
+        if (isBottomLeft == linked->isBottomLeft)
+        {
+            worm->SpY = -memY;
+            worm->SpX = -memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isBottomLeft == linked->isTopRight)
+        {
+            worm->SpX = -memX;
+            worm->SpY = memY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isBottomLeft == linked->isBottomRight)
+        {
+            worm->SpY = -memY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isBottomLeft == linked->isTopLeft)
+        {
+            worm->SpX = -memX;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isBottomLeft == linked->isRight)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = -memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isBottomLeft == linked->isLeft)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isBottomLeft == linked->isTop)
+        {
+            worm->SpY = memY / 2 + memX;
+            worm->SpX = memY / 2 + memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+        }
+        else if (isBottomLeft == linked->isBottom)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = -memY / 2 + memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+     }
+     else if (isBottomRight)                                                        // Bottom-Right, Obj
+     {
+        if (isBottomRight == linked->isBottomRight)
+        {
+            worm->SpY = -memY;
+            worm->SpX = -memX;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        if (isBottomRight == linked->isBottomLeft)
+        {
+            worm->SpY = -memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isBottomRight == linked->isTopRight)
+        {
+            worm->SpX = -memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isBottomRight == linked->isTopLeft)
+        {
+            worm->SpX = memX;
+            worm->SpY = memY;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY; 
+            if (worm->SpX < 0) worm->SpX = -worm->SpX; 
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isBottomRight == linked->isRight)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = -memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isBottomRight == linked->isLeft)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isBottomRight == linked->isTop)
+        {
+            worm->SpY = memY / 2 - memX;
+            worm->SpX = memY / 2 + memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+        }
+        else if (isBottomRight == linked->isBottom)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = -memY / 2 + memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+     }
+     else if (isTopLeft)                                                            // Top-Left
+     {
+        if (isTopLeft == linked->isTopLeft)
+        {
+            worm->SpY = -memY;
+            worm->SpX = -memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isTopLeft == linked->isTopRight)
+        {
+            worm->SpY = -memY;
+            worm->SpX = memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isTopLeft == linked->isBottomRight)
+        {
+            worm->SpX = memX;
+            worm->SpY = memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isTopLeft == linked->isBottomLeft)
+        {
+            worm->SpX = -memX;
+            worm->SpY = memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isTopLeft == linked->isRight)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = -memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isTopLeft == linked->isLeft)
+        {
+            worm->SpY = memY / 2 - memX;
+            worm->SpX = memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isTopLeft == linked->isTop)
+        {
+            worm->SpY = -memY / 2 + memX;
+            worm->SpX = memY / 2 + memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+        }
+        else if (isTopLeft == linked->isBottom)
+        {
+            worm->SpY = memY / 2 + memX;
+            worm->SpX = -memY / 2 + memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+     }
+     else if (isTopRight)                                                            // Top-Right, Obj
+     {
+        if (isTopRight == linked->isTopRight)
+        {
+            worm->SpY = -memY;
+            worm->SpX = -memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        if (isTopRight == linked->isTopLeft)
+        {
+            worm->SpY = -memY;
+            worm->SpX = memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        if (isTopRight == linked->isBottomRight)
+        {
+            worm->SpX = -memX;
+            worm->SpY = memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+        }
+        else if (isTopRight == linked->isBottomLeft)
+        {
+            worm->SpX = memX;
+            worm->SpY = memY;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+        }
+        else if (isTopRight == linked->isRight)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = -memY / 2;
+            if (worm->SpX > 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = -2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isTopRight == linked->isLeft)
+        {
+            worm->SpY = memY / 2 + memX;
+            worm->SpX = memY / 2;
+            if (worm->SpX < 0) worm->SpX = -worm->SpX;
+            if (worm->SpX > -2 && worm->SpX < 2) worm->SpX = 2;
+            if(worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+        else if (isTopRight == linked->isTop)
+        {
+            worm->SpY = -memY / 2 - memX;
+            worm->SpX = memY / 2 + memX;
+            if (worm->SpY < 0) worm->SpY = -worm->SpY;
+        }
+        else if (isTopRight == linked->isBottom)
+        {
+            worm->SpY = memY / 2 - memX;
+            worm->SpX = -memY / 2 + memX;
+            if (worm->SpY > 0) worm->SpY = -worm->SpY;
+        }
+     }
+  }
+  }
+}
+} // else GG->WriteToChat( 3, "Disabled", false); // if disabled 
+}
+
+
+void CPortal::DoTeleportationEffects()
+{
+    if (isOrange)
+    {
+    for(int i=0 ; i<5 ; i += 1)
+	{
+    pP = new PxParticle(tele_glowish->Index, Px, Py);
+		pP->SetLifeTime(40);
+		pP->GravityFactor(-0.5);
+		pP->SetRandomVelocity(3.5, 8.0);
+		pP->SetAirResistance(0.5);
+		pP->SetAlpha(255);
+		s = RandomFloat(0.3,1.0);
+		pP->SetStartSize(s, s);
+		pP->SetEndSize(0.01, 0.01);
+		pP->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		pP->SetStartColor(255,255 - s,0);
+		pP->SetEndColor(255,80 - s,0);
+		
+		pP->SetMotionRandomness(3.0);
+	}
+    } 
+    if (isBlue) {
+        for(int i=0 ; i<5 ; i += 1)
+	{
+    pP = new PxParticle(tele_glowish->Index, Px, Py);
+		pP->SetLifeTime(40);
+		pP->GravityFactor(-0.5);
+		pP->SetRandomVelocity(3.5, 8.0);
+		pP->SetAirResistance(0.5);
+		pP->SetAlpha(255);
+		s = RandomFloat(0.3,1.0);
+		pP->SetStartSize(s, s);
+		pP->SetEndSize(0.01, 0.01);
+		pP->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		pP->SetStartColor(0,120 - s,255);
+		pP->SetEndColor(0,80 - s,255);
+		
+		pP->SetMotionRandomness(3.0);
+	}
+    }
+}
+
+void CPortal::DoPortalEffects()
+{
+    if (isOrange)
+    {
+    pP = new PxParticle(tele_glowish->Index, Px, Py);
+		
+                r = 12.0;
+                pP->SetAngle( r);
+                s = 50.0;
+                pP->SetAngleSpeed( s);
+                pP->SetLifeTime(15);
+		pP->GravityFactor(-0.5);
+		pP->SetRandomVelocity(2.5, 4.0);
+		pP->SetAirResistance(0.5);
+		pP->SetAlpha(255);
+		s = RandomFloat(0.1,0.4);
+		pP->SetStartSize(s, s);
+		pP->SetEndSize(0.01, 0.01);
+		pP->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		pP->SetStartColor(255,255 - s,0);
+		pP->SetEndColor(255,80 - s,0);
+		
+		pP->SetMotionRandomness(1.0);
+    } 
+    if (isBlue) 
+    {
+    pP = new PxParticle(tele_glowish->Index, Px, Py);
+		r = 0.9;
+                pP->SetAngle( r);
+                s = 10.0;
+                pP->SetAngleSpeed( s);
+                pP->SetLifeTime(15);
+		pP->GravityFactor(-0.5);
+		pP->SetRandomVelocity(2.5, 4.0);
+		pP->SetAirResistance(0.5);
+		pP->SetAlpha(255);
+		s = RandomFloat(0.1,0.4);
+		pP->SetStartSize(s, s);
+		pP->SetEndSize(0.01, 0.01);
+		pP->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		pP->SetStartColor(0,120 - s,255);
+		pP->SetEndColor(0,80 - s,255);
+		
+		pP->SetMotionRandomness(1.0);
+    }
+}
+
+void CPortal::DoFireTeleportationEffects()
+{
+    if (isOrange)
+    {
+    for(int i=0 ; i<2 ; i += 1)
+	{
+    pP = new PxParticle(tele_glowish->Index, Px, Py);
+		pP->SetLifeTime(40);
+		pP->GravityFactor(-0.5);
+		pP->SetRandomVelocity(3.5, 8.0);
+		pP->SetAirResistance(0.5);
+		pP->SetAlpha(255);
+		s = RandomFloat(0.3,1.0);
+		pP->SetStartSize(s, s);
+		pP->SetEndSize(0.01, 0.01);
+		pP->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		pP->SetStartColor(255,255 - s,0);
+		pP->SetEndColor(255,80 - s,0);
+		
+		pP->SetMotionRandomness(3.0);
+	}
+    } 
+    if (isBlue) {
+        for(int i=0 ; i<2 ; i += 1)
+	{
+    pP = new PxParticle(tele_glowish->Index, Px, Py);
+		pP->SetLifeTime(40);
+		pP->GravityFactor(-0.5);
+		pP->SetRandomVelocity(3.5, 8.0);
+		pP->SetAirResistance(0.5);
+		pP->SetAlpha(255);
+		s = RandomFloat(0.3,1.0);
+		pP->SetStartSize(s, s);
+		pP->SetEndSize(0.01, 0.01);
+		pP->SetBlendMode(1);
+		
+		s = RandomInt(0, 50);
+		pP->SetStartColor(0,120 - s,255);
+		pP->SetEndColor(0,80 - s,255);
+		
+		pP->SetMotionRandomness(3.0);
+	}
+    }
+}
+
+// lol, looks like i don`t need this
+
+/*override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    tLastTeleport = NullObj;
+}
+
+override CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
+{
+    super;
+    tLastTeleport = NullObj;
+}
+
+override CCrate::CCrate(CObject* Parent,CCrateDesc* desc,EDropType type)
+{
+    super;
+    tLastTeleport = NullObj;
+}
+
+override COilDrum::COilDrum(CObject* Parent,fixed X,fixed Y,bool Snap)
+{
+    super;
+    tLastTeleport = NullObj;
+}*/
+
+void CPortal::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  if (Type == M_SKIPTURN) return;
+  if (Type == M_TURNEND) start_be_inactive = true;
+  if (Type == M_TURNBEGIN) 
+  {
+      start_be_inactive = false;       // Deactivate timer if turn started earlier then timer deactivated portal.
+      inactive_timer = 0;              // Usefull if some1 is afk. Becouse otherwise timer would disable portal`s activity on some1`s turn start :D
+      active = true;
+  }
+  
+  if (Type == M_TOUCHSENSOR_COLLIDE)
+  {
+    if (linked != NullObj && Disabled == false)
+    {
+       local ts = CTouchSensor(sender);
+       local activator = ts->activator;
+       if (activator->ClType != OC_Worm)
+       {
+         if (!tpMissiles || (activator->ClType != OC_Missile)) return;
+       } else {
+         if (!trapTeleport && (activator != GetCurrentWorm())) return;
+       }         
+       if (timer <= 0)
+       {
+          MData->params[0] = 1; //disable collision
+       }
+    }
+    return;
+  }
+  if (Type == M_TOUCHSENSOR)
+  {
+     if (linked == NullObj || Disabled) return;
+     
+     if (timer > 0)
+     {
+       timer = 2;
+       return;
+     }
+     
+     local ts = CTouchSensor(sender);
+     local activator = ts->activator;
+     
+     if (activator->ClType != OC_Worm)
+     {
+       if (!tpMissiles || (activator->ClType != OC_Missile)) return;
+     }  else {
+       if (!trapTeleport && (activator != GetCurrentWorm())) return;
+     }         
+            
+     TeleportObject(activator);
+     
+     if (activator->ClType == OC_Worm)
+     {
+       ts->noCollide = true;
+     } else {
+       ts->noCollide = false;
+     }
+     
+     timer = 2;
+     linked->timer = 2;
+     return;
+  }
+
+  
+  if (Type != M_FRAME) return;
+
+// M_FRAME type starts here.
+  
+
+  if (linked == NullObj)
+  {
+    if (StrCmp(LinkedTo, "")) return;
+    for (local i = 0; i < Root->Childs.Count; i += 1)
+    {
+      local obj = CPortal(Root->Childs.Objs[i]);
+      if (obj is CPortal)
+      {
+        if (StrCmp(obj->t_name, LinkedTo))
+        {
+          linked = obj;
+          linked->linked = this;
+          break;
+        }
+      }
+    }
+    return;
+  }
+  if (linked == NullObj) Disabled = true;
+//  else Disabled = false;
+  if (Disabled == false && active)
+  {
+  
+  if (timer2 % anim_fps) DoPortalEffects();         // particles animation
+  timer2++; 
+   
+  if (landTeleport) 
+  {
+    if (timer > 0) timer--;
+    return;
+  }
+  
+  if (isExit) 
+  {
+    waiting = false;
+    return;
+  }
+  
+      CheckAndTeleport();
+
+/*      for (local i = 1; i < Env->Objs.Count; i++)
+      {
+        local m = CLaserRay(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+//        if (m->ClType != OC_AirStrike) continue;
+        if (m is CLaserRay)
+        {
+          CLaserRay* ray = CLaserRay(m);                                   // imitation of Gas teleportation
+//          local power = gas->Power;
+        }
+      }*/
+  }
+  
+  if(start_be_inactive)
+  {
+      inactive_timer++;
+      if (inactive_timer > timer_to_deactivate)  // 150 = 3 secs
+      {
+         active = false;         
+         start_be_inactive = false;
+         inactive_timer = 0;
+      }
+  }
+
+  waiting = false;
+}
+
+
+
+void CPortal::CheckAndTeleport()
+{
+
+    if (teleMissiles)
+    {
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local m = CMissile(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+        if (m->ClType != OC_Missile) continue;         
+        if (m->weap->CheckName("Portal Gun")) continue;
+        if (m->portal_readed) continue; 
+        if (pr_x1 < m->PosX && pr_x2 > m->PosX && pr_y1 < m->PosY && pr_y2 > m->PosY)
+        {
+          if (m->tLastTeleport != this)
+          {
+            m->tLastTeleport = linked;  
+            TeleportObject(m);
+            DoTeleportationEffects();
+          }
+        } else {
+          if (m->tLastTeleport == this) m->tLastTeleport = NullObj;
+        }
+     }
+    }
+
+    if (teleWorms)
+    {
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local worm = CWorm(Env->Objs.Objs[i]);
+        if (worm == NullObj) continue;
+        if (worm->ClType != OC_Worm) continue;
+        if (pr_x1 < worm->PosX && pr_x2 > worm->PosX && pr_y1 < worm->PosY && pr_y2 > worm->PosY)
+        {
+          if (worm->tLastTeleport != this)
+          {
+            worm->tLastTeleport = linked;  
+            TeleportObject(worm);
+            DoTeleportationEffects();
+            portal_teleportation->Play( 1.0, 0, false);
+          }
+        } else {
+          if (worm->tLastTeleport == this) worm->tLastTeleport = NullObj;
+        }
+     }  
+    }
+    if (teleMines)
+    {
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local m = CMine(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+        if (m->ClType != OC_Mine) continue;
+        if (pr_x1 < m->PosX && pr_x2 > m->PosX && pr_y1 < m->PosY && pr_y2 > m->PosY)
+        {
+          if (m->tLastTeleport != this)
+          {
+            m->tLastTeleport = linked;  
+            TeleportObject(m);
+            DoTeleportationEffects();
+          }
+        } else {
+          if (m->tLastTeleport == this) m->tLastTeleport = NullObj;
+        }
+     }
+    }
+    if (teleCrates)
+    {
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local m = CCrate(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+        if (m->ClType != OC_Crate) continue;
+        if (pr_x1 < m->PosX && pr_x2 > m->PosX && pr_y1 < m->PosY && pr_y2 > m->PosY)
+        {
+          if (m->tLastTeleport != this)
+          {
+            m->tLastTeleport = linked;  
+            TeleportObject(m);
+            DoTeleportationEffects();
+          }
+        } else {
+          if (m->tLastTeleport == this) m->tLastTeleport = NullObj;
+        }
+     }
+    }
+    if (teleDrums)
+    {
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local m = COilDrum(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+        if (m->ClType != OC_OilDrum) continue;
+        if (pr_x1 < m->PosX && pr_x2 > m->PosX && pr_y1 < m->PosY && pr_y2 > m->PosY)
+        {
+          if (m->tLastTeleport != this)
+          {
+            m->tLastTeleport = linked;  
+            TeleportObject(m);
+            DoTeleportationEffects();
+          }
+        } else {
+          if (m->tLastTeleport == this) m->tLastTeleport = NullObj;
+        }
+     }
+    }
+    if (#WEAPON_BOWLINGBALL)
+    {     
+    if (teleBowl)
+    {
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        CBowlingBall *m = CBowlingBall(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+	    if(m is CBowlingBall) 
+            {
+                 CBowlingBall *ball = CBowlingBall(m);
+                 if (pr_x1 < m->PosX && pr_x2 > m->PosX && pr_y1 < m->PosY && pr_y2 > m->PosY)
+                 {
+                     if (ball->tLastTeleport != this)
+                     {
+                         ball->tLastTeleport = linked;
+                         TeleportObject(ball);
+                         ball->Wake();
+                         DoTeleportationEffects();
+                     }
+                 } else {
+                      if (ball->tLastTeleport == this) ball->tLastTeleport = NullObj;                      
+                 }
+         }
+      }
+     }
+    }
+    if (teleArrow)
+    {
+      for (local i = 1; i < Env->Objs.Count; i++)
+      {
+        local m = CArrow(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+        if (m->ClType != OC_Arrow) continue;
+        if (m is CArrow)
+        {
+          CArrow* arrow = CArrow(m);
+          if (pr_x1 < m->PosX && pr_x2 > m->PosX && pr_y1 < m->PosY && pr_y2 > m->PosY)
+          {
+            if (arrow->tLastTeleport != this)
+            {
+              arrow->tLastTeleport = linked;  
+              TeleportObject(arrow);
+              DoTeleportationEffects();
+            }
+          } else {
+            if (arrow->tLastTeleport == this) arrow->tLastTeleport = NullObj;
+          }
+        }
+      }
+    
+    }
+    if (teleCross)
+    {
+      for (local i = 1; i < Env->Objs.Count; i++)
+      {
+        local m = CWorm(Env->Objs.Objs[i]);
+        if (m == NullObj) continue;
+        if (m->ClType != OC_Cross) continue;
+          CWorm* m1 = CWorm(m);
+          if (pr_x1 < m1->PosX && pr_x2 > m1->PosX && pr_y1 < m1->PosY && pr_y2 > m1->PosY)
+          {
+            if (m1->tLastTeleport != this)
+            {
+              m1->tLastTeleport = linked;  
+              TeleportObject(m1);
+              DoTeleportationEffects();
+            }
+          } else {
+            if (m1->tLastTeleport == this) m1->tLastTeleport = NullObj;
+          }
+      }
+    }       
+       
+       
+       
+       
+/*       
+       for (local i = 1; i < Env->Objs.Count; i++) 
+       {
+           local m = CGObject(Env->Objs.Objs[i]);
+           if (m == NullObj) continue;
+           if (m == this) continue;
+
+           if (m->ClType == OC_Cross) 
+           {
+                if (!teleCross) continue;
+                CWorm* m1 = CWorm(m);
+//                if (p_mask->Check(Px, Py, m->ColMask, m->PosX, m->PosY)) 
+                if (pr_x1 < m1->PosX && pr_x2 > m1->PosX && pr_y1 < m1->PosY && pr_y2 > m1->PosY)
+                {
+                    if (m1->tLastTeleport != this)
+                    {
+                        m1->tLastTeleport = linked;
+                        TeleportObject(m1);
+                        DoTeleportationEffects();
+                    }
+                } else {
+                    if (m1->tLastTeleport == this) m1->tLastTeleport = NullObj;
+                }
+           } else
+
+           if (m is CMissile)
+           {
+                if (!teleMissiles) continue;
+                CMissile* m1 = CMissile(m);
+                if (#PORTAL_GUN) 
+                {
+                    if (m1->i_am_portal) continue;
+                }
+//                if (p_mask->Check(Px, Py, m->ColMask, m->PosX, m->PosY)) 
+                if (pr_x1 < m1->PosX && pr_x2 > m1->PosX && pr_y1 < m1->PosY && pr_y2 > m1->PosY)
+                {
+                    if (m1->tLastTeleport != this)
+                    {
+                        m1->tLastTeleport = linked;
+                        TeleportObject(m1);
+                        DoTeleportationEffects();
+                    }
+                } else {
+                    if (m1->tLastTeleport == this) m1->tLastTeleport = NullObj;
+                }
+           } else
+           if (m is CWorm)
+           {
+                if (!teleWorms) continue;
+                CWorm* m1 = CWorm(m);
+//                if (p_mask->Check(Px, Py, m->ColMask, m->PosX, m->PosY)) 
+                if (pr_x1 < m1->PosX && pr_x2 > m1->PosX && pr_y1 < m1->PosY && pr_y2 > m1->PosY)
+                {
+                    if (m1->tLastTeleport != this)
+                    {
+                        m1->tLastTeleport = linked;
+                        TeleportObject(m1);
+                        DoTeleportationEffects();
+                        portal_teleportation->Play( 1.0, 0, false);
+                    }
+                } else {
+                    if (m1->tLastTeleport == this) m1->tLastTeleport = NullObj;
+                }
+           } else
+           if (m is CCrate)
+           {
+                if (!teleCrates) continue;
+                CCrate* m1 = CCrate(m);
+//                if (p_mask->Check(Px, Py, m->ColMask, m->PosX, m->PosY)) 
+                if (pr_x1 < m1->PosX && pr_x2 > m1->PosX && pr_y1 < m1->PosY && pr_y2 > m1->PosY)
+                {
+                    if (m1->tLastTeleport != this)
+                    {
+                        m1->tLastTeleport = linked;
+                        TeleportObject(m1);
+                        DoTeleportationEffects();
+                    }
+                } else {
+                    if (m1->tLastTeleport == this) m1->tLastTeleport = NullObj;
+                }
+           } else
+           if (m is COilDrum)
+           {
+                if (!teleDrums) continue;
+                COilDrum* m1 = COilDrum(m);
+//                if (p_mask->Check(Px, Py, m->ColMask, m->PosX, m->PosY)) 
+                if (pr_x1 < m1->PosX && pr_x2 > m1->PosX && pr_y1 < m1->PosY && pr_y2 > m1->PosY)
+                {
+                    if (m1->tLastTeleport != this)
+                    {
+                        m1->tLastTeleport = linked;
+                        TeleportObject(m1);
+                        DoTeleportationEffects();
+                    }
+                } else {
+                    if (m1->tLastTeleport == this) m1->tLastTeleport = NullObj;
+                }
+           } else
+           if (m is CArrow)
+           {
+                if (!teleArrow) continue;
+                CArrow* m1 = CArrow(m);
+//                if (p_mask->Check(Px, Py, m->ColMask, m->PosX, m->PosY)) 
+                if (pr_x1 < m1->PosX && pr_x2 > m1->PosX && pr_y1 < m1->PosY && pr_y2 > m1->PosY)
+                {
+                    if (m1->tLastTeleport != this)
+                    {
+                        m1->tLastTeleport = linked;
+                        TeleportObject(m1);
+                        DoTeleportationEffects();
+                    }
+                } else {
+                    if (m1->tLastTeleport == this) m1->tLastTeleport = NullObj;
+                }
+           } else
+           if (m is CMine)
+           {
+                if(#WEAPON_BOWLINGBALL)
+                {
+                    if(m is CBowlingBall)
+                    {
+                        if (!teleBowl) continue;
+                        CBowlingBall *m2 = CBowlingBall(m);
+//                        if (p_mask->Check(Px, Py, m->ColMask, m->PosX, m->PosY)) 
+                        if (pr_x1 < m2->PosX && pr_x2 > m2->PosX && pr_y1 < m2->PosY && pr_y2 > m2->PosY)
+                        {
+                            if (m2->tLastTeleport != this)
+                            {
+                                m2->tLastTeleport = linked;
+                                TeleportObject(m2);
+                                m2->Wake();
+                                DoTeleportationEffects();
+                            }
+                        } else {
+                            if (m2->tLastTeleport == this) m2->tLastTeleport = NullObj;
+                        }
+                    }
+                }
+                else if (!teleMines) continue;
+                CMine* m1 = CMine(m);
+//                if (p_mask->Check(Px, Py, m->ColMask, m->PosX, m->PosY)) 
+                if (pr_x1 < m1->PosX && pr_x2 > m1->PosX && pr_y1 < m1->PosY && pr_y2 > m1->PosY)
+                {
+                    if (m1->tLastTeleport != this)
+                    {
+                        m1->tLastTeleport = linked;
+                        TeleportObject(m1);
+                        DoTeleportationEffects();
+                    }
+                } else {
+                    if (m1->tLastTeleport == this) m1->tLastTeleport = NullObj;
+                }
+           }
+       }
+*/
+}
+
+
+
+void CPortal::TeleportFire(CFire *Fire, fixed x, fixed y)
+{
+//    GG->WriteToChat( 3, "teleporting fire", false);
+    local tx = (linked->pr_x1 + linked->pr_x2)/2;
+    local ty = (linked->pr_y1 + linked->pr_y2)/2;
+    Fire = CFire(NullObj);
+    CFireDesc desc;
+    zero(&desc);
+    desc.X = tx;
+    desc.Y = ty;
+    desc.SpX = linked->spx1 * 7;
+    desc.SpY = linked->spy1 * 7;
+    desc.Count = 0;
+    desc.Duration = 1500;
+    desc.UpPower = 1;
+    desc.Damage = 2;
+    desc.Unk = 0;
+    desc.UnkB = 5;
+    desc.UnkD = 0;
+    desc.OwnerTeam = 0;
+    local f = new CFire(Root->GetObject(25, 0), &desc, 0);
+}
+
+/*
+  teleMissiles = true;
+  teleWorms = true;
+  teleMines = true;
+  teleCrates = true;
+  teleDrums = true;
+  teleBowl = true;
+  teleArrow = true;
+  teleCross = true;
+  teleMagnets = true;
+*/
+
+
+
+/*
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+//    if (!teleMissiles) return;
+    if (Type == M_FRAME)
+    {
+         for (local i = 1; i < Childs.Count; i++)
+         {
+           local m = CMissile(Childs.Objs[i]);
+           if (m == NullObj) continue;
+
+//           if (m->ClType == OC_Cross) 
+//           {
+//                if (!teleCross) continue;
+//                CWorm* m1 = CWorm(m);
+//                if (pr_x1 < m1->PosX && pr_x2 > m1->PosX && pr_y1 < m1->PosY && pr_y2 > m1->PosY)
+//                {
+//                    if (m1->tLastTeleport != this)
+//                    {
+//                        m1->tLastTeleport = linked;
+//                        TeleportObject(m1);
+//                        DoTeleportationEffects();
+//                    }
+//                } else {
+//                    if (m1->tLastTeleport == this) m1->tLastTeleport = NullObj;
+//                }
+           }
+    }
+}       */
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    portal_just_teleported = false;
+    portal_deactive_tele_bool = 40;
+    portal_deactive_tele_counter = 40;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+        if (portal_just_teleported)
+        {
+            if (portal_deactive_tele_counter != 0)
+            {
+                portal_deactive_tele_counter--;
+            }
+            else
+            {
+                portal_deactive_tele_counter = portal_deactive_tele_bool;
+                portal_just_teleported = false;
+            }
+        }
+    }
+}

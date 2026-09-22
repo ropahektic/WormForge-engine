@@ -1,0 +1,182 @@
+require utils;
+
+int mapsizeX;
+int mapsizeY;
+int mapwater;
+int ncrateCounter;
+int ncrateNextSpawn;
+int turnCounter;
+
+void nikolacrate::Init()
+{
+   mapsizeX = 0;
+   mapsizeY = 0;
+   mapwater = 0;
+   ncrateCounter = 1;
+   ncrateNextSpawn = 0;
+}
+
+void nikolacrate::FirstFrame()
+{
+   mapsizeX = GS->LevelSX;
+   mapsizeY = GS->LevelSY;
+   mapwater = Env->Water;
+}
+
+override void CWorm::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+   local CurrWorm = GetCurrentWorm();
+   isCurrentWorm = (CurrWorm != NullObj && CurrWorm == this);
+   if (isCurrentWorm== true)
+    {   
+      if (Type == M_FRAME)
+      {
+         // 60 frames per second, 3600 frames = 1 minute
+         if (ncrateNextSpawn == 0)
+            {
+            ncrateNextSpawn = 240 + (GS->GetRandom() % 240); //random number between 4 and 8 seconds
+         }
+ 
+            if (ncrateCounter == ncrateNextSpawn)
+            {
+            ncrateNextSpawn = 0;
+            ncrateCounter = 0;
+            spawnNikolaCrate();
+         }
+
+         ncrateCounter = ncrateCounter + 1;
+
+         if (ncrateCounter <= 0)
+            {
+            ncrateCounter = 1;
+         }
+
+      }
+
+   }
+
+   super;
+}
+
+bool spawnNikolaCrate()
+{
+   string wWeps[100];
+   
+   wWeps[0] = "Double Bazooka";
+   wWeps[1] = "Homing Missile";
+   wWeps[2] = "Mortar";
+   wWeps[3] = "Homing Pigeon";
+   wWeps[4] = "Sheep Launcher";
+   wWeps[5] = "Grenade";
+   wWeps[6] = "Cluster Bomb";
+   wWeps[7] = "Banana Bomb";
+   wWeps[8] = "Battle Axe";
+   wWeps[9] = "Real Shotgun";
+   wWeps[10] = "Uzi";
+   wWeps[11] = "Minigun";
+   wWeps[12] = "Longbow";
+   wWeps[13] = "Dynamite";
+   wWeps[14] = "Mine";
+   wWeps[15] = "Sheep";
+   wWeps[16] = "Aqua Sheep";
+   wWeps[17] = "Mole Bomb";
+   wWeps[18] = "Air Strike";
+   wWeps[19] = "Mail Strike";
+   wWeps[20] = "Mine Strike";
+   wWeps[21] = "Mole Squadron";
+   wWeps[22] = "Super Banana Bomb";
+   wWeps[23] = "Holy Hand-Grenade";
+   wWeps[24] = "Flame Thrower";
+   wWeps[25] = "Salvation Army";
+   wWeps[26] = "MB Bomb";
+   wWeps[27] = "Petrol Bomb";
+   wWeps[28] = "Skunk";
+   wWeps[29] = "Priceless Ming Vase";
+   wWeps[30] = "French Sheep Strike";
+   wWeps[31] = "Mike's Carpet Bomb";
+   wWeps[32] = "Mad Cow";
+   wWeps[33] = "Old Woman";
+   wWeps[34] = "Bowling Ball Strike";
+   wWeps[35] = "Invisibility";
+   wWeps[36] = "Double Bazooka";
+   wWeps[37] = "Grenade";
+   wWeps[38] = "Banana Bomb";
+   wWeps[39] = "Real Shotgun";
+   wWeps[40] = "Minigun";
+   wWeps[41] = "Dynamite";
+   wWeps[42] = "Mine";
+   wWeps[43] = "Sheep";
+   wWeps[44] = "Aqua Sheep";
+   wWeps[45] = "Flame Thrower";
+   wWeps[46] = "Petrol Bomb";
+   wWeps[47] = "Skunk";
+   wWeps[48] = "Mad Cow";
+   wWeps[49] = "Old Woman";
+
+   int wWepsCount = 49; // Moved this down here for visiblity
+
+   if (mapsizeX < 100 || mapsizeY < 100)// stupid thing might not be set because stupid PX
+    {
+      mapsizeX = GS->LevelSX;
+      mapsizeY = GS->LevelSY;
+   }
+
+   CCrateDesc cDesc;
+   zero(&cDesc);
+   cDesc.X = -1000;
+   cDesc.Y = -1000;
+   cDesc.type = CT_WEAPON; // CT_WEAPON CT_UTILITY CT_HEALTH
+
+   int rwWep = GS->GetRandom() % (wWepsCount + 1); // pick a random weapon index
+   if (wWeps[rwWep] == "NORMAL")
+    {
+      cDesc.wType = WCT_RANDOM;
+   }
+   else
+    {
+      cDesc.wType = WCT_DEFINED;
+      cDesc.amount = 1;
+      local wwep1 = GS->GetWeaponByName(wWeps[rwWep]);
+      if (wwep1 != NullObj)
+        {
+         cDesc.weapon = 100 * wwep1->GetPageIndex() + wwep1->GetWeaponIndex();
+      }
+   }
+
+   local nwC = new CCrate(Root->GetObject(25, 0), &cDesc, DT_CHUTE); // creates the crate but it does not have a spawn point yet
+   // the crate is created because we need to access its collision mask
+
+   int trywX = mapsizeX / 5;
+   int trywY = mapsizeY / 5;
+   int startwX = GS->GetRandom() % trywX;
+   int startwY = GS->GetRandom() % trywY;
+   
+    for (int n = 0; n < (trywX * trywY); n++)
+   {
+      int nwX = ((startwX + (n % trywX)) % trywX) * 5;
+      int nwY = ((startwY + (n / trywY)) % trywY) * 5;
+      CGObject * ow = Env->CheckCollision(nwC, nwX, nwY);
+      if (ow == NullObj)
+      {
+            int hitX = 0;
+         int hitY = 0;
+         if (TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY) != NullObj && TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY)->ClType != OC_Worm && TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY)->ClType != OC_Crate && TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY)->ClType != OC_OilDrum && TraceMask(nwC, nwC->ColMask, nwX, nwY, nwX, nwY + 1000, 4332670, &hitX, &hitY)->ClType != OC_Mine)
+            {
+            nwC->PosX = nwX;
+            nwC->PosY = nwY;
+            nwC->X = nwX;
+            nwC->Y = nwY;
+            return true; // found a spawn point, return. This means exit this entire function.
+         }
+      }
+   }
+   
+   nwC->Free(true); // we did not find a spawn point, lets destroy the crate we have created
+   return false;
+}
+
+override void CTurnGame::FinishTurn(int reason)
+{
+   turnCounter += 1;
+   super;
+}

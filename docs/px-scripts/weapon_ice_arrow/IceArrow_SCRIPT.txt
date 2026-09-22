@@ -1,0 +1,121 @@
+require utils, utils_steps, pxparticles;
+
+CArrow* icya;
+bool icyarrow;
+bool arrowmomentum;
+bool IcyArrowColdEffect;
+
+void IceArrow_SCRIPT::Init()
+{
+   IcyArrowColdEffect = true;
+}
+
+override void CArrow::CArrow(CObject* Parent,int* damage,CShootDesc* desc) {super; isthisicy=icyarrow;}  //Keep the icy flag on instance init only
+
+override void CArrow::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (isthisicy)
+        {
+            arrowmomentum = false;
+            icya = this;
+        }
+    }
+    if (Type == M_DRAWQUEUE && isthisicy)
+    {
+    SetColorMod(ARGB(180, 20, 90, 170), 8);  
+    super; 
+    if(gframe % 10 == 0)  
+    super;
+                    
+    ClearColorMod();
+    }
+super;
+}
+
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_GUNEXP)
+    {  
+        if (arrowmomentum)
+        {
+            arrowmomentum = false;
+            tobefrozen = true;
+        }
+        
+        if (icya != NullObj)
+        {
+            if (sender == icya)
+            {                                  //all the other ways are buggy and don't always work...
+                tobefrozen = true;
+            }
+        }
+    }
+    
+    if (Type == M_FRAME)
+    {
+        if (tobefrozen)
+        {
+            if (ObjState != WS_FROZEN) SetState(WS_FROZEN);
+            tobefrozen = false;
+        }
+    }
+    
+    if(Type == M_FRAME)
+    {
+       if(CurWeapon->CheckName("Ice Arrow"))
+       {
+          if(IcyArrowColdEffect == true)
+          {
+             PxParticle *p;
+       
+             for(int i=0; i<400;i++)
+             {
+                p = new PxParticle(611, PosX, PosY);
+           
+                p->SetLifeTime(50);
+                p->SetMotionRandomness(0.4);
+                p->SetAirResistance(0.20);
+                float s = RandomFloat(0.30, 0.40);
+                p->SetStartSize(s, s);
+                p->SetEndSize(s-0.4, s-0.4);
+                p->SetStartAlpha(255);
+                p->SetEndAlpha(175); //0
+                p->SetBlendMode(1);
+                p->SetStartColor(0, 75, 255);
+                p->SetEndColor(0, 125, 255);
+                p->SetRandomVelocity(1.0,3.0);// (0.01, 4.0);
+             }
+          
+             IcyArrowColdEffect = false;
+          }
+       }
+    }
+    
+    if(Type == M_SETWEAPON)
+    {
+       IcyArrowColdEffect = true;
+    }
+    
+    super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Ice Arrow"))
+    {
+        arrowmomentum = true;
+        icyarrow = true;
+/*        
+        nShoots = 0;
+        nAvalShoots = 1;
+        nTotalShoots = 1;
+        nShooted = 1;     */
+        super;
+        return;
+    }                      
+    icyarrow=false;
+    super;
+}

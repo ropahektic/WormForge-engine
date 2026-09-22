@@ -1,0 +1,43 @@
+require utils;
+
+CSoundFile* girderreverse;
+
+bool indy_active;
+
+void IndestructibleTerrainMode_SCRIPT::FirstFrame()
+{
+f = GetAttachment("girderreverse.wav");	 girderreverse = new CSoundFile(f);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_TURNEND && GG->land->Undestructable == true && indy_active == true)
+     {             
+     GG->land->Undestructable = false;     
+     ShowMessage("Indy Terrian : OFF");
+     indy_active = false;
+     }
+super;     
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{ 
+  if(Weap->CheckName("Indestructible Terrain Mode"))
+  {  
+     if(GG->land->Undestructable == false)
+        {
+        GG->land->Undestructable = true;
+        PlayLocalSound(112, 5, 1.0, 1.0);
+        ShowTeamMessage(2,"Indy Terrian : ON",WormTeam);
+        indy_active = true;        
+        }
+     else
+        {
+        GG->land->Undestructable = false;
+        girderreverse->Play(1.0, 0.0, false);
+        ShowTeamMessage(1,"Indy Terrian : OFF",WormTeam);
+        indy_active = false;
+        }                    
+  } 
+  super;
+}

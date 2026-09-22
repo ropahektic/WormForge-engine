@@ -1,0 +1,465 @@
+/*** EMP - ELECTROMAGNETIC PULSE ***/
+//update2
+/*** made by rafa``2 ***/
+
+//EMP Limited - Electronics down for 10 secs.
+//EMP Unlimited - Electronics down during your whole turn.
+
+require utils, utils_steps, pxparticles, pxairstrike,
+weapon_sentry_gun, weapon_sentry_laser, weapon_magnet, weapon_bowlingball, p_turrets, p_portal2;
+
+#EMP
+
+CEMP:CObject;
+CSprite* sprEMPFlash;
+CSoundFile* sndEMP1;
+CSoundFile* sndEMP2;
+CSoundFile* sndEMPFlash;
+CSoundFile* sndEMPcircuit;
+CSoundFile* sndEMPturnon;
+CEMP* NewEMP;
+ 
+void EMP_s::Init()
+{
+    sndEMP1     = new CSoundFile(GetAttachment("sndEMP1.wav"));
+    sndEMP2     = new CSoundFile(GetAttachment("sndEMP2.wav"));
+    sndEMPFlash = new CSoundFile(GetAttachment("sndEMPFlash.wav"));
+    sndEMPcircuit = new CSoundFile(GetAttachment("empcircuit.wav"));
+    sndEMPturnon = new CSoundFile(GetAttachment("empturnon.wav"));  
+}
+void EMP_s::InitGraphic()
+{
+    sprEMPFlash = LoadSprite(GetAttachment("EMPFlash.png"), 1, 0);
+}
+
+void EMP_s::FirstFrame()
+{
+    NewEMP = CEMP(NullObj);
+}
+
+enum EMPTYPE = (LIMITED, UNLIMITED);
+enum EMPFX = (GADGETS, OBJECTS);
+
+CEMP::CEMP(EMPTYPE Type, CWorm * owner)
+{      
+    super(Root->GetObject(25, 0), GS);
+    
+    if(owner == CWorm(NullObj)) return;
+    if(Type != LIMITED && Type != UNLIMITED) return;
+    
+    Owner        = owner;
+    EMPObjL      = new CObjList();
+    EMPType      = Type;
+    EMPPosX      = Owner->PosX;
+    EMPPosY      = Owner->PosY;
+    EMPLifeTime  = 0;    
+    if(EMPType == LIMITED) 
+    {
+        EMPLifeTime = 10000;
+    }
+    else if(EMPType == UNLIMITED) 
+    {
+        EMPLifeTime = -1;        
+    }
+    isActive        = true;
+    FiredTime       = MatchTimer;
+    SprFactor       = 0.5;
+    TimeFlashTo     = 255;
+    TimeEffectFrom  = 50;
+    TimeEffectTo    = 200;
+    TimeMalfunFrom  = 350;
+    TimeControlFrom = 500;
+    AddEMPObjects(); 
+    EMPedObjects(true);
+    if(gframe % 2 == 0)
+    { 
+        sndEMP1->Play( 1.5, 0.0, false);
+    }
+    else
+    { 
+        sndEMP2->Play( 1.5, 0.0, false);
+        sndEMPcircuit->Play( 1.0, 0.0, false);
+    }
+    ShowMessage("EMP! Electronics are down");
+}
+
+override void CGObject::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+     super;
+    
+    if(Type != M_FRAME) return;
+    
+    if(NewEMP == NullObj) return;
+      
+    if(NewEMP->Owner == NullObj) return;
+    
+    if(NewEMP->isActive && NewEMP->Owner->ObjState == WS_JETPACK && NewEMP->EMPTime() > NewEMP->TimeControlFrom)
+    {
+        EMPControls(NewEMP->Owner);
+    }
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{        
+     super;
+     
+     if(NewEMP != NullObj)
+     {
+         if(Type == M_TURNBEGIN)
+         {
+              NewEMP->unEMPed();      
+         }
+     }
+     
+     local cW = GetCurrentWorm();
+             
+     if(cW != NullObj)
+     {
+         if (Type == M_SETWEAPON)
+         {
+             if(cW->CurWeapon->CheckName("EMP Limited") || cW->CurWeapon->CheckName("EMP Unlimited"))
+             {
+                sndEMPFlash->Play( 1.5, 0.0, false);
+             }
+         }
+     }
+}     
+                                                      
+void CEMP::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+  
+  if(Owner == NullObj) return;
+  
+  if(isActive)
+  {
+       if(Type == M_DRAWQUEUE)
+       {      
+                if(TimeFlashTo > 0)
+                    FlashEffects();
+       }
+       if(Type == M_FRAME)
+       {
+                if(Owner->ObjState == WS_JETPACK && EMPTime() > TimeMalfunFrom)
+                { 
+                    MalfunctionEffects(GADGETS);
+                }
+                if(EMPTime() >= TimeEffectFrom && EMPTime() <= TimeEffectTo)
+                {
+                    MalfunctionEffects(OBJECTS); 
+                }
+                if(EMPType == LIMITED)
+                { 
+                    EMPRestoring();
+                    
+                    if(EMPLifeTime <= 0)
+                        unEMPed();
+                }
+      }
+   }
+                    
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+     
+     if(Weap->CheckName("EMP Limited") || Weap->CheckName("EMP Unlimited"))
+     {          
+          if(NewEMP != NullObj)
+          {
+               if(NewEMP->isActive)
+               {
+                   GS->Info.AddWeapon(WormTeam, Weap->GetWeaponIndex(), 1);
+                   ShowMessage("EMP still active!");
+                   return;
+               } 
+               NewEMP->Free(true);
+          }      
+          if(Weap->CheckName("EMP Limited"))
+          {
+               NewEMP = new CEMP(LIMITED, this);
+          }
+          else if(Weap->CheckName("EMP Unlimited"))
+          {
+               NewEMP = new CEMP(UNLIMITED, this);
+          }
+     }
+     else super;
+}
+
+int CEMP::EMPTime()
+{
+    if(FiredTime > 0)
+        return abs(MatchTimer - FiredTime);
+    else
+        return 0;
+}
+
+void CEMP::AddEMPObjects()
+{
+     if(EMPObjL == NullObj) return;
+     
+     for (local i = 0; i < Env->Objs.Count; i++)
+     {
+           local curObj = Env->Objs.Objs[i];
+               if(curObj == NullObj || curObj is CBowlingBall || curObj is PxAirstrike) 
+                   continue;
+               if(curObj is PxSentryGun || curObj is PxSentryLaser ||curObj is CMagnet || curObj is CTurretBase || curObj is CMine)
+               {                 
+                    EMPObjL->Add(curObj);
+               }
+     }
+     for (local i = 0; i < Root->Childs.Count; i++)
+     {     
+          local curObj = Root->Childs.Objs[i];
+          if(curObj == NullObj) continue; 
+          if(curObj is CPortal)
+          { 
+               EMPObjL->Add(curObj);
+          }
+     }
+   //GG->WriteToChat( 1, StrCon("EMPed List completed! > ", StrCon(itoa(L->Count), " Objs")), false);
+}
+
+void CEMP::EMPedObjects(bool deactivate)
+{
+     if(EMPObjL == NullObj) return;
+
+     for (local i = 0; i < EMPObjL->Count; i++)
+     {
+        local curObj = EMPObjL->Objs[i];
+        
+           if(curObj == NullObj || curObj is CBowlingBall || curObj is PxAirStrike) 
+               continue;
+           if(curObj is PxSentryGun)
+           {
+               local cSentry = PxSentryGun(curObj);
+               if(deactivate && cSentry->TurretActive)
+               {
+                  cSentry->TurretActive = false;
+                  cSentry->SentryEMPed = true;                  
+               }
+               else if(!deactivate && cSentry->SentryEMPed && cSentry->TurretActive == false)
+               {
+                  cSentry->TurretActive = true;
+                  cSentry->SentryEMPed = false;
+               }
+           }
+           if(#WEAPON_SENTRYLASER)
+           {
+               if(curObj is PxSentryLaser)
+               {
+                   local cSentry = PxSentryLaser(curObj);
+                   if(deactivate && cSentry->TurretActive)
+                   {
+                       cSentry->TurretActive = false;
+                       cSentry->SentryEMPed = true;                  
+                   }
+                   else if(!deactivate && cSentry->SentryEMPed && cSentry->TurretActive == false)
+                   {
+                       cSentry->TurretActive = true;
+                       cSentry->SentryEMPed = false;
+                   }
+               }
+           }
+           if(curObj is CMagnet)
+           {
+              local cMagnet = CMagnet(curObj);     
+              if(deactivate && cMagnet->TurnsRemaining > 0)
+                  cMagnet->TurnsRemaining = -99;
+              else if(!deactivate && cMagnet->TurnsRemaining == -99)
+                  cMagnet->TurnsRemaining = cMagnet->TurnsBackup;
+           }
+           if (curObj is CTurretBase)
+           {
+               local cTurret = CTurretBase(curObj);
+               if(deactivate)
+               {
+                   cTurret->sensorRadius = -1;
+                   cTurret->minimalRadius = 65536;
+                   cTurret->lostRadius = -1;
+                   cTurret->dontShoot = true;
+               }
+               else
+               {
+                   cTurret->sensorRadius = cTurret->SensorRadiusBackup;
+                   cTurret->minimalRadius = cTurret->MinimalRadiusBackup;
+                   cTurret->lostRadius = cTurret->LostRadiusBackup;
+                   cTurret->dontShoot = false;
+               }
+            }
+            if(curObj is CPortal)
+            {
+               local cPortal = CPortal(curObj);
+               if(deactivate)
+               {
+                   cPortal->Disabled = true;
+                   cPortal->active = false;
+               }
+               else
+               {  
+                   cPortal->Disabled = false;
+                   cPortal->active = true;
+               }
+            }
+            if(curObj is CMine)
+            {
+               local cMine = CMine(curObj);
+               if(deactivate)
+               {
+                  cMine->Active = 0;
+                  cMine->SensorFlags = 0;
+                  cMine->Fuse = cMine->FuseBackup;
+               }
+               else  
+               {
+                  cMine->SensorFlags = cMine->SensorFlagsBackup;
+               }
+           }
+    }    
+}
+
+void CEMP::unEMPed()
+{
+    if(isActive)
+    {    
+        isActive = false;
+        EMPedObjects(false);
+    }
+}
+
+void CEMP::EMPRestoring()
+{
+    EMPLifeTime -= 20;
+    if(EMPLifeTime == 3000)
+    {
+        ShowMessage("Restoring electronics in 3 seconds...");
+        ShowMessage("Restoring electronics in 2 seconds...");
+        ShowMessage("Restoring electronics in 1 second ...");
+   }
+   if(EMPLifeTime == 0)
+    {
+    sndEMPturnon->Play( 2.5, 0.0, false);
+    }
+}
+void CGObject::EMPControls(CGObject* obj)
+{   
+    if(obj == NullObj) return;
+    
+    local cW = CWorm(obj);
+    
+    cW->PressedUp = 0;
+    if(cW->SpY < 5.0 && cW->Stopped == 0)
+    {
+        cW->SpY += 0.015; 
+    }
+}
+
+void CEMP::FlashEffects()
+{     
+    if(TimeFlashTo <= 0) return;
+    
+    if(Owner == NullObj) return;
+    
+    alpha = TimeFlashTo;
+    SetColorMod(ARGB(alpha, 215, 215, 215), 1);
+    AddSpriteEx( 0, EMPPosX, EMPPosY, sprEMPFlash->Index, 0, 0, SprFactor);
+    ClearColorMod();
+    if(TimeFlashTo >= 225)
+        SprFactor+= 0.25;//0.75; windowed-mode
+    else
+        SprFactor+= 0.075;//0.25; windowed-mode
+    TimeFlashTo-=1;     
+}
+
+void CEMP::MalfunctionEffects(EMPFX Type)
+{
+      if(Type == GADGETS)
+      {
+            if(Owner == NullObj) return;
+            
+            PxParticle *P = new PxParticle(609, Owner->PosX - (10.0 * Owner->TurnSide), Owner->PosY);
+	    P->SetLifeTime(25);
+            if(Owner->Stopped == 1 || Owner->SpY == 0)
+                P->GravityFactor(-0.4);
+	    else
+	    {
+                P->GravityFactor(1);
+                P->SetAirResistance(0.01);
+                P->SetMotionRandomness(0.5);
+            }    
+            P->SetStartAlpha(0);
+	    P->SetEndAlpha(255);
+            P->SetRandomVelocity(0.1, 0.5);      
+     }
+     else if(Type == OBJECTS)
+     { 
+         if(EMPObjL == NullObj) return;
+         
+            for (local i = 0; i < EMPObjL->Count; i++)
+            {                  
+                 local curObj = EMPObjL->Objs[i];
+                 
+                 if(curObj == NullObj) continue;
+                 if(curObj is CPortal) continue;
+                 
+                      if (CGObject(curObj)->PosY < Env->Water)
+                      {                       
+                          PxParticle *P = new PxParticle(615, CGObject(curObj)->PosX , CGObject(curObj)->PosY - 5);
+                          P->SetLifeTime(40);
+                          P->GravityFactor(-0.3);
+                          P->SetStartAlpha(25);
+                          P->SetEndAlpha(255);
+                          P->SetMotionRandomness(0.3);
+                          P->SetRandomVelocity(0.25, 0.5);
+                      }
+             }     
+     }
+} 
+
+override void CDDQueue::AddSprite(fixed z,fixed x,fixed y,int unk,int sprite,fixed frame)
+{
+   
+   if(NewEMP != NullObj)
+   {   
+       if(NewEMP->Owner != NullObj)
+       {
+            if(NewEMP->isActive && NewEMP->EMPTime() > NewEMP->TimeMalfunFrom && (sprite == 171 || sprite == 171+262144 || sprite == 172)) 
+                return;
+            else super;
+       }
+       else super;
+   }
+   else super;
+}
+
+override CMagnet::CMagnet(CObject* Parent,CShootDesc* Desc,int WormDir,int Pol)
+{
+    super;
+    TurnsBackup = TurnsRemaining;
+}
+
+override void CMagnet::OnTurnBegin(int Team)
+{
+     super;
+     TurnsBackup = TurnsRemaining;
+}
+
+override CTurretBase::CTurretBase(CObject* parent,fixed x,fixed y)
+{
+     super;
+     SensorRadiusBackup = sensorRadius;
+     MinimalRadiusBackup = minimalRadius;
+     LostRadiusBackup = lostRadius;
+} 
+
+override CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
+{
+     super;
+     FuseBackup = Fuse;
+     SensorFlagsBackup = 4|8|16|32; // SensorFlagsBackup = SensorFlags;
+}
+override PxSentryGun::PxSentryGun(CObject* Parent, CShootDesc* Desc)
+{
+    super;
+    SentryEMPed = false;
+}                           

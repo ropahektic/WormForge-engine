@@ -1,0 +1,36 @@
+require utils, p_sprite_builder, sprite_curtis_249, sprite_curtis_455;
+
+CSprite* pogos_aiming;
+
+void pogo_sheep_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("spb_pogos.png");
+    pogos_aiming = LoadSprite(f, 1, 0);
+}
+
+//---------------------------------POGO SHEEP---------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Pogo Sheep";
+     sprite = pogos_aiming->Index;
+     Params->hand_type = 1;
+     Params->hand_scale = 1.2;
+     Params->hand_radius = -11.5;
+     Params->hand_rotation = -0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -11.0;
+     Params->dont_rotate_with_angle = true;
+     Params->hand_ang_if_static = 0.4;
+     Params->ang_if_static = 0.0;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}

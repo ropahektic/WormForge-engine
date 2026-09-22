@@ -1,0 +1,107 @@
+//#WEAPON_MINETURRET
+
+$editor
+  $object  MineTurret
+   $origin -20 -25
+   $radius 28
+   $image "edturret.png"
+   $func SpawnTurret
+   $param Invincible bool false
+   $param Mounted bool false
+   $param ClearMines bool true
+   $param AmmoPerTurn int 9999
+  $object_end
+$end
+
+CSprite* mineturretBase;
+CSprite* mineturretTower;
+
+void mineturret::InitGraphic()
+{
+  local f = GetAttachment("baseminez.png");
+  mineturretBase = LoadSprite(f, 1, 0);
+  local f = GetAttachment("towerminez.png");
+  mineturretTower = LoadSprite(f, 1, 0);
+}
+
+CMineTurret : CTurretBase;
+
+void CMineTurret::CMineTurret(CObject* parent, fixed x, fixed y)
+{
+  super;
+  breakable = true;
+  clearMines = false;
+  baseSprite = mineturretBase;
+  towerSprite = mineturretTower;
+  sprNum = 47;
+};
+
+bool CMineTurret::ShootAtEnemy()
+{
+    if (CheckMaskAt(this, FourCheckMask, ShootX, ShootY, -1) != NullObj) return false;
+    CMineParams MParams;
+    CShootDesc SDesc;
+    zero(&MParams);
+    zero(&SDesc);
+
+    local ForceVar = GS->GetRandom() % 64;
+    local BaseForce = shootPower - 0.1 + ForceVar / 96.0;
+
+    SDesc.Team = turretTeam;
+    SDesc.X = ShootX;
+    SDesc.Y = ShootY;
+
+    if (turretTeam < 0) SDesc.Team = 0;
+
+    SDesc.SpX = ShootSX * BaseForce;
+    SDesc.SpY = ShootSY * BaseForce;
+
+    MParams.Prefuse = 0;
+    MParams.Flags = 60;
+    MParams.Bias = 0;
+    MParams.Damage = 50;
+    MParams.BlastPower = 100;
+    MParams.Fuse = 400; //20 frames
+    MParams.Radius = 48;
+
+    local Mine = new CMine(Root->GetObject(25, 0), &MParams, &SDesc, false, 0);
+    Mine->autoTurnDestruct = clearMines;
+    return true;
+};
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+   if (Weap->CheckName("Mine Turret"))
+   {
+     local sg = new CMineTurret(GetObject(25, 0), PosX + 15 * TurnSide, PosY - 50);
+     sg->turretTeam = WormTeam;
+     sg->ammoPerTurn = 6;
+     sg->sprNum = 0;
+     vol = CalculateSoundVolume(PosX,PosY);
+     pan = CalculateSoundPan(PosX,PosY);
+     turretsetup->Play(vol, pan, false);
+   } else {
+     super;
+   };
+};
+
+void SpawnTurret(CEditorObject* eobj)
+{
+  local sg = new CMineTurret(Root->GetObject(25, 0), eobj->PosX, eobj->PosY);
+  sg->turretTeam = -1;
+  sg->clearMines = eobj->GetBool("ClearMines");
+  sg->ammoPerTurn = eobj->GetInt("AmmoPerTurn");
+  if (eobj->GetBool("Invincible"))
+  {
+    sg->breakable = false;
+  }
+  if (eobj->GetBool("Mounted"))
+  {
+    sg->SpeedDivider = 32767;
+    for (local i = 0; i < 100; i++)
+    {
+      if (Env->CheckCollision(sg, sg->PosX, sg->PosY + 1) != NullObj) break;
+      sg->PosY += 1;
+    }
+  }
+};

@@ -1,0 +1,17 @@
+CSoundFile* fallprotectionsound;
+ 
+void fall_protection_sound::Init()
+{
+	fallprotectionsound       = new CSoundFile(GetAttachment("fall_protection.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+  if(Weap->CheckName("Anti Fall Damage"))
+  {
+  vol = CalculateSoundVolume(PosX,PosY);
+  pan = CalculateSoundPan(PosX,PosY);
+  fallprotectionsound->Play(vol, pan, false);
+  }
+  super;
+}

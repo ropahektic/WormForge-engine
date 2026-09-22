@@ -1,0 +1,91 @@
+CSprite* TpTrgSprite;
+
+void teleport::InitGraphic()
+{
+    local spr1      = GetAttachment("tptrg4.png");
+    TpTrgSprite     = LoadSprite(spr1, 4, 0);
+}
+
+void teleport::Init()
+{
+}
+
+void teleport::FirstFrame()
+{
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+TgX = 0;
+TgY = 0;
+TPanimphase = 0.0;
+OptimizeFrames = 10;
+DrawAim = true;
+super;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if(Weap->CheckName("Dimensional Door"))
+    {
+    PlayLocalSound(67, 1.0, 1.0, 1.0);
+    DrawAim = false;
+    TeleportObject(this, TgX, TgY, 50, false, 2);
+    }
+super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+         if(CurWeapon->CheckName("Dimensional Door"))
+         {
+           if(Type == M_DRAWQUEUE)
+           {
+                if (DrawAim == true)
+                {
+           		local spr = TpTrgSprite->Index;
+           		AddSprite(12,TgX,TgY-4,0,spr,TPanimphase);
+           		}
+           }
+           
+           if(Type == M_TURNEND)
+           {
+                DrawAim = true;
+           }
+
+           if(Type == M_FRAME)
+           {
+            if(TPanimphase > 1){TPanimphase = 0;}else{TPanimphase = TPanimphase + 0.1;}
+            if(OptimizeFrames == 0)
+            {
+            //float ang = atan2(Desc->SpY, Desc->SpX);
+            //float a;
+            //a = ang;
+            //local DirX = cos(a);
+            //local DirY = sin(a);
+            //local TargX = Desc->X + DirX * 10000.0;
+            //local TargY = Desc->Y + DirY * 10000.0;
+            local ang = (1 - FireAngle) * 3.14159;
+            if (TurnSide < 0)
+            {
+               ang = 6.28318 - ang;
+            };
+            local len = 300;                //in pixelz
+            local dx = PosX + sin(ang) * len;   //being bad at math I scavenged old libs for what I needed
+            local dy = PosY - cos(ang) * len;   //dx and dy are targets of our trace
+            int hitx0;
+            int hity0;
+            local flags = 2;
+            CWorm* hitObject1 = TraceLine(this, PosX, PosY, dx, dy, flags, &hitx0, &hity0);
+            TgX = hitx0;
+            TgY = hity0;
+            OptimizeFrames = 10;
+            }
+            else
+            {
+            OptimizeFrames = OptimizeFrames - 1;   //im so good now
+            }
+           }
+         }
+super;
+}

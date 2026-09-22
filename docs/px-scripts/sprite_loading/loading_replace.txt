@@ -1,0 +1,11 @@
+CSprite* cdrom;
+
+void loading_replace::InitGraphic()
+{
+   CFile *f;
+   //f = GetAttachment("cdrom.png");
+   f = GetAttachment("percent.png");
+   cdrom = LoadSprite(f, 25, -1);
+   
+   SetSpriteOverride(1, cdrom);
+}

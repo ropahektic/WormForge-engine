@@ -1,0 +1,19 @@
+require utils;
+//------------------------------------------------------------------------------
+// Sound Mute
+override void CWorm::PlaySoundBank(int sound,fixed param1)
+{
+if(CurWeapon->CheckName("Grenade")
+|| CurWeapon->CheckName("Cluster Bomb")
+|| CurWeapon->CheckName("Banana Bomb")
+|| CurWeapon->CheckName("Holy Hand-Grenade"))
+	{
+	if (sound == 140 || sound == 194) return;         // Fire!
+	else if (sound == 177 || sound == 231) return;    // Watch This...
+	else super;
+	}
+else
+	{
+	super;
+	}
+}

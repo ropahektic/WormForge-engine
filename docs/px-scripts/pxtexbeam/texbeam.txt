@@ -1,0 +1,131 @@
+
+CQuad __BQ;
+int __BN;
+fixed __BZ;
+fixed __BF;
+int __BT;
+int __BB;
+CObject *__BO;
+
+CTexBeamPoint::CTexBeamPoint()
+{
+	x = 0.0;
+	y = 0.0;
+	dx = 0.0;
+	dy = 0.0;
+	texcoord = 0.0;
+	color = 0;
+}
+
+void CTexBeamPoint::Copy(CTexBeamPoint *dest)
+{
+	dest->x = x;
+	dest->y = y;
+	dest->dx = dx;
+	dest->dy = dy;
+	dest->texcoord = texcoord;
+	dest->color = color;
+}
+
+void CTexBeamPoint::RenderBeamSection(CTexBeamPoint *target)
+{
+	__BQ.blend = __BB;
+	__BQ.tex = __BT;
+	
+	__BQ.v[0].x = x + dx;
+	__BQ.v[0].y = y + dy;
+	__BQ.v[0].z = __BZ;
+	__BQ.v[0].tx = texcoord;
+	__BQ.v[0].ty = 0.0;
+	__BQ.v[0].color = color;
+	
+	__BQ.v[3].x = x - dx;
+	__BQ.v[3].y = y - dy;
+	__BQ.v[3].z = __BZ;
+	__BQ.v[3].tx = texcoord;
+	__BQ.v[3].ty = 1.0;
+	__BQ.v[3].color = color;
+	
+	__BQ.v[1].x = target->x + target->dx;
+	__BQ.v[1].y = target->y + target->dy;
+	__BQ.v[1].z = __BZ;
+	__BQ.v[1].tx = target->texcoord;
+	__BQ.v[1].ty = 0.0;
+	__BQ.v[1].color = target->color;
+	
+	__BQ.v[2].x = target->x - target->dx;
+	__BQ.v[2].y = target->y - target->dy;
+	__BQ.v[2].z = __BZ;
+	__BQ.v[2].tx = target->texcoord;
+	__BQ.v[2].ty = 1.0;
+	__BQ.v[2].color = target->color;
+	
+	__BO->AddSpriteQ(__BZ, &__BQ, __BT, __BF, 64);
+}
+
+CTexBeamPoint *__BP0;
+CTexBeamPoint *__BP1;
+CTexBeamPoint *__BP2;
+float __BW0;
+
+void texbeam::InitGraphic()
+{
+	__BP0 = new CTexBeamPoint();
+	__BP1 = new CTexBeamPoint();
+	__BP2 = new CTexBeamPoint();
+}
+
+void StartTexturedBeam(CObject *parent, fixed z, int tex, fixed frame, int blendmode)
+{
+	__BO = parent;
+	__BN = 0;
+	__BZ = z;
+	__BT = tex;
+	__BF = frame;
+	__BB = blendmode;
+}
+
+void TexturedBeamPoint(float x, float y, float width, float texcoord, int color)
+{
+	__BP0->x = x;
+	__BP0->y = y;
+	__BP0->texcoord = texcoord;
+	__BP0->color = color;
+	
+	if(__BN > 0)
+	{
+		float dx = __BP0->x - __BP1->x;
+		float dy = __BP0->y - __BP1->y;
+		float d = sqrt(dx*dx+dy*dy);
+		
+		// todo: exception handling for two successive beam points at the exact same position. (d=0)
+		__BP0->dx = -width * dy / d;
+		__BP0->dy = width * dx / d;
+		
+		if(__BN == 1)
+		{
+			__BP1->dx = -__BW0 * dy / d;
+			__BP1->dy = __BW0 * dx / d;
+		}
+		else
+		{
+			__BP1->dx = (__BP0->dx + __BP2->dx) / 2.0;
+			__BP1->dy = (__BP0->dy + __BP2->dy) / 2.0;
+			
+			__BP2->RenderBeamSection(__BP1);
+		}
+	}
+	
+	__BN += 1;
+	__BP1->Copy(__BP2);
+	__BP0->Copy(__BP1);
+	__BW0 = width;
+}
+
+void EndTexturedBeam()
+{
+	if(__BN > 0)
+	{
+		__BP2->RenderBeamSection(__BP1);
+	}
+}

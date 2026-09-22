@@ -1,0 +1,304 @@
+require utils;
+
+//Classes!
+
+CBuyInterface : CObject;
+CBitmap* CoinBitmap;
+CBitmap* DiamondBitmap;
+CSoundFile* TreasureSound;
+//GetWeaponIcon won't work with those.
+CBitmap* JetPackBitmap;
+CBitmap* LowGravBitmap;
+CBitmap* FastWalkBitmap;
+CBitmap* LaserSightBitmap;
+CBitmap* InvisibilityBitmap;
+CBitmap* Damagex2Bitmap;
+CBitmap* CrateSpyBitmap;
+CBitmap* PatsyBitmap;
+CBitmap* ArmageddonBitmap;
+CBitmap* FreezeBitmap;
+CBitmap* IndianTestBitmap;
+CBitmap* DonkeyBitmap;
+CBitmap* MadCowBitmap;
+CBitmap* OldWomanBitmap;
+CBitmap* SelectWormBitmap;
+
+//Get our attachments..
+
+void shopscript::FirstFrame()
+{
+     CFile *f;
+     f = GetAttachment("treasureopen.wav");
+     TreasureSound = new CSoundFile(f);
+}
+
+void shopscript::InitGraphic()
+{ 
+   CoinBitmap = LoadImage(GetAttachment("shopcoinico.png"));
+   DiamondBitmap = LoadImage(GetAttachment("shopdiamondico.png"));
+   //Exceptions
+   JetPackBitmap = LoadImage(GetAttachment("jetpackimg.png"));
+   LowGravBitmap = LoadImage(GetAttachment("lowgravityimg.png"));
+   FastWalkBitmap = LoadImage(GetAttachment("fastwalkimg.png"));
+   LaserSightBitmap = LoadImage(GetAttachment("lasersightimg.png"));
+   InvisibilityBitmap = LoadImage(GetAttachment("invisibilityimg.png"));
+   Damagex2Bitmap = LoadImage(GetAttachment("damagex2img.png"));
+   CrateSpyBitmap = LoadImage(GetAttachment("cratespyimg.png"));
+   PatsyBitmap = LoadImage(GetAttachment("patsyimg.png"));
+   ArmageddonBitmap = LoadImage(GetAttachment("armageddonimg.png"));
+   FreezeBitmap = LoadImage(GetAttachment("freezeimg.png"));
+   MadCowBitmap = LoadImage(GetAttachment("madcowimg.png"));
+   OldWomanBitmap = LoadImage(GetAttachment("oldwomanimg.png"));
+   IndianTestBitmap = LoadImage(GetAttachment("indiantestimg.png"));
+   DonkeyBitmap = LoadImage(GetAttachment("donkeyimg.png"));
+   SelectWormBitmap = LoadImage(GetAttachment("selectwormimg.png"));
+}
+
+//Variables!
+CBuyInterface::CBuyInterface(CObject* parent)
+   {
+   super(Root, GS);   
+   ShopGUI = MakeBitmap(64,80);
+   IconBitmap = MakeBitmap(32,32);
+   PosX=0;
+   PosY=0;
+   Weap="Bazooka";
+   OrigName="Bazooka"; //Name string occasionaly breaks, this is to prevent so
+   Amount=1;
+   Page=1;
+   CPrice=0;
+   DPrice=0;
+   GotWeap=false;
+   ReadyToGo=false; //This becomes true once the ShopObject successfully finds its stock
+   StockNum=1;
+   SelWeap=1;
+   Updated=false;
+   }
+
+//Draw all bitmaps!
+void CBuyInterface::DrawBitmap()
+   {
+    AddBitmap(12,PosX,PosY,ShopGUI,64,80,0);
+    DrawIcons();
+    AddBitmap(11,PosX-24,PosY+16,CoinBitmap,16,16,0);
+    AddBitmap(11,PosX-24,PosY+32,DiamondBitmap,16,16,0);
+   }
+
+//Non-bitmap stuff!  
+void CBuyInterface::DrawInfo()
+   {           			 
+   local a = 1;
+   local b = 1; 
+   local selstr = StrCon(StrCon(StrCon(StrCon("(",ItoA(SelWeap)),"/"),ItoA(StockNum)),")");                                          
+   local amstr = StrCon(ItoA(Amount),"x ");
+   local cpstr = StrCon("x",ItoA(CPrice));
+   local dpstr = StrCon("x",ItoA(DPrice));
+   ShopGUI->Rect(0,0,64,80,ARGB(255,0,0,0));	
+   GS->Disp->DrawText(3,ShopGUI, 2, 34, amstr, &a, &b);
+   GS->Disp->DrawText(3,ShopGUI, 34, 34, selstr, &a, &b);
+   GS->Disp->DrawText(7,ShopGUI, 18, 50, cpstr, &a, &b);
+   GS->Disp->DrawText(7,ShopGUI, 18, 66, dpstr, &a, &b);	
+   }
+   
+//Work around for the Weapon Icons that don't work
+void CBuyInterface::DrawIcons()
+   {
+    if (MyWeap == GS->GetWeaponByName("Jet Pack"))
+       AddBitmap(10,PosX,PosY-24,JetPackBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Low Gravity"))
+       AddBitmap(10,PosX,PosY-24,LowGravBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Fast Walk"))
+       AddBitmap(10,PosX,PosY-24,FastWalkBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Laser Sight"))
+       AddBitmap(10,PosX,PosY-24,LaserSightBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Invisibility"))
+       AddBitmap(10,PosX,PosY-24,InvisibilityBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Damage*2"))
+       AddBitmap(10,PosX,PosY-24,Damagex2Bitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Crate Spy"))
+       AddBitmap(10,PosX,PosY-24,CrateSpyBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Patsy's Magic Bullet"))
+       AddBitmap(10,PosX,PosY-24,PatsyBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Concrete Donkey"))
+       AddBitmap(10,PosX,PosY-24,DonkeyBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Freeze"))
+       AddBitmap(10,PosX,PosY-24,FreezeBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Indian Nuclear Test"))
+       AddBitmap(10,PosX,PosY-24,IndianTestBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Armageddon"))
+       AddBitmap(10,PosX,PosY-24,ArmageddonBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Old Woman"))
+       AddBitmap(10,PosX,PosY-24,OldWomanBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Mad Cow"))
+       AddBitmap(10,PosX,PosY-24,MadCowBitmap,32,32,0);
+    else if (MyWeap == GS->GetWeaponByName("Select Worm"))
+       AddBitmap(10,PosX,PosY-24,SelectWormBitmap,32,32,0);
+    else
+       AddBitmap(10,PosX,PosY-24,IconBitmap,32,32,0);
+   }
+
+//Make sure it actually draws.
+void CBuyInterface::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+   {
+   if (ReadyToGo) {
+   if (Type == M_FRAME) 
+   {
+   if (!GotWeap) //Oh wait, I don't know the weapon yet;
+       {
+         MyWeap = GS->GetWeaponByName(Weap);
+         Icon = GS->GetWeaponIcon(Page,MyWeap->GetWeaponIndex()); 
+         IconBitmap = Icon;
+         GotWeap=true; //k
+       }
+   else
+       {
+       if (Updated) {
+          IconBitmap = MakeBitmap(32,32);
+          Icon = GS->GetWeaponIcon(Page,MyWeap->GetWeaponIndex()); 
+          IconBitmap = Icon;
+          Updated=false;
+       }       
+       DrawInfo();    
+       }
+   }
+   if (GotWeap) {
+   if (Type == M_DRAWQUEUE)
+       {
+       DrawBitmap();
+       }
+   }
+   }
+}                                  
+
+//Very useful information indeed.
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{                                                             
+ if (Weap->CheckName("Gold Coin"))
+ {
+  ShowMessage("It is a golden coin!");
+  ShowMessage("Press B in an Item Shop to buy goods.");
+  ShowMessage("Press N to browse through the items in a shop.");
+  GS->Info.AddWeaponEx(Root->CurTeam,Weap->GetWeaponIndex(),Weap->GetPageIndex(),1);
+ }
+ else if (Weap->CheckName("Diamond"))
+ {
+  ShowMessage("It is a shiny diamond!");
+  ShowMessage("Press B in an Item Shop to buy goods.");
+  ShowMessage("Press N to browse through the items in a shop.");
+  ShowMessage(ItoA(Root->CurTeam));
+  ShowMessage(ItoA(Weap->GetWeaponIndex()));
+  ShowMessage(ItoA(Weap->GetPageIndex()));
+  GS->Info.AddWeaponEx(Root->CurTeam,Weap->GetWeaponIndex(),Weap->GetPageIndex(),1);
+ }
+ else if (Weap->CheckName("Treasure Chest"))
+ {
+  SoundObj = CSound(NullObj);
+  local cweap = GS->GetWeaponByName("Gold Coin");
+  local dweap = GS->GetWeaponByName("Diamond");
+  TreasureSound->Play(1.0, 0.0, false);
+  local rewType = GS->GetRandom() % 1000;
+   if (rewType>990) 
+   {
+   Root->ShowTeamMessage(1,"Lucky! You got 25 diamonds!",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,dweap->GetWeaponIndex(),dweap->GetPageIndex(),25);
+   }
+   else if (rewType>960) 
+   {
+   Root->ShowTeamMessage(1,"Lucky! You got 10 diamonds!",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,dweap->GetWeaponIndex(),dweap->GetPageIndex(),10);
+   }
+   else if (rewType>910) 
+   {
+   Root->ShowTeamMessage(1,"Lucky! You got 5 diamonds!",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,dweap->GetWeaponIndex(),dweap->GetPageIndex(),5);
+   }
+   else if (rewType>850) 
+   {
+   Root->ShowTeamMessage(1,"You got 1 diamond.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,dweap->GetWeaponIndex(),dweap->GetPageIndex(),1);
+   }
+   else if (rewType>820) 
+   {
+   Root->ShowTeamMessage(1,"Nice! You got 100 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),100);
+   }
+   else if (rewType>780) 
+   {
+   Root->ShowTeamMessage(1,"Nice! You got 50 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),50);
+   }
+   else if (rewType>730) 
+   {
+   Root->ShowTeamMessage(1,"Nice! You got 30 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),30);
+   }
+   else if (rewType>670) 
+   {
+   Root->ShowTeamMessage(1,"Nice! You got 25 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),25);
+   }
+   else if (rewType>600) 
+   {
+   Root->ShowTeamMessage(1,"You got 20 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),20);
+   }
+   else if (rewType>520) 
+   {
+   Root->ShowTeamMessage(1,"You got 15 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),15);
+   }
+   else if (rewType>430) 
+   {
+   Root->ShowTeamMessage(1,"You got 10 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),10);
+   }
+   else if (rewType>330) 
+   {
+   Root->ShowTeamMessage(1,"You got 8 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),8);
+   }
+   else if (rewType>220) 
+   {
+   Root->ShowTeamMessage(1,"You got 5 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),5);
+   }
+   else if (rewType>100) 
+   {
+   Root->ShowTeamMessage(1,"You got 3 coins.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),3);
+   }
+   else if (rewType>40) 
+   {
+   Root->ShowTeamMessage(1,"You got 1 coin.",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),1);
+   }
+   else if (rewType==37) 
+   {
+   Root->ShowTeamMessage(1,"Insane Luck! You got 1337 coins!",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),1337);
+   }
+   else if (rewType>30) 
+   {
+   Root->ShowTeamMessage(1,"You got a Sheep.",Root->CurTeam);
+   local tweap = GS->GetWeaponByName("Sheep");
+   GS->Info.AddWeaponEx(Root->CurTeam,tweap->GetWeaponIndex(),tweap->GetPageIndex(),1);
+   }
+   else if (rewType>20) 
+   {
+   Root->ShowTeamMessage(1,"There were TWO chests inside!",Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,Weap->GetWeaponIndex(),Weap->GetPageIndex(),2);
+   }
+   else if (rewType>10) 
+   {
+   Root->ShowTeamMessage(1,"There was absolutely nothing inside!",Root->CurTeam);
+   }
+   else 
+   {
+   local cAmount = GS->GetRandom() % 200;
+   Root->ShowTeamMessage(1,StrCon(StrCon("You got ",ItoA(cAmount+1))," coins."),Root->CurTeam);
+   GS->Info.AddWeaponEx(Root->CurTeam,cweap->GetWeaponIndex(),cweap->GetPageIndex(),cAmount+1);
+   }
+ }
+ else
+ super;
+}

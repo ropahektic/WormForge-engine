@@ -1,0 +1,41 @@
+require utils;
+
+void exturnside::FirstFrame()
+{       
+        keySync->AddKey(90); // Z button
+        keySync->AddKey(88); // X button
+        keySync->AddKey(37); // Left
+        keySync->AddKey(39); // Right
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+CWorm *AWorm = GetCurrentWorm();
+
+if(AWorm == NullObj){RopeReady = false; ActionReady = false;} // to prevent using outside the turn
+if(AWorm != NullObj){RopeReady = true; ActionReady = true;}
+           
+         if(Type == M_FRAME)
+         {       
+                   if(RopeReady == true && (AWorm->ObjState == WS_ROPING || AWorm->ObjState == WS_BUNGEE))
+                   {
+                   if(keySync->KeyPressedNow(90) == true) {AWorm->TurnSide = -1;}
+                   if(keySync->KeyPressedNow(88) == true) {AWorm->TurnSide = 1;}
+                   }
+                     
+                   if(ActionReady == true && (AWorm->ObjState == WS_BLOWTORCH || AWorm->ObjState == WS_SHOOTINGROPE ||
+                                              AWorm->ObjState == WS_FIRECONT || AWorm->ObjState == WS_SETPOWER ||
+                                              AWorm->ObjState == WS_FIRED || AWorm->ObjState == WS_FIREPUNCH ||
+                                              AWorm->ObjState == WS_JUMPPREPARE || AWorm->ObjState == WS_JUMP ||
+                                              AWorm->ObjState == WS_REPEATFIRE || AWorm->ObjState == WS_TELEPORTING ||
+                                              AWorm->ObjState == WS_DRILLING || AWorm->ObjState == WS_FLYING ||
+                                              AWorm->ObjState == WS_FLYING2 || AWorm->ObjState == WS_DEATH ||
+                                              AWorm->ObjState == WS_POWERFLY || AWorm->ObjState == WS_SUICIDEBOMBER ||
+                                              AWorm->ObjState == WS_SLIDING || AWorm->ObjState == WS_SINKING || AWorm->ObjState == WS_POING))
+                   {
+                   if(keySync->KeyPressedNow(37) == true) {AWorm->TurnSide = -1;}
+                   if(keySync->KeyPressedNow(39) == true) {AWorm->TurnSide = 1;}
+                   }
+         }
+super;        
+}

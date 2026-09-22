@@ -1,0 +1,141 @@
+//PARKOUR MOD
+
+//Wall-Jump (ENTER)
+//If the wall is close enough, the worm will make an additional jump in the air.
+//Basic math: 
+//SpY = SpY - WallJumpMultiplier.
+//SpX = (WallJumpMultiplier-1);
+
+//Bunny-Hop (BACKSPACE)
+//If the floor is close, the worm will make another jump with additional X speed. Can be used while sliding.
+//Basic math: 
+//SpX = SpX + BhopMultiplier*TurnSide.
+//SpY = SpY - 4
+
+require utils;
+
+void Parkour::InitGraphic()     //func that will run on GraphicInit. Usually used to load sprites.
+{
+}
+
+void Parkour::Init()     //func that will run on init. Usually used to load non-sprite objects, like sounds.
+{
+}
+
+void Parkour::FirstFrame()
+{	
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+WallJumpMultiplier = 2;
+BhopMultiplier = 3;
+BhopDelay = 0; //bhop will not work for 1st 25 frames.
+WallJumpDelay = 0;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+
+  if(GetCurrentWorm() != NullObj)
+  {
+    if(GetCurrentWorm() == this)
+    {
+      if(Type == M_FRAME)
+      {                
+              if(WallJumpDelay >= 1) {WallJumpDelay = WallJumpDelay - 1;}
+              if(BhopDelay >= 1) {BhopDelay = BhopDelay - 1;}
+              if(ObjState == WS_JUMPPREPARE){BhopDelay = 25;}
+              if(ObjState == WS_PARACHUTE){WallJumpDelay = 10;}
+      }
+      
+      if(Type == M_ENTER)
+      {
+      if(WallJumpDelay < 1)
+                       {
+                       WallJump();
+                       WallJumpDelay = 15;
+                       }
+      }
+      
+      if(Type == M_BACKSPACE)
+      {
+      if(BhopDelay == 0){BhopJump();}
+      }      
+    }
+  }
+}
+
+
+void CWorm::WallJump()
+{
+     if(ObjState == WS_JUMP || ObjState == WS_SLIDING || ObjState == WS_FLYING2)
+     {
+       //wall to the right
+       int hit2x;
+       int hit2y;
+       CGObject *hit2 = TraceLine(this, PosX, PosY, PosX+20, PosY, 2, &hit2x, &hit2y);   
+              
+       //wall to the left
+       int hit3x;
+       int hit3y;
+       CGObject *hit3 = TraceLine(this, PosX, PosY, PosX-20, PosY, 2, &hit3x, &hit3y); 
+       
+                if(hit2 != NullObj && hit3 != NullObj)
+		{   
+		   local x2 = sqrt((hit2x - PosX)*(hit2x - PosX));
+		   local x3 = sqrt((hit3x - PosX)*(hit3x - PosX));
+		   local side = 0;
+		   if(x2 < x3){ side = -1;}
+		   else{ side = 1;}
+		   
+		   
+                       if(SpY > 0){SpY = 0;}         			
+                       SpY = SpY - WallJumpMultiplier - sqrt(SpX*SpX);
+                       SpX = (WallJumpMultiplier+1 + sqrt(SpX*SpX)) * side;
+                       TurnSide = side;
+                       if(ObjState != WS_JUMP){ SetState(WS_JUMP);}
+		}
+		else
+		{
+		    if(hit2 != NullObj)
+		    {
+		       if(SpY > 0){SpY = 0;}
+                       SpY = SpY - WallJumpMultiplier - sqrt(SpX*SpX);
+                       SpX = -1*(WallJumpMultiplier+1 + sqrt(SpX*SpX));
+                       TurnSide = -1;
+                       if(ObjState != WS_JUMP){ SetState(WS_JUMP);}
+		    }
+		    
+		    if(hit3 != NullObj)
+		    {
+		       if(SpY > 0){SpY = 0;}
+                       SpY = SpY - WallJumpMultiplier - sqrt(SpX*SpX);
+                       SpX = WallJumpMultiplier+1 + sqrt(SpX*SpX);
+                       TurnSide = 1;
+                       if(ObjState != WS_JUMP){ SetState(WS_JUMP);}
+		    }
+		}
+     }
+}
+
+
+
+void CWorm::BhopJump()
+{
+     if(ObjState == WS_FLYING2 || ObjState == WS_FLYING || ObjState == WS_POWERFLY || ObjState == WS_JUMP || ObjState == WS_SLIDING)
+     {
+       int hitx1;
+       int hity1;
+       CGObject *hit1 = TraceLine(this, PosX, PosY, PosX, PosY+30, 2, &hitx1, &hity1);
+                if(hit1 != NullObj)
+		{     
+                       if(SpY > 0){SpY = 0;}       			
+                       SpY = SpY - BhopMultiplier;
+                       SpX = SpX + (BhopMultiplier-1)*TurnSide;
+                       if(ObjState != WS_JUMP){ SetState(WS_JUMP);}
+		}
+     }
+}

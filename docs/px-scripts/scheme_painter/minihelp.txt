@@ -1,0 +1,149 @@
+require utils;
+
+CHelpGUI : CObject;
+bool HGUION;
+bool HGUIEnabled;
+bool HDisabler; 
+
+CHelpGUI::CHelpGUI(CObject* parent)
+{
+     super(parent, GS);
+     HGUI = MakeBitmap(360,640);
+}
+
+void CHelpGUI::ProcessOutput()
+{
+      if (GS->Tick > 0)
+        {
+            local a = 0;
+            local b = 0;
+            local col = RGB(255, 255, 128);
+            
+                   HGUI->HLine(0, HGUI->SX - 1, 0, col);
+                   HGUI->HLine(0, HGUI->SX - 1, HGUI->SY - 1, col);
+                   HGUI->HLine(0, HGUI->SX - 1, 20, col);
+                   
+                   
+                   HGUI->VLine(HGUI->SX - 1, 0, HGUI->SY - 1, col);
+                   HGUI->VLine(0, 0, HGUI->SY - 1, col);
+                   
+                   HGUI->Rect(1, 1, HGUI->SX - 1, HGUI->SY - 1, ARGB(225, 0, 0, 0)))
+
+                   
+                   GS->Disp->DrawText(12, HGUI, HGUI->SX/2 -10, 10, "HELP", &a, &b);
+                   GS->Disp->DrawText(9, HGUI, HGUI->SX/2 -75, 30, "American QWERTY layout!", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 50, "Enable painter", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 70, "Disable painter", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 90, "Camera lock on/off", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 110, "Move brush", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 130, "Mouse brush on/off", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 150, "Paint", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 170, "Paint indy", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 190, "Erase", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 210, "Erase indy", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 230, "Erase indy, objects, soil", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 250, "Spray paint", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 270, "Spray paint indy", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 290, "Brush speed (0 = 10)", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 310, "Brush size (0 = 10)", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 330, "Brush color", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 350, "Make gas", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 370, "Make explosions", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 390, "Make mines", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 410, "Make oil drums", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 430, "Make fire", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 450, "Make crates", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 470, "Crate type", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 490, "Mine fuse", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 510, "Move brush 1 step", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 530, "Make only 1 object", &a, &b);
+                   GS->Disp->DrawText(16, HGUI, 10, 550, "Open GUI (info)", &a, &b);
+                   GS->Disp->DrawText(20, HGUI, 25, 580, "To open/close this help anytime,", &a, &b);
+                   GS->Disp->DrawText(20, HGUI, 130, 610, "press Ctrl+H.", &a, &b);
+                   
+                      
+                   
+                   
+                   GS->Disp->DrawText(15, HGUI, 220, 50, "]", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 70, "[", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 90, "'", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 110, "W, A, S, D", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 130, ";", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 150, "K", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 170, "I", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 190, "L", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 210, "O", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 230, "P", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 250, "J", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 270, "U", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 290, "1-0", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 310, "Shift+1-0", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 330, "Ctrl+1-0, ~, -, +, <-", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 350, "B", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 370, "N", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 390, "M", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 410, "<", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 430, ">", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 450, "?", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 470, "Tab+1-5", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 490, "Alt+0, -, +, <- (rnd)", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 510, "Shift+W, A, S, D", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 530, "Shift+Button", &a, &b);
+                   GS->Disp->DrawText(15, HGUI, 220, 550, "Num 5, Menu key", &a, &b);
+                   
+                                                                    
+                   
+        }
+}
+
+void minihelp::FirstFrame()
+{
+ new CHelpGUI(Root);
+ HGUION = true;
+ HGUIEnabled = true;
+}
+
+void CHelpGUI::Enable()
+{
+ if((IsKeyPressed(17) && IsKeyPressed(72)) && HGUIEnabled && !pressed) 
+   { 
+      HGUION = false; 
+      pressed = true; 
+   } 
+ 
+ if((!IsKeyPressed(17) && !IsKeyPressed(72)) && HGUIEnabled  && pressed) 
+   { 
+      HGUIEnabled = false; 
+      pressed = false; 
+   } 
+ 
+ if((IsKeyPressed(17) && IsKeyPressed(72)) && !HGUIEnabled && !pressed) 
+   { 
+      HGUION = true; 
+      pressed = true; 
+   } 
+ 
+ if((!IsKeyPressed(17) && !IsKeyPressed(72)) && !HGUIEnabled && pressed) 
+   { 
+      HGUIEnabled = true; 
+      pressed = false; 
+   }         
+}
+
+void CHelpGUI::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+
+ if (Type == M_FRAME)
+    {
+    Enable();     
+    ProcessOutput();   
+    }
+    
+ if (Type == M_DRAWQUEUE)
+    {
+     if (HGUION)
+     {
+      AddInterfaceBitmap(0, (GS->Disp->xRes / 2) - HGUI->SX / 2,(GS->Disp->yRes / 2) - HGUI->SX,HGUI,360,640,0);
+     }
+    }
+}

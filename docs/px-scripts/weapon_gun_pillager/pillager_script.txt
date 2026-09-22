@@ -1,0 +1,48 @@
+require utils, p_sprite_builder, sprite_curtis_452;
+
+CSprite* firep_bullet;
+
+void pillager_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("fpellet.png");
+    firep_bullet = LoadSprite(f, 6, 0);
+}
+
+
+//---------------------------------PILLAGER-----------------------------------//
+
+ override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+ {
+   if(Weap->CheckName("Pillager"))
+   {
+   Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 42;
+   Desc->SpY = 42*(0.5 - FireAngle);
+   super(GetWeaponByName("Fire Pellet"), Desc);
+   return;
+   }
+ super;
+ }
+ 
+//---------------------------------FIRE PELLET--------------------------------//
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Fire Pellet")) {
+         if (fpellet_anim) {
+              local sprite = firep_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 15.00;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              fpellet_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  fpellet_anim = true;
+}

@@ -1,0 +1,36 @@
+require p_sprite_builder, utils, p_animation;
+
+CSprite* icyaw_aim;
+
+void spw_spb::InitGraphic()
+{
+CFile *f;
+f = GetAttachment("spb_icyaw.png");
+icyaw_aim = LoadSprite(f, 1, 0);
+}
+
+//---------------------------SPRITE-BUILDER-------------------------------------
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if (Type == M_FRAME)
+	{
+	if (gframe == 1)
+		{
+		local weapName;
+		weapName = "Ice Bolt";
+		local sprite;
+		sprite = icyaw_aim->Index;
+		CWormAnimParams* Params = new CWormAnimParams;
+
+//-------------------------AIMING-ANIMATIONS------------------------------------
+
+		Params->draw_hand = false;
+		Params->weap_radial_rotation = 0.0;
+		Params->weap_rotation = 0.5;
+		Params->weap_radius = 4.5;
+
+		local WA = new WormSprite(weapName, sprite, Params);
+		}
+	}
+}

@@ -1,0 +1,31 @@
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+
+      if(Type == M_FRAME)
+      {
+              if(ObjState == WS_FLYING2)// || ObjState == WS_SLIDING || ObjState == WS_FLYING)
+              {
+                                if(GlitchingTimer != 0)GlitchingTimer = GlitchingTimer - 1;
+                                if(GlitchingTimer == 0)
+                                {
+                                SpX = 0;
+                                SpY = 0;
+                                GlitchingTimer = 500;
+                                SetState (WS_IDLE);
+                                }
+              }
+              else
+              {
+              if(GlitchingTimer != 500)GlitchingTimer = 500;
+              }
+      }
+
+
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+GlitchingTimer = 500;
+}

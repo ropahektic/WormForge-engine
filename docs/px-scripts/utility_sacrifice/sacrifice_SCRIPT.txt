@@ -1,0 +1,156 @@
+// Sacrifice by 0rang3 - adds turntime while damaging worm, 5 seconds for 50 health
+
+require utils, utils_steps;
+
+CSoundFile* timeadded;
+CSoundFile* timeerror;
+
+bool sacrifice_informer;
+bool dosacrifice;
+int factor;
+ 
+void sacrifice_SCRIPT::Init()
+{
+timeadded = new CSoundFile(GetAttachment("sacrifice_sound.wav"));
+timeerror = new CSoundFile(GetAttachment("sacrifice_error.wav"));                                            
+}
+
+void sacrifice_SCRIPT::FirstFrame()
+{
+sacrifice_informer = true;
+
+keySync->AddKey(49); // 1 button
+keySync->AddKey(50); // 2 button
+keySync->AddKey(51); // 3 button
+keySync->AddKey(52); // 4 button
+keySync->AddKey(53); // 5 button
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+override void CWorm::Message(CObject *sender, EMType Type, int mSize, CMessageData *mData)
+{   
+
+    local touchedworm = CWorm(this);
+    TargHealth = GS->Info.GetWormHealth(touchedworm->WormTeam, touchedworm->WormNumber);
+
+if(Type == M_FRAME)
+{  
+   if(CurWeapon != NullObj)
+      {
+      if(CurWeapon->CheckName("Sacrifice"))
+      {
+         if(sacrifice_informer == true)
+         {                        
+            local cw = GetCurrentWorm();
+            ShowTeamMessage(8,"Choose how many seconds you want",cw->WormTeam);
+            PlayLocalSound(1, 1.0, 1.0, 1.0);
+            sacrifice_informer = false;
+         }
+         
+         if(keySync->KeyPressedNow(49))
+         {
+            dosacrifice = true;
+            factor = 1;            
+            local cw = GetCurrentWorm();
+            ShowTeamMessage(8,"5 seconds",cw->WormTeam);
+            PlayLocalSound(106, 1.0, 1.0, 1.0);
+         }
+         else if(keySync->KeyPressedNow(50))
+         {
+            dosacrifice = true;
+            factor = 2;            
+            local cw = GetCurrentWorm();
+            ShowTeamMessage(8,"10 seconds",cw->WormTeam);
+            PlayLocalSound(106, 1.0, 1.0, 1.0);
+         } 
+         else if(keySync->KeyPressedNow(51))
+         {
+            dosacrifice = true;
+            factor = 3;            
+            local cw = GetCurrentWorm();
+            ShowTeamMessage(8,"15 seconds",cw->WormTeam);
+            PlayLocalSound(106, 1.0, 1.0, 1.0);
+         }
+         else if(keySync->KeyPressedNow(52))
+         {
+            dosacrifice = true;
+            factor = 4;            
+            local cw = GetCurrentWorm();
+            ShowTeamMessage(8,"20 seconds",cw->WormTeam);
+            PlayLocalSound(106, 1.0, 1.0, 1.0);
+         }
+         else if(keySync->KeyPressedNow(53))
+         {
+            dosacrifice = true;
+            factor = 5;            
+            local cw = GetCurrentWorm();
+            ShowTeamMessage(8,"25 seconds",cw->WormTeam);
+            PlayLocalSound(106, 1.0, 1.0, 1.0);
+         }   
+      }
+   } 
+}   
+   if(Type == M_SETWEAPON)
+   {
+      if(sacrifice_informer == false)
+      {
+         sacrifice_informer = true;
+      }
+   }               
+   super;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+   if(Weap->CheckName("Sacrifice") && dosacrifice == true)
+      {    
+      local HP = GS->Info.GetWormHealth(WormTeam, WormNumber);
+      vol = CalculateSoundVolume(PosX,PosY);
+      pan = CalculateSoundPan(PosX,PosY);
+  
+      if((HP > 50) && (HP - (50*factor) >= 1))
+        {
+        GS->Info.SetWormHealth(WormTeam, WormNumber, HP - (50*factor));
+        Root->Timer += (5000*factor);
+        timeadded->Play(vol, pan, false);
+        dosacrifice = false;        
+        }
+  
+      else if((HP > 50) && (HP - (50*factor) <= 0))
+        {
+        int newfactor = HP/50;
+        
+        if(HP-newfactor*50 == 0) {newfactor = newfactor-1;}
+        
+        GS->Info.SetWormHealth(WormTeam, WormNumber, HP - (50*newfactor));
+        Root->Timer += (5000*newfactor);
+        timeadded->Play(vol, pan, false);
+        local cw = GetCurrentWorm();
+        ShowTeamMessage(8,"Given as much time as possible for your HP",cw->WormTeam);
+        dosacrifice = false;                     
+        }
+        
+      else if(HP <= 50)
+        {
+        timeerror->Play(vol, pan, false);
+        local cw = GetCurrentWorm();
+        ShowTeamMessage(8,"Not enough HP",cw->WormTeam);
+        dosacrifice = false;
+        }           
+      }
+   else if(Weap->CheckName("Sacrifice") && dosacrifice != true)
+      {
+      local worm = GetCurrentWorm();
+      local wepGC = GS->GetWeaponByName("Sacrifice");
+      GS->Info.AddWeapon(WormTeam, wepGC->GetWeaponIndex(), 1);
+      timeerror->Play(vol, pan, false);
+      ShowMessage("Nothing selected.");
+      dosacrifice = false;      
+      return;
+      }
+  super;
+}
+   

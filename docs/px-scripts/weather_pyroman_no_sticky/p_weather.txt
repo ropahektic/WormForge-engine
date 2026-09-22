@@ -1,0 +1,521 @@
+require utils, utils_steps, weapon_lightning, weapon_magnet, weather_sounds;
+
+/* combo script of rain/snow by PyroMan  */
+
+CWeatherManager : CObject;
+CWeatherBlob : CObject;
+CGObject* weatherObjs[100];
+CWeatherManager *WM;
+CSprite* SWBlobSprite;
+CSprite* RWBlobSprite;
+CSprite* antidebris2; 
+CColMask* snow_checker_2;
+
+CSoundFile* BlizzardAmb;
+CSoundFile* RainAmb;
+
+int SpawnWZone;
+int SpawnWZoneNum;
+int TimeWSpawn[500];
+int BlobsWNum;
+int WLayerMax;
+int GlobalWeatherType;
+bool WStarted;
+
+bool WeatherSoundLimiterS;
+bool WeatherSoundLimiterR;
+
+void p_weather::InitGraphic()
+{
+	CFile *f;
+        f       = GetAttachment("snowflake.png");
+        SWBlobSprite     = LoadSprite(f, 7, 0);
+        f       = GetAttachment("gray_rb.png");
+        RWBlobSprite     = LoadSprite(f, 7, 0);
+        snow_checker_2 = new CColMask(2,2,MakeCircleMask(2));
+}
+   
+void p_weather::Init()
+{
+   WStarted = false;
+   BlobsWNum = 0;
+   
+   BlizzardAmb = new CSoundFile(GetAttachment("Blizzard Ambience.wav"));
+   RainAmb = new CSoundFile(GetAttachment("Rain Ambience.wav"));
+   
+   WeatherSoundLimiterS = false;
+   WeatherSoundLimiterR = false;
+}
+
+void p_weather::FirstFrame()
+{
+     WM = new CWeatherManager();
+     local layerN = 0;
+     WLayerMax = 0;
+     for (local i = 1; i < Env->Objs.Count; i++)
+     {
+        local lay = CGObject(Env->Objs.Objs[i]);
+        if (lay == NullObj) continue;
+        if (lay->ClType == OC_Worm) continue;
+        layerN += 1;
+        if (layerN >= WLayerMax) WLayerMax = layerN;
+     }
+} 
+
+CWeatherManager::CWeatherManager()
+{
+        super(Root, GS);
+        WeatherTimer = 0;
+        WeatherRTimer = 0;
+        Type = RandomInt(1, 3);
+        GlobalWeatherType = RandomInt(1, 3);
+        sType = 0;
+        memType = GlobalWeatherType;
+}                                                                                         
+                                                                         
+void __DrawWeather()
+{
+	WM->Draw();
+}
+
+void __DrawBGWeather()
+{
+	WM->Draw2();
+}
+
+void CWeatherManager::Draw()
+{
+	for(int i=0 ; i<Childs.Count ; i+=1)
+	{
+		local p = CWeatherBlob(Childs.Objs[i]);
+		if(p == CWeatherBlob(NullObj)) continue;
+		if (p->CWType == 3) continue;
+        if (p->ZPlane == 1) p->Draw();
+	}
+}
+
+void CWeatherManager::Draw2()
+{
+	for(int i=0 ; i<Childs.Count ; i+=1)
+	{
+		local p = CWeatherBlob(Childs.Objs[i]);
+		if(p == CWeatherBlob(NullObj)) continue;
+		if (p->CWType == 3) continue;
+		if (p->ZPlane == 2) p->Draw();
+	}
+}
+
+void CWeatherManager::chooseType()
+{
+    sType = RandomInt(1, 3);
+}
+
+void CWeatherManager::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_DRAWQUEUE)
+	{                         
+		AddCustomRender(6, "__DrawWeather");
+		AddCustomRender(25 - sqrt(WLayerMax)/10, "__DrawBGWeather"); 
+	}
+	if (Type == M_FRAME)
+	{
+           // timer for weather changing
+           if (WeatherTimer == 1) 
+           {
+            WeatherRTimer = RandomInt(500, 4000);
+            //WeatherRTimer = 20;  // for tests
+           }
+           // let`s shot lightnings!
+           if (WeatherTimer < (WeatherRTimer+1000) && memType == 2)
+           {
+             if (WeatherTimer == 750 || WeatherTimer == 1500 || WeatherTimer == 2500 || WeatherTimer == 3500 || WeatherTimer == 4500 || WeatherTimer == 6000)
+             {
+               local counter = 0;
+               CShootDesc Desc;
+               zero(&Desc);
+               for (local i = 1; i < Env->Objs.Count; i++)
+               {
+                 local obj = CGObject(Env->Objs.Objs[i]);
+                 if (obj == NullObj) continue;
+                 // priority choosing
+                 if (obj->ClType == OC_Mine || obj->ClType == OC_Missile || obj->ClType == OC_OilDrum || obj->ClType == OC_Crate)
+                 {
+                    if (obj is CMagnet || obj is CMagneticMissile)
+                    {
+                       weatherObjs[counter] = obj;
+                       counter++;
+                    }
+                    if (obj->ClType == OC_Mine || obj->ClType == OC_OilDrum || obj->ClType == OC_Crate)
+                    {
+                       weatherObjs[counter] = obj;
+                       counter++;
+                    }
+                 }
+               }
+             if (counter == 0)
+             {
+               for (local i = 1; i < Env->Objs.Count; i++)
+               {
+                 local obj = CGObject(Env->Objs.Objs[i]);
+                 if (obj == NullObj) continue;
+                 if (obj->ClType == OC_Worm || obj->ClType == OC_Cross)
+                 {
+                    weatherObjs[counter] = obj;
+                    counter++;
+                 }
+               }
+             }
+             local a = RandomInt(0, counter);
+               if (weatherObjs[a] != NullObj)
+               {
+                 Desc.AddX = weatherObjs[a]->PosX;
+                 Desc.AddY = weatherObjs[a]->PosY;
+                 new PxLightningStrike(GetObject(25, 0), &Desc);
+               }
+             }
+           }
+           if (WeatherTimer == WeatherRTimer) chooseType();
+           if (WeatherTimer > WeatherRTimer && WeatherTimer < WeatherRTimer+500)       // transition effect
+           {
+              // when snow
+              if (sType == 1)
+              {
+                  local tmp = RandomInt(1, 9);
+                  if (tmp == 1) GlobalWeatherType = 1;
+                  else GlobalWeatherType = memType;
+              }
+              // when rain
+              if (sType == 2)
+              {
+                  local tmp = RandomInt(1, 9);
+                  if (tmp == 1) GlobalWeatherType = 2;
+                  else GlobalWeatherType = memType;
+              }
+              // when nothing
+              if (sType == 3)
+              {
+                  local tmp = RandomInt(1, 9);
+                  if (tmp == 1) GlobalWeatherType = 3;
+                  else GlobalWeatherType = memType;
+              }
+           }
+           else if (WeatherTimer > WeatherRTimer+500 && WeatherTimer < WeatherRTimer+1000)       // 2nd transition effect
+           {
+              if (sType == 1)
+              {
+                  local tmp = RandomInt(1, 7);
+                  if (tmp == 1) GlobalWeatherType = 1;
+                  else GlobalWeatherType = memType;
+              }
+              if (sType == 2)
+              {
+                  local tmp = RandomInt(1, 7);
+                  if (tmp == 1) GlobalWeatherType = 2;
+                  else GlobalWeatherType = memType;
+              }
+              if (sType == 3)
+              {
+                  local tmp = RandomInt(1, 7);
+                  if (tmp == 1) GlobalWeatherType = 3;
+                  else GlobalWeatherType = memType;
+              }
+           }
+           else if (WeatherTimer > WeatherRTimer+1000 && WeatherTimer < WeatherRTimer+1500)       // 3nd transition effect
+           {
+              if (sType == 1)
+              {
+                  local tmp = RandomInt(1, 3);
+                  if (tmp == 1) GlobalWeatherType = 1;
+                  else GlobalWeatherType = memType;
+              }
+              if (sType == 2)
+              {
+                  local tmp = RandomInt(1, 3);
+                  if (tmp == 1) GlobalWeatherType = 2;
+                  else GlobalWeatherType = memType;
+              }
+              if (sType == 3)
+              {
+                  local tmp = RandomInt(1, 3);
+                  if (tmp == 1) GlobalWeatherType = 3;
+                  else GlobalWeatherType = memType;
+              }
+           }
+           else if (WeatherTimer > WeatherRTimer+1500 && WeatherTimer < WeatherRTimer+2000)       // final transition effect
+           {
+              if (sType == 1)
+              {
+                  local tmp = RandomInt(1, 3);
+                  if (tmp == 1) GlobalWeatherType = memType;
+                  else GlobalWeatherType = 1;
+              }
+              if (sType == 2)
+              {
+                  local tmp = RandomInt(1, 3);
+                  if (tmp == 1) GlobalWeatherType = memType;
+                  else GlobalWeatherType = 2;
+              }
+              if (sType == 3)
+              {
+                  local tmp = RandomInt(1, 3);
+                  if (tmp == 1) GlobalWeatherType = memType;
+                  else GlobalWeatherType = 3;
+              }
+           }
+           else if (WeatherTimer == WeatherRTimer+2000)       // full effect
+           {
+              if (sType == 1) GlobalWeatherType = 1;
+              if (sType == 2) GlobalWeatherType = 2;
+              if (sType == 3) GlobalWeatherType = 3;
+           }
+           else if (WeatherTimer > WeatherRTimer+2000) {WeatherTimer = 0; memType = GlobalWeatherType;}
+           WeatherTimer++;
+           
+           if(WStarted == true)
+           {    
+              if(GlobalWeatherType == 1)
+              {
+                 if(WeatherSoundLimiterS == false)
+                 {
+                    BlizzardAmbObj = BlizzardAmb->Play(0.70, 0.0, true);
+               
+                    WeatherSoundLimiterS = true;
+                 }        
+              }
+              else if(GlobalWeatherType == 2)
+              {
+                 if(WeatherSoundLimiterR == false)
+                 {
+                    RainAmbObj = RainAmb->Play(5.20, 0.0, true);
+                 
+                    WeatherSoundLimiterR = true;
+                 }
+              }
+           }
+	}
+	
+	if(Type == M_TURNBEGIN || Type == M_SETWEAPON || Type == M_TURNEND) 
+	{
+           if(WStarted == true)
+           {    
+              if(GlobalWeatherType == 1)
+              {
+                 if(WeatherSoundLimiterR == true) 
+                 {
+                    RainAmbObj->Stop();
+                 
+                    WeatherSoundLimiterR = false;
+                 }
+                 else return;
+              }   
+              else if(GlobalWeatherType == 2)
+              {
+                 if(WeatherSoundLimiterS == true)
+                 {
+                    BlizzardAmbObj->Stop();
+                 
+                    WeatherSoundLimiterS = false;
+                 }
+                 else return;
+              }
+              else if(GlobalWeatherType == 3)
+              {
+                 if(WeatherSoundLimiterS == true)
+                 {
+                    BlizzardAmbObj->Stop();
+                 
+                    WeatherSoundLimiterS = false;
+                 }
+                 else if(WeatherSoundLimiterR == true)
+                 {
+                    RainAmbObj->Stop();
+                 
+                    WeatherSoundLimiterR = false;
+                 }
+                 else return;
+              }
+           }
+	}
+	
+	super;
+}
+
+void CWeatherManager::MakeWeather(float x, float y)
+{
+     local Sblob = new CWeatherBlob(this, x, y, GlobalWeatherType);
+     Sblob->PosX = x;
+     Sblob->PosY = y;
+     Sblob->CWType = GlobalWeatherType;
+}
+
+CWeatherBlob::CWeatherBlob(CWeatherManager* WM, float x, float y, int type)
+{       
+    super(WM, GS);
+    PosX = x;
+    PosY = y;
+    SpX = 0.0;
+    SpY = 0.0;
+    Dead = false;
+    ZPlane = RandomInt(1, 2);
+    if (ZPlane == 1) hitGround = true;
+    else hitGround = false;
+    CWType = type; 
+    
+    RemovingStage = false; //final stage of s blob!
+    AnimPhase = 0.0;
+	randomcol = RandomInt(90,140);
+}
+
+void CWeatherBlob::Draw()
+{
+	if(Dead) {Free(true);}
+	
+
+	local rot = -Env->Wind;    //rotation
+	
+             //anim
+             local scale;
+             local Hscale = 1.0;
+             
+             if (ZPlane == 1) scale = 0.5;
+             else {scale = 0.4; Hscale = 0.6;}
+             
+             if (CWType == 1)         			// snow
+             {
+             	sprite = SWBlobSprite->Index;
+             	if (ZPlane == 1) col = ARGB(240,255,255,255);
+             	else col = ARGB(240,randomcol,randomcol,randomcol);
+             }
+             else if (CWType == 2)              // rain
+             {
+                sprite = RWBlobSprite->Index;  
+                if (ZPlane == 1) col = ARGB(200,78,173,243);
+                else col = ARGB(200,30,70,randomcol);
+             }
+             else sprite = 0;                   // nothing
+             
+             if(RemovingStage == false)
+             {
+                CQuad q;
+                FillSpriteQuad(&q, sprite, AnimPhase, 0);
+                TransformQuad(&q,rot,Hscale,scale,PosX,PosY);
+                q.blend = 0;
+                for (local i = 0; i < 4; i += 1) q.v[i].color = col;      //-1 will not change spr color
+	        RenderQuad(&q, 0);
+             }
+             
+             else if(RemovingStage == true)                          
+             {
+                if(AnimPhase < 1.0){
+                   CQuad t;
+                   FillSpriteQuad(&t, sprite, AnimPhase, 0);
+                   TransformQuad(&t,rot,Hscale,scale,PosX,PosY);
+                   t.blend = 0;
+                   for (local i = 0; i < 4; i += 1) t.v[i].color = col;
+	           RenderQuad(&t, 0);
+                }
+             }
+             
+}
+
+void CWeatherBlob::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    local w = GetCurrentWorm();
+	if(Type == M_FRAME && RemovingStage == false)
+    	{
+        local speed;
+        local randomizer;
+        local y_compensation;
+        local wind_affecting;
+             
+        if (CWType == 1)       // snow
+        	{
+            randomizer = RandomFloat(-2.0, 2.0);
+            y_compensation = 10;
+            wind_affecting = 9;
+            if (ZPlane == 1) speed = RandomInt(4, 5);
+            else speed = RandomInt(2, 4);
+            }
+        else if (CWType == 2)  // rain
+            {
+            randomizer = 0;
+            y_compensation = 10;
+            wind_affecting = RandomInt(9, 11);
+            if (ZPlane == 1) speed = RandomInt(9, 13);
+            else speed = RandomInt(7, 9);
+            }
+        else {};         // nothing
+             
+        PosY = PosY + speed;
+        PosX = PosX + Env->Wind*wind_affecting/3*speed + randomizer/3*speed;               
+
+		if (hitGround && w != NullObj)
+        	{
+            local x = PosX + Env->Wind*wind_affecting;
+            local y = PosY + 5;
+
+            local hit1 = CheckMaskAt(this, snow_checker_2, x, y, -1);
+
+			if(hit1 != NullObj){RemovingStage = true;}
+                          
+            }
+
+		if (PosY > GS->LevelSY) RemovingStage = true;
+		}
+
+	if (Type == M_FRAME && RemovingStage == true)
+        {
+        if(AnimPhase < 1.0){AnimPhase = AnimPhase + 0.1;}
+        else {Dead = true; Free(true); return;}
+        }
+}
+   
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+ if(Type == M_FRAME)
+ {
+         if(WStarted == false)
+         {
+         WStarted = true;
+         
+         SpawnWZone = 50;
+         SpawnWZoneNum = int(GS->LevelSX*1.6 / SpawnWZone);
+         for(local t = 0; t < SpawnWZoneNum; t++)
+                   {
+                   TimeWSpawn[t] = RandomInt(20,120);
+                   }
+         }
+         if(WStarted == true)
+         {
+                        if(BlobsWNum < 5000)
+                        {        
+                        SpawnWeather();
+                        }  else BlobsWNum = 0;
+         }
+ }
+ super;
+}
+
+void SpawnWeather()
+{
+     for(local t = 0; t < SpawnWZoneNum+1; t++)
+     {    
+         if(TimeWSpawn[t] < 1)
+         { 
+         TimeWSpawn[t] = RandomInt(45,160);
+         if (GlobalWeatherType == 1) TimeWSpawn[t] = RandomInt(50,220);       // less snow
+         local rndx = RandomInt((GS->LevelSX/2 - GS->LevelSX/4),GS->LevelSX/2);
+         local SpawnX = SpawnWZone*t-rndx;
+         local SpawnY = -500;
+         
+         BlobsWNum++;
+         if (GlobalWeatherType != 3) WM->MakeWeather(SpawnX, SpawnY);
+         }
+         
+         else   
+         {
+         TimeWSpawn[t]--;
+         }
+     }
+     return;
+}                                 

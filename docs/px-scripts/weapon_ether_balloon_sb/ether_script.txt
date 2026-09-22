@@ -1,0 +1,58 @@
+require utils, p_sprite_builder;
+
+CSprite* ether_aiming;
+CSprite* ether_bullet;
+
+void ether_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("spb_etherb.png");
+    ether_aiming = LoadSprite(f, 6, 0);
+    f = GetAttachment("etherb.png");
+    ether_bullet = LoadSprite(f, 16, 0);
+}
+
+//---------------------------------ETHER BALLOON------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Ether Balloon";
+     sprite = ether_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = -11.0;
+     Params->animate = true;
+     Params->anim_speed = 1.20;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Ether Balloon")) {
+         if (ether_anim) {
+              local sprite = ether_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.20;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              ether_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  ether_anim = true;
+}

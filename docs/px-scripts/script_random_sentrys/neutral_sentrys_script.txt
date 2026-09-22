@@ -1,0 +1,61 @@
+//rafa``2
+
+require utils, weapon_sentry_gun, weapon_sentry_laser, utils_steps;
+
+int nsentrys;
+int csentrys;
+int cmines;
+
+void neutral_sentrys_script::FirstFrame()
+{
+if (gframe < 10)
+    {
+    nsentrys = 5; // amount of turrets on map
+    csentrys = 0;
+    cmines = 0;
+    
+    for(int i = 1; i < Env->Objs.Count; i++)
+    	{
+        local obj = CGObject(Env->Objs.Objs[i]);
+        if(obj == NullObj) continue;
+        if(obj->ClType == OC_Mine)
+        cmines++;
+        else continue;
+    	}
+    
+    if(cmines == 0) return;
+    
+    for(int k = 1; k < Env->Objs.Count; k++)
+    	{
+       	if(csentrys < nsentrys)
+       		{
+           	local obj = CGObject(Env->Objs.Objs[k]);
+           	if(obj == NullObj) continue;
+           	if(obj->ClType == OC_Mine)
+	   			{
+	       		CMine *mine = CWorm(obj);
+	       		csentrys++;
+	       		CShootDesc desc;
+               	zero(&desc);
+               	desc.Team = 0;
+               	desc.Worm = 0;
+               	desc.X = fixed(mine->PosX);
+               	desc.Y = fixed(mine->PosY-6);
+               	desc.SpX = RandomFloat(-0.2, 0.2);
+               	mine->Free(true);
+
+	       		if(RandomInt(1,80) < 30)
+               		{
+                   	if(#WEAPON_KSENTRY)
+                   	local sg = new PxSentryGun(Root->GetObject(25, 0), &desc);
+               		}
+           		else
+               		{
+                   	if(#WEAPON_SENTRYLASER)
+                   	local sl = new PxSentryLaser(Root->GetObject(25, 0), &desc);
+               		}
+            	}
+        	}
+		}
+    } 
+}

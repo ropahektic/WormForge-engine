@@ -1,0 +1,19 @@
+require utils;
+
+void no_graves::Init()
+{
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+  if(Type == M_FRAME)
+  {
+        for (local i = 1; i < Env->Objs.Count; i++)
+        {
+            local obj = CGObject(Env->Objs.Objs[i]);
+            if (obj == NullObj) continue;
+            if (obj->ClType == OC_Cross){obj->Free(true); continue}
+        }
+  }
+}

@@ -1,0 +1,12 @@
+CSprite* ninjas_tr;
+
+void sprite_457::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("ninjast.png");
+    ninjas_tr = LoadSprite(f, 6, 0);
+    //f = GetAttachment("ninjast_old.png");
+    //ninjast = LoadSprite(f, 8, 0);
+
+    SetSpriteOverride(457, ninjas_tr);
+}

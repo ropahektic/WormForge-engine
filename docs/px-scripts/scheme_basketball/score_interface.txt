@@ -1,0 +1,273 @@
+CRedScoreInterface : CObject;
+CBlueScoreInterface : CObject;
+int RedScoreNumber;
+int BlueScoreNumber;
+
+CBitmap32* GUI;
+CInterfaceHandler : CObject;
+
+void score_interface::FirstFrame()
+   {
+   local RedScore = new CRedScoreInterface(Root);
+   RedScore->KCx = int(GS->LevelSX / 2) - 102;
+   RedScore->KCy = int(GS->LevelSY / 2) - 322;
+   RedScoreNumber = 0;
+
+   local BlueScore = new CBlueScoreInterface(Root);
+   BlueScore->KCx = int(GS->LevelSX / 2) + 102;
+   BlueScore->KCy = int(GS->LevelSY / 2) - 322;
+   BlueScoreNumber = 0;
+   
+   new CInterfaceHandler(Root);
+   }
+
+CRedScoreInterface::CRedScoreInterface(CObject* parent)
+   {
+   super(parent,GS);
+   CardRed = MakeBitmap(118,70);
+   KCx = 0;
+   KCy = 0;
+   }
+
+void CRedScoreInterface::DrawBackground()
+   {
+   CardRed->Rect(0,0,118,70,ARGB(255,0,0,0));
+   }
+
+void CRedScoreInterface::DrawText()
+   {
+   local a = 1;
+   local b = 1;
+
+   GS->Disp->DrawText(23,CardRed, 52, 21, ItoA(RedScoreNumber), &a, &b);
+   }
+
+void CRedScoreInterface::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+       {
+       DrawBackground();
+       DrawText();
+       }
+   if (Type == M_DRAWQUEUE)
+       {
+       local Ox = (KCx - GS->ActCameraX);
+       local Oy = (KCy - GS->ActCameraY);
+
+       AddInterfaceBitmap(0,Ox ,Oy,CardRed,118,70,0);
+       }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+CBlueScoreInterface::CBlueScoreInterface(CObject* parent)
+   {
+   super(parent,GS);
+   CardBlue = MakeBitmap(118,70);
+   KCx = 0;
+   KCy = 0;
+   }
+
+void CBlueScoreInterface::DrawBackground()
+   {
+   CardBlue->Rect(0,0,118,70,ARGB(255,0,0,0));
+   }
+
+void CBlueScoreInterface::DrawText()
+   {
+   local a = 1;
+   local b = 1;
+
+   GS->Disp->DrawText(23,CardBlue, 52, 21, ItoA(BlueScoreNumber), &a, &b);
+   }
+
+void CBlueScoreInterface::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+       {
+       DrawBackground();
+       DrawText();
+       }
+   if (Type == M_DRAWQUEUE)
+       {
+       local Ox = (KCx - GS->ActCameraX);
+       local Oy = (KCy - GS->ActCameraY);
+
+       AddInterfaceBitmap(0,Ox ,Oy,CardBlue,118,70,0);
+       }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+string BBWormNames[6];
+int BBWormColors[6];
+int BBTextColors[6];
+CWorm* BBPlayer[6];
+
+int bb1pts[6];
+int bb2pts[6];
+int bb3pts[6];
+int bballpts[6];
+
+void score_interface::Init()
+{
+    for (local i = 0; i < 6; i++)
+    	{
+    	BBWormColors[i] = 8;
+        BBWormNames[i] = "Not playing";
+        BBPlayer[i] = NullObj;
+    	}
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    BBNameReader = true;
+    1pointers = 0;
+    2pointers = 0;
+    3pointers = 0;
+    personalscore = 0;
+}
+
+CInterfaceHandler::CInterfaceHandler(CObject* parent)
+{
+    super(parent, GS);
+    GUIn = MakeBitmap(266, 112);
+    col = 8;
+}
+
+void CInterfaceHandler::ListNDraw()
+{
+	Obj_Cur = GetCurrentWorm();
+    Worm_Cur = CWorm(Obj_Cur);
+
+    local a = 0;
+    local b = 0;
+    local color = RGB(255, 255, 255);
+
+    for (local i = 0; i < 6; i++)
+        {
+        if (BBPlayer[i] != NullObj)
+        	{
+                bb1pts[i] = BBPlayer[i]->1pointers;
+                bb2pts[i] = BBPlayer[i]->2pointers;
+                bb3pts[i] = BBPlayer[i]->3pointers;
+                bballpts[i] = BBPlayer[i]->personalscore;
+                BBTextColors[i] = BBWormColors[i];
+            }
+        }
+
+    local lsx = GS->landSelectX;
+    local lsy = GS->landSelectY;
+    if (lsx & 32768) lsx = lsx | (65535 << 16);
+    if (lsy & 32768) lsy = lsy | (65535 << 16);
+
+    // Horizontal
+    GUIn->HLine(0, GUIn->SX - 1, 0, color);
+    GUIn->HLine(0, GUIn->SX - 1, GUIn->SY - 1, color);
+
+	// Vertical
+    GUIn->VLine(0, 0, GUIn->SY - 1, color);
+    GUIn->VLine(GUIn->SX - 1, 0, GUIn->SY - 1, color);
+
+	GUIn->Rect(1, 1, GUIn->SX - 2, GUIn->SY - 2, ARGB(127, 0, 0, 0));
+
+	// Desctiptions
+
+	GS->Disp->DrawText(7, GUIn, 10, 20, "Players", &a, &b);
+    GS->Disp->DrawText(7, GUIn, 90, 20, "1 pts.", &a, &b);
+    GS->Disp->DrawText(7, GUIn, 133, 20, "2 pts.", &a, &b);
+    GS->Disp->DrawText(7, GUIn, 178, 20, "3 pts.", &a, &b);
+    GS->Disp->DrawText(7, GUIn, 230, 15, "Total", &a, &b);
+    GS->Disp->DrawText(7, GUIn, 229, 25, "score", &a, &b);
+                          
+    							GS->Disp->DrawText(BBWormColors[0], GUIn, 10, 40, BBWormNames[0], &a, &b);
+    if (BBPlayer[1] != NullObj) GS->Disp->DrawText(BBWormColors[1], GUIn, 10, 50, BBWormNames[1], &b, &a);
+    if (BBPlayer[2] != NullObj) GS->Disp->DrawText(BBWormColors[2], GUIn, 10, 60, BBWormNames[2], &a, &b);
+    if (BBPlayer[3] != NullObj) GS->Disp->DrawText(BBWormColors[3], GUIn, 10, 70, BBWormNames[3], &b, &a);
+    if (BBPlayer[4] != NullObj) GS->Disp->DrawText(BBWormColors[4], GUIn, 10, 80, BBWormNames[4], &b, &a);
+    if (BBPlayer[5] != NullObj) GS->Disp->DrawText(BBWormColors[5], GUIn, 10, 90, BBWormNames[5], &b, &a);
+
+	// Parametres
+
+								GS->Disp->DrawText(BBTextColors[0], GUIn, 100, 40, ItoA(bb1pts[0]), &a, &b);
+    if (BBPlayer[1] != NullObj) GS->Disp->DrawText(BBTextColors[1], GUIn, 100, 50, ItoA(bb1pts[1]), &b, &a);
+    if (BBPlayer[2] != NullObj) GS->Disp->DrawText(BBTextColors[2], GUIn, 100, 60, ItoA(bb1pts[2]), &a, &b);
+    if (BBPlayer[3] != NullObj) GS->Disp->DrawText(BBTextColors[3], GUIn, 100, 70, ItoA(bb1pts[3]), &b, &a);
+    if (BBPlayer[4] != NullObj) GS->Disp->DrawText(BBTextColors[4], GUIn, 100, 80, ItoA(bb1pts[4]), &a, &b);
+    if (BBPlayer[5] != NullObj) GS->Disp->DrawText(BBTextColors[5], GUIn, 100, 90, ItoA(bb1pts[5]), &b, &a);
+
+								GS->Disp->DrawText(BBTextColors[0], GUIn, 143, 40, ItoA(bb2pts[0]), &a, &b);
+    if (BBPlayer[1] != NullObj) GS->Disp->DrawText(BBTextColors[1], GUIn, 143, 50, ItoA(bb2pts[1]), &a, &b);
+    if (BBPlayer[2] != NullObj) GS->Disp->DrawText(BBTextColors[2], GUIn, 143, 60, ItoA(bb2pts[2]), &a, &b);
+    if (BBPlayer[3] != NullObj) GS->Disp->DrawText(BBTextColors[3], GUIn, 143, 70, ItoA(bb2pts[3]), &a, &b);
+    if (BBPlayer[4] != NullObj) GS->Disp->DrawText(BBTextColors[4], GUIn, 143, 80, ItoA(bb2pts[4]), &a, &b);
+    if (BBPlayer[5] != NullObj) GS->Disp->DrawText(BBTextColors[5], GUIn, 143, 90, ItoA(bb2pts[5]), &a, &b);
+                          
+    							GS->Disp->DrawText(BBTextColors[0], GUIn, 190, 40, ItoA(bb3pts[0]), &a, &b);
+    if (BBPlayer[1] != NullObj) GS->Disp->DrawText(BBTextColors[1], GUIn, 190, 50, ItoA(bb3pts[1]), &a, &b);
+    if (BBPlayer[2] != NullObj) GS->Disp->DrawText(BBTextColors[2], GUIn, 190, 60, ItoA(bb3pts[2]), &a, &b);
+    if (BBPlayer[3] != NullObj) GS->Disp->DrawText(BBTextColors[3], GUIn, 190, 70, ItoA(bb3pts[3]), &a, &b);
+    if (BBPlayer[4] != NullObj) GS->Disp->DrawText(BBTextColors[4], GUIn, 190, 80, ItoA(bb3pts[4]), &a, &b);
+    if (BBPlayer[5] != NullObj) GS->Disp->DrawText(BBTextColors[5], GUIn, 190, 90, ItoA(bb3pts[5]), &a, &b);
+                          
+    							GS->Disp->DrawText(BBTextColors[0], GUIn, 240, 40, ItoA(bballpts[0]), &a, &b);
+    if (BBPlayer[1] != NullObj) GS->Disp->DrawText(BBTextColors[1], GUIn, 240, 50, ItoA(bballpts[1]), &a, &b);
+    if (BBPlayer[2] != NullObj) GS->Disp->DrawText(BBTextColors[2], GUIn, 240, 60, ItoA(bballpts[2]), &a, &b);
+    if (BBPlayer[3] != NullObj) GS->Disp->DrawText(BBTextColors[3], GUIn, 240, 70, ItoA(bballpts[3]), &a, &b);
+    if (BBPlayer[4] != NullObj) GS->Disp->DrawText(BBTextColors[4], GUIn, 240, 80, ItoA(bballpts[4]), &a, &b);
+    if (BBPlayer[5] != NullObj) GS->Disp->DrawText(BBTextColors[5], GUIn, 240, 90, ItoA(bballpts[5]), &a, &b);
+}
+
+void CInterfaceHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+	{
+    ListNDraw();
+    }
+
+if (Type == M_DRAWQUEUE)
+    {
+    AddInterfaceBitmap(0, (-GS->Disp->xRes/2) + (GUIn->SX+60) / 2, (-GS->Disp->yRes/2)+(GUIn->SY+60) / 2, GUIn,266,112,0);
+    }
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+    {
+    local w = GetCurrentWorm();
+    if (w != NullObj) BBPlayer = CWorm(w);
+        
+    if (gframe > 1)
+		{
+		if (BBNameReader)
+        	{
+    		for (local i = 0; i < 6; i++)
+	    		{
+    	    	if (BBWormColors[i] == 8)
+        	    	{
+            		BBWormNames[i] = GetName();
+	            	BBWormColors[i] = GetWormColor(this);
+    	        	BBPlayer[i] = CWorm(this);
+        	    	break;
+            		}
+        		}
+        	BBNameReader = false;
+        	}
+    	}
+	}
+super;
+}
+
+void CBasketBall::CalculatePoints()
+{
+    local w = GetCurrentWorm();
+    if (w != NullObj)
+		{
+		BBPlayer = CWorm(w);
+    	if(ScoreCoefficient == 1) {BBPlayer->1pointers += 1; BBPlayer->personalscore += 1;}
+		if(ScoreCoefficient == 2) {BBPlayer->2pointers += 1; BBPlayer->personalscore += 2;}
+		if(ScoreCoefficient == 3) {BBPlayer->3pointers += 1; BBPlayer->personalscore += 3;}
+		}
+}

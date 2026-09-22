@@ -1,0 +1,226 @@
+//- Antifire suit v1.2 - made by rafa``2 - 25/03/15      
+//- Invincible to any kind of fire
+
+//- v1.2  26/09/15 - fixed, no laser damage while using antifire suit.
+
+require utils, utils_steps, pxparticles, script_fire_extention, weapon_gun_lasergun;
+
+#ANTIFIRE_SUIT
+                           
+CSprite * AF_antifspr;
+CSoundFile* firesuitup;
+CAntifire:CObject
+
+CAntifire::CAntifire(CWorm * Owner)
+{
+    if(Owner == NullObj)
+        return;
+        
+    super(Root->GetObject(25,0), GS);
+    
+    AF_Owner      = Owner;
+    AF_Team       = AF_Owner->WormTeam;
+    AF_PosX       = AF_Owner->PosX;
+    AF_PosY       = AF_Owner->PosY;
+    
+    AF_Active     = true;
+    AF_TurnBegin  = false;
+    
+    AF_Radius     = 28;
+    AF_RepelFt    = 28;
+    AF_DelayMax   = 100;
+    AF_Delay      = AF_DelayMax;
+    AF_DelayMin   = 0;
+    AF_ShieldMax  = 120;
+    AF_ShieldMin  = 0;
+    AF_Shield     = AF_ShieldMax;
+    AF_Scale      = 0.85;
+    AF_ZPlaneBase = 14.0;
+    AF_ZPlane     = AF_ZPlaneBase + RandomFloat(0.01,0.99);
+    
+    AF_Owner->Antifire_Suit = this;
+    
+    version = 1.2;
+}      
+
+void antifire_suit_s::Init()
+{
+    FireEx_Active = true;
+    firesuitup       = new CSoundFile(GetAttachment("putting_on_suit.wav"));
+}             
+
+void antifire_suit_s::FirstFrame()
+{
+    local antifire_filter = CFilter(Root->GetObject(25,0));
+    antifire_filter->Allow(M_TURNBEGIN);
+}
+
+void antifire_suit_s::InitGraphic()
+{
+    AF_antifspr =  LoadSprite(GetAttachment("antifire.png"),1,0);
+}
+
+void CAntifire::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{                
+    if(!AF_Active || AF_Owner == NullObj || AF_Owner->ObjState == WS_SINKING || AF_Owner->ObjState == WS_DEAD || AF_Owner->ObjState == WS_DEATH)
+    {
+        if(AF_Owner != NullObj && AF_Owner->Antifire_Suit != NullObj)
+        {
+            AF_Owner->Antifire_Suit = CAntifire(NullObj);
+        }
+        
+        Free(true);
+    }
+    else
+    {
+       AF_PosX = AF_Owner->PosX;
+       AF_PosY = AF_Owner->PosY;
+    }
+    
+    if(Type == M_TURNBEGIN)
+    {    
+        AF_TurnBegin = true;
+    }
+    else if(Type == M_DRAWQUEUE)
+    {        
+        SetColorMod(ARGB(AF_Shield,255,0,0),1);
+        AddSpriteEx(AF_ZPlane, AF_PosX, AF_PosY, AF_antifspr->Index, 0, 0, AF_Scale);
+        ClearColorMod();
+    }  
+    else if(Type == M_FRAME)
+    {       
+        if(AF_TurnBegin)
+        {
+            AF_TurnBegin = false;
+            
+            if(AF_Team == Root->CurTeam)
+            {
+                AF_Active = false;
+            }
+        }
+        
+        AF_Shield();
+        
+        AF_Repel();  
+    }
+}
+void CAntifire::AF_Shield()
+{
+    if(AF_Delay >= AF_DelayMin)
+    {
+        AF_Delay -= 2;
+    }
+    else
+    {
+        AF_Shield -= 2;
+        
+        if(AF_Shield <= AF_ShieldMin) 
+        {
+            AF_Shield = AF_ShieldMin;
+            AF_Delay = AF_DelayMin;
+
+        }
+    } 
+}
+
+void CAntifire::AF_ResetShield()
+{
+    AF_Delay = AF_DelayMax;
+    AF_Shield += 40;
+    
+    if(AF_Shield >= AF_ShieldMax) 
+        AF_Shield = AF_ShieldMax;
+}
+
+void CAntifire::AF_Repel()
+{
+         for(int i=0; i<FireExList->Count; i++)
+         {
+              CFireEx* FireEx = FireExList->Objs[i];
+              
+              if(FireEx == NullObj || FireEx->FireParent == NullObj || AF_Owner == NullObj)
+                  continue;
+              
+              int dx = FireEx->FirePosX - AF_PosX;
+              int dy = FireEx->FirePosY - AF_PosY;
+              int d = sqrt(dx*dx + dy*dy);
+              
+              if(FireEx->FireMelting == 0 && d <= AF_Radius)
+              {                  
+                  AF_ResetShield();
+                  
+                  CMessageData msg;
+                  zero(&msg);
+                      
+                  msg.params[0]  = 1;             msg.fparams[1] = AF_PosX;
+                  msg.params[3]  = 100;           msg.fparams[2] = AF_PosY;
+                  msg.params[4]  = AF_RepelFt;
+                  msg.params[6]  = AF_Team;
+                      
+                  FireEx->FireParent->Message(this, M_EXPLOSION, 1032, &msg);
+              }
+         }
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    super;
+    Antifire_Suit = CAntifire(NullObj);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+       if(Type == M_GUNEXP)
+       {          
+           if(MData != NullObj && Antifire_Suit != NullObj && Antifire_Suit->AF_Active)
+           {
+               if(sender != NullObj && (sender is CLaserRay) == false && MData->GetParameter(0) == 1)
+               {                          
+                   if(Root->Timer > 0 && Root->CurWorm != 0)
+                   {
+                       if(gframe % 2 == 0)
+                       {
+                           PlayLocalSound(55, 3, 1, 1);
+                       }
+                       if(gframe % 5 == 0)
+                       {
+                           FX_Sizzle_Smoke(PosX, PosY);
+                       } 
+                   }
+                   
+                   Antifire_Suit->AF_ResetShield();
+                   
+                   return;    
+               }
+           }
+       }
+       
+       super;    
+}   
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+      if(Weap->CheckName("Antifire Suit"))
+      {
+          if(Antifire_Suit == NullObj)
+          {
+              Antifire_Suit = new CAntifire(this);
+              vol = CalculateSoundVolume(PosX,PosY);
+     		  pan = CalculateSoundPan(PosX,PosY);
+              firesuitup->Play(vol, pan, false);
+              ShowTeamMessage(7,"Antifire Suit ON",WormTeam);
+          }
+      }
+      else super;
+}
+
+void FX_Sizzle_Smoke(int x, int y)
+{
+     PxParticle *P = new PxParticle(609, x , y);
+     P->SetLifeTime(60);
+     P->GravityFactor(-0.3);
+     P->SetStartAlpha(200);
+     P->SetEndAlpha(255);
+     P->SetMotionRandomness(0.3);
+     P->SetRandomVelocity(0.25, 0.5);
+}   

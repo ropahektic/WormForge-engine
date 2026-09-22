@@ -1,0 +1,69 @@
+//Script by redddaz/lucho, sequencing shots without (fully) using gun params
+//Set weap anim to a gun's (6 for minigun, uzi, shotgun, handgun also work)
+//Nades or zooks have 1 frame which is inconvenient
+//There's a workararound for that, an array, and for i = 0; i<19; i++ {shotCooldown[i] = [12*i], then shotFrames++ on M_FRAME and if (shotFrames==shotCooldown[shotFrames]) super;}  more or less, you can set any cooldown you want with that, but it wasn't that reliable, if ur better than me do use that. 
+require utils, p_sprite_builder;   
+
+CWeapon* g_PillagerWeap;
+
+void pillager_fire::FirstFrame()
+{
+g_PillagerWeap = GetWeaponByName("Pillager");
+}
+
+//---------------CWorm Class Overrides---------------//
+override CWorm::CWorm(CObject * Parent, int aTeam, int aIndex, CWormParams * params)
+{
+    super;
+    PShotsFired = 0;
+    pillShooting = false;
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (Weap->CheckName("Pillager") )
+    {
+       if (PShotsFired<=19)     //Quantity of shots
+       {            
+         for (int curShots = PShotsFired; PShotsFired==curShots; PShotsFired++) //For some reason PShotsFired++ normally doesn't work.
+         Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 20;
+         Desc->SpY = 20*(0.5 - FireAngle);           
+         Desc->Y-18;    //hotfix
+         Desc->SpY + RandomInt(-4,4);     //Spread
+         super(g_PillagerWeap, Desc);
+         pillShooting=true;
+         return;   //Return makes it loop.
+       }
+       pillShooting=false;   //Don't reset shots here, it'll just keep looping. 
+       return;
+    }        
+    pillShooting=false; //Shouldn't be neccessary, however i'm insecure.
+    super;
+}
+     
+// --- Main Logic Loop --- //
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+  if (Type == M_FRAME)
+  {
+    if(CurWeapon->CheckName("Pillager") == true)
+    {
+       if (pillShooting)
+       {
+           // Persist animation.  
+           nShoots = 1;
+           nShooted = 0;
+       }
+    }
+  }
+  if (Type==M_SETWEAPON)
+  {
+     if(CurWeapon->CheckName("Pillager") == true)
+     {PShotsFired=0;pillShooting=false;}       //Reset variables
+  }  
+}
+
+//Well organized workflow oriented SPB
+CSprite* frplt_bul2;void pillager_fire::InitGraphic(){f = GetAttachment("frplt.png");frplt_bul2 = LoadSprite(f, 6, 0);}
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){super;if(Type==M_FRAME){if(weap->CheckName("Pillager")){if(frplt2_anim){local sprite=frplt_bul2->Index;WeapSpriteParams* Params= new WeapSpriteParams;Params->animate=true;Params->anim_speed=1.50;new WeapSprite(this,sprite,Params);weap->launch.anim.spriteIndex=0;frplt2_anim=false;}}}} override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){super;frplt2_anim = true;}        

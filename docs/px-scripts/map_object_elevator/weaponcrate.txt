@@ -1,0 +1,99 @@
+$editor
+ $object WeaponCrateSP
+  $origin -13 -15
+  $image "edcrate.png"
+  $func SpawnWCrate
+  $radius 17
+  $param Weapon int 1
+ $object_end
+$end
+
+CWeaponCrate : CBuilding;
+
+CBitmap1* MakeCrateMask()
+{
+msk = new CBitmap1(24, 24);
+for (int i = 0; i < 25; i+=1){msk->HLine(0, 24, i, 1);}
+return msk;
+}
+
+void weaponcrate::FirstFrame(){}
+
+void weaponcrate::InitGraphic(){}
+
+CWeaponCrate::CWeaponCrate(CObject* parent, fixed x, fixed y)
+{
+    super(parent, x, y);
+    PosX          = x;
+    PosY          = y;
+    WeaponNumber = 0;
+    IsMaterial = true;
+    GravityFactor = 1;
+
+    ColMask = new CColMask(12,12,MakeCrateMask());
+}
+
+
+void CWeaponCrate::TakeItem(CWorm* worm)
+{
+if(worm->WormTeam != 1)
+	{
+    local weapname = "Null";
+    if(WeaponNumber == 1){weapname = "Stun Mine";}
+    if(WeaponNumber == 2){weapname = "Hand Grenade";}
+    if(WeaponNumber == 3){weapname = "Plasma Rifle";}
+    if(WeaponNumber == 4){weapname = "Jet Pack";}
+    if(WeaponNumber == 5){weapname = "Medkit 50";}
+
+    if(StrCmp(weapname,"Null") != true)
+    	{
+        local wep = GS->GetWeaponByName(weapname);
+        if(wep != NullObj)
+        	{
+            PlaySound(124,0,0,1.0);
+            ShowTeamMessage(1, weapname, worm->WormTeam);
+            GS->Info.AddWeaponEx(worm->WormTeam, wep->GetWeaponIndex(), wep->GetPageIndex(), 1);
+            }
+        }
+
+	Free(true);
+    return;
+    }
+}
+
+void CWeaponCrate::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if(Type == M_FRAME)
+	{
+    for(int i = 0; i < Env->Objs.Count; i += 1)
+		{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(obj->IsMaterial == false) continue;
+
+		if(obj->ClType == OC_Worm)
+			{
+			local worm = CWorm(obj);
+            if(PosX > worm->PosX-25 && PosX < worm->PosX+25 && PosY > worm->PosY-25 && PosY < worm->PosY+25){TakeItem(worm);}
+			}
+        }
+    }
+}
+
+void SpawnWCrate(CEditorObject* obj)
+{
+  x = obj->PosX;
+  y = obj->PosY;
+  GetWeap = obj->GetInt("Weapon");
+
+  WCrate = new CWeaponCrate(Root->GetObject(25, 0), 0, 0);
+  WCrate->PosX = x;
+  WCrate->PosY = y;
+  WCrate->WeaponNumber = GetWeap;
+  WCrate->GravityFactor = 1;
+  WCrate->IsMaterial = true;
+  WCrate->AnimPhaseSpeed = 0.0042;
+  WCrate->ClassType = "Weapon Crate";
+}

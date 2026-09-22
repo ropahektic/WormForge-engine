@@ -1,0 +1,13 @@
+//List of sprites
+CSprite* kabomb;
+
+void spreplace18::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("Kirov Bomb.png"); 
+   kabomb = LoadSprite(f, 1, 0);
+   
+   //Let's override the sprites!
+   SetSpriteOverride(250, kabomb);
+}

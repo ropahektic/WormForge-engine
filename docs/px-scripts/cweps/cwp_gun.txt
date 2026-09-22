@@ -1,0 +1,106 @@
+require utils;
+
+//---------------------------GUN-LAUNCHER---------------------------------------
+//    NINJA STAR                                       RIPPER
+//    FIRE PELLET        REQUIRED IN PXS FOR:          PILLAGER
+//    TORCH FLAME                                      MINI-TORCH
+//
+//    PILLAGER REQUIRES RUBBERWORM FLAME LIMIT BE INCREASED TO AT LEAST 230
+//------------------------------------------------------------------------------
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+//------RIPPER------------------------------------------------------------------
+if(Weap->CheckName("Ripper"))
+{
+Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 45;
+Desc->SpY = 45*(0.5 - FireAngle);
+super(GetWeaponByName("Ninja Star"), Desc);
+return;
+}
+//------PILLAGER----------------------------------------------------------------
+if(Weap->CheckName("Pillager"))
+{
+Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 42;
+Desc->SpY = 42*(0.5 - FireAngle);
+super(GetWeaponByName("Fire Pellet"), Desc);
+return;
+}
+//------MINI-TORCH--------------------------------------------------------------
+if(Weap->CheckName("Mini-Torch"))
+{
+Desc->SpX = (TurnSide * (0.5 - sqrt((0.5 - FireAngle)*(0.5 - FireAngle)))) * 20;
+Desc->SpY = 20*(0.5 - FireAngle);
+super(GetWeaponByName("Torch Flame"), Desc);
+return;
+}
+
+super;
+}
+//-------------------------MULTIPLY-BULLETS-------------------------------------
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+if (Weap->CheckName("Burst Rifle")
+|| Weap->CheckName("Gatling Gun"))
+{//  2
+super;
+}
+if (Weap->CheckName("Fire Orbs")
+|| Weap->CheckName("Hotchkiss")
+|| Weap->CheckName("Ether Balloons"))
+{//  3
+super;
+super;
+}
+if (Weap->CheckName("Mini-Torch"))
+{//  6
+super;
+super;
+super;
+super;
+super;
+}
+if (Weap->CheckName("Cloud Buster"))
+{// 18
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+}
+if (Weap->CheckName("Stone Blaster"))
+{// 20
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+super;
+}
+super;
+}

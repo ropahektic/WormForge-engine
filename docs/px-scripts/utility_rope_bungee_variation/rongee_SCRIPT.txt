@@ -1,0 +1,39 @@
+void rongee_SCRIPT::Init()
+{
+     keySync->AddKey(16); // SHIFT
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    CWorm* w = GetCurrentWorm();
+
+    if (w != NullObj)
+    {
+         if (Type == M_FRAME)
+         {
+                   if (w->chameleongee)
+                   {
+                       if (keySync->KeyPressedNow(16) && !w->plopped)
+                       {
+                           if      (w->ObjState == WS_ROPING) {w->SetState(WS_BUNGEE); PlaySound(131,0,0,1.0);}
+                           else if (w->ObjState == WS_BUNGEE) {w->SetState(WS_ROPING); PlaySound(131,0,0,1.0);}
+                       }
+                   }
+
+                   if (w->CurWeapon->CheckName("Rongee"))
+                   {
+                       if (w->ObjState == WS_SHOOTINGROPE || w->ObjState == WS_JUMP || w->ObjState == WS_JUMPPREPARE || w->ObjState == WS_SLIDING)
+                       {
+                           w->chameleongee = true;
+                       }
+                   }
+
+                   if (w->chameleongee && w->ObjState != WS_ROPING && w->ObjState != WS_SHOOTINGROPE && w->ObjState != WS_AFTERROPE && w->ObjState != WS_BUNGEE && w->ObjState != WS_JUMP && w->ObjState != WS_JUMPPREPARE && w->ObjState != WS_SLIDING)
+                   {
+                       w->chameleongee = false;
+                   }
+
+         }
+    }
+super;
+}

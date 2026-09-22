@@ -1,0 +1,13 @@
+require utils;
+
+void script_safesurrender::Init()
+{
+    keySync->AddKey(17);
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("Surrender") && keySync->KeyPressed(17)) super;
+    else if (Weap->CheckName("Surrender")) {ShowMessage("Hold control and press space to surrender."); return;}
+    else super;
+}

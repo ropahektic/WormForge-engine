@@ -1,0 +1,333 @@
+CSprite* SprKCrate;
+CSprite* SprKCrateOL;
+CSprite* SprMayhem;
+CBitmap32* GUIkcrate;
+
+CSprite* lwlk;
+CSprite* lwlkb;
+CSprite* lslp;
+
+CObjList * KCrateList;
+
+bool SpawnKCrateOverride;
+
+void kaos_crate::InitGraphic()
+{
+    //CFile *f;
+    local f  = GetAttachment("kcrate.png"); SprKCrate = LoadSprite(f, 7, 0);
+    local f  = GetAttachment("kcrateol.png"); SprKCrateOL = LoadSprite(f, 7, 0);
+
+    local f  = GetAttachment("lwalk1.png"); lwlk = LoadSprite(f, 8, 0);
+    local f  = GetAttachment("lwalk1b.png"); lwlkb = LoadSprite(f, 8, 0);
+    local f  = GetAttachment("zzz.png"); lslp = LoadSprite(f, 5, 0);
+
+    local f  = GetAttachment("mayhem.png"); SprMayhem = LoadSprite(f, 1, 0);
+    
+    GUIkcrate = LoadImage( GetAttachment("cntk.png") );
+}
+
+void kaos_crate::Init()
+{
+    KCrateList = new CObjList();
+    KCrateList->Compact();
+}
+
+override COilDrum::COilDrum(CObject* Parent, fixed X, fixed Y, bool Snap)
+{
+    nMframes = 0;
+    IsKCrate = false;
+	CF = 0;
+
+    Cat = 0;
+    RndcR = 255;
+    RndcG = 0;
+    RndcB = 0;
+    SinkOnce = false;
+
+    StartTurn = 1;
+    TurnsLeft = 5;
+    CInterfaceHandler* GUIref;
+
+super;
+}
+
+override void COilDrum::Free(bool FreeMem)
+{
+if(IsKCrate == true && GUIref != NullObj)
+	{
+    GUIref->FreeNow = true;
+    }
+super;
+}
+
+override void COilDrum::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+    {
+    local mapSY = 0;
+    if(mapsizeY < 100){mapsizeY = GS->LevelSY;}
+    mapSY = mapsizeY;
+
+    if(IsKCrate && SinkOnce == false)
+		{
+        if(PosY > (mapSY - 30) )
+			{
+            KCrateList->Remove(this);
+            KCrateList->Compact();
+            SinkOnce = true;
+            }
+		else
+			{
+            GUIref->KCx = PosX;
+            GUIref->KCy = PosY;
+
+			nMframes += 1;
+            if(nMframes % 100 == 0)
+				{
+                local StAliveTurns = 5;
+                TurnsLeft = (StartTurn + StAliveTurns) - StartTurnCounter;
+                GUIref->KCtl = TurnsLeft;
+                if((StartTurn + StAliveTurns) <= StartTurnCounter)
+					{
+                    KCrateList->Remove(this);
+                    KCrateList->Compact();
+                    PosX = -500;
+                    PosY = -500;
+                    Free(true);
+                    }
+                }
+
+            if(Root->CurTeam == 0 || Root->CurWorm == 0){super; return;} //in-betweem turns?
+            local CurrWormz = GetCurrentWorm();
+            if(CurrWormz == NullObj){super; return;} //No worm?
+            //all worms.. could use curworm instead..
+
+            if( (abs(CurrWormz->PosX - PosX) < 33) && (abs(CurrWormz->PosY - PosY) < 33) )
+				{
+                CurrWormz->KaozActive = true;
+                Root->Timer = Root->Timer + 20000;
+                PlayLocalSound(124, 3, 1, 1);
+
+                KCrateList->Remove(this);
+                KCrateList->Compact();
+
+                PosX = -500;
+                PosY = -500;
+
+                //activate swimsuit
+                CurrWormz->swimsuit = true;
+                CurrWormz->plopready = true;
+                CurrWormz->SwimInGame = true;
+                if (!CurrWormz->ghostjet) CurrWormz->ColGroup = 134342;
+                else CurrWormz->ColGroup = 0;
+                Free(true);
+                }
+            }
+        }
+    }
+super;
+}
+
+override void COilDrum::Render()
+{
+	CF = CF + 1;
+    if (IsKCrate == false){super; return;}
+
+    if(CF % 25 == 0){Cat = (Cat + 1) % 5;}
+    if(Cat == 0){RndcR = 255; RndcG = 0; RndcB = 0;}
+	else if(Cat == 1){RndcR = 0; RndcG = 255; RndcB = 0;}
+	else if(Cat == 2){RndcR = 0; RndcG = 0; RndcB = 255;}
+	else if(Cat == 3){RndcR = 128; RndcG = 0; RndcB = 128;}
+	else if(Cat == 4){RndcR = 100; RndcG = 78; RndcB = 15;}
+
+    SetColorMod(RGB(RndcR,RndcG,RndcB),8);
+    AddSpriteEx(16, PosX, PosY, SprKCrateOL->Index, (sin(CF/40)) , 0, 1.0);
+    ClearColorMod();
+    AddSpriteEx(15, PosX, PosY, SprKCrate->Index, (sin(CF/40)) , 0, 1.0);
+}
+
+override void COilDrum::Explosion()
+{
+	if (IsKCrate == false){super; return;}
+
+	DoExplosion(PosX, PosY, 100, 100, 0, 1);
+	KCrateList->Remove(this);
+	KCrateList->Compact();
+super;
+}
+
+void NewKCrate(int PoX, int SX, int SY)
+{
+	local NewPosY = -125;
+    if(SX == 2200 && SY == 1504){NewPosY = -125;}
+    
+    if(SX == 2200 && SY == 2000)
+		{
+        if(CurrWaterLvl > 1850)
+			{
+            NewPosY = 1518;
+            if(PoX > 900 && PoX < 1300){NewPosY = 1100;}
+        	}
+		else {NewPosY = -125;}
+    	}
+    	
+    local drumee = new COilDrum(Root->GetObject(25, 0), 0, 0, false);
+
+    drumee->PosX = PoX;
+    drumee->PosY = NewPosY;
+    drumee->IsKCrate = true;
+    drumee->StartTurn = StartTurnCounter;
+    KCrateList->Add(drumee);
+
+    drumgui = new CInterfaceHandler(Root);
+    drumee->GUIref = drumgui;
+}
+
+int NextKcrateX;
+int WantToSpawnKCrate(int RNGA,int RNGB, int SX, int SY, int startturns)
+{
+    KCrateList->Compact();
+    if(KCrateList->Count >= 2){return 3;} //No more 2 at the time
+
+    local bonus = int(startturns);
+    
+    if(bonus > 30 || bonus < 0){bonus = 30;}
+    if((RNGA % 100) < (5 + bonus))
+		{
+        local sp = 20;
+        local xstep = SX / sp;
+        NextKcrateX = xstep * ((RNGB % sp) + 1);
+
+        if(SX == 2200 && SY == 1504)
+			{
+            if(NextKcrateX < 105){NextKcrateX = 105; return 1;}
+            if(NextKcrateX > 2098){NextKcrateX = 2098; return 1;}
+            if(NextKcrateX > 1010 && NextKcrateX < 1195)
+				{
+                if(RNGB % 2 == 0){NextKcrateX = 555;}
+                else {NextKcrateX = 1690;}
+                }
+            }
+
+		return 1;
+        }
+
+	return 0;
+}
+
+
+CWorm* NearestEnemyWorm;
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+CWorm * tmpTW;
+
+if(Type == M_DRAWQUEUE)
+	{
+	local PlayingWorm = GetCurrentWorm();
+    if(PlayingWorm != NullObj)
+		{
+        if(PlayingWorm != this){super; return;}
+        if(PlayingWorm->KaozActive == true)
+			{
+            local CaX = GS->ActCameraX;
+            local CaY = GS->ActCameraY;
+            AddSpriteEx(0,CaX,CaY - GS->Disp->halfY + 100,SprMayhem->Index,1.0,0.0,1.0);
+            }
+        }
+	}
+
+if(Type == M_FRAME)
+   	{
+    //Every frame for every worm check wep panel refresh
+    //every first worm in team that fired will do this
+
+    local PlayingWorm = GetCurrentWorm();
+    if(PlayingWorm != NullObj)
+		{
+        if(PlayingWorm != this){super;return;}
+
+        if(JobFrame > 0 && JobFrame < 10){JobFrame++;}
+        if(JobFrame == 10)
+			{
+            JobFrame = 0;
+            //Worms select !
+
+            local wTeam = PlayingWorm->WormTeam;
+            local wInTeam = 0;
+
+            //Find out if only 1 worm alive
+            for (int j = 6; j >= 1; j-=1)
+                {
+                for (int i = 8; i >= 1; i-=1)
+                	{
+                    tmpTW = Root->GetObject(2, 16 * j + i);
+                    if (tmpTW != NullObj && wTeam == tmpTW->WormTeam )
+                    	{
+                        wInTeam += 1;
+                        if(wInTeam >= 2){break;}
+                        }
+                    }
+                }
+
+			if(wInTeam > 1)
+				{
+                CMessageData msgselect;
+                msgselect.params[0] = PlayingWorm->WormTeam;
+                msgselect.params[1] = PlayingWorm->WormNumber;
+                msgselect.params[2] = 59;
+                msgselect.params[3] = 0;
+                PlayingWorm->Message(NullObj, M_SETWEAPON, 1032, &msgselect);
+                CMessageData msgspace;
+                msgspace.params[0] = PlayingWorm->WormTeam;
+                PlayingWorm->Message(NullObj, M_SPACE, 1032, &msgspace);
+                }
+            }
+
+        if(NearestEnemyWorm != NullObj)
+			{
+            if (PlayingWorm->ObjState == WS_JETPACK)
+				{
+                //Find nearest worm
+                local distanceX = abs(NearestEnemyWorm->PosX - PlayingWorm->PosX);
+                local distanceY = abs(NearestEnemyWorm->PosY - PlayingWorm->PosY);
+                local hypotenusa = sqrt((distanceX*distanceX) + (distanceY*distanceY));
+                if(hypotenusa < 1){hypotenusa = 1;}
+                PlayingWorm->JetFuel = hypotenusa*65536; //Fuel = distance to closest enemy worm
+                }
+            }
+
+        if(mapsizeX < 100 || mapsizeY < 100)
+			{
+            mapsizeX = GS->LevelSX;
+            mapsizeY = GS->LevelSY;
+            }
+
+        if(TeamSide == 1)
+			{
+            if(PosX < int(mapsizeX / 2))
+				{
+                KaozActiveBeta = true;
+                centerLineGUI->SetDrawColor = 1;
+                }
+			else
+				{
+                KaozActiveBeta = false;
+                centerLineGUI->SetDrawColor = 2;
+                }
+            }
+		else
+			{
+            if(PosX > int(mapsizeX / 2))
+				{
+                KaozActiveBeta = true;
+                centerLineGUI->SetDrawColor = 1;
+                }
+			else{
+                KaozActiveBeta = false;
+                centerLineGUI->SetDrawColor = 2;
+                }
+            }
+        }
+   }
+super;
+}

@@ -1,0 +1,194 @@
+
+
+
+
+
+
+
+
+void GetNewCrateSpawn(int mSX, int mSY, int rngseedA)
+{
+    CrateSpawnSuccess = false;
+    local RndSide = RandomInt(0,1);
+    if (GenerateCrSpawnMap(RndSide, mSX, mSY) == false){CrateSpawnSuccess = false; return;}
+
+    //pick a value between 1 and SMlastdist
+    //local Rtarget = 0;
+    //if(RndSide == 0){if (SMlastdistL!=0) Rtarget = rngseedA % SMlastdistL;}
+    //else{if (SMlastdistR!=0)Rtarget = rngseedA % SMlastdistR;}
+    
+    //pick a value between 1 and SMlastdist
+    local Rtarget = 0;
+    if(RndSide == 0){Rtarget = rngseedA % SMlastdistL;}
+	else{Rtarget = rngseedA % SMlastdistR;}
+
+    local lastIndex = 0;
+
+    //Find closest value to target in array
+    //Optimize ?
+    for(int i = 0; i < (ax * ay); i++ )
+		{
+        local MapInt = 0;
+        if(RndSide == 0){MapInt = MapEmptySpaceL[i];}
+		else{MapInt = MapEmptySpaceR[i];}
+
+        if(MapInt != 0)
+			{
+            if(MapInt < Rtarget)
+				{
+                lastIndex = i;
+                CrateSpawnSuccess = true;
+                continue;
+				}
+			else {break;}
+            }
+        }
+
+   	if(mSX == 2200 & mSY == 1504)
+	   	{
+       	if(RndSide == 0) //  & ax!= 0
+			{
+        	NewCrX = ((lastIndex % ax) * CrSearchGridSize);
+        	NewCrY = (int(lastIndex / ax) * CrSearchGridSize) + 305;
+       		}
+		else
+			{
+        	NewCrX = ((lastIndex % ax) * CrSearchGridSize) + 1325;
+        	NewCrY = (int(lastIndex / ax) * CrSearchGridSize) + 305;
+       		}
+    	}
+
+	if(mSX == 2200 & mSY == 2000)
+		{
+       	if(RndSide == 0) //  & ax!=0
+			{
+        	NewCrX = ((lastIndex % ax) * CrSearchGridSize) + 80;
+        	NewCrY = (int(lastIndex / ax) * CrSearchGridSize) + 713;
+       		}
+		else
+			{
+        	NewCrX = ((lastIndex % ax) * CrSearchGridSize) + 1377;
+        	NewCrY = (int(lastIndex / ax) * CrSearchGridSize) + 713;
+       		}
+    	}
+}
+
+void CCrateHandler::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+	if (Type == M_FRAME)
+    {
+    if(mapsizeX < 100 || mapsizeY < 100)
+		{
+        mapsizeX = GS->LevelSX;
+        mapsizeY = GS->LevelSY;
+        }
+
+	local RNGt = GS->GetRandom();
+    local mzX = mapsizeX;
+    local mzY = mapsizeY;
+    if(NewlyCrate != NullObj && CrCustomSpawnActive == true)
+		{
+        if(NewlyCrate->FixedWeapon == 0)
+			{
+            if(NewlyCrate->PositionSet == false)
+				{
+                GetNewCrateSpawn(mzX, mzY, RNGt);
+                if(CrateSpawnSuccess == true)
+					{
+                    NewlyCrate->PosX = NewCrX;
+                    NewlyCrate->PosY = NewCrY;
+                    NewlyCrate->X = NewCrX;
+                    NewlyCrate->Y = NewCrY;
+                    NewlyCrate->PositionSet = true;
+                    NewlyCrate->LookAtMe(NewCrX, NewCrY, 5);
+                    }
+				else
+					{
+                    //could not spawn crate
+                    NewlyCrate->PositionSet = true;
+                    NewlyCrate->Freeing = true;
+                    NewlyCrate->Free(true);
+                    }
+                }
+            }
+        }
+
+        DelayRoutine = ( DelayRoutine + 1 ) % DelayRoutineSet;
+        if(DelayRoutine == 0)
+			{
+            for(int n = 0; n < 66; n++)
+				{
+                if(n != 0 && // None
+				   n != 3 && // Torch
+				   n != 10 && // Earthquake
+				   n != 18 && // Kamikaze
+				   n != 26 && // Mole Bomb
+				   n != 29 && // Far Sight
+				   n != 32 && // Blowtorch
+				   n != 33 && // Drill
+				   n != 34 && // Girder
+				   n != 37 && // Ninja Rope
+				   n != 38 && // Bungee
+				   n != 39 && // Parachute
+				   n != 57 && // Skip Go
+				   n != 58 && // Surrender
+				   n != 59 && // Select Worm
+				   n != 64) // Fast Walk
+					{
+                    twep = GS->GetWeaponByIndex(1, n);
+                    
+                    if(twep != NullObj)
+						{
+                        local invertTmz = false;
+
+						//Bug from hell. This fixes it but i cant explain why. Weapons now go to right team.
+                        if(GetTeamColor(1) == GetTeamColor(2))
+							{
+                            for(int m = 2; m <= 6; m++)
+								{
+                                if( GetTeamColor(m) != GetTeamColor(m + 1))
+									{
+                                    if(GetTeamColor(m) > GetTeamColor(m + 1)){invertTmz = true;}
+                                    break;
+                                    }
+                                }
+                            }
+
+                        if(invertTmz)
+							{
+                            GS->Info.SetWeaponEx( 2, n, twep->GetPageIndex(), ( WepAmountL[n]) );
+                            GS->Info.SetWeaponEx( 1, n, twep->GetPageIndex(), ( WepAmountR[n]) );
+                        	}
+						else
+							{
+                            GS->Info.SetWeaponEx( 1, n, twep->GetPageIndex(), ( WepAmountL[n]) );
+                            GS->Info.SetWeaponEx( 2, n, twep->GetPageIndex(), ( WepAmountR[n]) );
+                            }
+                        }
+                    }
+                }
+        	}
+    }
+}
+
+CCrateHandler::CCrateHandler(CObject* parent)
+{
+    super(parent, GS);
+    col = 8; //maybe needed?
+    DelayRoutine = 0;
+    DelayRoutineSet = 50;
+}
+
+override void CCrate::CCrate(CObject* Parent, CCrateDesc* desc, EDropType type)
+{
+    PositionSet = false;
+    NewlyCrate = this;
+    Freeing = false;
+
+    super;
+
+    PosX = -500;
+    PosY = -500;
+    X = -500;
+    Y = -500;
+}

@@ -1,0 +1,61 @@
+WormSprite* handGrenadeWS;
+CSprite* hand_grenade_aiming;                                                                                               
+                                                                                 
+void hand_grenade_anim::InitGraphic() {
+    CFile* f;                                                                    
+    f = GetAttachment("hand_grenade_bullet.png");                             
+    hand_grenade_aiming = LoadSprite(f, 1, 0);                                                           
+}                                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 1) {                                                           
+     local weapName; local sprite;
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Hand Grenade";                                               
+     sprite = hand_grenade_aiming->Index;                                     
+     Params->hand_radius = 17.5;                                                         
+     Params->weap_rotation =  0.5;
+     Params->weap_radius = 9.0;
+     Params->hand_type = 1;
+     Params->hand_scale = 0.8;                                                                                   
+                                                  
+     handGrenadeWS = new WormSprite(weapName, sprite, Params);
+    }                                                                            
+  }                                                                              
+}                                                                                
+
+
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;                                                                           
+  if (Type == M_FRAME){                                                          
+     if (weap->CheckName("Hand Grenade")) {                                
+         if (hand_grenade_anim2) {                                              
+            local sprite = hand_grenade_aiming->Index;                      
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);        
+            weap->launch.anim.spriteIndex = 0;
+            hand_grenade_anim2 = false;                                         
+         } 
+     }                                                                                                                                                                                                                          
+  }                                                                              
+}                                                                                
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;                                                                           
+  hand_grenade_anim2 = true;                                                    
+}                                                                                
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("Hand Grenade")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+//DoParticleEffects( sprite, RelX, RelY, lifeTime, animSpeed, veloMin, veloMax, startAlpha, endAlpha, windFactor, startSize, endSize, angleMin, angleMax, randomMotion, grav);
+            DoAnimParticleEffects( hand_grenade_aiming->Index, 5, -7, -7, 20, 0.03, -3.0, -7.0, 255, 255, 0, 0.5, 0.2, 0.0, 2.31, 0.0, -1.0);
+        }
+    }
+}

@@ -1,0 +1,17 @@
+require utils;
+
+CSoundFile* allah;
+ 
+void quran_sound::Init()
+{
+	allah  = new CSoundFile(GetAttachment("allah.wav"));
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+   if(Weap->CheckName("Holy Quran"))
+   {  
+              allah->Play(1.0, 0.0, false);
+   }
+   super;
+}

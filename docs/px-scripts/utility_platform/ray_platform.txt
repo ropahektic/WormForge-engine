@@ -1,0 +1,208 @@
+require utils;
+
+CPlatform : CGObject;
+CSprite* platform_sprite;
+CSprite* platform_broken;
+
+void ray_platform::FirstFrame(){}
+
+void ray_platform::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("platform_sprite.png");
+	platform_sprite = LoadSprite(f, 1, 0);
+	f = GetAttachment("platform_broken.png");
+	platform_broken = LoadSprite(f, 1, 0);
+}
+
+CPlatform::CPlatform(CObject* parent, fixed x, fixed y)
+{
+	SetLayerOverride(LAYER_OILDRUM);
+
+	super(parent, 17, 9);
+
+    owningTeam   = 0;
+    PosX          = x;
+    PosY          = y;
+    IsMaterial  = true;
+	ClType = EObjectClass(72);
+	ColGroup = CMASK_SKIMMING;
+	ColMask = new CColMask(70, 10, MakeRectMask(140, 20));
+	GravityFactor = 0;
+	SpeedDivider = 1000;
+	SpeedDividerB = 1000;
+
+	DefaultColGroup = CMASK_TERRAIN | CMASK_WORM_ON_TERRAIN | CMASK_WORM_FROZEN
+		| CMASK_CRATE | CMASK_DONORCARD | CMASK_OILDRUM;
+	NoWormsColGroup = CMASK_TERRAIN | CMASK_CRATE | CMASK_DONORCARD | CMASK_OILDRUM;
+	DamageableColGroup = CMASK_WORM_ON_TERRAIN | CMASK_WORM_USING_WEAPON
+		| CMASK_WORM_IN_MIDAIR | CMASK_WORM_ON_ROPE | CMASK_WORM_FROZEN
+		| CMASK_MINE | CMASK_CRATE | CMASK_DONORCARD | CMASK_OILDRUM;
+
+	DelayNextZPlaneUpdate = 0;
+	ZPlane = 13; // was 5
+	
+	breakable = true;
+    health = 40;
+    ExpDamage = 10;
+}
+
+bool CPlatform::ApplyDamage(int dmg)
+{
+   if (breakable == false) return false;
+   health -= dmg;
+   if (health <= 0)
+   {
+      DoExplosion(PosX,PosY, 100, ExpDamage, 0, 0);
+      Free(true);
+      return true;
+   }
+   return false;
+}
+
+void CPlatform::Message(CObject* sender, EMType type, int mSize, CMessageData* mData)
+{
+    if (breakable && (health <= 0)) return;
+    
+	if (type == M_FRAME)
+	{
+	    if(Removed)
+		{
+			Free(true);
+			return;
+		}
+		else
+		{
+		InMidAir = 0;
+		Stopped = 1;
+		SpX = 0;
+		SpY = 0;
+		
+		if(health <= 0)
+			{
+			DoExplosion(PosX,PosY-20, 10, 10, 0, 0);
+			Removed = true;
+			}
+		}
+	}
+	
+	sprite1 = platform_sprite->Index;
+	sprite2 = platform_broken->Index;
+	
+	if (type == M_DRAWQUEUE)
+	{
+        local Color = GetTeamColor(owningTeam);
+    	if (Color == 0){SetColorMod(RGB(100, 0, 0), 4);}
+    	if (Color == 1){SetColorMod(RGB(0, 0, 100), 4);}
+    	if (Color == 2){SetColorMod(RGB(0, 100, 0), 4);}
+    	if (Color == 3){SetColorMod(RGB(80, 80, 0), 4);}
+    	if (Color == 4){SetColorMod(RGB(80, 0, 80), 4);}
+    	if (Color == 5){SetColorMod(RGB(0, 80, 80), 4);}
+    	
+    	if(health > 20){AddSpriteEx(ZPlane + 0.01, PosX, PosY, sprite1, 0, 0, 1);}
+    	else{AddSpriteEx(ZPlane + 0.01, PosX, PosY, sprite2, 0, 0, 1);}
+		
+		
+		ClearColorMod();
+		return;
+	}
+	
+	if (breakable)
+     {
+       if (type == M_EXPLOSION)
+       {
+        local dx = mData->fparams[1] - PosX;
+        local dy = mData->fparams[2] - PosY;
+
+        local dist = dx*dx + dy*dy;
+        local dmgcoef = 1 - dist / (mData->params[4] * mData->params[4] * 4);
+        if (dmgcoef > 0)
+           {
+           if (ApplyDamage(dmgcoef * mData->params[4])) return;
+           }
+       }
+
+       if (type == M_GUNEXP)
+       {
+        if (ApplyDamage(mData->params[5])) return;
+       }
+     }
+	super;
+}
+
+void CPlatform::TakeExplosionDamage(fixed x, fixed y, int dmg)
+{
+	if(dmg == 0) return;
+
+	float fdmg = dmg;
+	float dx = PosX - x;
+	float dy = PosY - y;
+
+	float distsqr = dx*dx + dy*dy;
+	float fdmgsqr = fdmg*fdmg*4.0;
+
+	fdmg = (1.0-distsqr/fdmgsqr) * fdmg;
+	dmg = fdmg;
+
+	if(dmg > 0) TakeDamage(0, dmg);
+}
+
+void CPlatform::TakeDamage(int type, int dmg)
+{
+	if(type == 10)
+	{
+		fixed fdmg = dmg;
+		fdmg = health * fdmg / 100.0;
+		dmg = fdmg;
+	}
+
+	health -= dmg;
+}
+
+void CPlatform::UpdateZPlane()
+{
+	if (DelayNextZPlaneUpdate <= 0)
+	{
+		local matches = 0;
+		for (int i = 1; i < Env->Objs.Count; i++)
+		{
+			local obj = Env->Objs.Objs[i];
+			if(obj == NullObj)
+				continue;
+			if(obj == this)
+				continue;
+			if (obj->ClType == EObjectClass(72))
+			{
+				local plat = CPlatform(obj);
+				float dX = plat->PosX - PosX;
+				float dY = plat->PosY - PosY;
+				if (dX * dX + dY * dY < 900)
+				{
+					if (plat->ZPlane == ZPlane)
+						plat->ZPlane++;
+					matches++;
+				}
+			}
+		}
+		if(matches == 0)
+			ZPlane = 13; // was 5
+		DelayNextZPlaneUpdate = 200;
+	}
+	else
+	{
+		DelayNextZPlaneUpdate--;
+	}
+}
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if (Weap->CheckName("Platform"))
+	{
+	    PlayLocalSound(112, 5, 1.0, 1.0);
+        local pl = new CPlatform(GetObject(25, 0), PosX, PosY + 17);
+		local worm = CWorm(this);
+        local wteam = worm->WormTeam;
+        pl->owningTeam = wteam;
+	}
+super;
+}

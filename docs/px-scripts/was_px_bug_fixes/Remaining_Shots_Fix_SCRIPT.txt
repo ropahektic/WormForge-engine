@@ -1,0 +1,64 @@
+/* 
+
+Made by: DannyB, February 2023
+
+*/
+
+// This script fixes a bug, where changing menus while have remaining shots, causes weapons and utilities to be mixed together. 
+
+bool rsf_active;
+bool rsf_ends_turn;
+
+void Remaining_Shots_Fix_SCRIPT::FirstFrame() 
+{
+     // initialize variable
+     rsf_active = false;
+     rsf_ends_turn = false;
+}
+
+override void CWorm::Message(CObject* sender, EMType type, int msize, CMessageData* mdata)
+{        
+     if(CurWeapon != NullObj)
+     {
+          if(type == M_SPACE && CurWeapon->NShoots >= 2)
+          {
+               if(rsf_active == false)
+               {
+                    rsf_active = true;
+                    rsf_ends_turn = CurWeapon->EndsTurn;
+               }
+          }
+     }
+     
+     if(rsf_active == true)
+     { 
+          if(Current_Worm != NullObj)
+          {     
+               if(type == M_CHANGEWEAPONPANEL)
+               {
+                    ShowTeamMessage(1, "Use all shots before changing menus!", Current_Worm->WormTeam);
+                    ShowTeamMessage(1, "Use all shots before changing menus!", Current_Worm->WormTeam);
+                    ShowTeamMessage(1, "Use all shots before changing menus!", Current_Worm->WormTeam);
+                        
+                    if(rsf_ends_turn == true)
+                    {
+                         Root->Message(Root, M_SKIPTURN, 0, NullObj);
+                         
+                         PlayLocalSound(93, 5, 2.5, 1.0);
+                    }
+                    
+                    rsf_active = false;
+               }
+               
+               if(Current_Worm->nTotalShoots == Current_Worm->nAvalShoots)
+               {
+                    if(rsf_active == true)
+                    {
+                         rsf_active = false;
+                    }
+               }
+          }
+     }
+     
+     super;         
+}

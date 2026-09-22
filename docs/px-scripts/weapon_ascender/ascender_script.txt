@@ -1,0 +1,15 @@
+CSprite* ascendert;
+CSprite* descendert;
+
+void ascender_script::InitGraphic()
+{
+   //Loading picture data
+   CFile *f;
+   f = GetAttachment("ascendert.png");
+   ascendert = LoadSprite(f, 5, 0);
+   f = GetAttachment("descendert.png");
+   descendert = LoadSprite(f, 5, 0);
+   
+   SetSpriteOverride(459, ascendert);
+   SetSpriteOverride(460, descendert);
+}

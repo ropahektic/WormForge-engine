@@ -1,0 +1,168 @@
+//--------------------------------------------------------------------------
+// Trailed numbers
+   /*  These functions work similarly to MakeZeroedNumber in utils.pxl but the 
+   have extra string parameter "trail". So you can concatenate number string 
+   with any other string. By instance, equivalent to MakeZeroedNumber(50, 5) is 
+   makeLeftTrailedNumber(50, 5, "0"), output will be "00050". If you want to 
+   make number number string look like "123---" or "98----" you should call
+   makeRigthTrailedNumber(123, 6, "-"). */ 
+//----------------------------------------------------------------------------
+string makeLeftTrailedNumber(int number, int minLen, string trail) {
+  string str = ItoA(number);
+  while (StrLen(str) < minLen) str = StrCon(trail, str);
+  return str;  
+} 
+string makeRightTrailedNumber(int number, int minLen, string trail) {
+  string str = ItoA(number);
+  while (StrLen(str) < minLen) str = StrCon(str, trail);
+  return str;  
+} 
+//----------------------------------------------------------------------------
+// 
+StrNode::StrNode(string s) { 
+  String = s; 
+  Next = NullObj; 
+  Prev = Next; 
+}
+StrList::StrList() { 
+  Size = 0; 
+  Head = NullObj; 
+  Tail = Head; 
+}
+StrList* StrList::Add(string s) {
+  if (Head == NullObj) { 
+    Head = new StrNode(s); 
+    Tail = Head; 
+    Size = 1; 
+  } else { 
+    Tail->Next = new StrNode(s); 
+    Tail->Next->Prev = Tail; 
+    Tail = Tail->Next; 
+    Size++; 
+  }
+  return this; 
+}
+StrList* StrList::Add(int    n) { return Add(ItoA(n)); }
+StrList* StrList::Add(float  f) { return Add(ftoa(f)); }
+StrList* StrList::Add(bool   b) { return Add(boolToStr(b)); }
+/** get the list item at specified index **/  
+string StrList::Get(int i) { 
+  if (abs(i) >= Size) return ""; // error 
+  local halfsize = Size/2;
+  if (i >= 0) {
+    if (halfsize >= i) {
+      Curr = Head; 
+      while (i != 0) { Curr = Curr->Next; i--; } 
+    }
+    else { 
+      Curr = Tail; i = Size - i; 
+      while (i != 0) { Curr = Curr->Prev; i--; }
+    }
+  } else { i = -i;
+    if (halfsize >= i) {
+      Curr = Head; i = Size - i; 
+      while (i != 0) { Curr = Curr->Next; i--; } 
+    }
+    else { 
+      Curr = Tail; 
+      while (i != 0) { Curr = Curr->Prev; i--; }
+    }
+  }
+  return Curr->String; 
+}
+string StrList::Concat() {
+  Curr = Head; s = "";
+  while (Curr != NullObj) { s = StrCon(s, Curr->String); 
+    /*GG->WriteToChat(1, Curr->String, false);*/ Curr = Curr->Next; }
+  return s;
+}
+string StrList::Concat(int n) {
+  Curr = Head; local s = "";
+  while (Curr != Tail) { s = StrCon(s, Curr->String); 
+    /*GG->WriteToChat(1, Curr->String, false);*/ Curr = Curr->Next; }
+  return StrSave(s);
+}
+StrList* StrList::Riffle(string s, bool toInsertAtBegin, bool toInsertAtEnd) { 
+  if (toInsertAtBegin) { 
+    Head->Prev = new StrNode(s); 
+    Head->Prev->Next = Head; 
+    Head = Head->Prev;
+  }
+  Curr = Head;
+  while (Curr != Tail) { 
+    local oldNext = Curr->Next;
+    Curr->Next = new StrNode(s);
+    Curr->Next->Prev = Curr;
+    Curr->Next->Next = oldNext;
+    Curr = oldNext;
+  }
+  if (toInsertAtEnd) { 
+    Tail->Next = new StrNode(s); 
+    Tail->Next->Prev = Tail; 
+    Tail = Tail->Next;
+  }
+  return this;
+}
+StrList* StrList::SparseRiffle(string s, bool toInsertAtBegin, bool toInsertAtEnd,
+    int modulus) {
+  local i = 0;
+  if (toInsertAtBegin) { 
+    Head->Prev = new StrNode(s); 
+    Head->Prev->Next = Head; 
+    Head = Head->Prev;
+  }
+  Curr = Head; 
+  while (Curr != Tail) { 
+    local oldNext = Curr->Next;
+    if (i % modulus == 0) {
+      Curr->Next = new StrNode(s);
+      Curr->Next->Prev = Curr;
+      Curr->Next->Next = oldNext;
+    }
+    Curr = oldNext;
+    i++;
+  }
+  if (toInsertAtEnd) { 
+    Tail->Next = new StrNode(s); 
+    Tail->Next->Prev = Tail; 
+    Tail = Tail->Next;
+  }
+  return this;
+}
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// Conversion functions
+//----------------------------------------------------------------------------
+// Convertion of string to integer queue
+//----------------------------------------------------------------------------
+CIntQueue* strToIntQueue(string str) {
+  IntQueue = new CIntQueue(Root);  
+  int strLen = StrLen(str);
+  strLen = StrLen(str);
+  leftSeparatorPos = 0;             
+  if (!StrCmp(StrChr(str, leftSeparatorPos), "|")) {
+    IntQueue->Push(atoi(str, 0));
+    return IntQueue;
+  }                          
+  rightSeparatorPos = 1;
+  while (rightSeparatorPos < strLen) {
+    while(!StrCmp(StrChr(str, rightSeparatorPos), "|")) { 
+      rightSeparatorPos++;
+    }    
+    
+    cutStrLen = rightSeparatorPos - leftSeparatorPos - 1;  
+    cutStr = StrRight(StrLeft(str, rightSeparatorPos), cutStrLen);
+    cutInt = atoi(cutStr, 0);
+    IntQueue->Push(cutInt);
+    
+    leftSeparatorPos = rightSeparatorPos;
+    rightSeparatorPos++;       
+  } 
+  return IntQueue;      
+}
+//----------------------------------------------------------------------------

@@ -1,0 +1,9 @@
+require utils;
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+      local touchedworm = CWorm(this);
+      TargHealth = GS->Info.GetWormHealth(touchedworm->WormTeam, touchedworm->WormNumber);
+
+super;
+}

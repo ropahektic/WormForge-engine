@@ -1,0 +1,39 @@
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    local TeamNumber = GetTeamNumber(WormTeam);
+    
+    // Soldier
+    if(Weap->CheckName("Bazooka")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    else if(Weap->CheckName("Grenade")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    else if(Weap->CheckName("Mines Gun")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 2);}
+    else if(Weap->CheckName("TNT")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 2);}
+    else if(Weap->CheckName("Chilli Bomb")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 2);}
+    else if(Weap->CheckName("Parkour")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+      
+    // Gunner
+    else if(Weap->CheckName("Gatling Gun")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    else if(Weap->CheckName("Prod")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    else if(Weap->CheckName("Sentry Gun")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 3);}
+    else if(Weap->CheckName("Platform")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    else if(Weap->CheckName("Banana Bomb")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    
+    // Engineer
+    else if(Weap->CheckName("BlowTorch")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    else if(Weap->CheckName("Girder")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 2);}
+    else if(Weap->CheckName("Sentry Laser")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 3);}
+    else if(Weap->CheckName("Mine")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 2);}
+    else if(Weap->CheckName("Electromagnet")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 3);}
+    else if(Weap->CheckName("Tele Arrow")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 2);}
+      
+    // Ninja
+    else if(Weap->CheckName("Fire Punch")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    else if(Weap->CheckName("Ninja Star")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    else if(Weap->CheckName("Petrol Bomb")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 2);}
+    
+    // Medic
+    else if(Weap->CheckName("Real Shotgun")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+    else if(Weap->CheckName("Teleport")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 5);}
+    else if(Weap->CheckName("Holy Hand-Grenade")){GS->Info.SetWeaponDelay(TeamNumber, Weap->GetWeaponIndex(), Weap->GetPageIndex(), 1);}
+super;
+}

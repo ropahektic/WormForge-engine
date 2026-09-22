@@ -1,0 +1,116 @@
+//Thanks to Zed for help
+
+require utils;
+
+CColMask* SANTA_COLMASK;
+CSprite* santaSprite;
+
+CSoundFile* hohoho;
+
+void santa_script::InitGraphic()
+{
+        CFile *f;
+	f = GetAttachment("evilswalk.png");	santaSprite = LoadSprite(f, 3, 3);
+}
+
+void santa_script::Init()
+{
+hohoho       = new CSoundFile(GetAttachment("hohoho.wav"));
+}
+
+void santa_script::FirstFrame()
+{
+     SANTA_COLMASK = new CColMask(10,10,MakeRectMask(20,20));   
+}
+
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+super;
+SType = false;  //Santa flag
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc) 
+{
+super;  
+ if(Weap->CheckName("Evil Santa"))
+ {     
+    	CGObject *sobj;
+        CMissile *smis;	
+	sobj = CGObject(Env->Objs.Objs[Env->Objs.Count-1]);
+	     if(sobj->ClType == OC_Missile)
+             {
+             smis = sobj;
+             smis->SType = true;
+             //debug
+             //GG->WriteToChat(GG->curFont, "Santa was modified...", false); 
+             //endd
+             }                
+ } 
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if(SType == true)
+   {
+              if(Type == M_FRAME)
+              {
+                      ProcessCollision(15.0);
+              }
+            /*if(Type == M_DRAWQUEUE)
+              {
+                      if(Side == 1)
+                      {AddSprite(5,PosX,PosY-15,0,santaSprite->Index,3);}
+                      else
+                      {AddSprite(5,PosX,PosY-15,0,santaSprite->Index+262144,3);}
+              }*/
+   }
+super;
+}
+
+void CMissile::ProcessCollision(float Speed)
+{
+	CGObject *obj;
+	
+	for(int i = 0; i < Env->Objs.Count; i += 1)
+	{
+		obj = CGObject(Env->Objs.Objs[i]);
+		if(obj == this) continue;
+		if(obj == NullObj) continue;
+		if(GetCurrentWorm() != NullObj)
+		                    {
+		                    if(obj == GetCurrentWorm()) continue;
+		                    }
+		
+		
+		if(obj->ClType == OC_Worm)
+		{
+			if(SANTA_COLMASK->Check(PosX, PosY, obj->ColMask, obj->PosX, obj->PosY))
+			{
+				float ForceX = obj->PosX - PosX;
+				float ForceY = obj->PosY - PosY;
+				float dist = sqrt(ForceX*ForceX + ForceY*ForceY);
+				
+				if(dist > 0)
+				{
+					ForceX = 0.6*sqrt(Speed) * ForceX / dist;
+					ForceY = 0.6*sqrt(Speed) * ForceY / dist;
+					
+					CMessageData msg;
+					msg.params[0]	= 0;
+					msg.fparams[1]	= PosX;
+					msg.fparams[2]	= PosY;
+					msg.fparams[3]	= ForceX;
+					msg.fparams[4]	= ForceY;
+					msg.params[5]	= 1;
+					msg.params[6]	= 0;
+					
+					obj->Message(this, M_GUNEXP, 1032, &msg);
+					
+					hohoho->Play(1.0, 0.0, false);
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,62 @@
+// script by PyroMan
+
+CColMask* SWMask;
+
+void sworm_spd::Init()
+{
+    keySync->AddKey(49); // 1
+    keySync->AddKey(50); // 2
+    keySync->AddKey(51); // 3
+    keySync->AddKey(52); // 4
+    keySync->AddKey(53); // 5 
+    keySync->AddKey(16); // Shift
+    keySync->AddKey(17); // Ctrl
+    keySync->AddKey(38); // Up
+    keySync->AddKey(40); // Down
+    SWMask = new CColMask(3, 3, MakeCircleMask(6));
+}
+
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    SSSpeed = 0.0;
+    SSCheck = false;
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{ 
+    if (Type == M_FRAME)
+    {
+        if (weap->CheckName("Super Worm"))
+        {
+          if (IsFlying)
+          {
+            if (keySync->KeyPressed(16) || keySync->KeyPressed(17) || keySync->KeyPressed(38) || keySync->KeyPressed(40))
+            {
+                if (keySync->KeyPressed(16) || keySync->KeyPressed(38)) SSSpeed = 0.6;
+                if (keySync->KeyPressed(17) || keySync->KeyPressed(40)) SSSpeed = -0.3; 
+            }
+            else SSSpeed = 0.0;
+
+            local hit1 = CheckMaskAt(Root, SWMask, PosX+SpX*0.8, PosY+SpY*0.8, -1);
+            if (hit1 != NullObj && hit1->ClType == OC_Landscape) 
+            {
+                if (SSCheck) 
+                {
+                   ShowMessage("Careful!");
+                   SSCheck = false;
+                }
+                PosX = PosX+SpX*(-0.05);  // slow down a bit to make regular script proceed collision, if its there
+                PosY = PosY+SpY*(-0.05);
+            }
+            else
+            {
+                SSCheck = false;
+                PosX = PosX+SpX*SSSpeed;
+                PosY = PosY+SpY*SSSpeed;
+            }   
+          }    
+        }                                  
+    }
+    super;   
+}

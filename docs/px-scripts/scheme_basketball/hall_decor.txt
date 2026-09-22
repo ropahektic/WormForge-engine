@@ -1,0 +1,132 @@
+CSprite* net_spr;
+CSprite* scoreboard;
+
+CSprite*hall1;
+CSprite*hall2;
+CSprite*hall3;
+CSprite*hall4;
+
+//CSprite* bg;
+CSprite* crshairb;
+
+CSprite* r1p;
+CSprite* r2p;
+CSprite* r3p;
+
+CSprite* b1p;
+CSprite* b2p;
+CSprite* b3p;
+
+CSprite* out;
+
+CAnimation* BBMessage;
+CAnimationParams* bb_message_params;
+
+void hall_decor::FirstFrame()
+{
+    bb_message_params = new CAnimationParams;
+	bb_message_params->duration = 3;   // seconds, fade duration
+	bb_message_params->turns = 0;
+    bb_message_params->rot = 178.5;
+    bb_message_params->alpha = 100;
+    bb_message_params->ZPlane = 3;
+    bb_message_params->fade = false;
+}
+
+void hall_decor::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("net.png");		net_spr = LoadSprite(f, 1, 0);
+	f = GetAttachment("scoreboard.png");		scoreboard = LoadSprite(f, 1, 0);
+
+	f = GetAttachment("hall1.png");		hall1 = LoadSprite(f, 1, 0);
+	f = GetAttachment("hall2.png");		hall2 = LoadSprite(f, 1, 0);
+	f = GetAttachment("hall3.png");		hall3 = LoadSprite(f, 1, 0);
+	f = GetAttachment("hall4.png");		hall4 = LoadSprite(f, 1, 0);
+
+	//f = GetAttachment("bg.png");        bg = LoadSprite(f, 1, 0);
+	f = GetAttachment("crshairb.png"); 	crshairb = LoadSprite(f, 1, 0);
+
+   	//SetSpriteOverride(621, bg);
+
+   	SetSpriteOverride(2, crshairb);
+    SetSpriteOverride(3, crshairb);
+    SetSpriteOverride(4, crshairb);
+    SetSpriteOverride(5, crshairb);
+    SetSpriteOverride(6, crshairb);
+    SetSpriteOverride(7, crshairb);
+    
+    f = GetAttachment("r1p.png");		r1p = LoadSprite(f, 1, 0);
+	f = GetAttachment("r2p.png");		r2p = LoadSprite(f, 1, 0);
+	f = GetAttachment("r3p.png");		r3p = LoadSprite(f, 1, 0);
+
+	f = GetAttachment("b1p.png");		b1p = LoadSprite(f, 1, 0);
+	f = GetAttachment("b2p.png");		b2p = LoadSprite(f, 1, 0);
+	f = GetAttachment("b3p.png");		b3p = LoadSprite(f, 1, 0);
+
+	f = GetAttachment("out.png");		out = LoadSprite(f, 1, 0);
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+if(Type == M_DRAWQUEUE)
+	{
+	AddSpriteEx(15,395, 315, net_spr->Index,1.0,0.0,1.0);
+	AddSpriteEx(15,1527, 315, net_spr->Index + 262144,1.0,0.0,1.0);
+	AddSpriteEx(25, GS->LevelSX / 2, 0, scoreboard->Index,1.0,0.0,1.0);
+
+	SetColorMod(RGB(100, 100, 100), 0);
+	AddSpriteEx(25, 461, 440, hall1->Index,1.0,0.0,1.0);
+	AddSpriteEx(25, 794, 440, hall2->Index,1.0,0.0,1.0);
+	AddSpriteEx(25, 1127, 440, hall3->Index,1.0,0.0,1.0);
+	AddSpriteEx(25, 1460, 440, hall4->Index,1.0,0.0,1.0);
+	ClearColorMod();
+    }
+}
+
+void CBasketBall::ShowSprite()
+{
+        	bb_message_params->scale = 0.0;
+            bb_message_params->blend_type = 2;
+            bb_message_params->duration = 3;   // seconds, fade duration
+            bb_message_params->rot = 178.5;
+            bb_message_params->turns = 0;
+            bb_message_params->alpha = 100;
+            bb_message_params->ZPlane = 3;
+            bb_message_params->fade = false;
+
+			if(sprite_roll == 0) bb_message_params->sprite = out->Index;
+			else if(sprite_roll == 1)
+			    {
+			    if	   (ScoreCoefficient == 1) bb_message_params->sprite = b1p->Index; 
+			    else if(ScoreCoefficient == 2) bb_message_params->sprite = b2p->Index;
+			    else if(ScoreCoefficient == 3)
+					{
+					bb_message_params->sprite = b3p->Index;
+					local i = RandomInt(1, 3);
+    				if      (i == 1) crowd1->Play(1.0, 0.0, false);
+    				else if (i == 2) crowd2->Play(1.0, 0.0, false);
+    				else if (i == 3) crowd3->Play(1.0, 0.0, false);
+    				}
+			    }
+            else if(sprite_roll == 2)
+			    {
+			    if	   (ScoreCoefficient == 1) bb_message_params->sprite = r1p->Index;
+			    else if(ScoreCoefficient == 2) bb_message_params->sprite = r2p->Index;
+			    else if(ScoreCoefficient == 3)
+					{
+					bb_message_params->sprite = r3p->Index;
+					local i = RandomInt(1, 3);
+    				if      (i == 1) crowd1->Play(1.0, 0.0, false);
+    				else if (i == 2) crowd2->Play(1.0, 0.0, false);
+    				else if (i == 3) crowd3->Play(1.0, 0.0, false);
+    				}
+			    }
+            else bb_message_params->sprite = 0;
+
+			BBMessage = new CAnimation(Root, GS->LevelSX / 2, 200, NullObj, bb_message_params);
+            animate = true;
+            stopFrame = gframe;
+            return;
+}

@@ -1,0 +1,90 @@
+require utils, p_sprite_builder, pxparticles, utils_curtis,
+sprite_curtis_453, sprite_curtis_457, sprite_curtis_458;
+
+CSprite* staff_aiming;
+CSprite* staff_bullet;
+
+void staff_script::InitGraphic()
+{
+    CFile *f;
+    f = GetAttachment("spb_staff.png");
+    staff_aiming = LoadSprite(f, 6, 0);
+    f = GetAttachment("jolt.png");
+    staff_bullet = LoadSprite(f, 20, 0);
+}
+
+//---------------------------------STAFF OF JOLTING---------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 1) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Staff of Jolting";
+     sprite = staff_aiming->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 1.15;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){
+super;
+  if (Type == M_FRAME){
+     if (weap->CheckName("Staff of Jolting")) {
+         if (jolt_anim) {
+              local sprite = staff_bullet->Index;
+              WeapSpriteParams* Params = new WeapSpriteParams;
+              Params->animate = true;
+              Params->anim_speed = 1.50;
+              new WeapSprite(this, sprite, Params);
+              weap->launch.anim.spriteIndex = 0;
+              jolt_anim = false;
+         }
+     }
+  }
+}
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata){
+super;
+  jolt_anim = true;
+}
+
+//---------------PARTICLE FX---------------//
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) {
+        if (CurWeapon->CheckName("Staff of Jolting")) {
+            if (ObjState == WS_AIMING || ObjState == WS_SETPOWER)
+            DoAnimParticleEffects(
+
+            453,     //   SPRITE
+            1,       //   RADIUS
+            20,      //   RELX
+            20,      //   RELY
+            70,      //   LIFETIME
+            0.02,    //   SPEED
+            1.0,     //   VELO.MIN
+            5.0,     //   VELO.MAX
+            255,     //   START.ALPHA
+            255,     //   END.ALPHA
+            0,       //   WIND
+            0.65,    //   START.SIZE
+            0.01,    //   END.SIZE
+            0.00,    //   ANGLE.MIN
+            0.00,    //   ANGLE.MAX
+            0.0,     //   RANDOMNESS
+            -3.0);   //   GRAVITY
+        }
+    }
+}

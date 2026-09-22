@@ -1,0 +1,74 @@
+require utils, utils_danylo, map_object_ktk_control, wosc_lib;
+
+CSprite* crown;
+CBitmap1* king_mask;
+
+void live_king::InitGraphic()
+{
+CFile* f;
+f = GetAttachment("crown.png");  crown = LoadSprite(f, 1, 0);
+king_mask = new CBitmap1(512, 512);
+}
+
+override CKtkControl::CKtkControl(CEditorObject* EObj, int index)
+{
+super;
+king_mask->Rect(0,0,EObj->GetInt("KingZone"),EObj->GetInt2("KingZone"),1);
+GG->land->ApplyCustomMask(king_mask, KingX1, KingY1, CM_CLEAR);
+
+DestructionArea = -1;
+AttackersLost = false;
+}
+
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+super;
+IsKing = false;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if(Type == M_FRAME)
+	{
+    for(int i = 1; i < Env->Objs.Count; i++)
+    	{
+        local obj = Env->Objs.Objs[i];
+
+        if(obj == NullObj) continue;
+        if((obj is CWorm) == false) continue;
+
+        CWorm* worm = CWorm(obj);
+
+        if(worm == NullObj) continue;
+
+        if(StrCmp(GetTeamName(worm->WormTeam), "KING"))
+        	{
+            worm->IsKing = true;
+            worm->SetName("King");
+
+            if(worm->GS->Info.GetWormHealth(worm->WormTeam, worm->WormNumber) <= 0)
+            	{
+                for (local teamIndex = 1; teamIndex <= 6; teamIndex++)
+                	{
+                    if (GetTeamColor(teamIndex) == 1) destroyTeam(teamIndex);
+				 	}
+                }
+            }
+        }
+	}
+
+if(Type == M_DRAWQUEUE && IsKing == true)
+    {
+    if (!isInvisible)
+        {
+    	if(TurnSide < 0) {AddSpriteEx(13, PosX+5, PosY-20, crown->Index, 1.0, 0, 0.8);}
+    	else {AddSpriteEx(13, PosX-5, PosY-20, crown->Index + 262144, 1.0, 0, 0.8);}
+    	}
+    }
+
+super;
+}
+
+override void CKtkControl::DrawKingHealth()
+{}

@@ -1,0 +1,242 @@
+//- Valyrian Fire v1.0 (aka Wildfire)
+//- 25% more damage  and 100% wilder
+//- made by rafa``2
+//- 10/04/2015
+
+require utils, p_sprite_builder;
+
+#VALYRIAN_FIRE
+
+CValyrianFire:CFire
+ 
+CValyrianFire::CValyrianFire(CObject* Parent,CFireDesc* Desc,int unk)
+{
+    super(Parent, Desc, unk);
+    VFTeam = Desc->OwnerTeam;
+    version = 1.0;
+}      
+
+override void CMissile::ExplodeAt(fixed x,fixed y)
+{
+    if(weap != NullObj && weap->CheckName("Valyrian Fire"))
+    {                
+        if(true)
+        {
+            local w = GetCurrentWorm();
+            
+            for(int i = 0; i <= 50; i++)
+            {
+                CFireDesc fdesc;
+                zero(&fdesc);
+            
+                if(i % 2 == 0)
+                {
+                    fdesc.X = x + 3 * cos(360 - i * 7.2);   
+                }
+                else
+                {
+                    fdesc.X = x - 3 * cos(360 - i * 7.2) ;
+                }
+                
+                fdesc.Y = y - 3 * sin(360 - i * 7.2);
+                fdesc.Count    = 0;     
+                fdesc.Unk      = 0;
+                fdesc.UnkB     = 1;
+                fdesc.UnkD     = 1;
+                fdesc.Duration = 6000;
+                fdesc.UpPower  = 0;
+                fdesc.Damage   = 0;
+            
+                if(w == NullObj)
+                {
+                    fdesc.OwnerTeam = 0;
+                }
+                else
+                {
+                    fdesc.OwnerTeam = w->WormTeam;
+                }
+            
+                local wfire = new CValyrianFire(Root->GetObject(TI_FireStore, 0), &fdesc, 0);
+                
+                /*CMessageData msg;
+                 zero(&msg);
+                      
+                  msg.params[0]  = 1;               msg.fparams[1] = PosX;
+                  msg.params[3]  = 100;             msg.fparams[2] = PosY;
+                  msg.params[4]  = 20;
+                  msg.params[6]  = fdesc.OwnerTeam;
+                        
+                  wfire->Message(this, M_EXPLOSION, 1032, &msg); */
+            }
+        }
+    }
+    super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+       if(Type == M_GUNEXP)
+       {           
+           if(sender is CValyrianFire)
+           {
+               CValyrianFire * VFire = sender;
+               
+               if(MData->GetParameter(0) == 1)
+               {   
+                   MData->fparams[1] = PosX;
+                   MData->fparams[2] = PosY;
+                   MData->fparams[3] = MData->fparams[3] * 2.0;
+                   MData->fparams[4] = MData->fparams[4] * 2.0;
+                   MData->params[5]  = MData->params[5] * 1.25;
+                   MData->params[6]  = VFire->VFTeam;
+               }
+           }
+       }
+       
+   super;    
+}
+
+void CValyrianFire::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{    
+    if(Type == M_DRAWQUEUE)
+    {
+        SetColorMod(RGB(75, 225, 75), 1);
+        super;
+        
+        if(gframe % 10 == 0)
+            super;
+                    
+        ClearColorMod();
+        
+    }
+    else if(Type == M_EXPLOSION)
+    {
+         super;
+         super;
+    }    
+    else super;
+}
+
+CSprite* valyrianfire_aiming_spr;
+
+void valyrianfire_s::InitGraphic()
+{   
+    valyrianfire_aiming_spr = LoadSprite(GetAttachment("valyrianfire.png"), 1, 0);
+}                                                                                
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{ 
+    super;                                                                       
+    if (Type == M_FRAME) 
+    {                                              
+        if (gframe == 1)
+        {                                                          
+            local weapName; 
+            local sprite;
+            
+            CWormAnimParams* Params = new CWormAnimParams;
+            weapName = "Valyrian Fire";               
+            sprite = valyrianfire_aiming_spr->Index;
+                                     
+            Params->hand_radius = -6.0;                                                 
+            Params->hand_rotation = 0.0;
+            Params->hand_radial_rotation = 0.0;
+            Params->weap_radial_rotation = 0.0;     
+            Params->weap_rotation = 0.35;
+            Params->weap_radius = -8.0;
+            Params->hand_type = 1;
+            Params->hand_scale = 1.0;                           
+            local WA = new WormSprite(weapName, sprite, Params);
+    }                               
+  }                                 
+}
+                                                                             
+override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{
+    super;
+    valyrianfire_anim = true;                                                
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{    
+    super;
+    if (Type == M_FRAME)
+    {                                               
+        if (weap != NullObj) 
+        {                                   
+            if(weap->CheckName("Valyrian Fire"))
+            {
+                if(PosY >= Env->Water)
+                {
+                    ExplodeAt(PosX, PosY);
+                    Free(true); 
+                }
+                
+                if (valyrianfire_anim) 
+                {                                            
+                    local sprite = valyrianfire_aiming_spr->Index;
+                    WeapSpriteParams* Params = new WeapSpriteParams;
+                    local wsprite = new WeapSprite(this, sprite, Params);
+                    wsprite->type = 3;
+                    wsprite->speed = 0.35;
+                    valyrianfire_anim = false;
+                }                                       
+            }                                                                     
+        }                                                                                                                                                     
+    }                                                                            
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if(Weap->CheckName("Valyrian Fire"))
+    {
+        if(PosY >= Env->Water)
+        {
+            GS->Info.AddWeapon(WormTeam, Weap->GetWeaponIndex(), 1);
+        }
+        else
+        { 
+            Desc->X += 15 * cos(MATH_PI * FireAngle - MATH_HALF_PI) * TurnSide;           
+            Desc->Y -= 15 * sin(MATH_PI * FireAngle - MATH_HALF_PI); 
+            ShowMessage("WILDFIRE !!!");
+            super;
+        }       
+    }
+    else 
+        super;
+}
+
+//       pi/2
+//        /
+//  pi----/----0
+//        /
+//      3pi/2
+
+
+/*override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME) 
+    {
+        if (GetCurrentWorm() == this && CurWeapon->CheckName("Valyrian Fire")) 
+        {                                                                
+            if(ObjState == WS_AIMING || ObjState == WS_SETPOWER )
+            {
+                local x = PosX + 5 * cos(MATH_PI * FireAngle - MATH_HALF_PI - 0.5)*-TurnSide;
+                local y = PosY + 5 * sin(MATH_PI * FireAngle - MATH_HALF_PI - 0.5);
+                
+                PxParticle *P = new PxParticle(126, x , y);
+                P->SetLifeTime(10);
+                //P->GravityFactor(-0.05);
+                P->SetStartAlpha(0);
+                P->SetEndAlpha(50);
+                P->SetBlendMode(1);
+                P->SetColor(75,230,75);
+                P->SetMotionRandomness(0.1);
+                P->SetRandomVelocity(0.1, 0.25);
+                //P->SetAngle(MATH_PI * FireAngle - 2.0);
+                //P->SetAnimSpeed(0.5);
+            } 
+        }
+    }
+}  */

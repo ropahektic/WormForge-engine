@@ -1,0 +1,70 @@
+require utils;
+
+void supergirder_SCRIPT::Init()
+{
+    keySync->AddKey(16); // SHIFT
+}
+
+override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+{
+    cblit = true;
+    super;
+}
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_SPACE)
+    {
+        if (CurWeapon->CheckName("Super Girder"))
+        {
+            putgirder = true;
+            return;
+        }
+    }
+
+    if (Type == M_FRAME)
+    {
+        local LsX = GS->landSelectX;
+        local LsY = GS->landSelectY;
+        if (LsX & 32768) LsX = LsX | (65535 << 16);
+        if (LsY & 32768) LsY = LsY | (65535 << 16);
+
+        local SelX = SelectX/65536;
+        local SelY = SelectY/65536;
+        
+        if (CurWeapon->CheckName("Super Girder"))
+        {
+            if (keySync->KeyPressedNow(16))
+            {
+                if (!cblit) {cblit = true;   ShowTeamMessage(8,"Normal Girder",WormTeam);}
+                else        {cblit = false;  ShowTeamMessage(8,"INDESTRUCTABLE Girder",WormTeam);}
+            }
+        }
+        
+        if (putgirder)
+        {
+            if (ObjState != WS_ROPING && ObjState != WS_PARACHUTE && ObjState != WS_BUNGEE && ObjState != WS_JETPACK)
+            {
+                SetState(WS_FIRED);
+                DestrBlit = cblit;
+                nShoots = 0;
+                nAvalShoots = 1;
+                nTotalShoots = 1;
+                nShooted = 0;
+            }
+            
+            else ShowTeamMessage(1,"Super Girder must be used from ground!",WormTeam);
+            
+            putgirder = false;
+        }
+    }
+    
+    if (Type == M_TURNEND)
+    {
+        if (putgirder)
+        {
+        cblit = false;
+        }
+	}
+super;
+}                                                

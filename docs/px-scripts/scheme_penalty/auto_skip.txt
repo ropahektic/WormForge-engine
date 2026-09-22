@@ -1,0 +1,42 @@
+// 0rang3: I removed this part and just made a turn 5 seconds
+
+/*
+int JumpingCheck;
+
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+super;
+local w = GetCurrentWorm();
+local sg = GetWeaponByName("Skip Go");
+
+	if (Type == M_PRETURNSTART){JumpingCheck = 0;}
+    if (Type == M_SPACE && ObjState != WS_JUMPPREPARE)
+        {
+        if (ObjState != WS_JUMP)
+            {
+            if(CurWeapon->CheckName("Jump"))
+                {
+                super;
+                JumpingCheck = 1;
+                }
+            }
+        }
+
+    if(JumpingCheck == 1 && ObjState == WS_AIMING)
+        {
+        if(w == NullObj) return;
+        if(w->isPlacing) return;
+        w->FireWeapon(sg , w->PosX, w->PosY, 0.0, 0.0, 0.0, 0.0, 3000, 1.0, 0.0);
+        }
+
+    if(Type == M_FRAME && Root->Timer < 65403000)
+        {
+        if(ObjState == WS_AIMING || ObjState == WS_WALKING || ObjState == WS_JUMPPREPARE)
+         	{
+            if(w == NullObj) return;
+            if(w->isPlacing) return;
+            w->FireWeapon(sg, w->PosX, w->PosY, 0.0, 0.0, 0.0, 0.0, 3000, 1.0, 0.0);
+         	}
+        }
+}
+*/

@@ -1,0 +1,71 @@
+require utils, utils_steps;
+
+bool lockworms;
+       
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_TURNBEGIN)
+    {
+        lockworms = false;
+    }
+    
+super;
+}       
+       
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if (Type == M_FRAME)
+    {
+        if (GetFreeWormIndex(WormTeam) > 8 || GetFreeWormIndex(WormTeam) < 1)
+        {
+            lockworms = true;
+        }
+        
+        if (PrepareToLand)
+        {
+            revtick += 1;
+            
+            if (revtick >= 5 && SpY < 0.1)
+            {
+                SetState(WS_IDLE);
+                PrepareToLand = false;
+            }
+            
+            if (JetFuel < 1 || ObjState == WS_SINKING)
+            {
+                PrepareToLand = false;
+            }
+        }
+    }
+    
+    if (Type == M_DISABLECONTROL)
+    {
+        lockworms = false;
+    }
+    
+    super;
+}       
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+        if (Weap->CheckName("Reinforcement"))
+        { 
+            if (lockworms) {ShowTeamMessage(1,"Too many worms (8) in your team!",WormTeam); return;}
+            else
+            {
+                local Reinfwormie = RessurectWormEx(GetFreeWormIndex(WormTeam), WormTeam, 0, 0, "Reinforcement", 200);
+		 
+                Reinfwormie->PosX = SelectX/65536;
+                Reinfwormie->PosY = -200;
+               
+                Reinfwormie->SetState(WS_JETPACK);
+                Reinfwormie->JetFuel = 1;
+                Reinfwormie->revtick = 0;
+                Reinfwormie->PrepareToLand = true;
+            }
+	    
+	}
+        
+   super;
+        
+}                     

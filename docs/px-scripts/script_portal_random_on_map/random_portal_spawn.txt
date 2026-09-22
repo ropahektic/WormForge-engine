@@ -1,0 +1,74 @@
+// script by PyroMan
+require utils, p_portal2;
+
+CAnimationParams* portal_loop3_Params;
+CSprite* portal_blue3;
+CSprite* portal_orange3;
+
+void random_portal_spawn::InitGraphic()
+{
+        CFile *f;
+	f = GetAttachment("portal_blue.png");           portal_blue3 = LoadSprite(f, 1, 0);
+	f = GetAttachment("portal_orange.png");         portal_orange3 = LoadSprite(f, 1, 0);
+}
+
+void random_portal_spawn::FirstFrame()
+{
+    portal_loop3_Params = new CAnimationParams;
+        
+        portal_loop3_Params->speed = 35;
+        portal_loop3_Params->ZPlane = 9;
+        portal_loop3_Params->scale = 0.8;
+        portal_loop3_Params->turns = 500;
+        portal_loop3_Params->loop = true;
+        portal_loop3_Params->alpha = 45;
+        portal_loop3_Params->blend_type = 3;  
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+       if (gframe == 2)
+       {
+           local x = RandomInt(300, GS->LevelSX/2);  
+           local y = RandomInt(150, GS->LevelSY-300);
+           local x_koef; local y_koef;
+           local portal_type = RandomInt(1, 8);
+                if (portal_type == 1) {x_koef = 0;   y_koef = 10;}
+           else if (portal_type == 2) {x_koef = -10; y_koef = 10;}
+           else if (portal_type == 3) {x_koef = -10; y_koef = 0;}
+           else if (portal_type == 4) {x_koef = -10; y_koef = -10;}
+           else if (portal_type == 5) {x_koef = 0;   y_koef = -10;}
+           else if (portal_type == 6) {x_koef = 10;  y_koef = -10;}
+           else if (portal_type == 7) {x_koef = 10;  y_koef = 0;}      
+           else if (portal_type == 8) {x_koef = 10;  y_koef = 10;}
+           local r_portal_1 = "random_portal1";
+           local r_portal_2 = "random_portal2";
+           
+           new CPortal(1, x + x_koef, y + y_koef, 40, 50, 0, 0, false, false, r_portal_1, r_portal_2, true, portal_type);
+           portal_loop3_Params->sprite = portal_orange3->Index;
+           portal_loop3_Params->rot = 2*(-45+45*portal_type);
+           new CAnimation(Root->GetObject(25, 0), x, y, NullObj, portal_loop3_Params);
+           
+           x = RandomInt(GS->LevelSX/2, GS->LevelSX-300);   
+           y = RandomInt(150, GS->LevelSY-300);
+           
+           portal_type = RandomInt(1, 8);
+                if (portal_type == 1) {x_koef = 0;   y_koef = 10;}
+           else if (portal_type == 2) {x_koef = -10; y_koef = 10;}
+           else if (portal_type == 3) {x_koef = -10; y_koef = 0;}
+           else if (portal_type == 4) {x_koef = -10; y_koef = -10;}
+           else if (portal_type == 5) {x_koef = 0;   y_koef = -10;}
+           else if (portal_type == 6) {x_koef = 10;  y_koef = -10;}
+           else if (portal_type == 7) {x_koef = 10;  y_koef = 0;}      
+           else if (portal_type == 8) {x_koef = 10;  y_koef = 10;}
+           
+           new CPortal(2, x + x_koef, y + y_koef, 40, 50, 0, 0, false, false, r_portal_2, r_portal_1, true, portal_type);
+           portal_loop3_Params->sprite = portal_blue3->Index;
+           portal_loop3_Params->rot = 2*(-45+45*portal_type);
+           new CAnimation(Root->GetObject(25, 0), x, y, NullObj, portal_loop3_Params);
+       }
+    }
+}

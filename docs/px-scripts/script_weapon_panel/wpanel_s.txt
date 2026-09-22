@@ -1,0 +1,637 @@
+//- WeaponPanelEx V1.3                 
+//- A new weapons panel that you can see at anytime.
+
+//- V1.0 only works with one team per player (excluding allies) for now
+//- V1.1 support for multiple teams per player, quickly press the left mouse button twice to switch panels
+//- V1.2 support for changing location of the panel and use of some keys instead of mouse buttons, amount of weps are shown now, 
+//-      (Alt+P) Open/Close, (Alt+O) Switch sides, (Alt+T) Switch teams, (Alt+U) Reset Position,
+//-      (Alt+Up) Move it up, (Alt+Down) Move it down. 
+//- V1.3 support for unlimited amount of weapons and unlimited delay. (08/07/2017)
+
+//- by rafa``2  22/09/2014
+
+require utils, utils_steps, utils_pyroman;
+
+#WEAPONPANELEX
+
+CWeaponPanelEx * WPPanel[6];      
+int WPPixels[13122]; //18*27*27
+CSprite * sprwpanel;
+CSprite * sprwborder;
+CSprite * sprwhighl;
+
+CWeaponPanelEx:CObject
+CWeaponPanelEx::CWeaponPanelEx(int LocalMachine)   
+{
+    if(LocalMachine<0 && LocalMachine>5) 
+        return;
+    
+    WPLMachine      = LocalMachine;
+    WPIndex         = new int[130];
+    WPTeams         = new int[6];  //my teams per machine/player
+    WPIcons         = new CBitmap32*[71];
+    WPTActual       = 0;
+    WPTCount        = 0;
+    WPTeamColor     = 0;
+    
+    WPSide          = 1;
+    WPPanelOffsetX  = 10;
+    WPPanelOffsetY  = 10;
+    WPPanelWidth    = 180;
+    WPPanelHeight   = 380;
+    WPPosX          = 0;
+    WPPosY          = 0;
+    WPPosYMax       = 0;
+    WPPosYMin       = 0;
+    WPIconX         = 0;
+    WPIconY         = 0;
+    WPPanelMoveX    = 0;
+    WPPanelMoveY    = 0;
+    WPPanelInitMoveY= 0;
+    WPPanelMoveStep = 10;
+    
+    WPDispBoundUp   = 10; 
+    WPDispBoundDwn  = -80;
+    
+    WPAlphaMin      = 50;
+    WPAlphaMax      = 250;
+    WPAlpha         = WPAlphaMax;
+    
+    WPSliderMax     = WPPanelWidth;
+    WPSliderMin     = 0;
+    WPSlider        = WPSliderMax;
+    WPSliderAmplit  = 20;
+    
+    WPFadeSpeed     = 1.03;
+    WPFadeFactor    = 0.65;
+    
+    WPSelWepRow     = 0;
+    WPSelWepPos     = 0;
+    
+    WPIconOffsetX   = 43;
+    WPIconOffsetY   = 175;
+    WPIconRefX      = 29;
+    WPIconRefY      = 29;
+    WPFinalIconX    = 0;
+    WPFinalIconY    = 0;
+    WPWepIndex      = 0;
+    WPWepAmount     = 0;
+    WPWepDelay      = 0;
+    WPTextCol       = 0;
+    
+    WPActive        = false;
+    WPIsHidden      = true;
+    WPHiding        = false;
+    WPShowing       = false;
+    WPIsShown       = false;
+    WPTurnBegin     = false;
+    WPSideChanged   = false;
+    WPDrawHighlight = false;
+     
+    WPPosX          = GS->ActCameraX + (GS->ResX/2 + WPSlider - WPPanelWidth/2 - WPPanelOffsetX) * WPSide;
+    WPPosY          = GS->ActCameraY - GS->ResY/2 + WPPanelHeight/2 + WPPanelOffsetY + WPPanelMoveY;
+    WPPosYMax       = GS->ActCameraY + GS->ResY/2 - WPPanelHeight/2 + WPDispBoundDwn;
+    WPPosYMin       = GS->ActCameraY - GS->ResY/2 + WPPanelHeight/2 + WPDispBoundUp;
+    //WPPanelMoveY    = WPPosYMax - WPPosYMin;
+    WPPanelInitMoveY= WPPanelMoveY;
+    
+    for(int i=0; i<130; i++) 
+        WPIndex[i] = -1;
+    for(int k=0; k<6; k++) 
+        WPTeams[k] = -1;
+    for(int j=0; j<71; j++) 
+        WPIcons[j] = MakeBitmap(27,27);
+    
+    version = 1.3;
+    
+    super(Root->GetObject(25,0), GS);    
+}
+
+void wpanel_s::InitGraphic()
+{
+    sprwpanel = LoadSprite(GetAttachment("wppanel.png"), 1, 0);
+    sprwborder = LoadSprite(GetAttachment("wpborder.png"), 1, 0);
+    sprwhighl = LoadSprite(GetAttachment("wphighl.png"), 1, 0);
+}
+
+void wpanel_s::FirstFrame()
+{
+     if(IsMultiplayer())
+     {
+         int machine = GetLocalMachine();
+         WPPanel[machine] = new CWeaponPanelEx(machine); //Thread per machine/player
+         WPPanel[machine]->WPCreateIcons();
+         WPPanel[machine]->WPMatchTeamsByMachine(GG->machColors[machine]);
+     }
+     //wplog = new CLogFile("test.txt");
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    if(Type == M_FRAME && gframe > 0 && IsMultiplayer())
+    {
+        int machine = GetLocalMachine();
+        
+        if(IsKeyPressed(18)) 
+        {
+            if(IsKeyPressedB(80) && WPPanel[machine]->WPTCount > 0) // alt+p  open/close
+            {                
+                if(WPPanel[machine]->WPHiding || WPPanel[machine]->WPIsHidden)
+                {
+                    WPPanel[machine]->WPActive = true;
+                    WPPanel[machine]->WPShowing = true;
+                }
+                else if(WPPanel[machine]->WPShowing || WPPanel[machine]->WPIsShown) 
+                {
+                    WPPanel[machine]->WPHiding = true;
+                }                                   
+            }   
+            
+            if(WPPanel[machine]->WPActive)
+            {
+                if(IsKeyPressedB(79) && WPPanel[machine]->WPIsShown) // alt+o  switch sides
+                {
+                    WPPanel[machine]->WPSideChanged = true;
+                    WPPanel[machine]->WPHiding = true;
+                }
+                if(IsKeyPressedB(84) && WPPanel[machine]->WPTCount > 1)  // alt+t  switch teams
+                {
+                    WPPanel[machine]->WPNextTeamPanel();
+                }
+            
+                if(IsKeyPressed(40) && WPPanel[machine]->WPPosY < WPPanel[machine]->WPPosYMax) //alt+up  move up
+                {
+                    WPPanel[machine]->WPPanelMoveY += WPPanel[machine]->WPPanelMoveStep;
+                }
+            
+                if(IsKeyPressed(38) && WPPanel[machine]->WPPosY > WPPanel[machine]->WPPosYMin) //alt+down move down
+                {
+                    WPPanel[machine]->WPPanelMoveY -= WPPanel[machine]->WPPanelMoveStep;
+                }
+            
+                if(IsKeyPressed(85))   //alt+u  reset position
+                {
+                    WPPanel[machine]->WPPanelMoveY = WPPanel[machine]->WPPanelInitMoveY;
+                }
+            }  
+        }
+        
+        if(Root->CurTeam != NullObj && WPPanel[machine]->WPActive && WPPanel[machine]->WPTActual == WPPanel[machine]->WPGetTeamIndex(Root->CurTeam))
+        {
+            local w = GetCurrentWorm();
+            
+            if(w != NullObj && w->CurWeapon != NullObj)
+            {
+                 local index = w->CurWeapon->GetWeaponIndex();
+                 local row = w->CurWeapon->Row;
+                 local pos = WPPanel[machine]->WPGetPos(row, index);
+                 
+                 if(pos >= 0 && pos <= 4)
+                 {
+                     WPPanel[machine]->WPSelWepRow = row; 
+                     WPPanel[machine]->WPSelWepPos = pos; 
+                     WPPanel[machine]->WPDrawHighlight = true;
+                 }
+                 else
+                 {
+                     WPPanel[machine]->WPDrawHighlight = false;
+                 }
+            }
+            else
+            {
+                WPPanel[machine]->WPDrawHighlight = false;
+            }
+         }
+         else
+         {
+             WPPanel[machine]->WPDrawHighlight = false;
+         }
+     }
+     
+     super;
+}
+
+void CWeaponPanelEx::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{    
+    if(Type == M_TURNBEGIN)
+    { 
+        WPTurnBegin = true; 
+    }
+    
+    if(!WPActive)
+        return;
+               
+    if(Type == M_FRAME)
+    {            
+        if(WPTurnBegin)
+        {
+            WPUpdateTeam();
+        }
+        
+        WPSlidePanel();
+        
+        WPFadePanel();
+    }
+    
+    if(Type == M_DRAWQUEUE)
+    {        
+        WPDrawPanel();
+        
+        WPDrawIcons();
+        
+        WPDrawHighlight();
+    }
+}
+
+void CWeaponPanelEx::WPSlidePanel()
+{    
+   if(WPShowing)
+    {   
+        if(WPSlider > WPSliderMin)
+        {
+            WPSlider -= WPSliderAmplit;
+            WPIsHidden = false;
+            WPIsHiding = false;
+            WPActive = true;
+        }
+        else
+        {
+            WPShowing = false;
+            WPIsShown = true;
+        }
+    }
+    else if(WPHiding)
+    {
+        if(WPSlider <= WPSliderMax)
+        {
+            WPSlider += WPSliderAmplit;
+            WPIsShown = false;
+            WPShowing = false;
+        }
+        else
+        {
+            WPIsHidden = true;
+            WPHiding = false;
+            
+            if(WPSideChanged)
+            {
+                WPSide = -WPSide;
+                WPShowing = true;
+                WPSideChanged = false;
+            }
+            else
+                WPActive = false;
+        }   
+    }
+}
+
+void CWeaponPanelEx::WPFadePanel()
+{
+    local w = GetCurrentWorm();
+    
+    if(w == NullObj)
+    {
+        if(WPAlpha < WPAlphaMax)
+        { 
+            WPAlpha += WPFadeSpeed;
+            if(WPAlpha > WPAlphaMax)
+                WPAlpha = WPAlphaMax;
+        }
+    }
+    else
+    {
+        local panelref = GS->ActCameraX + (GS->ResX/2 - WPPanelWidth - WPPanelOffsetX) * WPSide;
+        
+        local distance = int((panelref - w->PosX) * WPFadeFactor * WPSide) ;
+        local distanceMin = WPAlphaMin;
+        local distanceMax = WPAlphaMax;
+        local distanceTrg = WPAlpha;
+              
+        if(distance > distanceMin && distance < distanceMax)
+        {
+            distanceTrg = int(distance);
+        }
+        else if(distance <= distanceMin)
+            distanceTrg = distanceMin;
+        else
+            distanceTrg = distanceMax;
+            
+        WPAlpha = distanceTrg;
+    }    
+}     
+
+void CWeaponPanelEx::WPUpdateTeam()
+{
+    local WPTeam = WPGetTeamIndex(Root->CurTeam);
+    
+    WPTurnBegin = false;
+    
+    if(WPTeam == -1)
+        WPTActual = 0;
+    else
+        WPTActual = WPTeam;    
+}
+
+void CWeaponPanelEx::WPDrawPanel()
+{    
+    WPPosX =  GS->ActCameraX + (GS->ResX/2 + WPSlider - WPPanelWidth/2 - WPPanelOffsetX) * WPSide;
+    WPPosY =  GS->ActCameraY - GS->ResY/2 + WPPanelHeight/2 + WPPanelOffsetY + WPPanelMoveY;
+    WPPosYMax = GS->ActCameraY + GS->ResY/2 - WPPanelHeight/2 + WPDispBoundDwn;
+    WPPosYMin = GS->ActCameraY - GS->ResY/2 + WPPanelHeight/2 + WPDispBoundUp;
+    
+    WPTeamColor = GetTeamColor(WPTeams[WPTActual])+1;
+    SetColorMod(RGBtoARGB(WPAlpha, GetTeamColorRGB(WPTeamColor)),0);
+    AddSpriteEx(0.33, WPPosX, WPPosY, sprwborder->Index, 0, 0, 0.994);
+    ClearColorMod();
+           
+    SetColorMod(ARGBEx(WPAlpha,255,255,255),16);
+    AddSpriteEx(0.34, WPPosX, WPPosY,sprwpanel->Index, 0, 0, 1.0);
+    ClearColorMod();
+}
+
+void CWeaponPanelEx::WPDrawIcons()
+{
+    if(WPTActual < 0) return; 
+    
+    WPIconX = WPPosX - WPIconOffsetX;
+    WPIconY = WPPosY - WPIconOffsetY;
+           
+    for(WPWepIndex = 3; WPWepIndex < 71; WPWepIndex++)
+    {
+        local wep =  GS->GetWeaponByIndex(1, WPWepIndex-2);
+        
+        if(wep != NullObj)
+        {   
+            WPWepAmount = GS->Info.Stores[WPTeams[WPTActual]-1].Count[WPWepIndex];
+            WPWepDelay = GS->Info.Stores[WPTeams[WPTActual]-1].Delay[WPWepIndex];
+            
+            if (WPWepAmount == 0)
+            {
+                WPUnassign(wep->Row, WPWepIndex-2);
+            }
+            else
+            {                   
+                int IconRow = wep->Row;
+                int IconPos = WPGetPos(IconRow, WPWepIndex-2);
+                
+                if(IconPos == -2)
+                {                  
+                    WPAssign(IconRow, WPWepIndex-2); 
+                }  
+                else if(IconPos >= 0 && IconPos <= 4)
+                {
+                    WPFinalIconX = WPIconX + (IconPos * WPIconRefX);
+                    WPFinalIconY = WPIconY + (IconRow * WPIconRefY);
+                    
+                    if(WPWepDelay >=0)
+                        WPIconTransparency(WPAlpha, WPWepIndex-2);
+                    
+                    if(WPWepAmount > 0)
+                    {                        
+                        if(WPWepDelay == 0)
+                            WPTextCol = 8;
+                        else
+                            WPTextCol = 1;
+                        
+                        local a=0; local b=0;
+                        GS->Disp->DrawText(WPTextCol, WPIcons[WPWepIndex-2], 2, -1, itoa(WPWepAmount), &a, &b);
+                        
+                        if(WPWepDelay > 0)
+                            GS->Disp->DrawText(WPTextCol, WPIcons[WPWepIndex-2], 15, 15, StrCon3("(",itoa(WPWepDelay),")"), &a, &b);
+
+						
+                    }
+                    else if(WPWepAmount < 0) // -1 = unlimited
+                    {
+                        if(WPWepDelay < 0)
+                        {
+                             WPIconTransparency(WPAlphaMin, WPWepIndex-2);
+                        } 
+                    } 
+                    
+                    AddBitmap(0.32 , WPFinalIconX, WPFinalIconY, WPIcons[WPWepIndex-2], 27, 27, 0);  
+                }
+            } 
+        }
+    }
+}
+
+void CWeaponPanelEx::WPDrawHighlight()
+{    
+    if(!WPDrawHighlight)  return;
+    
+    local WX = WPIconX + (WPSelWepPos * WPIconRefX);
+    local WY = WPIconY + (WPSelWepRow * WPIconRefY);
+    
+    SetColorMod(RGBtoARGB(WPAlpha, GetTeamColorRGB(WPTeamColor)),0);
+    AddSpriteEx(0.31, WX+1, WY+1, sprwhighl->Index, 0, 0, 1.0);
+    ClearColorMod();   
+}
+
+void CWeaponPanelEx::WPNextTeamPanel()
+{
+    if(WPTActual == WPTCount-1)
+        WPTActual = 0;
+    else
+        WPTActual++;
+}
+
+void CWeaponPanelEx::WPAssign(int row, int index)
+{
+    int emptypos = WPGetPos(row, -1);
+    
+    if(emptypos > -1 && emptypos < 10)
+    {
+        WPIndex[(row*10)+emptypos] = index;
+        WPOrderByIndex(row);
+     }
+}
+
+void CWeaponPanelEx::WPUnassign(int row, int index) 
+{
+    int pos = WPGetPos(row, index);
+    if(pos > -1  && pos < 10) 
+    {
+        WPIndex[(row*10)+pos] = -1;
+        WPCompact(row);
+    }
+}
+
+int CWeaponPanelEx::WPGetPos(int row, int index)                                     
+{
+     local cont = 0;
+     for(int i = row*10; i < (row*10)+10 ; i++)
+     {
+         if(WPIndex[i] == index)
+         {
+             return cont;
+         }
+         else
+             cont++;             
+     }
+     return -2;   
+}
+
+void CWeaponPanelEx::WPCompact(int row)
+{
+    int Temp[10];
+    int cont = 0;
+    for(int i = row*10; i < (row*10)+10 ; i++)
+    {
+         if(WPIndex[i] != -1)
+         {
+             Temp[cont] = WPIndex[i];
+             cont++;
+             WPIndex[i] = -1;
+         }                  
+    }
+    int cont2 = 0;
+    for(int k = row*10; k < (row*10)+cont ; k++)
+    {
+         WPIndex[k] = Temp[cont2];
+         cont2++;
+    }
+}
+
+void CWeaponPanelEx::WPOrderByIndex(int row)
+{
+     int temp;
+     
+     for (int i = (row*10); i<(row*10)+10 ; i++) 
+     {
+          for( int k = (row*10); k<(row*10)+9; k++)
+          {
+               if ((WPIndex[k] != -1) && (WPIndex[k+1] != -1) && (WPIndex[k] > WPIndex[k+1]))
+               {
+                    temp = WPIndex[k];
+                    WPIndex[k] = WPIndex[k+1];
+                    WPIndex[k+1] = temp;
+               }
+          }
+     }
+}
+
+void CWeaponPanelEx::WPMatchTeamsByMachine(int code)
+{                                          
+     if(code <= 0) return;
+     
+     for(int i = 0; i < 6 ; i++)
+     { 
+         if(code & (1 << i))  
+             AddTeam(GetTeamPosByColor(i));
+     }
+}
+
+int CWeaponPanelEx::AddTeam(int team)
+{
+     if(team < 0) return;
+     
+     for(int i=0; i<6; i++)
+     {
+         if(WPTeams[i] == -1)
+         {
+             WPTeams[i] = team;
+             WPTCount++;
+             return i;
+         }
+     }
+}
+
+int CWeaponPanelEx::GetTeamPosByColor(int color)
+{
+    for (int i = 0; i < 6; i++) 
+    {
+        local team = CTeam(Root->GetObject(TI_Team, i+1));
+        if(team == NullObj) continue;
+        if(color == GetTeamColor(team->Index))
+            return i+1;
+    }
+    return -1;
+}
+
+int CWeaponPanelEx::WPGetTeamIndex(int team)
+{
+     for (int i = 0; i < 6; i++) 
+     {
+         if(WPTeams[i] == team)
+                 return i;
+     }
+     return -1;
+}
+
+void CWeaponPanelEx::WPIconTransparency(int alpha, int index)
+{     
+    for(int y=0; y<27; y++)
+    {
+         for(int x=0; x<27; x++)
+         {
+                local pixel = WPIcons[index]->GetPixel(x,y);
+                
+                if(pixel == ARGB(1,0,0,0))
+                    continue;  
+                
+                if(index > 52 && index < 71)
+                    pixel = WPPixels[(index - 53)*27*27 + y*27 + x];
+                else
+                    pixel = GetOriginalPixel(x,y,GS->GetWeaponIcon(1, index));
+                    
+                WPIcons[index]->SetPixel(x,y,RGBtoARGB(alpha, pixel));
+         }
+    }
+}
+
+void CWeaponPanelEx::WPCreateIcons()
+{
+    for(int i=0; i<71; i++)
+    {  
+       for(int y=0; y<27; y++)
+        {
+            for(int x=0; x<27; x++)
+            {
+                local pixel = GetOriginalPixel(x, y, GS->GetWeaponIcon(1, i));
+                
+                WPIcons[i]->SetPixel(x,y,pixel);
+                pixel = WPIcons[i]->GetPixel(x,y); //?
+                
+                if(pixel == RGB(0,0,0))
+                    WPIcons[i]->SetPixel(x,y,ARGBEx(0,0,0,0)); 
+                
+               if(i > 52 && i < 71)
+               {
+                    index = (i - 53) * 27 * 27 + y * 27 + x;
+                    WPPixels[index] = WPIcons[i]->GetPixel(x,y);
+               }
+            }
+        }
+    }
+}
+
+int GetOriginalPixel(int x, int y, CBitmap32 * icon)
+{
+     if(x < 0 || y < 0) return;
+     
+     if(icon == NullObj) return;
+     
+     return icon->GetPixel(x+2,y+2);
+}
+
+
+int RGBtoARGB(int alpha, int rgb)
+{
+    return rgb + (AlphaEx(alpha) << 24) - RGB(0,0,0);
+}
+
+int ARGBEx (int a, int r, int g, int b)
+{
+    return ARGB(AlphaEx(a), r, g, b);   
+}
+
+ int AlphaEx(int alpha)
+ {
+     if(alpha <= 0) 
+         alpha = 1;
+     else if(alpha >=255) 
+         alpha = 255;
+     
+     return alpha;
+ }

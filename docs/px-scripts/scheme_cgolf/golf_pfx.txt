@@ -1,0 +1,33 @@
+require p_sprite_builder, pxparticles, utils;
+
+void CMissile::tfx_golfb()
+{
+if (PosY < Env->Water)
+{
+p0 = new PxParticle(lglow->Index, PosX, PosY);
+p0->SetBlendMode(1);
+p0->SetStartColor(255,255,255);
+p0->SetEndColor(255,255,255);
+p0->SetStartAlpha(255);
+p0->SetEndAlpha(150);
+p0->SetLifeTime(6);
+p0->SetRandomVelocity(0,0);
+p0->SetMotionRandomness(0);
+p0->SetAirResistance(1.0);
+p0->SetStartSize(0.14,0.14);
+p0->SetEndSize(0.01,0.01);
+}
+}
+
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+if (Type == M_FRAME)
+{
+if (weap->CheckName("Driver")
+|| weap->CheckName("Driver.T"))
+{
+tfx_golfb();
+}
+}
+super;
+}

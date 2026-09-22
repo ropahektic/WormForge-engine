@@ -1,0 +1,571 @@
+require utils, fow_darkness;
+
+#LAMP_MISSILE
+
+CSprite* LampSprite;
+CLampMissile : CMine;
+
+// Loading resources
+void lamp_missile_script::InitGraphic()
+{
+	CFile *f;
+	f = GetAttachment("lampmissile.png");
+	LampSprite = LoadSprite(f, 1, 0);
+}
+
+void lamp_missile_script::FirstFrame(){}
+
+///////////////////////////////////////////////////
+// CMagnet class
+
+CLampMissile::CLampMissile(CObject* Parent, CShootDesc* Desc, int WormDir)
+{
+	WormTurnSide = WormDir;
+
+	// How many cycles of turns before the lamp stops working
+	TurnsRemaining = 4;
+
+	// How much damage the lamp can take before breaking
+	Health = 40;
+	ExplosionDamage = 25;
+	ExplosionBlast = 25;
+
+	// Ignore any damage taken
+	IgnoreDamage = true;
+
+	// Sprite parameters
+	Sprite = LampSprite->Index;
+
+	// Animation parameters
+	SpinMultiplier = 0.04;
+	MaxSpinSpeed = 0.5;
+
+	OrientationOption = 1;
+
+	// Physics crap
+	DumpingA = 0.3;
+	DumpingB = 0.3;
+	DumpingC = 0.3;
+
+	// Private shit
+	Removed = false;
+
+	Rotation = float(0.0);
+
+	NextRecalcZPlane = 0;
+	ZPlane = 10;
+
+	OwnerTeam = Desc->Team;
+	LastTeam = OwnerTeam;
+
+	CMineParams MParams;
+	zero(&MParams);
+
+	MParams.Prefuse = 0;
+	MParams.Flags = 0;
+	MParams.Bias = 0;
+	MParams.Radius = 1;
+	MParams.Fuse = 1;
+	MParams.Damage = 0;
+	MParams.BlastPower = 0;
+
+	super(Parent, &MParams, Desc, false, 0);
+
+	ClType = EObjectClass(9966);
+	Initialized = false;
+	
+	Phase = 0;
+	AttachX = 0.0;
+	AttachY = 0.0;
+
+	LastSpX = SpX;
+	LastSpY = SpY;
+
+	TurnEnded = false;
+	TurnEndTime = 0;
+	TurnsLifetime = 0;
+}
+
+
+// Collisions derp
+void CLampMissile::Collide(CGObject* Obj, int type)
+{
+	if(Phase == 0)
+	{
+		float speed = sqrt(LastSpX * LastSpX + LastSpY * LastSpY);
+
+		// Collided with the world
+		if(Obj->ClType == OC_Landscape)
+		{
+			int hitx;
+			int hity;
+
+			float s = sin(Rotation);
+			float c = cos(Rotation);
+			float dx = 0 - (s * 8.0);
+			float dy = c * 8.0;
+
+			// Perform a trace 8 units forwards
+			CGObject *hit = TraceLine(this, PosX, PosY, PosX + dx, PosY + dy, 2, &hitx, &hity);
+
+			if(hit != NullObj)
+			{
+				// The trace hit the world, make the missile stick
+				if(hit->ClType == OC_Landscape)
+				{
+					AttachX = PosX;
+					AttachY = PosY;
+					SpeedDivider = 1000;
+					SpeedDividerB = 1000;
+					SpX = 0.0;
+					SpY = 0.0;
+					GravityFactor = 0.0;
+					Stopped = 1;
+					InMidAir = 0;
+					Phase = 1;
+
+					// Arrow impact sound
+					PlayLocalSound(28, 5, 1.0, 1.0);
+
+					IgnoreDamage = false;
+					OrientationOption = 0;
+
+					return;
+				}
+			}
+			else if(speed>5.0)
+			{
+				// Didn't hit the world at a suitable angle, reflect it if it has enough speed
+				super;
+				return;
+			}
+
+			// Not enough speed, make it roll away
+			IgnoreDamage = false;
+			OrientationOption = 0;
+			Phase = 2;
+		}
+		else	// Collided with something else
+		{
+			bool nodamage = false;
+
+			// Bounce off oil drums and crates without dealing any damage
+			if(Obj->ClType == OC_OilDrum)	nodamage = true;
+			if(Obj->ClType == OC_Crate)		nodamage = true;
+
+			if(nodamage)
+			{
+				IgnoreDamage = false;
+				OrientationOption = 0;
+				Phase = 2;
+				super;
+				return;
+			}
+
+			// Knock colliding objects away
+			fixed forceX;
+			fixed forceY;
+
+			if(speed>0.5)
+			{
+				forceX = LastSpX * 0.3;
+				forceY = (LastSpY - speed) * 0.3;
+				// This will ensure the missile keeps going right through whatever it collided with
+				PostCollide = true;
+
+				CMessageData msg;
+				msg.params[0]	= 0;
+				msg.fparams[1]	= PosX;
+				msg.fparams[2]	= PosY;
+				msg.fparams[3]	= forceX;
+				msg.fparams[4]	= forceY;
+				msg.params[5]	= 5;
+				msg.params[6]	= 0;
+
+				Obj->Message(this, M_GUNEXP, 1032, &msg);
+
+				// PUNCH!
+				PlayLocalSound(101, 5, 1.0, 1.0);
+				return;
+			}
+			else
+			{
+				IgnoreDamage = false;
+				OrientationOption = 0;
+				Phase = 2;
+				super;
+				return;
+			}
+		}
+	}
+	super;
+}
+
+
+// Initializations which require the initial parameters should be done there
+void CLampMissile::InitializeParameters()
+{
+	if(Initialized) return;
+	TurnsLifetime = TurnsRemaining;
+	Initialized = true;
+}
+
+// Recharges a discharged lamp
+void CLampMissile::Recharge()
+{
+	if(Removed) return;
+	TurnsRemaining = TurnsLifetime;
+}
+
+// Update the angle of the projectile
+void CLampMissile::UpdateRotation()
+{
+	if(OrientationOption == 0)
+	{
+		float speed = sqrt(SpX*SpX + SpY*SpY);
+		float rot = SpinMultiplier * speed;
+
+		if(rot > MaxSpinSpeed) rot = MaxSpinSpeed;
+		if(SpX<0) rot = 0-rot;
+
+		ApplyRotation(rot);
+	}
+	else
+	{
+
+		if(SpX==0.0)
+		{
+			if(SpY>0.0)
+			{
+				if(WormTurnSide > 0){Rotation = 0;}
+				else {Rotation = 3.141593;}
+			}
+			else if(SpY<0.0)
+			{
+				if(WormTurnSide > 0){Rotation = 3.141593;}
+				else {Rotation = 0;}
+			}
+		}
+		else
+		{
+			Rotation = 0-atan2(SpX, SpY);
+		}
+		ApplyRotation(0.0);
+	}
+}
+
+// Rotates the projectile by r radians, and normalizes the angle
+void CLampMissile::ApplyRotation(float r)
+{
+	Rotation += r;
+	while(Rotation > 3.141593)		Rotation -= 6.283186;
+	while(Rotation <= 0 - 3.141593)	Rotation += 6.283186;
+}
+
+// Applies blast damage to the lamp
+// x, y : origin of the explosion
+// dmg : maximum damage the explosion should do
+void CLampMissile::TakeExplosionDamage(fixed x, fixed y, int dmg)
+{
+	if(dmg == 0) return;
+
+	float fdmg = dmg;
+	float dx = PosX - x;
+	float dy = PosY - y;
+
+	float distsqr = dx*dx + dy*dy;
+	float fdmgsqr = fdmg*fdmg*4.0;
+
+	fdmg = (1.0-distsqr/fdmgsqr) * fdmg;
+	dmg = fdmg;
+
+	if(dmg > 0) TakeDamage(0, dmg);
+}
+
+// Applies direct damage to the lamp (without any further calculation)
+// type should be always 0 (10 is for percentage-based damage and is reserved to the Battle Axe)
+void CLampMissile::TakeDamage(int type, int dmg)
+{
+	if(type == 10)
+	{
+		fixed fdmg = dmg;
+		fdmg = Health * fdmg / 100.0;
+		dmg = fdmg;
+	}
+
+	Health -= dmg;
+}
+
+// Called when a new turn begins (this is used to discharge the lamp after a given number of turn cycles)
+void CLampMissile::OnTurnBegin(int Team)
+{
+	TurnEnded = false;
+	TurnEndTime = 0;
+	if(TurnsRemaining>0)
+	{
+		if(Team == OwnerTeam) TurnsRemaining = TurnsRemaining - 1;
+	}
+}
+
+void CLampMissile::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+	if(Type == M_FRAME)
+	{
+		InitializeParameters();
+	}
+
+	if(Type == M_TURNEND)
+	{
+		TurnEnded = true;
+		TurnEndTime = GS->Tick;
+	}
+
+	// Drawing operations are done here
+	if(Type == M_DRAWQUEUE)
+	{
+		if(Initialized == false) return;
+
+		if(Removed==false)
+		{
+			local Color = GetTeamColor(OwnerTeam);
+            if (Color == 0){SetColorMod(RGB(245, 40, 40), 8);}
+        	if (Color == 1){SetColorMod(RGB(0, 135, 255), 8);}
+        	if (Color == 2){SetColorMod(RGB(99, 211, 60), 8);}
+        	if (Color == 3){SetColorMod(RGB(255, 245, 83), 8);}
+        	if (Color == 4){SetColorMod(RGB(173, 69, 199), 8);}
+			if (Color == 5){SetColorMod(RGB(62, 244, 255), 8);}
+            
+			AddSpriteEx(ZPlane, PosX, PosY, Sprite, 0, Rotation + 3.14159, 1);
+
+			ClearColorMod();
+
+			// Recalculate Z plane periodically to make sure lamps are drawn properly when overlapping each other
+			if(NextRecalcZPlane <= 0)
+			{
+				local matches = 0;
+
+				for(local i = 1; i < Env->Objs.Count; i+=1)
+				{
+					local obj = Env->Objs.Objs[i];
+
+					if(obj == NullObj) continue;
+					if(obj == this) continue;
+					if(obj->ClType == EObjectClass(70))
+					{
+						local mag = CMagnet(obj);
+
+						float dX = mag->PosX - PosX;
+						float dY = mag->PosY - PosY;
+						float r2 = dX*dX + dY*dY;
+
+						if(r2 < 900.0)
+						{
+							if(mag->ZPlane == ZPlane)
+							{
+								mag->ZPlane = mag->ZPlane + 2;
+							}
+							matches = matches + 1;
+						}
+					}
+				}
+
+				if(matches == 0)	ZPlane = 10;
+
+				NextRecalcZPlane = 200;
+			}
+			else
+			{
+				NextRecalcZPlane = NextRecalcZPlane - 1;
+			}
+		}
+
+		return;
+	}
+
+	// Damage handling
+	if(Removed==false)
+	{
+		if(Type == M_EXPLOSION)
+		{
+			if(IgnoreDamage) return;
+			TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]);
+		}
+		if(Type == M_GUNEXP)
+		{
+			if(IgnoreDamage) return;
+			TakeDamage(MData->params[0], MData->params[5]);
+		}
+	}
+
+	// This is done every frame (derp)
+	if(Type == M_FRAME)
+	{
+		if(Removed)
+		{
+			Free(true);
+			return;
+		}
+		else
+		{
+			if(Sinking)
+			{
+			}
+			else UpdateRotation();
+
+			// No more health -> KA-BEWM!
+			if(Health <= 0)
+			{
+				DoExplosion(PosX,PosY, ExplosionBlast, ExplosionDamage, 0, 0);
+				Removed = true;
+				SpeedDivider = 1000;
+				SpX = 0.0;
+				SpY = 0.0;
+				GravityFactor = 0.0;
+				IsMaterial = false;
+				Stopped = 1;
+			}
+		}
+		
+		if(Phase == 1)
+		{
+			PosX = AttachX;
+			PosY = AttachY;
+			SpX = 0.0;
+			SpY = 0.0;
+			Stopped = 1;
+			InMidAir = 0;
+		}
+
+		if(PostCollide)
+		{
+			// Collided with something it should go right through
+			// Set its velocity back to what it was before the collision
+			SpX = LastSpX;
+			SpY = LastSpY;
+			PostCollide = false;
+		}
+		LastSpX = SpX;
+		LastSpY = SpY;
+	}
+	
+	if(Phase == 1)
+	{
+		bool checkdetach = false;
+		bool detach = true;
+
+		// Took damage, see if it should detach or not
+		if(Type == M_EXPLOSION)	{ checkdetach = true; detach = false; }
+		else if(Type == M_GUNEXP)
+		{
+			// Detach it no matter what if melee damage has been received (aka type != 1 and 3)
+			checkdetach = true;
+			if(MData->params[0] == 1) detach = false;
+			if(MData->params[0] == 3) detach = false;
+		}
+
+		if(checkdetach)
+		{
+			if(detach == false)
+			{
+				// Damage has been dealt by fire, bullets or explosions, check if the missile still has an attachment point
+				int hitx;
+				int hity;
+
+				float s = sin(Rotation);
+				float c = cos(Rotation);
+				float dx = 0 - (s * 8.0);
+				float dy = c * 8.0;
+
+				// Perform a trace 8 units forwards
+				CGObject *hit = TraceLine(this, PosX, PosY, PosX + dx, PosY + dy, CMASK_TERRAIN, &hitx, &hity);
+
+				// Not attached to world anymore, detach it
+				if(hit == NullObj)						detach = true;
+				else if(hit->ClType != OC_Landscape)	detach = true;
+			}
+
+			// Detaching :(
+			if(detach)
+			{
+				AttachX = 0.0;
+				AttachY = 0.0;
+				SpeedDivider = 1;
+				SpeedDividerB = 1;
+				GravityFactor = 1.0;
+				Stopped = 0;
+				InMidAir = 1;
+				Phase = 2;
+			}
+		}
+	}
+super;
+}
+
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+	if(Weap->CheckName("Lamp Missile"))
+	{
+		local ang = (1 - FireAngle) * 3.14159;
+		if (TurnSide < 0){ang = 6.28318 - ang;}
+
+		CShootDesc SDesc;
+		zero(&SDesc);
+
+		float BaseForce = FirePower * 20.0;
+
+		SDesc.Team = WormTeam;
+		SDesc.X = PosX;
+		SDesc.Y = PosY;
+		SDesc.SpX = SpX + sin(ang) * BaseForce;
+		SDesc.SpY = SpY - cos(ang) * BaseForce;
+
+		new CLampMissile(GetObject(25, 0), &SDesc, TurnSide);
+	}
+	else
+	{
+	super;
+	}
+}
+
+override void CDarknessControl::GenerateLSources()
+{
+super;
+for (local i = 1; i < Env->Objs.Count; i++)
+	{
+    local obj = CGObject(Env->Objs.Objs[i]);
+    if (obj == NullObj) continue;
+
+    if (obj->ClType == EObjectClass(9966))
+		{
+        if (obj != NullObj)
+			{
+        	local team = CLampMissile(obj)->OwnerTeam;
+        	if (darkControl->IsTeamVisible(team))
+				{
+				if(CLampMissile(obj)->Sinking){intensity = 0.2;}
+				else {intensity = CLampMissile(obj)->TurnsRemaining/4;}
+				
+                SetLight(obj->PosX, obj->PosY, 60, 120, intensity);
+            	}
+            }
+    	}
+	}
+}
+
+override void CTurnGame::SetCurrentTeam(int Team)
+{
+	super;
+
+	for(local i = 1; i < Env->Objs.Count; i+=1)
+	{
+		local obj = Env->Objs.Objs[i];
+
+		if(obj == NullObj) continue;
+		if(obj is CLampMissile)
+		{
+			CLampMissile *lamp = CLampMissile(obj);
+			lamp->OnTurnBegin(Team);
+		}
+	}
+}

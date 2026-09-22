@@ -1,0 +1,62 @@
+require utils;
+
+float ViscoSpeedLimit;
+float ViscoDumpingMax;
+
+void visco::FirstFrame()
+{
+    ViscoSpeedLimit = 1.00000;
+    ViscoDumpingMax = 0.0;
+}
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+    local ViscoWorkNow;
+    if (Type == M_TURNBEGIN)
+    {
+      if (ViscoDumpingMax <= 0.90) ViscoWorkNow = true;
+      local w = GetCurrentWorm();
+      if (w != NullObj)
+      {
+        if ((ViscoDumpingMax > 0.10 && ViscoDumpingMax < 0.15) || (ViscoDumpingMax > 0.2 && ViscoDumpingMax < 0.25) || (ViscoDumpingMax > 0.3 && ViscoDumpingMax < 0.35) || (ViscoDumpingMax > 0.4 && ViscoDumpingMax < 0.45) || (ViscoDumpingMax > 0.5 && ViscoDumpingMax < 0.55) || (ViscoDumpingMax > 0.6 && ViscoDumpingMax < 0.65) || (ViscoDumpingMax > 0.7 && ViscoDumpingMax < 0.75) || (ViscoDumpingMax > 0.8 && ViscoDumpingMax < 0.85)) Root->ShowTeamMessage(w->WormTeam, "Getting more slippery.. take care!", w->WormTeam);
+        if (ViscoDumpingMax >= 0.90) Root->ShowTeamMessage(w->WormTeam, "ICE around! Be careful!", w->WormTeam);
+      } 
+    }
+    if (Type == M_TURNEND)
+    {
+        if (ViscoWorkNow)
+        {
+          if (ViscoSpeedLimit <= 1.03000) ViscoSpeedLimit += 0.0025;
+          if (ViscoDumpingMax <= 0.90) ViscoDumpingMax += 0.025;
+          ViscoWorkNow = false;
+        }
+    }
+    super;
+}
+
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+{
+   if (Type == M_FRAME)
+   {
+      for (local i = 1; i < Env->Objs.Count; i++)
+      {
+          local obj = CGObject(Env->Objs.Objs[i]);
+          if (obj == NullObj) continue;
+//          if (obj->IsMoving() == false) continue;
+          if (obj->ClType == OC_Mine || obj->ClType == OC_Worm || obj->ClType == OC_OilDrum || obj->ClType == OC_Crate || obj->ClType == OC_Cross)
+          {
+            local MemorizeDumbB = obj->DumpingB; 
+            local Obje = Env->CheckCollision(obj, obj->PosX, obj->PosY + 10);
+            if (Obje != NullObj)
+            {
+              obj->SpX = obj->SpX * ViscoSpeedLimit;
+//              obj->SpY = obj->SpY * ViscoSpeedLimit;
+              if (obj->SpX > 5.0) obj->DumpingB = 0.0;
+              if (obj->DumpingC <= ViscoDumpingMax) obj->DumpingC = ViscoDumpingMax;
+            } else obj->DumpingB = MemorizeDumbB;
+          }  
+      }
+   }
+   super;
+}
