@@ -1,6 +1,8 @@
 //! Install a PNG strip or GIF as a WA `.spr` via ConstructSprite + ProcessSprite.
-//! Palette overflow washes colours onto the live map table — left for Edlud's
-//! render PR; we do not pre-resolve / steal / nearest-rewrite here.
+//!
+//! On palette overflow, rewrite the sheet onto existing live colours (read-only
+//! nearest) so MapColor does not land on index 255 (solid white). Washed, but
+//! usable — real fix waits on Edlud's render PR. Never steal map slots.
 
 use crate::log_line;
 use crate::rebase::rb;
@@ -52,7 +54,13 @@ pub struct SpriteRef {
     pub h: i32,
 }
 
+const PAL_RGB: usize = 0x04;
+const PAL_IN_USE: usize = 0x404;
 const PAL_FREE_COUNT: usize = 0x504;
+const PAL_FREE_LIST: usize = 0x506;
+const PAL_CACHE_COUNT: usize = 0x606;
+const PAL_CACHE: usize = 0x608;
+const PAL_DIRTY: usize = 0x708;
 
 pub fn clear() {
     if let Ok(mut g) = LOADED.lock() {
@@ -208,6 +216,9 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
     let mut sprite = Box::new(SpriteObj([0u8; 0x70]));
     let mut spr = spr.into_boxed_slice();
     unsafe {
+        // Snap overflow colours onto live slots before ProcessSprite so MapColor
+        // exact-hits them (raw overflow → index 255 = solid white).
+        let (kept, allocated, nearest) = wash_spr_palette(pal_ctx, &mut spr)?;
         construct_sprite(sprite.0.as_mut_ptr(), cache);
         let ok = process_sprite(sprite.0.as_mut_ptr(), pal_ctx, spr.as_mut_ptr());
         if ok == 0 {
@@ -215,7 +226,7 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
         }
         let free_after = *(pal_ctx.add(PAL_FREE_COUNT) as *const i16);
         log_line(&format!(
-            "LoadSprite equivalent: slot {id} layer {layer} free={free_before}->{free_after}"
+            "LoadSprite equivalent: slot {id} layer {layer} free={free_before}->{free_after} kept={kept} alloc={allocated} nearest={nearest}"
         ));
         let ptrs = (display as usize + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
         let layers = (display as usize + DISPLAY_SPRITE_LAYERS) as *mut u32;
@@ -420,6 +431,204 @@ unsafe fn palette_ctx(display: *mut u8) -> (*mut u8, u32) {
             }
         }
         (std::ptr::null_mut(), 0)
+    }
+}
+
+/// Exact / free-list / nearest onto live colours. Rewrites `.spr` RGB only so
+/// ProcessSprite's MapColor hits; never overwrites map palette slots.
+unsafe fn wash_spr_palette(
+    pal_ctx: *mut u8,
+    spr: &mut [u8],
+) -> Result<(u32, u32, u32), String> {
+    if spr.len() < 12 {
+        return Err("truncated .spr".into());
+    }
+    let pal_n = u16::from_le_bytes([spr[10], spr[11]]) as usize;
+    if pal_n == 0 {
+        return Ok((0, 0, 0));
+    }
+    let mut kept = 0u32;
+    let mut allocated = 0u32;
+    let mut nearest = 0u32;
+    let mut overflow_logged = false;
+    for i in 0..pal_n {
+        let o = 12 + i * 3;
+        if o + 2 >= spr.len() {
+            break;
+        }
+        let rgb = spr[o] as u32 | ((spr[o + 1] as u32) << 8) | ((spr[o + 2] as u32) << 16);
+        unsafe {
+            resolve_colour(
+                pal_ctx,
+                rgb,
+                &mut spr[o..o + 3],
+                &mut kept,
+                &mut allocated,
+                &mut nearest,
+                &mut overflow_logged,
+            )?;
+        }
+    }
+    Ok((kept, allocated, nearest))
+}
+
+unsafe fn resolve_colour(
+    ctx: *mut u8,
+    rgb: u32,
+    spr_rgb: &mut [u8],
+    kept: &mut u32,
+    allocated: &mut u32,
+    nearest: &mut u32,
+    overflow_logged: &mut bool,
+) -> Result<u32, String> {
+    unsafe {
+        if let Some(slot) = find_exact_cached(ctx, rgb) {
+            *kept += 1;
+            return Ok(slot);
+        }
+        if let Some(slot) = find_exact_table(ctx, rgb) {
+            cache_ensure(ctx, slot);
+            *kept += 1;
+            return Ok(slot);
+        }
+        let free = *(ctx.add(PAL_FREE_COUNT) as *const i16);
+        if free > 0 {
+            let next = free - 1;
+            let slot = *ctx.add(PAL_FREE_LIST + next as usize) as u32;
+            if slot != 0 && slot <= 255 && *ctx.add(PAL_IN_USE + slot as usize) == 0 {
+                *(ctx.add(PAL_FREE_COUNT) as *mut i16) = next;
+                write_free_slot(ctx, slot, rgb);
+                mark_dirty(ctx);
+                *allocated += 1;
+                return Ok(slot);
+            }
+        }
+        if !*overflow_logged {
+            log_line("Palette Overflow Detected! (washing onto live colours)");
+            *overflow_logged = true;
+        }
+        let slot = nearest_live_colour(ctx, rgb).ok_or("palette empty")?;
+        let [r, g, b] = rgb_at(ctx, slot);
+        spr_rgb[0] = r;
+        spr_rgb[1] = g;
+        spr_rgb[2] = b;
+        cache_ensure(ctx, slot);
+        *nearest += 1;
+        Ok(slot)
+    }
+}
+
+unsafe fn cache_ensure(ctx: *mut u8, slot: u32) {
+    if slot == 0 || slot > 255 {
+        return;
+    }
+    unsafe {
+        let n = (*(ctx.add(PAL_CACHE_COUNT) as *const i16) as usize).min(256);
+        for i in 0..n {
+            if *ctx.add(PAL_CACHE + i) as u32 == slot {
+                return;
+            }
+        }
+        if n >= 256 {
+            return;
+        }
+        *ctx.add(PAL_CACHE + n) = slot as u8;
+        *(ctx.add(PAL_CACHE_COUNT) as *mut i16) = (n + 1) as i16;
+    }
+}
+
+unsafe fn nearest_live_colour(ctx: *mut u8, rgb: u32) -> Option<u32> {
+    unsafe {
+        let tr = (rgb & 0xff) as i32;
+        let tg = ((rgb >> 8) & 0xff) as i32;
+        let tb = ((rgb >> 16) & 0xff) as i32;
+        let in_use = ctx.add(PAL_IN_USE);
+        let mut best_dist = i32::MAX;
+        let mut best_slot = 0u32;
+        for slot in 1..=255u32 {
+            if *in_use.add(slot as usize) == 0 {
+                continue;
+            }
+            let [r, g, b] = rgb_at(ctx, slot);
+            let dist = (g as i32 - tg).abs() * 5
+                + (b as i32 - tb).abs() * 2
+                + (r as i32 - tr).abs() * 3;
+            if dist == 0 {
+                return Some(slot);
+            }
+            if dist < best_dist {
+                best_dist = dist;
+                best_slot = slot;
+            }
+        }
+        if best_slot == 0 {
+            None
+        } else {
+            Some(best_slot)
+        }
+    }
+}
+
+unsafe fn find_exact_cached(ctx: *mut u8, rgb: u32) -> Option<u32> {
+    unsafe {
+        let n = (*(ctx.add(PAL_CACHE_COUNT) as *const i16) as usize).min(256);
+        let want = rgb & 0xffffff;
+        for i in 0..n {
+            let slot = *ctx.add(PAL_CACHE + i) as u32;
+            if slot == 0 {
+                continue;
+            }
+            let [r, g, b] = rgb_at(ctx, slot);
+            let live = r as u32 | ((g as u32) << 8) | ((b as u32) << 16);
+            if live == want {
+                return Some(slot);
+            }
+        }
+        None
+    }
+}
+
+unsafe fn find_exact_table(ctx: *mut u8, rgb: u32) -> Option<u32> {
+    unsafe {
+        let want = rgb & 0xffffff;
+        let in_use = ctx.add(PAL_IN_USE);
+        for i in 1..=255u32 {
+            if *in_use.add(i as usize) == 0 {
+                continue;
+            }
+            let [r, g, b] = rgb_at(ctx, i);
+            let live = r as u32 | ((g as u32) << 8) | ((b as u32) << 16);
+            if live == want {
+                return Some(i);
+            }
+        }
+        None
+    }
+}
+
+unsafe fn write_free_slot(ctx: *mut u8, slot: u32, rgb: u32) {
+    if slot == 0 || slot > 255 {
+        return;
+    }
+    unsafe {
+        let p = ctx.add(PAL_RGB + slot as usize * 4) as *mut u32;
+        let prev = *p;
+        *p = (prev & 0xff000000) | (rgb & 0xffffff);
+        *ctx.add(PAL_IN_USE + slot as usize) = 1;
+        cache_ensure(ctx, slot);
+    }
+}
+
+unsafe fn mark_dirty(ctx: *mut u8) {
+    unsafe {
+        *(ctx.add(PAL_DIRTY) as *mut u16) = 1;
+    }
+}
+
+unsafe fn rgb_at(ctx: *mut u8, slot: u32) -> [u8; 3] {
+    unsafe {
+        let p = ctx.add(PAL_RGB + slot as usize * 4);
+        [*p, *p.add(1), *p.add(2)]
     }
 }
 
