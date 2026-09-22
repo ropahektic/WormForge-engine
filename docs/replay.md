@@ -1,0 +1,123 @@
+# Replay — W0: the determinism probe
+
+WA is a lockstep engine: a `.WAgame` records *inputs*, and playback is
+re-simulation, not a movie. A WormForge replay is therefore only possible if
+WormForge itself is deterministic. Nothing verified that before this.
+
+W0 builds the instrument and nothing else. It answers one question — *do two
+runs of the same input produce the same simulation?* — and everything else in
+the replay plan is gated on the answer.
+
+It is worth having on its own. WormForge ships actors that crater terrain and
+damage worms; until now a desynced multiplayer game would have surfaced as a
+rendering bug, or as nothing at all.
+
+## What it measures
+
+Every sim frame, at the end of the world root's `FRAME_FINISH`, three hashes:
+
+| component | covers | a divergence means |
+|---|---|---|
+| `rng` | `GameWorld+0x45EC` and the two secondary RNG words | **we perturbed WA itself** — the most serious result |
+| `worms` | every live worm's position, velocity and HP | stock simulation drifted |
+| `actors` | every live Lua actor's position, velocity, sprite, phase | only our own layer drifted; WA is still in step |
+
+They are separate numbers on purpose: *which* one moved is most of the
+diagnosis.
+
+**The RNG is the canary.** WA has exactly one RNG, shared by gameplay and
+visual effects, so "visual-only" is not a category that exists here. OpenWA's
+desync journal traced a whole-match divergence to a skipped `debris.spr` load
+that changed how often `GenerateDebrisParticles` ticked that word — 15,470
+writes against 17,106 — and the simulation cascaded apart from there.
+
+## Running the gate
+
+```sh
+tools/sync-run.sh  a  "/path/to/some.WAgame"   # drives WA with /play
+tools/sync-run.sh  b  "/path/to/some.WAgame"   # same replay, again
+tools/sync-diff.sh a b
+```
+
+`sync-run.sh` arms the probe, truncates `wkLua.log`, launches WA, and saves the
+run to `tmp/sync-<label>.log`. `sync-diff.sh` reports the first divergent frame
+and which component moved. Omit the replay path to play a round by hand
+instead.
+
+A corpus of 18 curated single-feature replays already exists at
+`~/worms_work/wkFOW/clones/openwa/testdata/replays/` (girder, napalm, kamikaze,
+cluster, freeze_nuke_armageddon, …).
+
+### The two tests, which answer different questions
+
+**A — does WormForge's presence perturb WA at all?** Run the same vanilla
+replay with `wkLua.dll` present and absent and compare WA's own checksums.
+A mismatch is the `debris.spr` class of bug and is worth fixing whether or not
+replay ever ships. Repeat with the GPU renderer off to say whether it is the
+cause.
+
+**B — is our own layer reproducible?** Run the same vanilla replay twice with
+a scripted, input-free pack — one that spawns actors on a turn-start timer and
+never calls `keys()` or `pointer()` — and diff the hash streams.
+
+Neither test needs a recorder to exist, which is why they come first.
+
+## Cost
+
+Off unless a `sync.txt` marker sits beside `wkLua.log`
+(`%LOCALAPPDATA%\WormForge\`). Off, it costs one relaxed atomic load per frame
+and writes nothing, following `queue_census`.
+
+## Notes that cost time to learn
+
+**WA already has a frame counter** at `GameWorld+0x5CC`, incremented at the end
+of each frame in `GameFrameDispatcher`. The plan called for introducing one;
+reading WA's is strictly better, because it is the number a replay stream is
+keyed to. `GameWorld+0x7EF0` is `-1` during playback — WA's own `IsReplay()`,
+for free.
+
+**Addresses are never hashed and never used as identity.** Worm and actor
+handles are heap pointers, so hashing them would make every run look divergent.
+Worms are walked by `(team, index)` and actors in spawn order; that the counts
+and the ordering still have to match is what the probe actually tests.
+
+**The offsets were cross-checked before being trusted.** They come from
+OpenWA's 3.8.1 catalog, and both catalogs independently agree on struct size
+`0x98D8` and on `landscape 0x20`, `weapon_table 0x510`, `team_arena 0x4628`,
+`water_level 0x5E0`, `level_width 0x77C0`. A wrong base would have produced a
+hash that looked like it was working.
+
+**The diff tool was validated before being pointed at real runs**, against
+known-identical and known-divergent input. OpenWA's journal lost days to a diff
+tool that reported ~490 false differences on a run that was actually passing.
+
+## Project X reconnaissance
+
+Time-boxed, three questions.
+
+**Does PX carry its own RNG, or use WA's?** WA's, exclusively. The LCG
+multiplier `0x19660D` appears **0 times in `wkPX.dll`**, against 168 in PX's
+patched `wa.exe` and 163 in stock 3.8.1 `WA.exe`. So every one of the ~227
+`GS->GetRandom()` calls in PX's scripts bottoms out in WA's shared RNG. This
+confirms the design for `wa.random()`: read `GameWorld+0x45EC`, never generate
+locally.
+
+PX applies the same principle to input. `keySync->AddKey(vk)` /
+`KeyPressed(vk)` appears 1,123 times across the extracted scripts — scripts
+register the keys they care about and read them through a *synchronised*
+object rather than polling. That is the answer to WormForge's `wa.world.keys()`
+hole, which the README already flags as "local until extra packets exist".
+
+**What does a PX replay archive hold?** `Libs\Replay\` plus
+`PXSchemes\repl.pxs`: PX copies the `.pxl` libraries and the scheme the round
+actually used, versions them (`Invalid PX replay version :`), and reloads them
+from there on playback. **PX archives the scripts rather than fingerprinting
+them** — a replay stays playable after you edit or delete the pack. That is the
+model for `.WF_WAgame`. (The folder is empty on this install; no PX replay was
+ever recorded here.)
+
+**What does its desync machinery compare?** A `DesyncLogging` INI switch
+feeding `DesyncData` / `NetComparing` units. It is absent from the shipped
+`PX.ini`, so it is a developer diagnostic rather than a player feature —
+consistent with what W0 builds, but with no reusable detail short of deep
+Delphi RTTI work, which the settled architecture does not need.
