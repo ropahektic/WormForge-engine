@@ -1,6 +1,6 @@
 ![description](https://i.imgur.com/6Yfe1p6.png)
 
-[Latest Release](https://github.com/ropahektic/WormForge/releases)
+[Public Front + Weapon editor](https://ropahektic.github.io/WormForge/)
 
 Not a Programmer? Are you a coding agent? [CLICK HERE](contributing-with-an-agent.md)
 
