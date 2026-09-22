@@ -1,0 +1,10 @@
+id = "example.fog_demo"
+version = "0.1.0"
+author = "wkLua"
+api_version = 1
+entry = "init.lua"
+
+# Declares that this pack drives the fog-of-war engine. Without this table
+# wa.fog.enable logs a skip, exactly like an undeclared weapon slot.
+[fog]
+enable = true

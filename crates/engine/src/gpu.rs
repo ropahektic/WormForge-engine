@@ -45,6 +45,8 @@ extern "C" {
     fn wf_gpu_atlas(w: u32, h: u32, bgra: *const u8) -> i32;
     fn wf_gpu_mask(w: u32, h: u32, coverage: *const u8) -> i32;
     fn wf_gpu_draw(verts: *const c_void, count: u32) -> i32;
+    fn wf_gpu_fog_mask(w: u32, h: u32, visibility: *const u8) -> i32;
+    fn wf_gpu_fog_draw() -> i32;
 }
 
 /// Decided once per match at `on_gfx_ready`, never per frame.
@@ -107,6 +109,11 @@ struct Frame {
     /// draw. Terrain is decided from the collision mask instead.
     front: Vec<u8>,
     hud: Vec<u8>,
+    /// 255 where the HUD won the pixel this frame, 0 elsewhere. Derived from
+    /// the same `hud != front` diff as `mask`, but kept as its own plane so
+    /// the fog pass can exempt the HUD from the multiply: the fog visibility
+    /// mask is world-space and does not know the HUD is on top of it.
+    hud_region: Vec<u8>,
     /// Transformed quads, rebuilt each frame from `PENDING`, split by which
     /// mask they use. Two draw calls rather than one, which the measured
     /// cost (0.25 ms for a full-surface mask upload at 1280x800) makes a
@@ -128,6 +135,7 @@ impl Frame {
             mask_front: vec![255; pixels],
             front: vec![0; pixels],
             hud: vec![0; pixels],
+            hud_region: vec![0; pixels],
             vertices: Vec::new(),
             vertices_front: Vec::new(),
             valid: false,
@@ -201,7 +209,10 @@ pub fn release() {
 ///
 /// Returns true when it performed the stock drawing itself.
 pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
-    if !is_active() || clip == 0 {
+    // Fog needs the HUD region even when the sprite path is inactive (a mod
+    // with fog but no GPU sheets), so the split runs for fog alone. Every
+    // sprite-specific step below is already gated on there being vertices.
+    if !(is_active() || crate::fog::enabled()) || clip == 0 {
         return false;
     }
     // Without the D3D9 shader renderer there is nowhere to draw, and a GPU
@@ -226,8 +237,12 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
         return false;
     };
     // Nothing of ours this frame: let the caller do its normal single draw.
+    // Fog changes that: the HUD exemption it needs comes from the same
+    // dispatch split below, so when fog is active we run the split even with
+    // no sprites of our own, purely to learn where the HUD landed.
     let queued = PENDING.lock().map(|p| p.len()).unwrap_or(0);
-    if queued == 0 {
+    let fog_needs_hud = crate::fog::enabled();
+    if queued == 0 && !fog_needs_hud {
         return false;
     }
     let Some((surface, width, height, read)) = surface_reader(display) else {
@@ -242,7 +257,8 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
     }
     let frame = state.as_mut().unwrap();
     resolve(frame, display, clip);
-    if frame.vertices.is_empty() && frame.vertices_front.is_empty() {
+    let no_sprites = frame.vertices.is_empty() && frame.vertices_front.is_empty();
+    if no_sprites && !fog_needs_hud {
         // Everything of ours was culled or unresolvable.
         return false;
     }
@@ -329,6 +345,8 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
         let open = if hud_here { 0 } else { 255 };
         frame.mask[i] = open;
         frame.mask_front[i] = open;
+        // The fog pass exempts these same pixels from its multiply.
+        frame.hud_region[i] = if hud_here { 255 } else { 0 };
         if hud_here {
             covered += 1;
         }
@@ -447,48 +465,119 @@ fn report_hidden_sprites(frame: &Frame) {
     }
 }
 
-/// Draw the frame's sprites. Called after WA's fullscreen composite and
-/// before its Present, where a second scene is legal and survives — which the
-/// S0 probe established against WA's real device parameters.
+/// Draw the frame's sprites, then the fog. Called after WA's fullscreen
+/// composite and before its Present, where a second scene is legal and
+/// survives — which the S0 probe established against WA's real device
+/// parameters.
 pub unsafe fn present(device: *mut c_void) {
-    if !is_active() || device.is_null() {
+    // The sprite path and the fog share this second scene and this device.
+    // Either one being active is reason enough to run; both off is a no-op.
+    let sprites = is_active();
+    let fog = crate::fog::enabled();
+    if device.is_null() || (!sprites && !fog) {
         return;
     }
-    let Ok(mut state) = FRAME.lock() else {
-        return;
-    };
-    let Some(frame) = state
-        .as_mut()
-        .filter(|f| f.valid && !(f.vertices.is_empty() && f.vertices_front.is_empty()))
-    else {
-        return;
-    };
-    // Consume once: a stale frame must never be drawn twice.
-    frame.valid = false;
 
     if wf_gpu_init(device) == 0 {
         warn("device init failed");
         return;
     }
-    if !ensure_atlas() {
+
+    // Draw the sprite bands and grab the HUD region for the fog, all while
+    // the frame lock is held, then drop it before the fog upload so the fog
+    // path never re-locks FRAME (std Mutex is not reentrant).
+    let mut hud: Option<(Vec<u8>, usize, usize)> = None;
+    {
+        let Ok(mut state) = FRAME.lock() else {
+            return;
+        };
+        // A frame is worth drawing sprites from when it is valid and has
+        // quads. Fog needs no quads -- only the HUD region capture produced --
+        // so it is not gated on the vertex lists.
+        let has_quads = state
+            .as_ref()
+            .is_some_and(|f| f.valid && !(f.vertices.is_empty() && f.vertices_front.is_empty()));
+        if let Some(frame) = state.as_mut() {
+            // Consume once: a stale frame must never be drawn twice.
+            frame.valid = false;
+            if sprites && has_quads && ensure_atlas() {
+                // Back band first: it is occluded by terrain, so it must not
+                // paint over the front band.
+                for (mask, verts) in [
+                    (&frame.mask, &frame.vertices),
+                    (&frame.mask_front, &frame.vertices_front),
+                ] {
+                    if verts.is_empty() {
+                        continue;
+                    }
+                    if wf_gpu_mask(frame.width as u32, frame.height as u32, mask.as_ptr())
+                        == 0
+                    {
+                        warn("coverage mask upload failed");
+                        return;
+                    }
+                    if wf_gpu_draw(verts.as_ptr() as *const c_void, verts.len() as u32) == 0
+                    {
+                        warn("sprite draw failed");
+                    }
+                }
+            }
+            if fog && !frame.hud_region.is_empty() {
+                hud = Some((
+                    frame.hud_region.clone(),
+                    frame.width,
+                    frame.height,
+                ));
+            }
+        }
+    }
+
+    // Fog LAST. The multiply applies to whatever is already in the framebuffer
+    // at this point -- WA's composite (world + HUD) plus the sprite quads just
+    // drawn -- so drawing it after the sprites darkens the world and our
+    // sprites alike, while the HUD exemption composited into the mask keeps
+    // the HUD bright. Drawing it before the sprites would leave them unfogged.
+    if fog {
+        draw_fog(hud);
+    }
+}
+
+/// Upload the visibility mask with the HUD exempted, then draw the multiply
+/// quad. `hud` is the region `capture` produced this frame (255 where the HUD
+/// won a pixel), already cloned out from under the frame lock. A no-op when
+/// the mask or the shader renderer is unavailable, so fog costs exactly
+/// nothing on a frame it cannot run on.
+fn draw_fog(hud: Option<(Vec<u8>, usize, usize)>) {
+    if !crate::shader::is_ready() {
+        if !NO_SHADER_LOGGED.swap(true, Ordering::SeqCst) {
+            log_error(
+                "fog: WA's D3D9 shader renderer is unavailable, so the fog \
+                 multiply cannot be drawn and the map is left fully lit. This \
+                 is a missing capability, not a mod fault.",
+            );
+        }
         return;
     }
-    // Back band first: it is occluded by terrain, so it must not paint over
-    // the front band.
-    for (mask, verts) in [
-        (&frame.mask, &frame.vertices),
-        (&frame.mask_front, &frame.vertices_front),
-    ] {
-        if verts.is_empty() {
-            continue;
+    let Some((mut mask, w, h)) = crate::fog::cached_mask() else {
+        return;
+    };
+    // Exempt the HUD: the visibility mask is world-space and does not know the
+    // HUD is composited on top of it, so force those pixels fully visible.
+    if let Some((hud, hw, hh)) = hud {
+        if hw == w && hh == h && hud.len() == mask.len() {
+            for (m, &hud_px) in mask.iter_mut().zip(hud.iter()) {
+                if hud_px != 0 {
+                    *m = 255;
+                }
+            }
         }
-        if wf_gpu_mask(frame.width as u32, frame.height as u32, mask.as_ptr()) == 0 {
-            warn("coverage mask upload failed");
-            return;
-        }
-        if wf_gpu_draw(verts.as_ptr() as *const c_void, verts.len() as u32) == 0 {
-            warn("sprite draw failed");
-        }
+    }
+    if unsafe { wf_gpu_fog_mask(w as u32, h as u32, mask.as_ptr()) } == 0 {
+        warn("fog mask upload failed");
+        return;
+    }
+    if unsafe { wf_gpu_fog_draw() } == 0 {
+        warn("fog draw failed");
     }
 }
 

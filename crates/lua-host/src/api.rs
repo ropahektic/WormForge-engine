@@ -14,6 +14,7 @@ pub struct BindContext {
     pub root: PathBuf,
     pub allowed_slots: HashSet<StockWeapon>,
     pub allowed_register: HashSet<String>,
+    pub fog_allowed: bool,
     pub claims: Rc<RefCell<Vec<OverlayClaim>>>,
     pub logs: Rc<RefCell<Vec<String>>>,
 }
@@ -84,6 +85,7 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     actors_tbl.set("kind", kind_fn).map_err(|e| e.to_string())?;
     spawn::bind_world(lua, &actors_tbl, &wa)?;
+    bind_fog(lua, &wa, ctx.fog_allowed, &ctx.mod_id, &ctx.logs)?;
     Ok(())
 }
 
@@ -178,6 +180,120 @@ fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     on.set(name, f).map_err(|e| e.to_string())
+}
+
+/// Convert a Lua value to the fog crate's dependency-free `Value` for
+/// validation against the settings registry.
+fn fog_value(v: &Value) -> mlua::Result<fog::Value> {
+    match v {
+        Value::Integer(n) => Ok(fog::Value::Int(*n as i32)),
+        Value::Number(n) => Ok(fog::Value::Int(*n as i32)),
+        Value::Boolean(b) => Ok(fog::Value::Bool(*b)),
+        Value::String(s) => Ok(fog::Value::Str(s.to_str()?.to_string())),
+        other => Err(mlua::Error::external(format!(
+            "fog setting values must be integers, booleans or strings, got {}",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Bind the `wa.fog` namespace: scheme configuration and fog-state queries for
+/// the fog-of-war engine. All gameplay settings are validated against
+/// `fog::settings::SETTINGS`, the Rust port of wkFOW's registry.
+///
+/// `enable` is gated on the pack declaring `[fog]` in mod.toml, mirroring how
+/// an undeclared weapon slot is skipped. Reads (`get`/`defaults`/`enabled`/
+/// `visible`) stay open: a mod may inspect fog state without owning it.
+fn bind_fog(
+    lua: &Lua,
+    wa: &Table,
+    fog_allowed: bool,
+    mod_id: &str,
+    logs: &Rc<RefCell<Vec<String>>>,
+) -> Result<(), String> {
+    let fogt = lua.create_table().map_err(|e| e.to_string())?;
+
+    // wa.fog.set{ circle_radius = 300, los = false, ... }
+    //
+    // Starts from the CURRENT scheme so a mod can change one setting without
+    // restating the rest, validates every key, and only then replaces the live
+    // scheme — a bad key leaves the running fog untouched.
+    let set = lua
+        .create_function(|_, spec: Table| {
+            let mut scheme = crate::actor::native_fog_scheme();
+            for pair in spec.pairs::<String, Value>() {
+                let (key, value) = pair?;
+                let fv = fog_value(&value)?;
+                scheme
+                    .set(&key, &fv)
+                    .map_err(mlua::Error::external)?;
+            }
+            if let Some(f) = crate::actor::native_fog_set_scheme() {
+                f(scheme);
+            }
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("set", set).map_err(|e| e.to_string())?;
+
+    // wa.fog.get("circle_radius") -> integer, or nil for an unknown name.
+    let get = lua
+        .create_function(|_, name: String| {
+            Ok(crate::actor::native_fog_scheme().get(&name))
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("get", get).map_err(|e| e.to_string())?;
+
+    // wa.fog.defaults() -> { name = default, ... } straight from the registry.
+    let defaults = lua
+        .create_function(|lua, ()| {
+            let t = lua.create_table()?;
+            for def in fog::SETTINGS {
+                t.set(def.name, def.default)?;
+            }
+            Ok(t)
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("defaults", defaults).map_err(|e| e.to_string())?;
+
+    // wa.fog.enable(true|false) — master switch for the match. Requires the
+    // pack to declare `[fog]` in mod.toml; otherwise it logs a skip, exactly
+    // like an undeclared weapon slot.
+    let enable_logs = Rc::clone(logs);
+    let enable_mod = mod_id.to_string();
+    let enable = lua
+        .create_function(move |_, on: bool| {
+            if !fog_allowed {
+                enable_logs.borrow_mut().push(format!(
+                    "[{enable_mod}] skipped fog.enable — no [fog] table in mod.toml"
+                ));
+                return Ok(());
+            }
+            if let Some(f) = crate::actor::native_fog_enable() {
+                f(on);
+            }
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("enable", enable).map_err(|e| e.to_string())?;
+
+    // wa.fog.enabled() -> boolean
+    let enabled = lua
+        .create_function(|_, ()| Ok(crate::actor::native_fog_enabled()))
+        .map_err(|e| e.to_string())?;
+    fogt.set("enabled", enabled).map_err(|e| e.to_string())?;
+
+    // wa.fog.visible(x, y) -> 0..255 at a world 16.16 position.
+    let visible = lua
+        .create_function(|_, (x, y): (i32, i32)| {
+            Ok(crate::actor::native_fog_visible()
+                .map(|f| f(x, y))
+                .unwrap_or(255))
+        })
+        .map_err(|e| e.to_string())?;
+    fogt.set("visible", visible).map_err(|e| e.to_string())?;
+
+    wa.set("fog", fogt).map_err(|e| e.to_string())
 }
 
 fn make_push(ctx: &BindContext) -> Rc<dyn Fn(OverlayClaim, &str) -> mlua::Result<()>> {

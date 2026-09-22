@@ -22,6 +22,7 @@
 #include <cstdint>
 
 #include "../shaders/sprite.h"
+#include "../shaders/fog.h"
 
 namespace {
 
@@ -34,8 +35,16 @@ IDirect3DTexture9* mask = nullptr;           // DEFAULT|DYNAMIC
 IDirect3DVertexBuffer9* vertices = nullptr;  // DEFAULT|DYNAMIC
 IDirect3DStateBlock9* saved = nullptr;
 
+// Fog of war: a separate L8 visibility mask and pixel shader from the sprite
+// coverage mask. They differ in both size and content -- coverage marks where
+// a nearer stock draw owns a pixel, visibility marks where the fog lets light
+// through -- so sharing one texture would corrupt both.
+IDirect3DPixelShader9* fog_shader = nullptr;
+IDirect3DTexture9* fog_mask = nullptr;       // DEFAULT|DYNAMIC
+
 UINT atlas_w = 0, atlas_h = 0;
 UINT mask_w = 0, mask_h = 0;
+UINT fog_mask_w = 0, fog_mask_h = 0;
 UINT vertex_capacity = 0;                    // in vertices, not bytes
 
 struct Vertex {
@@ -46,12 +55,21 @@ struct Vertex {
 };
 const DWORD FVF = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX2;
 
+// The fullscreen fog quad needs only position and one screen-space texcoord;
+// it has no atlas sample and no per-vertex tint.
+struct FogVertex {
+    float x, y, z, rhw;
+    float su, sv;    // screen space, samples the visibility mask
+};
+const DWORD FOG_FVF = D3DFVF_XYZRHW | D3DFVF_TEX1;
+
 // WA's surface never exceeds this; refuse anything implausible rather than
 // trusting a size that came from a struct read.
 const UINT MAX_DIMENSION = 4096;
 
 void release_default_pool() {
     if (mask) { mask->Release(); mask = nullptr; mask_w = mask_h = 0; }
+    if (fog_mask) { fog_mask->Release(); fog_mask = nullptr; fog_mask_w = fog_mask_h = 0; }
     if (vertices) { vertices->Release(); vertices = nullptr; vertex_capacity = 0; }
 }
 
@@ -100,11 +118,16 @@ int wf_gpu_init(void* raw_device) {
         release_default_pool();
         if (atlas) { atlas->Release(); atlas = nullptr; atlas_w = atlas_h = 0; }
         if (shader) { shader->Release(); shader = nullptr; }
+        if (fog_shader) { fog_shader->Release(); fog_shader = nullptr; }
         device = dev;
     }
     if (dev->TestCooperativeLevel() != D3D_OK) return 0;
     if (!shader && FAILED(dev->CreatePixelShader(
             (const DWORD*)WF_SPRITE_SHADER, &shader))) {
+        return 0;
+    }
+    if (!fog_shader && FAILED(dev->CreatePixelShader(
+            (const DWORD*)WF_FOG_SHADER, &fog_shader))) {
         return 0;
     }
     return 1;
@@ -123,6 +146,7 @@ void wf_gpu_release() {
     wf_gpu_on_device_lost();
     if (atlas) { atlas->Release(); atlas = nullptr; atlas_w = atlas_h = 0; }
     if (shader) { shader->Release(); shader = nullptr; }
+    if (fog_shader) { fog_shader->Release(); fog_shader = nullptr; }
     device = nullptr;
 }
 
@@ -239,6 +263,108 @@ int wf_gpu_draw(const void* verts, uint32_t count) {
 
     // Kept for the next call; released only on device loss, where every
     // DEFAULT-pool object must go before WA resets the shared device.
+    saved->Apply();
+    return ok;
+}
+
+// Fog-of-war visibility: 255 where a vision source lights the pixel, 0 where
+// the fog is full. One byte per pixel, full surface, with the HUD region
+// already forced to 255 by the caller so the multiply below leaves the HUD
+// alone. Own L8 texture, same DEFAULT|DYNAMIC + DISCARD pattern as the
+// coverage mask.
+int wf_gpu_fog_mask(uint32_t w, uint32_t h, const uint8_t* visibility) {
+    if (!device || !visibility || !w || !h || w > MAX_DIMENSION || h > MAX_DIMENSION)
+        return 0;
+    if (fog_mask && (fog_mask_w != w || fog_mask_h != h)) {
+        fog_mask->Release(); fog_mask = nullptr; fog_mask_w = fog_mask_h = 0;
+    }
+    if (!fog_mask) {
+        if (FAILED(device->CreateTexture(w, h, 1, D3DUSAGE_DYNAMIC, D3DFMT_L8,
+                D3DPOOL_DEFAULT, &fog_mask, nullptr)))
+            return 0;
+        fog_mask_w = w; fog_mask_h = h;
+    }
+    if (!upload(fog_mask, visibility, w, h, D3DLOCK_DISCARD)) return 0;
+    return 1;
+}
+
+// Draw ONE fullscreen multiply quad. SRCBLEND=ZERO, DESTBLEND=SRCCOLOR
+// computes dest = src_colour * dest, so sampling the visibility mask as the
+// output colour scales the framebuffer: fogged pixels darken toward black,
+// lit pixels (v == 1) are untouched. This runs after WA's composite and after
+// the sprite bands, so it darkens the world and our sprites alike while the
+// HUD exemption baked into the mask keeps the HUD bright.
+//
+// The quad covers the whole surface in XYZRHW screen space. The half-texel
+// offset aligns texel centres with pixel centres so the point sample reads
+// the visibility value for exactly this pixel, not a blend of neighbours.
+int wf_gpu_fog_draw() {
+    if (!device || !fog_shader || !fog_mask) return 0;
+    if (device->TestCooperativeLevel() != D3D_OK) return 0;
+
+    // The surface size comes from the texture we uploaded, which the caller
+    // sized to the surface; the quad and the texcoords both derive from it.
+    const float w = (float)fog_mask_w;
+    const float h = (float)fog_mask_h;
+    if (w <= 0.0f || h <= 0.0f) return 0;
+    FogVertex quad[6] = {
+        // First triangle: top-left, top-right, bottom-left.
+        { -0.5f,     -0.5f,     0.0f, 1.0f, 0.0f, 0.0f },
+        { w - 0.5f,  -0.5f,     0.0f, 1.0f, 1.0f, 0.0f },
+        { -0.5f,      h - 0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+        // Second triangle: top-right, bottom-right, bottom-left.
+        { w - 0.5f,  -0.5f,     0.0f, 1.0f, 1.0f, 0.0f },
+        { w - 0.5f,   h - 0.5f, 0.0f, 1.0f, 1.0f, 1.0f },
+        { -0.5f,      h - 0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
+    };
+
+    // Same state-block discipline as the sprite draw: capture everything we
+    // are about to touch and restore it before returning, because WA's own
+    // fullscreen draw follows immediately.
+    if (!saved && FAILED(device->CreateStateBlock(D3DSBT_ALL, &saved))) {
+        saved = nullptr;
+        return 0;
+    }
+    if (FAILED(saved->Capture())) {
+        saved->Release(); saved = nullptr;
+        return 0;
+    }
+
+    int ok = 0;
+    if (SUCCEEDED(device->BeginScene())) {
+        device->SetRenderState(D3DRS_ZENABLE, FALSE);
+        device->SetRenderState(D3DRS_LIGHTING, FALSE);
+        device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+        device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+        device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+        device->SetRenderState(D3DRS_COLORWRITEENABLE,
+            D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
+            D3DCOLORWRITEENABLE_BLUE);
+        // Multiply: dest = src_colour * dest. ZERO kills the source's own
+        // contribution; SRCCOLOR scales the destination by the shader output.
+        device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+        device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+        device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+        device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+        device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+        device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+        device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+        device->SetTexture(0, fog_mask);
+        device->SetFVF(FOG_FVF);
+        device->SetVertexShader(nullptr);
+        device->SetPixelShader(fog_shader);
+        // DrawPrimitiveUP is correct here even though the sprite path avoids
+        // it: the S0 probe's 296x-slower finding was for 500 per-sprite UP
+        // calls, while this is ONE 6-vertex quad per frame, so the UP copy is
+        // noise and a second managed vertex buffer would be pure overhead.
+        ok = SUCCEEDED(device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2,
+                quad, sizeof(FogVertex)));
+        device->EndScene();
+    }
+
     saved->Apply();
     return ok;
 }

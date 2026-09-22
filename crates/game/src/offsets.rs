@@ -110,6 +110,10 @@ pub const SPRITE_WFLY_LNK: u32 = 278;
 pub const WORM_FACING: usize = 0x3DC;
 /// WormEntity show-cursor latch (`+0x268`). Strike targeting.
 pub const WORM_SHOW_CURSOR: usize = 0x268;
+/// WormEntity rendered aim sweep (`+0x270`), read as i32. The low 16 bits
+/// encode a 180-degree sweep; `facing` selects which side of the worm it
+/// occupies. wkFOW `CTaskWorm::getAimAngle` reads the same offset.
+pub const WORM_AIM_ANGLE: usize = 0x270;
 /// WorldRootEntity: non-zero pauses the HUD turn clock (grenade-in-flight).
 pub const WORLD_ROOT_WORM_ACTIVE: usize = 0x108;
 pub const WORLD_ROOT_TURN_TIMER_DISPLAY: usize = 0x188;

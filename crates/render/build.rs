@@ -3,8 +3,6 @@
 //! The staleness check runs on all hosts on purpose: an edited .hlsl whose
 //! header was never regenerated would otherwise ship stale bytecode, and that
 //! failure is invisible until it renders wrong on someone else's machine.
-use std::path::Path;
-
 fn fnv1a(data: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in data {
@@ -13,25 +11,32 @@ fn fnv1a(data: &[u8]) -> u64 {
     hash
 }
 
-fn main() {
-    println!("cargo:rerun-if-changed=native/wf_gpu.cpp");
-    println!("cargo:rerun-if-changed=shaders/sprite.hlsl");
-    println!("cargo:rerun-if-changed=shaders/sprite.h");
-
-    let source = Path::new("shaders/sprite.hlsl");
-    let header = Path::new("shaders/sprite.h");
-    let hlsl = std::fs::read(source).expect("shaders/sprite.hlsl");
-    let text = std::fs::read_to_string(header).expect("shaders/sprite.h");
+/// Re-check that a shader header's stamped source hash still matches its
+/// .hlsl, so an edited shader whose header was never regenerated fails the
+/// build instead of shipping stale bytecode.
+fn check_fresh(name: &str) {
+    let source = format!("shaders/{name}.hlsl");
+    let header = format!("shaders/{name}.h");
+    println!("cargo:rerun-if-changed={source}");
+    println!("cargo:rerun-if-changed={header}");
+    let hlsl = std::fs::read(&source).unwrap_or_else(|_| panic!("{source}"));
+    let text = std::fs::read_to_string(&header).unwrap_or_else(|_| panic!("{header}"));
     let stamped = text
         .lines()
         .next()
         .and_then(|line| line.strip_prefix("// HLSL-FNV1A: "))
-        .expect("shaders/sprite.h is missing its source hash");
+        .unwrap_or_else(|| panic!("{header} is missing its source hash"));
     assert_eq!(
         stamped,
         format!("{:016x}", fnv1a(&hlsl)),
         "stale shader: regenerate with crates/render/probe/compile-shader.py"
     );
+}
+
+fn main() {
+    println!("cargo:rerun-if-changed=native/wf_gpu.cpp");
+    check_fresh("sprite");
+    check_fresh("fog");
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         cc::Build::new()

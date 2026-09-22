@@ -57,6 +57,7 @@ pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
             root: pack.root.clone(),
             allowed_slots: pack.manifest.weapons.allowed_slots()?.into_iter().collect(),
             allowed_register: pack.manifest.weapons.register.iter().cloned().collect(),
+            fog_allowed: pack.manifest.fog.enable,
             claims: Rc::clone(&claims),
             logs: Rc::clone(&logs),
         };
