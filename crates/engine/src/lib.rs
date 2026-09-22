@@ -16,6 +16,7 @@ mod physics;
 mod queue_census;
 mod rebase;
 pub mod render_queue;
+mod replay;
 pub mod shader;
 mod sprite;
 mod sync;

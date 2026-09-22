@@ -3,8 +3,23 @@
 pub const IMAGE_BASE: u32 = 0x0040_0000;
 
 pub const INIT_WEAPON_TABLE: u32 = 0x0053_CAB0;
+/// `ReplayLoader(GameInfoPrefix*, mode)`, stdcall, RET 8.
+pub const REPLAY_LOADER: u32 = 0x0046_2DF0;
+pub const GAME_ENGINE_SHUTDOWN: u32 = 0x0056_DCD0;
 pub const STR_VERSION_381: u32 = 0x0064_1C60;
 pub const G_GAME_SESSION: u32 = 0x007A_0884;
+/// Frontend replay-prefix singleton, named by the `push imm32` operand at
+/// wkFOW's `ReferencesDDMain` site (0x004E3B40 + 0x24).
+pub const G_REPLAY_PREFIX: u32 = 0x0087_D3F8;
+
+/// Replay metadata lives in the frontend singleton named by the immediate at
+/// `ReferencesDDMain + 0x24`. wkFOW calls the address 0x40 bytes after this
+/// singleton DDMain, then subtracts the prefix again before using these fields.
+pub const REPLAY_PREFIX_SIZE: usize = 0x40;
+pub const REPLAY_ACTIVE: usize = 0xDB48;
+pub const REPLAY_INPUT_PATH: usize = 0xDB60;
+pub const REPLAY_OUTPUT_PATH: usize = 0xDF60;
+pub const REPLAY_PATH_CAPACITY: usize = 0x400;
 
 /// `GameRuntime.world` — InitWeaponTable reads `[runtime+0x488]`.
 pub const GAME_RUNTIME_WORLD: usize = 0x488;
@@ -478,6 +493,7 @@ mod tests {
         assert_eq!(CONSTRUCT_SPRITE, 0x004FAA30);
         assert_eq!(PROCESS_SPRITE, 0x004FAB80);
         assert_eq!(GFX_HANDLER_LOAD_SPRITES, 0x00570B50);
+        assert_eq!(G_REPLAY_PREFIX, 0x0087D3F8);
         assert_eq!(GAME_RUNTIME_DISPLAY, 0x4D0);
         assert_eq!(DISPLAY_PALETTE_ENTRIES, 0x358D);
         assert_eq!(PALETTE_COMMIT, 0x0056CD20);
@@ -523,8 +539,10 @@ mod tests {
         // the code that uses them.
         assert_eq!(
             u32::from_le_bytes([
-                ADVANCE_RNG_PROLOGUE[2], ADVANCE_RNG_PROLOGUE[3],
-                ADVANCE_RNG_PROLOGUE[4], ADVANCE_RNG_PROLOGUE[5],
+                ADVANCE_RNG_PROLOGUE[2],
+                ADVANCE_RNG_PROLOGUE[3],
+                ADVANCE_RNG_PROLOGUE[4],
+                ADVANCE_RNG_PROLOGUE[5],
             ]) as usize,
             GAME_WORLD_FRAME_COUNTER
         );

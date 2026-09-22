@@ -1,0 +1,33 @@
+# Replay metadata is stored in the frontend singleton at 0x87D3F8, named by
+# the `push` immediate at ReferencesDDMain (0x4E3B40) + 0x24. wkFOW calls the
+# address 0x40 bytes after this singleton DDMain and subtracts 0x40 before
+# accessing these fields. It is not GameRuntime.display/DisplayGfx.
+
+[[function]]
+va = 0x00462DF0
+name = "ReplayLoader"
+calling_convention = "__stdcall"
+signature = "uint32_t ReplayLoader(ReplayPrefix *prefix, int mode)"
+plate_comment = "Loads .WAgame input from prefix+0xDB60. mode 1=play, 2=getmap, 3=getscheme, 4=repair. RET 8."
+
+[[struct]]
+name = "ReplayPrefix"
+size = 0xE360
+
+  [[struct.field]]
+  offset = 0xDB48
+  name = "playback_active"
+  type = "byte"
+  comment = "Nonzero while WA is playing an input replay."
+
+  [[struct.field]]
+  offset = 0xDB60
+  name = "input_path"
+  type = "char[0x400]"
+  comment = "Null-terminated .WAgame input filename."
+
+  [[struct.field]]
+  offset = 0xDF60
+  name = "output_path"
+  type = "char[0x400]"
+  comment = "Null-terminated .WAgame recording filename."

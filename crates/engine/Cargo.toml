@@ -9,6 +9,7 @@ fog = { path = "../fog" }
 game = { path = "../game" }
 gfx = { path = "../gfx" }
 render = { path = "../render" }
+replay = { path = "../replay" }
 lua-host = { path = "../lua-host" }
 re-catalog = { path = "../re-catalog" }
 minhook = { workspace = true }

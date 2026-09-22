@@ -1,4 +1,55 @@
-# Replay — W0: the determinism probe
+# Replay
+
+W0 and W1 established deterministic simulation and stable pack APIs. W2 recording
+and W3 playback of `.WF_WAgame` containers are live-accepted.
+
+During a recorded round, WormForge writes an incomplete container beside WA's
+ordinary replay plus capped temporary input and checkpoint streams. After WA's
+shutdown closes its replay writer, WormForge embeds the original `.WAgame`
+bytes and the exact loaded pack files, marks the container complete, and
+publishes it atomically. A crash or write failure leaves `complete = false`,
+which playback will refuse instead of trying to simulate a partial match.
+
+The first live round-trip passed on 2026-09-22. A 1,057-frame round produced a
+complete container with 22 checkpoints and 9 archived packs containing 367
+files. Extracting `[wa]` returned all 8,313 bytes with the same SHA-256 as WA's
+original, and finalization removed both temporary streams.
+
+After finishing a local round, inspect the file written beside WA's `.WAgame`:
+
+```sh
+cargo run -p replay --bin wf-replay -- inspect "/path/to/round.WF_WAgame"
+cargo run -p replay --bin wf-replay -- extract "/path/to/round.WF_WAgame" /tmp/round.WAgame
+cmp "/path/to/round.WAgame" /tmp/round.WAgame
+```
+
+`inspect` validates the directory, complete flag, pack archive, input stream
+and checkpoints before printing their counts and frame range. `extract` writes
+the embedded vanilla section unchanged.
+
+Playback hooks WA's mode-1 `ReplayLoader` before it opens the selected file. For
+a `.WF_WAgame`, WormForge validates the container, extracts `[wa]`, redirects WA
+to that ordinary replay, and loads the archived packs from a private temporary
+directory. Installed packs are ignored. Recorded key/pointer samples replace OS
+input at their matching simulation frame; each checkpoint compares RNG, worms,
+and actors separately and records the first differing component as an error.
+
+The W3 acceptance replay completed all 1,057 frames and all 22 checkpoints with
+no mismatch. Run it directly with WA's command line, for example:
+
+```sh
+tools/sync-run.sh replay-check "/path/to/round.WF_WAgame"
+```
+
+Playback refuses incomplete containers, unsupported format or WA versions,
+unsafe archived paths, oversized pack tables, and malformed input/checkpoint
+streams before starting the custom simulation.
+
+The final W3a build was then used for another live recording: 1,173 frames and
+24 checkpoints, with all nine packs archived. Its extracted 5,951-byte vanilla
+replay was byte-identical to WA's original.
+
+## W0: the determinism probe
 
 WA is a lockstep engine: a `.WAgame` records *inputs*, and playback is
 re-simulation, not a movie. A WormForge replay is therefore only possible if

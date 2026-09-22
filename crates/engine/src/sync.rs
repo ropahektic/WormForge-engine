@@ -113,6 +113,12 @@ unsafe fn hash_actors() -> u32 {
     h.finish()
 }
 
+/// The recorder's checkpoint payload. Kept here so the diagnostic probe and
+/// replay files hash exactly the same fields in exactly the same order.
+pub(crate) unsafe fn checkpoint(world: *mut u8) -> (u32, u32, u32) {
+    (hash_rng(world), hash_worms(), hash_actors())
+}
+
 /// Called at the end of every world-root `FRAME_FINISH`, after WA's own
 /// handler has run — so this observes end-of-frame state, which is the point
 /// at which WA increments its frame counter.
@@ -140,14 +146,16 @@ pub unsafe fn observe(world: *mut u8) {
         log_line(&format!(
             "sync probe: world {world:?} first frame {frame}, \
              recorded_frame_counter {recorded} ({}), net_game {net:#x} ({})",
-            if recorded < 0 { "REPLAY PLAYBACK" } else { "live or recording" },
+            if recorded < 0 {
+                "REPLAY PLAYBACK"
+            } else {
+                "live or recording"
+            },
             if net != 0 { "NETWORKED" } else { "local" }
         ));
     }
 
-    let rng = hash_rng(world);
-    let worms = hash_worms();
-    let actors = hash_actors();
+    let (rng, worms, actors) = checkpoint(world);
 
     let n = FRAMES.fetch_add(1, Ordering::Relaxed) + 1;
     if n % REPORT_EVERY == 0 {

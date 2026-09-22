@@ -15,6 +15,8 @@ static FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
 static ERR: Mutex<Vec<std::fs::File>> = Mutex::new(Vec::new());
 static CONSOLE: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
 
+pub(crate) const BUILD_ID: &str = "20260922-replay-w3a";
+
 pub fn log_path() -> PathBuf {
     wormforge_dir().join("wkLua.log")
 }
@@ -106,14 +108,14 @@ pub fn init() {
         prev(info);
     }));
 
-    log_line("wkLua build 20260918-aim");
+    log_line(&format!("wkLua build {BUILD_ID}"));
     log_line(&format!("log file {}", path.display()));
     log_line(&format!("error log {}", err_path.display()));
     if wa_err != err_path {
         log_line(&format!("error log copy {}", wa_err.display()));
     }
     write_err(&format!(
-        "=== wkLua session 20260918-aim ===\r\nerror log {}\r\n",
+        "=== wkLua session {BUILD_ID} ===\r\nerror log {}\r\n",
         err_path.display()
     ));
 }

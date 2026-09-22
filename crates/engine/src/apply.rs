@@ -50,17 +50,20 @@ pub fn on_gfx_ready(display: *mut u8) {
     // Flush the previous match's queue census before its counters are reused.
     crate::queue_census::finish();
     crate::sync::finish();
+    crate::replay::finish_recording();
     world::clear_input_latch();
     crate::truecolor::clear();
     crate::gpu::clear();
     crate::fog::clear();
 
-    let mods_dir = mods_root_from(&wa_directory());
+    let mods_dir =
+        crate::replay::playback_mods_root().unwrap_or_else(|| mods_root_from(&wa_directory()));
     log_line(&format!("loading mods from {}", mods_dir.display()));
     let discovered = match discover_mods(&mods_dir) {
         Ok(d) => d,
         Err(e) => {
             log_error(&format!("InitGraphic discover: {e}"));
+            crate::replay::playback_failed(format!("cannot discover archived packs: {e}"));
             return;
         }
     };
@@ -69,11 +72,15 @@ pub fn on_gfx_ready(display: *mut u8) {
         log_line(&s);
     }
     log_line(&format!("modset {}", modset_fingerprint(&mods)));
+    if !crate::replay::prepare(&mods) {
+        return;
+    }
 
     let scripts = match run_mods(&mods) {
         Ok(s) => s,
         Err(e) => {
             log_error(&format!("InitGraphic lua: {e}"));
+            crate::replay::playback_failed(format!("cannot load archived packs: {e}"));
             return;
         }
     };
@@ -110,10 +117,7 @@ pub fn on_gfx_ready(display: *mut u8) {
             // reason the path exists.
             if let (Some(prefix), Some(p)) = (&claim.params.gpu_prefix, path.as_ref()) {
                 if p.starts_with(prefix.as_str()) {
-                    gpu_sheets.push((
-                        gfx::sprite_key(&claim.mod_id, p),
-                        sheet.clone(),
-                    ));
+                    gpu_sheets.push((gfx::sprite_key(&claim.mod_id, p), sheet.clone()));
                     return;
                 }
             }

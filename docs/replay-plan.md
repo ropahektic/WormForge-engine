@@ -1,10 +1,9 @@
 # WormForge replay: `.WF_WAgame`
 
 > **Status: W0 complete and passed (2026-09-22). W1 complete: items 1, 3, 4,
-> 5, 6 and 7 done (4 live-verified; 6 and 7 determinism-neutral, host-tested);
-> item 2 shipped as detection only — the underlying gap needs lockstep
-> packets. W2 (recorder) is next. Session-to-session handoff:
-> `docs/replay-handoff.md`.**
+> 5, 6 and 7 done; item 2 shipped as detection only because the underlying
+> gap needs lockstep packets. W2 recording and W3 playback are complete and
+> live-accepted on 2026-09-22. W4 live packet exchange remains optional.**
 >
 > This is the canonical plan. `docs/replay.md` is its companion: what W0
 > measures, how to run the gate, and the results. Sections below are annotated
@@ -75,14 +74,16 @@ renderer *removes* sprites from WA's queue, and anything that reaches
 
 | What | Where |
 |---|---|
-| prefix object | `DDMain - 0x40` — i.e. `GameRuntime+0x4D0` (we have this as `GAME_RUNTIME_DISPLAY`) minus `0x40` |
+| prefix object | `G_REPLAY_PREFIX 0x87D3F8`, the `push imm32` operand at `ReferencesDDMain` (`0x4E3B40`) + `0x24`; wkFOW names `prefix + 0x40` DDMain |
 | playback active | `prefix + 0xDB48` |
 | input filename | `prefix + 0xDB60` |
 | output filename | `prefix + 0xDF60` |
 | map seed / saved seed | `G_MAP_SEED 0x87D430`, `G_SAVED_RANDOM_SEED 0x88ABAC` |
 
-wkFOW's note is worth repeating: using `GameWorld + 0x24` instead of the prefix reads
-64 bytes late and loses the filename.
+wkFOW's note is worth repeating: the frontend singleton is not
+`GameRuntime+0x4D0` (`DisplayGfx`). Using that graphics pointer loses the filename.
+`GameWorld+0x24` is useful for comparison, but wkFOW deliberately selects the
+frontend singleton because the two filename buffers need not agree.
 
 **Project X solved the same problem by archiving, not fingerprinting.** `strings
 wkPX.dll` shows `Libs\Replay\`, `PXSchemes\repl.pxs`, `PX Replay Detected :`,
@@ -413,27 +414,51 @@ making the inputs *exist* in one place, W2 about writing them down.
 
 ### W2 — Recorder
 
-- Read WA's output replay path from `prefix + 0xDF60` (prefix = `display - 0x40`).
+- ✅ Read WA's output replay path from `prefix + 0xDF60` (prefix = the singleton
+  operand at `ReferencesDDMain + 0x24`).
   If WA supplies none, record nothing and say so — wkFOW's rule, and correct.
-- Write `[wf]` + `[chk]` during the round to a temp file; at round end, read WA's
-  finished `.WAgame`, assemble the container, atomically replace.
-- **Freeze the schema as explicit versioned arrays from day one.** wkFOW's
+- ✅ Write `[wf]` + `[chk]` during the round to temp files. The
+  `GameEngine::Shutdown` wrapper finalizes only after WA has destroyed its
+  replay writer, then embeds the finished `.WAgame` and publishes with
+  `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)`.
+- ✅ **Freeze the schema as explicit versioned arrays from day one.** wkFOW's
   `ReplayFormat.h` carries a comment about a real outage caused by serialising the
   live settings registry while the reader compared against a frozen list: *"Every
   sidecar written since the explosion setting landed was unloadable, which is a worse
   failure than a version bump would have been."*
-- Two-phase `complete` flag, as wkFOW does: an aborted round leaves an unplayable file
+- ✅ Two-phase `complete` flag, as wkFOW does: an aborted round leaves an unplayable file
   rather than a subtly wrong one. Cap the stream below the reader's limit.
+
+The pure format crate has host tests for full round-trip, byte-identical `[wa]`
+extraction, version refusal, directory truncation, section bounds and torn input.
+The live acceptance round produced a complete 9,034,237-byte container with all
+1,057 frames (`0..=1056`), 22 checkpoints and 9 packs/367 files. Its embedded
+8,313-byte `[wa]` section has SHA-256
+`c22e7266d3b346649ef2c4eaa785f5b6594866d9b47463491d07dcb2ae904e61`, byte-for-byte
+identical to WA's replay. No temporary files remained after finalization.
 
 ### W3 — Playback
 
-- Detect `.WF_WAgame`, extract `[wa]` to temp, point `prefix + 0xDB60` at it, set the
+- ✅ Detect `.WF_WAgame`, extract `[wa]` to temp, point `prefix + 0xDB60` at it, set the
   playback flag, load `[pack]` in place of the installed packs.
-- Feed recorded local input back at the matching frame.
-- Verify `[chk]` as it goes. **Stop loudly at the first mismatch, naming the frame and
+- ✅ Feed recorded local input back at the matching frame.
+- ✅ Verify `[chk]` as it goes. **Stop loudly at the first mismatch, naming the frame and
   which component diverged** — a replay that quietly stops matching is the expensive
   failure mode.
-- Refuse cleanly on: wrong format version, wrong WA version, missing `complete`.
+- ✅ Refuse cleanly on: wrong format version, wrong WA version, missing `complete`.
+
+The live W3 acceptance used WA's `/play` path on the W2 container. ReplayLoader
+accepted the extracted vanilla bytes, all nine archived packs loaded from the
+private playback directory, and the run verified all 1,057 frame samples and all
+22 checkpoints. The 21 marker-gated sync lines also match the recording. Playback
+then removed its extracted `.WAgame` and archived-pack directory. The player rejects
+unsafe archive paths and bounds pack count, file count, and gzip expansion before
+materialising untrusted replay contents.
+
+A second round recorded by the final W3a build also passed container inspection:
+1,173 frames (`0..=1172`), 24 checkpoints, the same 9 packs/367 files, and a
+byte-identical 5,951-byte `[wa]` section (SHA-256
+`510f4e48e5c45c76a9803d1ea4ea78cf2ce889ddff4aed55885e04e0de4b560e`).
 
 ### W4 — Live desync compare (unlocked by W0, not blocking)
 
@@ -450,11 +475,11 @@ crates/game/src/hash.rs       ✅ FNV-1a (here, not in engine: darwin can't buil
 mods/examples/synctest/       ✅ the input-free control pack for test B
 tools/sync-{run,diff,gate}.sh ✅ harness (gitignored: machine-local paths)
 docs/replay.md                ✅ procedure + results
-crates/engine/src/replay.rs      recorder/player state machine (W2/W3)
-crates/replay/                   container format, host-testable, no WA
+crates/engine/src/replay.rs   ✅ recorder/player state machine (W2/W3)
+crates/replay/                ✅ container format, host-testable, no WA
   src/{lib.rs,format.rs,pack.rs}
 re/GameWorld.toml             ✅ probe fields added (frame counter, RNG, replay flag)
-re/Replay.toml                   prefix offsets, ported from openwa + wkFOW
+re/Replay.toml                ✅ prefix offsets, ported from openwa + wkFOW
 re/Random.toml                   RNG state + advance
 docs/replay.md
 ```

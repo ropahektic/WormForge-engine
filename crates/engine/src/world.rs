@@ -3,8 +3,8 @@
 
 use crate::log::{log_error, log_line};
 use crate::rebase::rb;
-use game::latch::FrameLatch;
 use game::entity::{read_i32, write_i32};
+use game::latch::FrameLatch;
 use game::offsets::*;
 use std::collections::VecDeque;
 use std::ffi::CString;
@@ -161,7 +161,16 @@ pub fn view_cam() -> (i32, i32, i32, i32) {
 /// display so windowed / DPI stretch still covers the whole map.
 pub fn pointer() -> (i32, i32, bool) {
     warn_local_input_desync("a pack calling wa.world.pointer()");
-    latched(&POINTER, poll_pointer)
+    pointer_latched()
+}
+
+fn pointer_latched() -> (i32, i32, bool) {
+    latched(&POINTER, || {
+        sim_frame()
+            .and_then(crate::replay::playback_input)
+            .map(|sample| (sample.1, sample.2, sample.3))
+            .unwrap_or_else(poll_pointer)
+    })
 }
 
 fn poll_pointer() -> (i32, i32, bool) {
@@ -374,9 +383,7 @@ fn advance_rng_verified() -> bool {
     match RNG_OK.load(Ordering::Relaxed) {
         0 => {
             let addr = rb(GAME_WORLD_ADVANCE_RNG) as *const u8;
-            let found = unsafe {
-                std::slice::from_raw_parts(addr, ADVANCE_RNG_PROLOGUE.len())
-            };
+            let found = unsafe { std::slice::from_raw_parts(addr, ADVANCE_RNG_PROLOGUE.len()) };
             let ok = found == ADVANCE_RNG_PROLOGUE;
             RNG_OK.store(if ok { 2 } else { 1 }, Ordering::Relaxed);
             if !ok {
@@ -461,7 +468,21 @@ pub fn keys() -> u32 {
 }
 
 fn keys_latched() -> u32 {
-    latched(&KEYS, poll_keys)
+    latched(&KEYS, || {
+        sim_frame()
+            .and_then(crate::replay::playback_input)
+            .map(|sample| sample.0)
+            .unwrap_or_else(poll_keys)
+    })
+}
+
+/// The exact per-frame samples consumed by packs and the engine. Calling this
+/// at FRAME_FINISH returns an earlier sample if something already read input
+/// this frame, or takes the one and only sample otherwise.
+pub(crate) fn replay_input() -> (u32, i32, i32, bool) {
+    let keys = keys_latched();
+    let (px, py, down) = pointer_latched();
+    (keys, px, py, down)
 }
 
 /// True while Space is held, as sampled for this frame. `pump_space_fire` and

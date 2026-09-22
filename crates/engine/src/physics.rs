@@ -337,6 +337,7 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     // false in ordinary play, so anything below it never runs in a normal
     // turn and the probe would never fire.
     if msg == MSG_FRAME_FINISH {
+        unsafe { crate::replay::observe(crate::world::session_world()) };
         unsafe { crate::sync::observe(crate::world::session_world()) };
     }
     if !holding() {
