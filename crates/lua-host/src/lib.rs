@@ -470,6 +470,18 @@ mod tests {
         }
     }
 
+    /// W1 item 7: `coroutine` stays out of the sandbox. Suspend/resume points
+    /// are driven by whoever yields rather than by the sim, so a pack using
+    /// them would desync; assert the strip so a future edit to the list is
+    /// caught rather than silently reopened.
+    #[test]
+    fn coroutine_stays_nil() {
+        let _guard = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        let is_nil: bool = lua.load("return coroutine == nil").eval().unwrap();
+        assert!(is_nil, "coroutine must stay nil");
+    }
+
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
     }

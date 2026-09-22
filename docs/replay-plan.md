@@ -1,7 +1,10 @@
 # WormForge replay: `.WF_WAgame`
 
-> **Status: W0 complete and passed (2026-09-22). W1 in progress: items 1, 3, 4,
-> 5 and 6 done (4 live-verified); item 7 (`coroutine`) remains, then W2.**
+> **Status: W0 complete and passed (2026-09-22). W1 complete: items 1, 3, 4,
+> 5, 6 and 7 done (4 live-verified; 6 and 7 determinism-neutral, host-tested);
+> item 2 shipped as detection only — the underlying gap needs lockstep
+> packets. W2 (recorder) is next. Session-to-session handoff:
+> `docs/replay-handoff.md`.**
 >
 > This is the canonical plan. `docs/replay.md` is its companion: what W0
 > measures, how to run the gate, and the results. Sections below are annotated
@@ -392,7 +395,18 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    is safe and what would invalidate it. Integer keys are unaffected either
    way: Lua hashes integers without a per-process seed, which is why item 5
    settled the common `state[a.id]` pattern without a `CFLAGS` hack.
-7. **Strip `coroutine`**, or keep it deliberately and say why (gap 8).
+7. ✅ **`coroutine` stripped — DONE.** Added to the nil-list in
+   `sandbox.rs` with the reason in place: suspend/resume points are driven
+   by whoever yields rather than by the sim, and a yield across a frame
+   boundary would strand Rust-held references across a per-peer GC cycle
+   (gap 8's `__gc` half). No example pack uses coroutines — checked before
+   stripping. A `coroutine_stays_nil` host test beside
+   `lua_own_rng_stays_nil` keeps a future edit from silently reopening it.
+
+   The `__gc` half of gap 8 (reachable via `setmetatable`, `collectgarbage`
+   already nil) is deliberately left open: no pack uses it, and stripping
+   `setmetatable` would break legitimate metatable use. Documented as a
+   known-accepted risk; the probe will surface it if it ever bites.
 
 Record the latch into the `[wf]` stream as part of W2, not here — W1 is about
 making the inputs *exist* in one place, W2 about writing them down.

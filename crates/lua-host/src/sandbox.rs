@@ -18,6 +18,13 @@ fn strip_unsafe(lua: &Lua) -> LuaResult<()> {
         "load",
         "require",
         "collectgarbage",
+        // Lockstep: coroutines suspend and resume script execution, and the
+        // resume point is driven by whoever yields -- wall-clock input, hook
+        // order, anything but the sim. A yield across a frame boundary would
+        // also strand Rust-held Lua references across a GC cycle whose timing
+        // differs per peer (gap 8). No example pack uses them; keep them out
+        // rather than audit every yield path.
+        "coroutine",
     ] {
         globals.set(name, mlua::Value::Nil)?;
     }
