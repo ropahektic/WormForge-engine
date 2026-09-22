@@ -48,14 +48,32 @@ A corpus of 18 curated single-feature replays already exists at
 `~/worms_work/wkFOW/clones/openwa/testdata/replays/` (girder, napalm, kamikaze,
 cluster, freeze_nuke_armageddon, …).
 
-Measured behaviour of `/play`, so the timings are not a surprise:
+Measured behaviour of `/play`:
 
-- WA **does** exit on its own when the replay ends. A 93-second replay takes
-  around three minutes of wall clock, so the script blocks for a while.
+- WA **does** exit on its own when the replay ends, and the exit itself takes
+  about ten seconds. Playback runs at roughly wall-clock speed, so the run
+  lasts about as long as the recorded game: `girder` (93 s of gameplay,
+  4,649 frames) takes a little under two minutes end to end.
 - WA writes **no** `User/Logs` entry for a `/play` run, and prints nothing
   about checksums to stdout or stderr on a clean run. The corpus's
   `*_expected.log` baselines therefore cannot be reproduced this way — they
   come from OpenWA's own Rust test runner, not from stock WA.
+
+### If WA hangs on an unreadable error
+
+Symptom: WA starts, prints *"Wine cannot find the FreeType font library"*, and
+then hangs on a dialog you cannot read. `ERRORLOG.TXT` records
+
+```
+WA caused an Integer Divide by Zero (0xc0000094)
+in module comctl32.dll
+```
+
+That is the Wineskin environment missing, not a WA or WormForge fault: with no
+fonts loaded, text metrics come back zero and a Windows common control divides
+by one of them. `tools/sync-run.sh` exports what the bundle's launcher exports,
+which is the fix. If you launch WA by hand for a probe run, export the same
+block or expect this crash.
 
 ### The two tests, which answer different questions
 
