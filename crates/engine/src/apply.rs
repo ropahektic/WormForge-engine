@@ -51,6 +51,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     crate::queue_census::finish();
     crate::truecolor::clear();
     crate::gpu::clear();
+    crate::fog::clear();
 
     let mods_dir = mods_root_from(&wa_directory());
     log_line(&format!("loading mods from {}", mods_dir.display()));

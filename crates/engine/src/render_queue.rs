@@ -165,6 +165,11 @@ unsafe extern "C" fn dispatch(base: usize, display: usize, clip: usize) {
             q.apply_depths();
             // Measurement only, behind a marker file: see queue_census.rs.
             crate::queue_census::observe(&q);
+            // Fog of war: rebuild this frame's vision sources and light grid.
+            // Runs once per render frame here, alongside the GPU/truecolor
+            // captures, with display+clip in hand. The mask it caches is taken
+            // by the render pass separately (fog::build_mask / cached_mask).
+            crate::fog::on_render_frame(display, clip);
             // The GPU path owns the split when it is active; the two must
             // never both cut the dispatch, so this is exclusive by construction.
             if !crate::gpu::capture(&q, display, clip) {

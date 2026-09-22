@@ -115,6 +115,11 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         hp: crate::world::worm_hp,
         ammo: crate::world::ammo,
         hurt: crate::physics::hit_worm,
+        fog_enable: native_fog_enable,
+        fog_enabled: crate::fog::enabled,
+        fog_set_scheme: crate::fog::set_scheme,
+        fog_scheme: crate::fog::scheme,
+        fog_visible: crate::fog::visible,
     });
     log_line("LuaActor: StrikeFire + CreateWeaponProjectile wrap; land/objects/sound");
     Ok(())
@@ -875,6 +880,16 @@ fn native_gravity(handle: u32) {
             write_i32(this, ENT_GRAVITY_SCALE, 0x10000);
             apply_gravity(this);
         }
+    }
+}
+
+/// Lua `wa.fog.enable`: start the fog engine from the current scheme, or tear
+/// it down. Enabling reads the live map size, so it only succeeds in a match.
+fn native_fog_enable(enable: bool) {
+    if enable {
+        crate::fog::start_match(crate::fog::scheme());
+    } else {
+        crate::fog::clear();
     }
 }
 

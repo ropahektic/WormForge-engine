@@ -1108,3 +1108,29 @@ pub fn solid_sampler() -> Option<impl Fn(i32, i32) -> bool> {
     let grid = live_grid()?;
     Some(move |x: i32, y: i32| grid.solid_px(x, y))
 }
+
+/// A `Sync` solidity sampler, for the fog crate's parallel shadowcast, which
+/// calls the closure from its worker threads.
+///
+/// `solid_sampler`'s return type is not `Sync` because `GridView` holds a raw
+/// `*const u8`. The grid is read-only for the whole cast (terrain writes are
+/// hooked and applied on the game thread between frames, never mid-dispatch),
+/// so sharing the pointer across the pool's threads is sound. `SyncGrid`
+/// asserts that invariant at the type level rather than by discipline.
+pub fn solid_sampler_sync() -> Option<impl Fn(i32, i32) -> bool + Sync> {
+    struct SyncGrid(GridView);
+    // SAFETY: the wrapped grid is only ever read through `solid_px`; no
+    // mutation escapes, and the underlying WA collision buffer outlives the
+    // cast that borrows it.
+    unsafe impl Sync for SyncGrid {}
+    impl SyncGrid {
+        fn solid_px(&self, x: i32, y: i32) -> bool {
+            self.0.solid_px(x, y)
+        }
+    }
+    let grid = SyncGrid(live_grid()?);
+    // Calling a method on `grid` (not a field) makes the closure capture the
+    // whole SyncGrid -- whose Sync impl is the point -- rather than disjointly
+    // capturing the non-Sync GridView field inside it.
+    Some(move |x: i32, y: i32| grid.solid_px(x, y))
+}

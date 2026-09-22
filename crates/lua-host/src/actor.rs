@@ -165,6 +165,15 @@ pub struct ActorNative {
     pub ammo: fn(handle: u32, slot: u32, delta: Option<i32>) -> i32,
     /// Stock SpecialImpact (msg 0x4B). No explosion. Pose restored so the worm does not move.
     pub hurt: fn(target: u32, from: u32, amount: i32),
+    /// Fog-of-war master switch for the match. Enabling creates the engine
+    /// instance from the current scheme; disabling drops it.
+    pub fog_enable: fn(enable: bool),
+    pub fog_enabled: fn() -> bool,
+    /// Replace the active scheme (already validated by `fog::settings`).
+    pub fog_set_scheme: fn(fog::Scheme),
+    pub fog_scheme: fn() -> fog::Scheme,
+    /// Light level (0..=255) at a world 16.16 position, for `wa.fog.visible`.
+    pub fog_visible: fn(x: i32, y: i32) -> u8,
 }
 
 impl Default for ActorNative {
@@ -202,6 +211,11 @@ impl Default for ActorNative {
             hp: |_| 0,
             ammo: |_, _, _| 0,
             hurt: |_, _, _| {},
+            fog_enable: |_| {},
+            fog_enabled: || false,
+            fog_set_scheme: |_| {},
+            fog_scheme: fog::Scheme::default,
+            fog_visible: |_, _| 255,
         }
     }
 }
@@ -981,6 +995,34 @@ pub fn native_ammo() -> Option<fn(u32, u32, Option<i32>) -> i32> {
 
 fn native_hurt() -> Option<fn(u32, u32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hurt)
+}
+
+pub fn native_fog_enable() -> Option<fn(bool)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.fog_enable)
+}
+
+pub fn native_fog_enabled() -> bool {
+    NATIVE
+        .lock()
+        .ok()
+        .and_then(|n| n.as_ref().map(|n| (n.fog_enabled)()))
+        .unwrap_or(false)
+}
+
+pub fn native_fog_set_scheme() -> Option<fn(fog::Scheme)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.fog_set_scheme)
+}
+
+pub fn native_fog_scheme() -> fog::Scheme {
+    NATIVE
+        .lock()
+        .ok()
+        .and_then(|n| n.as_ref().map(|n| (n.fog_scheme)()))
+        .unwrap_or_default()
+}
+
+pub fn native_fog_visible() -> Option<fn(i32, i32) -> u8> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.fog_visible)
 }
 
 pub(crate) fn sound_slot(slot: Value) -> mlua::Result<i32> {

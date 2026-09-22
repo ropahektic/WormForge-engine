@@ -8,5 +8,6 @@ license.workspace = true
 game = { path = "../game" }
 gfx = { path = "../gfx" }
 actors = { path = "../actors" }
+fog = { path = "../fog" }
 mlua = { workspace = true }
 weapons = { path = "../weapons" }
