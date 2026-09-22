@@ -32,6 +32,19 @@ local PX = 0x10000
 local DOT = "sprites/dot.png"
 local SPRITES = { DOT }
 
+-- Resolved to a namespaced key HERE, at load time, and never by relative path
+-- at spawn time.
+--
+-- wa.actors.spawn resolves a bare path like "sprites/dot.png" against
+-- `wa._mod`, the current pack context -- but only the weapon-event
+-- dispatchers (on_fire / on_click / on_select / actor brains) ever set that.
+-- A wa.on.worm_message hook does not, so with several packs installed the
+-- path resolves against whichever pack last fired a weapon, and the spawn
+-- fails with "sprite is not installed" even though the sheet is loaded.
+-- wa.sprites.key closes over this pack's own id, so the key it returns is
+-- correct whenever it is used.
+local DOT_KEY = wa.sprites.key(DOT)
+
 local COUNT = 6 -- actors spawned per turn
 local LIFE = 90 -- frames each one lives
 local GRAVITY = 0x0600 -- per-frame velocity delta, 16.16
@@ -74,7 +87,7 @@ local function spawn_wave(worm)
   turns = turns + 1
   for i = 1, COUNT do
     local dot = wa.actors.spawn({
-      sprite = DOT,
+      sprite = DOT_KEY,
       x = worm.x + SPREAD[i] * (PX // 100),
       y = worm.y - 20 * PX,
       vx = SPREAD[i] * (PX // 200),

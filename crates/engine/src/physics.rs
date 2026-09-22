@@ -34,6 +34,7 @@ type HandleMessageFn = unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut 
 
 static ORIG_GRAVITY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_MISSILE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static WORM_MSG_ERRORS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static ORIG_WORM: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_ROOT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_DRAW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -352,6 +353,29 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     }
 }
 
+/// Every other Lua dispatch site logs its errors; this one used to discard
+/// them with `unwrap_or(false)`, so a pack whose `wa.on.worm_message` hook
+/// threw looked exactly like a pack that had no hook at all. That cost real
+/// time to diagnose once and would have cost it again.
+///
+/// Deduplicated by message text, following the same idiom as `gpu.rs`:
+/// this runs for every worm on every message, so an error that repeats every
+/// frame would otherwise bury the log it is trying to help with.
+fn worm_message_reporting_errors(worm: u32, team: u32, msg: u32) -> bool {
+    match lua_host::worm_message(worm, team, msg) {
+        Ok(eat) => eat,
+        Err(e) => {
+            if let Ok(mut seen) = WORM_MSG_ERRORS.lock() {
+                if !seen.iter().any(|s| s == &e) {
+                    seen.push(e.clone());
+                    crate::log_error(&format!("worm_message (msg {msg:#x}): {e}"));
+                }
+            }
+            false
+        }
+    }
+}
+
 unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
     let team = if this.is_null() {
         0
@@ -364,7 +388,7 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if hurt {
         eat = crate::hurt::before(this, a, msg, b, c);
     }
-    eat = eat || lua_host::worm_message(this as u32, team, msg).unwrap_or(false);
+    eat = eat || worm_message_reporting_errors(this as u32, team, msg);
     if eat {
         return;
     }
