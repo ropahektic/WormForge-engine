@@ -10,6 +10,36 @@ plate_comment = "Partial. weapon_table confirmed: InitWeaponTable memset *(world
   comment = "Walk mask at Landscape+0x914. +0x910/+0x91C are paint. Map size at +0x77C0/+0x77C4."
 
   [[struct.field]]
+  offset = 0x5CC
+  name = "frame_counter"
+  type = "int"
+  comment = "Sim frame counter, incremented at the end of each frame in GameFrameDispatcher. WA keeps its own clock, so the determinism probe and any replay stream key off this rather than counting hook calls."
+
+  [[struct.field]]
+  offset = 0x45EC
+  name = "game_rng"
+  type = "uint"
+  comment = "Game RNG state: rng = (frame_counter + rng) * 0x19660D + 0x3C6EF35F. ONE shared RNG for gameplay and visual effects alike -- there is no visual-only code in a lockstep engine. Divergence here means something perturbed WA itself."
+
+  [[struct.field]]
+  offset = 0x72EC
+  name = "rng_state_1"
+  type = "uint"
+  comment = "Secondary RNG word, changes every frame."
+
+  [[struct.field]]
+  offset = 0x72F0
+  name = "rng_state_2"
+  type = "uint"
+  comment = "Secondary RNG word, changes every frame."
+
+  [[struct.field]]
+  offset = 0x7EF0
+  name = "recorded_frame_counter"
+  type = "int"
+  comment = "Recording-side frame counter, -1 while a replay is playing back. WA's own equivalent of Project X's IsReplay()."
+
+  [[struct.field]]
   offset = 0x510
   name = "weapon_table"
   type = "WeaponTable *"

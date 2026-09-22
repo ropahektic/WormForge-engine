@@ -330,6 +330,14 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if msg == MSG_RENDER_SCENE {
         crate::truecolor::begin_frame();
     }
+    // End of a sim frame, after WA's own handler: this is the state both
+    // peers must agree on, and the point WA increments its frame counter.
+    // Deliberately ABOVE the holding() gate -- that is the worm-carry state,
+    // false in ordinary play, so anything below it never runs in a normal
+    // turn and the probe would never fire.
+    if msg == MSG_FRAME_FINISH {
+        unsafe { crate::sync::observe(crate::world::session_world()) };
+    }
     if !holding() {
         return;
     }

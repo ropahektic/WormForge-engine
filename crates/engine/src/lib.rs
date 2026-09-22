@@ -18,6 +18,7 @@ mod rebase;
 pub mod render_queue;
 pub mod shader;
 mod sprite;
+mod sync;
 mod truecolor;
 mod version;
 mod world;

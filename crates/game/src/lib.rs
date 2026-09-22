@@ -1,6 +1,7 @@
 //! 32-bit WA 3.8.1 layouts. Offsets are Ghidra VAs / struct fields, not RVAs.
 
 pub mod entity;
+pub mod hash;
 pub mod offsets;
 pub mod weapon;
 

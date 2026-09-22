@@ -293,6 +293,32 @@ pub const ACTOR_TINT: usize = 0x148;
 pub const ACTOR_DEPTH: usize = 0x14C;
 pub const SHARED_WORLD_ROOT: u32 = 0x14;
 pub const GAME_WORLD_LANDSCAPE: usize = 0x20;
+/// Determinism probes. WA is a lockstep engine and these are the words that
+/// prove two runs agree; a replay or a networked peer diverges here first.
+/// Ported from the OpenWA catalog (`re/GameWorld.toml`), same 3.8.1 build.
+/// Cross-checked before trusting: both catalogs agree on struct size 0x98D8
+/// and on landscape 0x20, weapon_table 0x510, team_arena 0x4628,
+/// water_level 0x5E0 and level_width 0x77C0 -- so the base pointer is the
+/// same object and these land on the intended words.
+///
+/// `GameWorld.frame_counter` — incremented at the end of each frame in
+/// GameFrameDispatcher. WA keeps its own sim clock, so nothing here needs to
+/// invent one; this is the number the replay stream is keyed to.
+pub const GAME_WORLD_FRAME_COUNTER: usize = 0x5CC;
+/// `GameWorld.game_rng` — `rng = (frame_counter + rng) * 0x19660D + 0x3C6EF35F`.
+///
+/// ONE shared RNG for gameplay and visual effects alike. OpenWA's desync
+/// journal turned on exactly this: a skipped `debris.spr` load changed how
+/// often `GenerateDebrisParticles` ticked this word (15,470 writes vs 17,106)
+/// and the whole simulation drifted. Treat it as the canary.
+pub const GAME_WORLD_GAME_RNG: usize = 0x45EC;
+/// Secondary RNG words, both of which change every frame.
+pub const GAME_WORLD_RNG_STATE_1: usize = 0x72EC;
+pub const GAME_WORLD_RNG_STATE_2: usize = 0x72F0;
+/// `GameWorld.recorded_frame_counter` — **-1 while a replay is playing back**.
+/// This is WA's own answer to Project X's `IsReplay()`, for free.
+pub const GAME_WORLD_RECORDED_FRAME: usize = 0x7EF0;
+
 pub const GAME_WORLD_WATER_LEVEL: usize = 0x5E0;
 pub const GAME_WORLD_WATER_KILL_Y: usize = 0x5E4;
 /// Map pixel size (GameWorld). Blas / BitGrid fallback.
@@ -458,5 +484,13 @@ mod tests {
         assert_eq!(CLASS_CRATE, 15);
         assert_eq!(CLASS_MINE, 8);
         assert_eq!(ENT_CHILDREN_DATA, 0x14);
+        // Determinism probes, ported from OpenWA's 3.8.1 catalog.
+        assert_eq!(GAME_WORLD_FRAME_COUNTER, 0x5CC);
+        assert_eq!(GAME_WORLD_GAME_RNG, 0x45EC);
+        assert_eq!(GAME_WORLD_RNG_STATE_1, 0x72EC);
+        assert_eq!(GAME_WORLD_RNG_STATE_2, 0x72F0);
+        assert_eq!(GAME_WORLD_RECORDED_FRAME, 0x7EF0);
+        // Every probe must land inside the struct.
+        assert!(GAME_WORLD_RECORDED_FRAME < 0x98D8);
     }
 }

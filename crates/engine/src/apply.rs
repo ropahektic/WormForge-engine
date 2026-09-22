@@ -49,6 +49,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     crate::render_queue::clear_depths();
     // Flush the previous match's queue census before its counters are reused.
     crate::queue_census::finish();
+    crate::sync::finish();
     crate::truecolor::clear();
     crate::gpu::clear();
     crate::fog::clear();

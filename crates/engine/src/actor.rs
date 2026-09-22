@@ -1030,6 +1030,20 @@ fn native_list_actors() -> Vec<u32> {
     LIVE.lock().map(|g| g.clone()).unwrap_or_default()
 }
 
+/// Live worms for the determinism probe, walked by (team, index) rather than
+/// by address so two runs enumerate them in the same order. Resolves the
+/// tables from the global session, so it needs no entity to start from.
+pub fn live_worms() -> Vec<u32> {
+    unsafe { list_worms(std::ptr::null_mut()) }
+}
+
+/// Our own live actors, in spawn order: `LIVE` is a `Vec` and `retain`
+/// preserves it, so this is reproducible where an address-keyed set would not
+/// be.
+pub fn live_actors() -> Vec<u32> {
+    native_list_actors()
+}
+
 fn native_list_worms(from: u32) -> Vec<u32> {
     unsafe { list_worms(from as *mut u8) }
 }
