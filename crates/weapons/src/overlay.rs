@@ -70,8 +70,14 @@ pub struct ClusterSpec {
     pub trail_path: Option<String>,
     /// 0 = no bounce. 100 = grenade-like.
     pub bounce_pct: i32,
+    /// 0 = bounce forever (until fuse/prox/rest). N = explode after N terrain hits.
+    pub bounces: i32,
+    /// 0 = no fuse. Else ms until boom (grenade timer).
+    pub fuse_ms: i32,
+    /// 0 = no proximity. Else px radius — boom when a worm enters (mine-like).
+    pub proximity: i32,
     pub homing: ClusterHoming,
-    /// Explode when a bit lands (or finishes bouncing).
+    /// Explode on first land (ignores bounce).
     pub impact: bool,
 }
 
@@ -85,6 +91,9 @@ impl Default for ClusterSpec {
             trail: 0,
             trail_path: None,
             bounce_pct: 0,
+            bounces: 0,
+            fuse_ms: 0,
+            proximity: 0,
             homing: ClusterHoming::Off,
             impact: false,
         }
@@ -105,6 +114,9 @@ impl ClusterSpec {
             trail: 609,
             trail_path: None,
             bounce_pct: 0,
+            bounces: 0,
+            fuse_ms: 0,
+            proximity: 0,
             homing: ClusterHoming::Off,
             impact,
         }
@@ -468,7 +480,9 @@ pub fn apply_params(entry: &mut WeaponEntry, params: &OverlayParams) {
         entry.set_wind_pct(v);
     }
     if let Some(v) = params.sprite_id {
-        entry.set_sprite_id(v);
+        // Replace flight + HM burn seed fields (entry +0xE0/+0xE4), not only +0x60.
+        let old = entry.sprite_id();
+        entry.retarget_sprite_id(old, v);
     }
     if let Some(v) = params.cluster_sprite_id {
         entry.set_cluster_sprite_id(v);
@@ -580,6 +594,26 @@ mod tests {
         ]);
         assert!(resolved.skipped.is_empty());
         assert_eq!(resolved.applied.len(), 2);
+    }
+
+    #[test]
+    fn apply_params_retargets_homing_burn_seeds() {
+        let mut entry = WeaponEntry::default();
+        entry.set_sprite_id(59);
+        entry.write_i32(0xAC, 58);
+        entry.write_i32(0xE0, 58);
+        entry.write_i32(0xE4, 59);
+        apply_params(
+            &mut entry,
+            &OverlayParams {
+                sprite_id: Some(50), // e.g. sprite = "wroll"
+                ..Default::default()
+            },
+        );
+        assert_eq!(entry.sprite_id(), 50);
+        assert_eq!(entry.read_i32(0xAC), 50);
+        assert_eq!(entry.read_i32(0xE0), 50);
+        assert_eq!(entry.read_i32(0xE4), 50);
     }
 
     #[test]

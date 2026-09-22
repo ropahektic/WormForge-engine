@@ -110,8 +110,20 @@ pub const GAME_WORLD_PANEL_IMG: usize = 0x144;
 pub const CUSTOM_SPRITE_SENTINEL: i32 = 1023;
 /// MissileEntity.weapon_data[9] — copy of fire-params sprite_id.
 pub const MISSILE_WEAPON_SPRITE: usize = 0x180;
+/// Mirror of WeaponEntry+0xAC inside the copied fire-params blob
+/// (`weapon_data` base 0x15C + 0x70). Stock HM keeps hmissil1 here.
+pub const MISSILE_WEAPON_ALT_SPRITE: usize = 0x1CC;
 /// MissileEntity.fire_particle_trigger — sprite id missile render actually blits.
 pub const MISSILE_RENDER_SPRITE: usize = 0x2EC;
+/// Alternate sprite bank when entity+0x100 is set (render reads +0x338).
+pub const MISSILE_ALT_BANK_SPRITE: usize = 0x338;
+/// Used when entity+0x3A4 is set instead of the normal render sprite.
+pub const MISSILE_RENDER_SPRITE_ALT: usize = 0x368;
+/// Homing-mode blink pair (stock reads these while entity+0x394 == 1).
+pub const MISSILE_HOMING_SPRITE_A: usize = 0x36C;
+pub const MISSILE_HOMING_SPRITE_B: usize = 0x370;
+/// Homing physics/render mode: 1 = lock engaged (burn blit path).
+pub const MISSILE_HOMING_MODE: usize = 0x394;
 /// MissileEntity.animation_phase — GetSpriteFrameForBlit anim_value.
 pub const MISSILE_ANIM_PHASE: usize = 0x3E8;
 
@@ -317,9 +329,11 @@ pub const GAME_WORLD_MAP_W: usize = 0x77C0;
 /// GameWorld.viewport_pixel_width / height (GameRender).
 pub const GAME_WORLD_VIEWPORT_W: usize = 0x77AC;
 pub const GAME_WORLD_VIEWPORT_H: usize = 0x77B0;
-/// viewport_coords[3] camera center (Fixed 16.16). ClipContext / listener.
-pub const GAME_WORLD_VIEW_CX: usize = 0x8CEC;
-pub const GAME_WORLD_VIEW_CY: usize = 0x8CF0;
+/// `viewport_coords[3]` camera centre (Fixed 16.16). WA packs **Y then X**
+/// at these offsets (verified: swapping broke overlay into off-screen Y and
+/// washed-only fallback). `view_cam()` still returns `(cx, cy)`.
+pub const GAME_WORLD_VIEW_CY: usize = 0x8CEC;
+pub const GAME_WORLD_VIEW_CX: usize = 0x8CF0;
 /// GameWorld land targeting cursor (16.16). Blas / teleport marker.
 pub const GAME_WORLD_LAND_CURSOR_X: usize = 0x7380;
 pub const GAME_WORLD_LAND_CURSOR_Y: usize = 0x7384;
@@ -387,6 +401,15 @@ pub const BITGRID_DISPLAY_VTABLE: u32 = 0x0066_4144;
 pub const SPRITE_VTABLE: u32 = 0x0066_418C;
 pub const CONSTRUCT_SPRITE: u32 = 0x004F_AA30;
 pub const PROCESS_SPRITE: u32 = 0x004F_AB80;
+/// PaletteContext__MapColor — thiscall(this=PaletteContext, rgb), RET 4.
+/// Exact cache hit or pop free list; returns 0xFFFFFFFF on overflow.
+pub const MAP_COLOR: u32 = 0x0054_12B0;
+/// PaletteContext__NearestColor — usercall EDI=PaletteContext, stdcall(rgb, *quality) RET 8.
+/// Same routine PX falls through to on WA 3.6.31 (`0x510550`); searches MapColor cache only.
+pub const NEAREST_COLOR: u32 = 0x0054_1340;
+/// Apply palette remap lut in-place to sprite pixels (ProcessSprite's post-MapColor step).
+/// stdcall(pixels, pitch_arg, remap, dword_width, rows) RET 0x14.
+pub const APPLY_SPRITE_REMAP: u32 = 0x005B_2BEB;
 /// GfxHandler::LoadSprites — stdcall(runtime, sprite_data, flags, gfx_dir), ESI=PaletteContext, RET 16.
 /// World ctor calls it at 0x56E76A / 0x56E81C (after sprites.dat). PX InitGraphic is this window.
 pub const GFX_HANDLER_LOAD_SPRITES: u32 = 0x0057_0B50;
@@ -439,18 +462,28 @@ mod tests {
         assert_eq!(DISPLAY_GAME_LAYER, 3);
         assert_eq!(CONSTRUCT_SPRITE, 0x004FAA30);
         assert_eq!(PROCESS_SPRITE, 0x004FAB80);
+        assert_eq!(MAP_COLOR, 0x005412B0);
+        assert_eq!(NEAREST_COLOR, 0x00541340);
+        assert_eq!(APPLY_SPRITE_REMAP, 0x005B2BEB);
         assert_eq!(GFX_HANDLER_LOAD_SPRITES, 0x00570B50);
         assert_eq!(GAME_RUNTIME_DISPLAY, 0x4D0);
         assert_eq!(DISPLAY_PALETTE_ENTRIES, 0x358D);
         assert_eq!(PALETTE_COMMIT, 0x0056CD20);
         assert_eq!(MISSILE_RENDER_SPRITE, 0x2EC);
+        assert_eq!(MISSILE_WEAPON_ALT_SPRITE, 0x1CC);
+        assert_eq!(MISSILE_ALT_BANK_SPRITE, 0x338);
+        assert_eq!(MISSILE_RENDER_SPRITE_ALT, 0x368);
+        assert_eq!(MISSILE_HOMING_SPRITE_A, 0x36C);
+        assert_eq!(MISSILE_HOMING_SPRITE_B, 0x370);
+        assert_eq!(MISSILE_HOMING_MODE, 0x394);
         assert_eq!(MISSILE_ANIM_PHASE, 0x3E8);
         assert_eq!(LANDSCAPE_PLOT_SCRATCH, 0x0D0);
         assert_eq!(LANDSCAPE_COLLISION, 0x914);
         assert_eq!(LANDSCAPE_SOIL, 0x91C);
         assert_eq!(GAME_WORLD_MAP_W, 0x77C0);
         assert_eq!(GAME_WORLD_VIEWPORT_W, 0x77AC);
-        assert_eq!(GAME_WORLD_VIEW_CX, 0x8CEC);
+        assert_eq!(GAME_WORLD_VIEW_CY, 0x8CEC);
+        assert_eq!(GAME_WORLD_VIEW_CX, 0x8CF0);
         assert_eq!(GAME_WORLD_LAND_CURSOR_X, 0x7380);
         assert_eq!(WORM_START_FIRING, 0x0051B7F0);
         assert_eq!(WORM_RELEASE_WEAPON, 0x0051C010);

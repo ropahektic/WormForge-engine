@@ -75,6 +75,12 @@ struct SmokePuff {
 #[derive(Clone, Copy)]
 struct ClusterLive {
     bounce_pct: i32,
+    /// Remaining terrain hits before force-boom; 0 = unlimited.
+    bounces_left: i32,
+    /// Frames until auto-boom; 0 = no fuse.
+    fuse_frames: i32,
+    /// Worm proximity radius (px); 0 = off.
+    proximity: i32,
     homing: ClusterHoming,
     #[allow(dead_code)]
     impact: bool,
@@ -746,6 +752,10 @@ unsafe fn tick(this: *mut u8) {
     // CM message 1 already ran update_0 (stock gravity + rope) on this body.
     // Homemade pos+=vel / a second gravity leaf made the arc twice as fast.
     apply_cluster_homing(this);
+    apply_cluster_timers(this);
+    if read_i32(this, ACTOR_DEAD) != 0 {
+        return;
+    }
     let worm_hit = false;
     let mut land_now = false;
     let mut left_ground = false;
@@ -1101,16 +1111,16 @@ pub fn emit_attached(
     };
     let n = cluster.count.clamp(1, 16);
     let trail = trail_sprite(&cluster, n);
-    let rest = cluster.power <= 0;
-    let y = if rest {
-        y
-    } else {
+    // Stack every bit above the blast (WA Y+ is down). Side offsets made the
+    // explosion shove outer bits flat horizontally — keep X shared so knock
+    // lifts the whole bouquet into arcs.
+    let base_y = {
         let before = y;
-        let y = lift_clear(x, y);
-        if y != before {
-            log_line(&format!("attached lift y {before:#x} -> {y:#x}"));
+        let lifted = lift_clear(x, y);
+        if lifted != before {
+            log_line(&format!("attached lift y {before:#x} -> {lifted:#x}"));
         }
-        y
+        lifted
     };
     let mut bit_spawn = emit.spawn.clone();
     if let Some(c) = bit_spawn.cluster.as_mut() {
@@ -1118,31 +1128,30 @@ pub fn emit_attached(
         c.trail = trail;
         c.trail_path = cluster.trail_path.clone();
         c.sprite = sprite;
-    } else if n > 1 || trail != 0 || cluster.bounce_pct > 0 || cluster.homing != ClusterHoming::Off
-    {
-        bit_spawn.cluster = Some(ClusterSpec {
-            count: 1,
-            spread: cluster.spread,
-            power: cluster.power,
-            sprite,
-            trail,
-            trail_path: cluster.trail_path.clone(),
-            bounce_pct: cluster.bounce_pct,
-            homing: cluster.homing,
-            impact: cluster.impact,
-        });
+        if !c.impact && c.bounce_pct == 0 {
+            c.bounce_pct = 100;
+        }
+    } else if cluster_needs_live(&cluster) {
+        let mut c = cluster.clone();
+        c.count = 1;
+        c.sprite = sprite;
+        c.trail = trail;
+        c.trail_path = cluster.trail_path.clone();
+        bit_spawn.cluster = Some(c);
     }
     let mut first = None;
     let mut last_err = None;
     for i in 0..n {
-        let (vx, vy) = bit_vel(i, n, emit, &cluster);
-        let ox = (i * 2 - (n - 1)) * 0x2_0000;
-        let bx = x.wrapping_add(ox);
-        let by = y;
+        // Stack upward (2px) with a tiny X jitter so the blast fans arcs
+        // left/right — never park bits out on the flanks (±9px max at n=10).
+        let ox = (i * 2 - (n - 1)) * 0x10000;
+        let by = base_y.wrapping_sub((i + 1) * 0x2_0000);
+        // Rest: CreateExplosion's blast walk supplies the upward fan.
+        let (vx, vy) = (0, 0);
         let result = unsafe {
             spawn_lua_actor(SpawnBody {
                 owner,
-                x: bx,
+                x: x.wrapping_add(ox),
                 y: by,
                 vx,
                 vy,
@@ -1182,6 +1191,9 @@ fn cluster_of(emit: &AttachedSpawn) -> ClusterSpec {
         trail: emit.trail,
         trail_path: emit.trail_path.clone(),
         bounce_pct: 0,
+        bounces: 0,
+        fuse_ms: 0,
+        proximity: 0,
         homing: ClusterHoming::Off,
         impact: emit.spawn.explode.is_some(),
     });
@@ -1203,7 +1215,23 @@ fn cluster_of(emit: &AttachedSpawn) -> ClusterSpec {
     if c.sprite == 0 {
         c.sprite = emit.sprite;
     }
+    // Bounce bits without an explicit percent get grenade-like restitution.
+    if !c.impact && c.bounce_pct == 0 {
+        c.bounce_pct = 100;
+    }
     c
+}
+
+fn cluster_needs_live(c: &ClusterSpec) -> bool {
+    c.count > 1
+        || c.trail != 0
+        || c.trail_path.is_some()
+        || c.bounce_pct > 0
+        || c.bounces > 0
+        || c.fuse_ms > 0
+        || c.proximity > 0
+        || c.homing != ClusterHoming::Off
+        || !c.impact
 }
 
 fn bit_vel(i: i32, n: i32, emit: &AttachedSpawn, cluster: &ClusterSpec) -> (i32, i32) {
@@ -1221,6 +1249,8 @@ fn bit_vel(i: i32, n: i32, emit: &AttachedSpawn, cluster: &ClusterSpec) -> (i32,
         cluster.power
     } else if emit.vy < 0 {
         -emit.vy
+    } else if n > 1 {
+        ClusterSpec::STOCK_POWER
     } else {
         0
     };
@@ -1290,12 +1320,28 @@ fn remember_cluster(handle: u32, spec: &ClusterSpec) {
     if handle == 0 {
         return;
     }
+    let bounce_pct = if spec.bounce_pct > 0 {
+        spec.bounce_pct
+    } else if !spec.impact {
+        100
+    } else {
+        0
+    };
+    let fuse_frames = if spec.fuse_ms > 0 {
+        // WA logic is 50 fps.
+        (spec.fuse_ms.max(1) * 50 + 999) / 1000
+    } else {
+        0
+    };
     if let Ok(mut g) = CLUSTERS.lock() {
         g.retain(|(h, _)| *h != handle);
         g.push((
             handle,
             ClusterLive {
-                bounce_pct: spec.bounce_pct,
+                bounce_pct,
+                bounces_left: spec.bounces.max(0),
+                fuse_frames,
+                proximity: spec.proximity.max(0),
                 homing: spec.homing,
                 impact: spec.impact,
                 seek: false,
@@ -1307,6 +1353,51 @@ fn remember_cluster(handle: u32, spec: &ClusterSpec) {
 fn cluster_get(handle: u32) -> Option<ClusterLive> {
     let g = CLUSTERS.lock().ok()?;
     g.iter().find(|(h, _)| *h == handle).map(|(_, c)| *c)
+}
+
+fn cluster_update(handle: u32, f: impl FnOnce(&mut ClusterLive)) {
+    if let Ok(mut g) = CLUSTERS.lock() {
+        if let Some((_, c)) = g.iter_mut().find(|(h, _)| *h == handle) {
+            f(c);
+        }
+    }
+}
+
+unsafe fn apply_cluster_timers(this: *mut u8) {
+    let Some(live) = cluster_get(this as u32) else {
+        return;
+    };
+    if live.fuse_frames > 0 {
+        let left = live.fuse_frames - 1;
+        cluster_update(this as u32, |c| c.fuse_frames = left);
+        if left == 0 {
+            explode(this);
+            return;
+        }
+    }
+    if live.proximity > 0 && worm_in_proximity(this, live.proximity) {
+        explode(this);
+    }
+}
+
+unsafe fn worm_in_proximity(this: *mut u8, radius_px: i32) -> bool {
+    let owner = read_i32(this, ACTOR_OWNER) as u32;
+    let x = read_i32(this, ENT_POS_X);
+    let y = read_i32(this, ENT_POS_Y);
+    let r = (radius_px as i64) << 16;
+    let r2 = r.saturating_mul(r);
+    for w in list_worms(this) {
+        if w == 0 || w == owner || w == this as u32 {
+            continue;
+        }
+        let p = w as *mut u8;
+        let dx = (read_i32(p, ENT_POS_X) as i64) - (x as i64);
+        let dy = (read_i32(p, ENT_POS_Y) as i64) - (y as i64);
+        if dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy)) <= r2 {
+            return true;
+        }
+    }
+    false
 }
 
 unsafe fn apply_cluster_homing(this: *mut u8) {
@@ -1418,11 +1509,105 @@ unsafe fn spawn_configured(body: SpawnBody) -> Result<u32, String> {
                 path: None,
                 spawn: body.spawn.clone(),
             };
-            return emit_attached(body.owner, body.x, body.y, &emit, 0)
+            return emit_fan(body.owner, body.x, body.y, &emit, 0)
                 .ok_or_else(|| "cluster spawn failed".into());
         }
     }
     spawn_lua_actor(body)
+}
+
+/// Self-launched cluster fan (on_fire / at launch): stock CreateClusters rays.
+pub fn emit_fan(
+    owner: *mut u8,
+    x: i32,
+    y: i32,
+    emit: &AttachedSpawn,
+    inherit_sprite: i32,
+) -> Option<u32> {
+    let depth = EMIT_DEPTH.fetch_add(1, Ordering::SeqCst);
+    if depth >= 8 {
+        EMIT_DEPTH.fetch_sub(1, Ordering::SeqCst);
+        log_error("attached spawn depth 8, stopping");
+        return None;
+    }
+    let cluster = cluster_of(emit);
+    let visible = emit.spawn.visible;
+    let sprite = if !visible || emit.sprite == CUSTOM_SPRITE_SENTINEL {
+        CUSTOM_SPRITE_SENTINEL
+    } else if cluster.sprite != 0 {
+        cluster.sprite
+    } else if emit.sprite != 0 {
+        emit.sprite
+    } else if let Some(path) = &emit.path {
+        sprite::lookup_key(path)
+            .map(|r| r.id)
+            .unwrap_or(inherit_sprite)
+    } else if inherit_sprite != 0 {
+        inherit_sprite
+    } else {
+        CUSTOM_SPRITE_SENTINEL
+    };
+    let delta = if emit.delta != 0 {
+        emit.delta
+    } else {
+        sprite::actor_loop_delta(sprite)
+    };
+    let n = cluster.count.clamp(1, 16);
+    let trail = trail_sprite(&cluster, n);
+    let y = lift_clear(x, y);
+    let mut bit_spawn = emit.spawn.clone();
+    if let Some(c) = bit_spawn.cluster.as_mut() {
+        c.count = 1;
+        c.trail = trail;
+        c.trail_path = cluster.trail_path.clone();
+        c.sprite = sprite;
+        if !c.impact && c.bounce_pct == 0 {
+            c.bounce_pct = 100;
+        }
+    } else if cluster_needs_live(&cluster) {
+        let mut c = cluster.clone();
+        c.count = 1;
+        c.sprite = sprite;
+        c.trail = trail;
+        c.trail_path = cluster.trail_path.clone();
+        bit_spawn.cluster = Some(c);
+    }
+    let mut first = None;
+    let mut last_err = None;
+    for i in 0..n {
+        let (vx, vy) = bit_vel(i, n, emit, &cluster);
+        let result = unsafe {
+            spawn_lua_actor(SpawnBody {
+                owner,
+                x,
+                y,
+                vx,
+                vy,
+                sprite,
+                delta,
+                spawn: bit_spawn.clone(),
+            })
+        };
+        match result {
+            Ok(handle) => unsafe {
+                if first.is_none() {
+                    first = Some(handle);
+                }
+                let p = handle as *mut u8;
+                write_i32(p, ENT_WIND_SCALE, 0);
+                if trail != 0 {
+                    remember_trail(handle, trail);
+                    drop_puff(p);
+                }
+            },
+            Err(e) => last_err = Some(e),
+        }
+    }
+    EMIT_DEPTH.fetch_sub(1, Ordering::SeqCst);
+    if let Some(e) = last_err {
+        log_error(&format!("fan spawn: {e}"));
+    }
+    first
 }
 
 fn drop_puff(this: *mut u8) {
@@ -1716,8 +1901,64 @@ unsafe fn drowned(this: *mut u8, world: *mut u8) -> bool {
 
 unsafe fn land(this: *mut u8) {
     if (read_i32(this, ACTOR_FLAGS) & ACTOR_FLAG_EXPLODE) != 0 {
+        // Donkey / bounce-boom: persist + explode. Without an upward kick the crater
+        // re-lands the bit in the same impact and burns bounces=N in a few frames.
+        if let Some(live) = cluster_get(this as u32) {
+            if live.bounces_left > 0 {
+                let left = live.bounces_left - 1;
+                cluster_update(this as u32, |c| c.bounces_left = left);
+                if left == 0 {
+                    let flags = read_i32(this, ACTOR_FLAGS);
+                    explode_at(
+                        this,
+                        read_i32(this, ACTOR_DAMAGE),
+                        read_i32(this, ACTOR_BOOM_ID),
+                        (flags & ACTOR_FLAG_EXPLODE_BELOW) != 0,
+                        (flags & ACTOR_FLAG_DAMAGE_TERRAIN) != 0,
+                        (flags & ACTOR_FLAG_DAMAGE_WORMS) != 0,
+                    );
+                    die(this);
+                    return;
+                }
+                // Boom without self-knock, then grenade-style bounce on the
+                // impact velocity (own blast was shoving bits sideways).
+                explode_no_self_knock(this);
+                if read_i32(this, ACTOR_DEAD) == 0 {
+                    let pct = if live.bounce_pct > 0 {
+                        live.bounce_pct
+                    } else {
+                        100
+                    };
+                    bounce_step(this, pct);
+                }
+                return;
+            }
+        }
         explode(this);
-    } else if (read_i32(this, ACTOR_FLAGS) & ACTOR_FLAG_PERSIST) == 0 {
+        return;
+    }
+    // Custom cluster bits: bounce / fuse / prox — never instant-despawn on dirt.
+    if let Some(live) = cluster_get(this as u32) {
+        if live.bounce_pct > 0 {
+            if live.bounces_left > 0 {
+                let left = live.bounces_left - 1;
+                cluster_update(this as u32, |c| c.bounces_left = left);
+                if left == 0 {
+                    explode(this);
+                    return;
+                }
+            }
+            bounce_step(this, live.bounce_pct);
+            return;
+        }
+        // Drop-and-wait (fuse / proximity mine bits): sit until timer or worm.
+        if live.fuse_frames > 0 || live.proximity > 0 {
+            write_i32(this, ENT_SPEED_X, 0);
+            write_i32(this, ENT_SPEED_Y, 0);
+            return;
+        }
+    }
+    if (read_i32(this, ACTOR_FLAGS) & ACTOR_FLAG_PERSIST) == 0 {
         die(this);
     }
 }
@@ -1735,6 +1976,16 @@ unsafe fn explode(this: *mut u8) {
     );
     if !persist {
         die(this);
+    }
+}
+
+/// Terrain/worm boom still fires; this body ignores its own blast mass.
+unsafe fn explode_no_self_knock(this: *mut u8) {
+    let mass = read_i32(this, ENT_BLAST_MASS);
+    write_i32(this, ENT_BLAST_MASS, 0);
+    explode(this);
+    if read_i32(this, ACTOR_DEAD) == 0 {
+        write_i32(this, ENT_BLAST_MASS, mass);
     }
 }
 

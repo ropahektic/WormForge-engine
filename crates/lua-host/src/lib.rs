@@ -432,6 +432,45 @@ wa.weapons.replace({
         assert_eq!(fx.homing, weapons::ClusterHoming::Off);
         assert!(!spawn.collide);
         assert!(spawn.explode.is_none());
+
+        let bounce = pack(
+            &root.join("b"),
+            "user.cluster_bounce",
+            r#"
+id = "user.cluster_bounce"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["bazooka"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "bazooka",
+  copy_from = "mine",
+  on_explode = {
+    spawn = {
+      kind = "cluster",
+      sprite = "banana",
+      count = 5,
+      impact = false,
+      bounces = 3,
+      fuse = 2000,
+      proximity = 40,
+      explode = { damage = 30, id = 100 },
+    },
+  },
+})
+"#,
+        );
+        let scripts = run_mods(&[bounce]).unwrap();
+        let c = &scripts.resolved.applied[0];
+        let boom = c.params.explode_spawn.as_ref().expect("bounce cluster");
+        let spec = boom.spawn.cluster.as_ref().expect("bounce spec");
+        assert!(!spec.impact);
+        assert_eq!(spec.bounce_pct, 100); // default grenade bounce when omitted
+        assert_eq!(spec.bounces, 3);
+        assert_eq!(spec.fuse_ms, 2000);
+        assert_eq!(spec.proximity, 40);
     }
 
     fn pack(dir: &std::path::Path, _id: &str, toml: &str, lua: &str) -> LoadedMod {

@@ -154,13 +154,36 @@ impl WeaponEntry {
     /// reads `AirStrike+0x60` as weapon_data, which is entry `+0x74` —
     /// the field named wind_influence. Stock donkey stores KnownSpriteId
     /// Donkey (82) there, not fire-params sprite_id (100).
+    ///
+    /// Homing missile stores several body graphic ids. Missile ctor copies
+    /// fire-params into entity+0x15C, then mirrors a slice onto the render
+    /// banks: +0x2EC ← +0x180 (sprite_id), +0x36C/+0x370 ← +0x200/+0x204
+    /// (entry +0xE0/+0xE4). Lock mode (`entity+0x394 == 1`) blits that blink
+    /// pair — so every sibling must become `new`, not only +0x60/+0xAC.
     pub fn retarget_sprite_id(&mut self, old: i32, new: i32) {
         if old == new {
             return;
         }
         self.set_sprite_id(new);
         const DONKEY_GFX: i32 = 82;
-        for off in [0x64usize, 0x68, WEAPON_WIND_PCT, 0x110, 0x114, 0x118] {
+        // Flight + burn/turn siblings: HM (58/59), bullet (49), pigeon turns.
+        const HOMING_ALTS: &[i32] = &[58, 59, 49, 175, 176, 177, 178, 673, 674];
+        for off in [
+            0x64usize,
+            0x68,
+            0xAC, // stock HM alternate (hmissil1)
+            0xDC, // seeds MISSILE_RENDER_SPRITE_ALT (+0x368)
+            0xE0, // seeds MISSILE_HOMING_SPRITE_A (+0x36C) after ctor mirror
+            0xE4, // seeds MISSILE_HOMING_SPRITE_B (+0x370)
+            WEAPON_CLUSTER_SPRITE,
+            WEAPON_CLUSTER_RENDER_TIMER,
+        ] {
+            let v = self.read_i32(off);
+            if v == old || v == DONKEY_GFX || HOMING_ALTS.contains(&v) {
+                self.write_i32(off, new);
+            }
+        }
+        for off in [WEAPON_WIND_PCT, 0x110usize, 0x114, 0x118] {
             let v = self.read_i32(off);
             if v == old || v == DONKEY_GFX {
                 self.write_i32(off, new);
@@ -324,5 +347,25 @@ mod tests {
         assert_eq!(dest.read_i32(0x64), 801);
         assert_eq!(dest.read_i32(0x68), 801);
         assert_eq!(dest.wind_pct(), 801);
+    }
+
+    #[test]
+    fn retarget_replaces_homing_burn_alt() {
+        let mut e = WeaponEntry::default();
+        e.set_sprite_id(59); // hmissil2 primary
+        e.write_i32(0xAC, 58); // hmissil1 alternate / pre-lock
+        e.write_i32(0xDC, 58);
+        e.write_i32(0xE0, 58); // burn blink A seed
+        e.write_i32(0xE4, 59); // burn blink B seed
+        e.write_i32(0x64, 59);
+        e.write_i32(0x68, 59);
+        e.retarget_sprite_id(59, 900);
+        assert_eq!(e.sprite_id(), 900);
+        assert_eq!(e.read_i32(0xAC), 900);
+        assert_eq!(e.read_i32(0xDC), 900);
+        assert_eq!(e.read_i32(0xE0), 900);
+        assert_eq!(e.read_i32(0xE4), 900);
+        assert_eq!(e.read_i32(0x64), 900);
+        assert_eq!(e.read_i32(0x68), 900);
     }
 }

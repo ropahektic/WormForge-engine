@@ -14,13 +14,15 @@ use crate::log_line;
 use crate::rebase::rb;
 use game::entity::{is_missile, read_cm_forces, read_i32, read_motion, write_i32, write_motion, write_scales};
 use game::offsets::{
-    APPLY_PROJECTILE_GRAVITY, ENT_MOVED, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y,
-    ENT_WORM_TEAM, HIT_AMOUNT, HIT_TEAM, MISSILE_HANDLE_MESSAGE, MISSILE_VTABLE, MSG_COMMIT_HEALTH,
-    MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE, WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW,
-    WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR, WORM_DRAW_HEALTH, WORM_DRAW_HUD, WORM_DRAW_NAME,
-    WORM_DRAW_OFFMAP, WORM_DRAW_SPRITE, WORM_DRAW_TURN, WORM_SHOW_CURSOR, WORM_FACING,
-    WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_STATE, WORM_STATE_AIRBORNE, WORLD_ROOT_HANDLE_MESSAGE,
-    WORLD_ROOT_TURN_ENDED,
+    APPLY_PROJECTILE_GRAVITY, CUSTOM_SPRITE_SENTINEL, CUSTOM_SPRITE_SLOT_MIN, ENT_MOVED, ENT_POS_X,
+    ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y, ENT_WORM_TEAM, HIT_AMOUNT, HIT_TEAM, MISSILE_ALT_BANK_SPRITE,
+    MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
+    MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT, MISSILE_VTABLE, MISSILE_WEAPON_ALT_SPRITE,
+    MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE,
+    WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW, WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR, WORM_DRAW_HEALTH,
+    WORM_DRAW_HUD, WORM_DRAW_NAME, WORM_DRAW_OFFMAP, WORM_DRAW_SPRITE, WORM_DRAW_TURN,
+    WORM_SHOW_CURSOR, WORM_FACING, WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_STATE,
+    WORM_STATE_AIRBORNE, WORLD_ROOT_HANDLE_MESSAGE, WORLD_ROOT_TURN_ENDED,
 };
 use minhook::MinHook;
 use re_catalog::Catalog;
@@ -38,6 +40,10 @@ static ORIG_ROOT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_DRAW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_NAME: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_HUD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+/// Missile ptr → body sprite that should survive the lock-mode bank switch.
+static HM_CUSTOM: Mutex<Vec<(usize, i32)>> = Mutex::new(Vec::new());
+/// Logged (entity, mode) pairs so we see ballistic and lock once each.
+static HM_LOGGED: Mutex<Vec<(usize, i32)>> = Mutex::new(Vec::new());
 static ORIG_HEALTH: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_CURSOR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_OFFMAP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -298,6 +304,9 @@ unsafe extern "thiscall" fn missile_hook(
     b: u32,
     c: *mut u8,
 ) {
+    // Homing lock switches blit banks mid-flight (entity+0x394). Keep every
+    // body-graphic slot on our custom sheet *before* stock runs (incl. render).
+    unsafe { remap_homing_body_sprites(this) };
     if msg == MSG_FRAME_FINISH {
         if let Some(m) = unsafe { read_motion(this) } {
             if let Ok(after) = lua_host::missile_frame(m, msg, "pre") {
@@ -310,6 +319,8 @@ unsafe extern "thiscall" fn missile_hook(
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
     }
+    // Stock may refresh burn banks when lock engages — push custom again.
+    unsafe { remap_homing_body_sprites(this) };
     if msg == MSG_FRAME_FINISH {
         if let Some(m) = unsafe { read_motion(this) } {
             if let Ok(after) = lua_host::missile_frame(m, msg, "post") {
@@ -320,8 +331,116 @@ unsafe extern "thiscall" fn missile_hook(
     }
 }
 
+/// Body graphic slots stock HM / pigeon may blit from across flight → lock.
+const BODY_GFX_OFFS: &[usize] = &[
+    MISSILE_WEAPON_SPRITE,
+    MISSILE_WEAPON_ALT_SPRITE,
+    MISSILE_RENDER_SPRITE,
+    MISSILE_ALT_BANK_SPRITE,
+    MISSILE_RENDER_SPRITE_ALT,
+    MISSILE_HOMING_SPRITE_A,
+    MISSILE_HOMING_SPRITE_B,
+];
+
+/// Stock HM engages a second physics/render mode (`+0x394 == 1`) that blits the
+/// burn blink pair instead of the flight sprite. Remember the body sheet from
+/// the ballistic phase (custom *or* any non-HM replacement like wroll) and keep
+/// every body slot on it through the mode switch.
+unsafe fn remap_homing_body_sprites(entity: *mut u8) {
+    if entity.is_null() {
+        return;
+    }
+    let key = entity as usize;
+    let mode = unsafe { read_i32(entity, MISSILE_HOMING_MODE) };
+    let flight = unsafe { read_i32(entity, MISSILE_RENDER_SPRITE) };
+    let weapon = unsafe { read_i32(entity, MISSILE_WEAPON_SPRITE) };
+
+    let mut body = None;
+    for &off in BODY_GFX_OFFS {
+        let id = unsafe { read_i32(entity, off) };
+        if is_replacement_body(id) {
+            body = Some(id);
+            break;
+        }
+    }
+    if body.is_none() {
+        if let Ok(g) = HM_CUSTOM.lock() {
+            body = g.iter().find(|(e, _)| *e == key).map(|(_, id)| *id);
+        }
+    }
+    // Ballistic: remember whatever non-HM sheet is actually flying so lock
+    // cannot fall back to stock 58/59.
+    if body.is_none() && mode == 0 {
+        for id in [flight, weapon] {
+            if id > 0 && !is_stock_homing_body(id) {
+                body = Some(id);
+                break;
+            }
+        }
+    }
+    let Some(body) = body else {
+        return;
+    };
+    if let Ok(mut g) = HM_CUSTOM.lock() {
+        if let Some(slot) = g.iter_mut().find(|(e, _)| *e == key) {
+            slot.1 = body;
+        } else {
+            g.push((key, body));
+        }
+    }
+
+    let mut wrote = false;
+    for &off in BODY_GFX_OFFS {
+        let id = unsafe { read_i32(entity, off) };
+        if id != body && (id <= 0 || is_stock_homing_body(id)) {
+            unsafe { write_i32(entity, off, body) };
+            wrote = true;
+        }
+    }
+    for off in [MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B] {
+        if unsafe { read_i32(entity, off) } != body {
+            unsafe { write_i32(entity, off, body) };
+            wrote = true;
+        }
+    }
+    for off in (0x15Cusize..=0x210).step_by(4) {
+        let id = unsafe { read_i32(entity, off) };
+        if is_stock_homing_body(id) && id != body {
+            unsafe { write_i32(entity, off, body) };
+            wrote = true;
+        }
+    }
+
+    if wrote || mode == 1 {
+        if let Ok(mut logged) = HM_LOGGED.lock() {
+            if !logged.iter().any(|(e, m)| *e == key && *m == mode) {
+                logged.push((key, mode));
+                log_line(&format!(
+                    "hm body remap entity={key:#x} body={body} mode={mode} flight={flight} a={} b={}",
+                    unsafe { read_i32(entity, MISSILE_HOMING_SPRITE_A) },
+                    unsafe { read_i32(entity, MISSILE_HOMING_SPRITE_B) },
+                ));
+            }
+        }
+    }
+}
+
+fn is_custom_sprite(id: i32) -> bool {
+    id >= CUSTOM_SPRITE_SLOT_MIN && id < CUSTOM_SPRITE_SENTINEL
+}
+
+/// Custom install slots, or any positive id that is not a stock HM/pigeon body.
+fn is_replacement_body(id: i32) -> bool {
+    is_custom_sprite(id) || (id > 0 && !is_stock_homing_body(id) && id < CUSTOM_SPRITE_SENTINEL)
+}
+
+fn is_stock_homing_body(id: i32) -> bool {
+    matches!(id, 58 | 59 | 49 | 175 | 176 | 177 | 178 | 673 | 674)
+}
+
 unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
     if msg == MSG_RENDER_SCENE {
+        // Puff scratch for this render pass.
         crate::actor::begin_puff_frame();
     }
     let orig = ORIG_ROOT.load(Ordering::SeqCst);

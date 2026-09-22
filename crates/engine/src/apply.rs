@@ -25,9 +25,8 @@ struct GfxPass {
 static GFX: Mutex<Option<GfxPass>> = Mutex::new(None);
 
 /// PX `InitGraphic`: custom PNG/GIF sprites immediately after `LoadSprites`
-/// (`sprites.dat`). In-match colour is the map's 256-slot PaletteContext
-/// (usually already full). We quantize the PNG onto that table; stock
-/// `SetLayerVisibility(3, 1)` later commits it.
+/// (`sprites.dat`). Palette overflow may wash colours; Edlud's render PR
+/// owns a real fix. Stock `SetLayerVisibility(3, 1)` later commits the table.
 pub fn on_gfx_ready(display: *mut u8) {
     if display.is_null() {
         return;
@@ -45,6 +44,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     actor::clear_claims();
     crate::worm_sprite::clear();
     crate::mine::clear();
+    crate::missile_boom::clear();
 
     let mods_dir = mods_root_from(&wa_directory());
     log_line(&format!("loading mods from {}", mods_dir.display()));
@@ -315,6 +315,29 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 "{} MineEntity slot {idx} sprite {sprite} damage {}",
                 claim.mod_id,
                 claim.params.damage.unwrap_or(100)
+            ));
+        } else if !claim.params.uses_lua_projectile()
+            && (claim.params.explode_spawn.is_some() || claim.params.on_explode_id != 0)
+        {
+            // Same attach pattern as mines: stock MissileEntity (HM/bazooka/…)
+            // keeps its fire path; Lua bits spawn on detonate.
+            let sprite = pass
+                .sprite_ids
+                .get(&idx)
+                .copied()
+                .or(claim.params.sprite_id)
+                .unwrap_or(0);
+            crate::missile_boom::claim(
+                idx,
+                crate::missile_boom::BoomTune {
+                    sprite,
+                    explode: claim.params.explode_spawn.clone(),
+                    explode_id: claim.params.on_explode_id,
+                },
+            );
+            log_line(&format!(
+                "{} MissileEntity on_explode slot {idx}",
+                claim.mod_id
             ));
         }
         log_line(&format!(

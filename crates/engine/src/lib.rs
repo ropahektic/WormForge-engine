@@ -11,6 +11,7 @@ mod hurt;
 mod overlay;
 mod log;
 mod mine;
+mod missile_boom;
 mod physics;
 mod rebase;
 mod sprite;

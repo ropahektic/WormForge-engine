@@ -149,7 +149,7 @@ fn live_tune(this: *mut u8) -> Option<MineTune> {
     live_mine(this).map(|m| m.tune)
 }
 
-fn slot_from_fire_params(this: *mut u8, fire_params: *const i32) -> Option<usize> {
+pub(crate) fn slot_from_fire_params(this: *mut u8, fire_params: *const i32) -> Option<usize> {
     if this.is_null() || fire_params.is_null() {
         return None;
     }

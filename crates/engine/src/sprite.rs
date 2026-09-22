@@ -1,17 +1,6 @@
-//! Install a PNG strip or GIF the same way PX `LoadSprite` / stock `LoadSprite` do.
-//!
-//! PX (`pxlog.txt`): after `Loading sprites.dat`, `Loading custom sprites` →
-//! `InitGraphic@` → `LoadSprite(png, columns, rows)` → `CSprite->Index`.
-//! That is `GfxHandler__LoadSprites` (0x570B50) returning in the world ctor.
-//! Stock later flushes colour with `SetLayerVisibility(3, 1)` → `UpdatePalette`.
-//!
-//! In-match colour is the **map palette** in `PaletteContext.rgb_table` (256
-//! slots, usually all in use by the time sprites.dat finishes). Frontend
-//! `Graphics/*.pal` RIFF files are a different table. ProcessSprite's MapColor
-//! only exact-matches the cache or allocates; when `free_count==0` we rewrite
-//! the .spr RGB to the nearest live slot (3|dR|+5|dG|+2|dB|, same as
-//! FindNearestCached 0x541340) and put that slot in the cache so MapColor
-//! hits instead of returning 0xFFFFFFFF (white).
+//! Install a PNG strip or GIF as a WA `.spr` via ConstructSprite + ProcessSprite.
+//! Palette overflow washes colours onto the live map table — left for Edlud's
+//! render PR; we do not pre-resolve / steal / nearest-rewrite here.
 
 use crate::log_line;
 use crate::rebase::rb;
@@ -63,11 +52,7 @@ pub struct SpriteRef {
     pub h: i32,
 }
 
-const PAL_RGB: usize = 0x04;
-const PAL_IN_USE: usize = 0x404;
 const PAL_FREE_COUNT: usize = 0x504;
-const PAL_CACHE_COUNT: usize = 0x606;
-const PAL_CACHE: usize = 0x608;
 
 pub fn clear() {
     if let Ok(mut g) = LOADED.lock() {
@@ -219,27 +204,25 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
     }
 
     let free_before = unsafe { *(pal_ctx.add(PAL_FREE_COUNT) as *const i16) };
-    let cache_n = unsafe { *(pal_ctx.add(PAL_CACHE_COUNT) as *const i16) };
 
     let mut sprite = Box::new(SpriteObj([0u8; 0x70]));
     let mut spr = spr.into_boxed_slice();
     unsafe {
-        let snapped = quantize_to_map_palette(pal_ctx, &mut spr)?;
-        log_line(&format!(
-            "LoadSprite equivalent: slot {id} layer {layer} free={free_before} cache={cache_n} quantized={snapped}"
-        ));
         construct_sprite(sprite.0.as_mut_ptr(), cache);
         let ok = process_sprite(sprite.0.as_mut_ptr(), pal_ctx, spr.as_mut_ptr());
         if ok == 0 {
             return Err("ProcessSprite returned 0".into());
         }
+        let free_after = *(pal_ctx.add(PAL_FREE_COUNT) as *const i16);
+        log_line(&format!(
+            "LoadSprite equivalent: slot {id} layer {layer} free={free_before}->{free_after}"
+        ));
         let ptrs = (display as usize + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
         let layers = (display as usize + DISPLAY_SPRITE_LAYERS) as *mut u32;
         let vis = (display as usize + DISPLAY_LAYER_VISIBILITY) as *mut u32;
         *ptrs.add(id as usize) = sprite.0.as_mut_ptr();
         *layers.add(id as usize) = layer;
         *vis.add(layer as usize) = (*vis.add(layer as usize)).wrapping_add(1);
-        let free_after = *(pal_ctx.add(PAL_FREE_COUNT) as *const i16);
         log_line(&format!(
             "installed .spr at sprite id {id} layer {layer} ({} frames loop={} delta={} free={})",
             strip.frames.len(),
@@ -440,132 +423,6 @@ unsafe fn palette_ctx(display: *mut u8) -> (*mut u8, u32) {
     }
 }
 
-/// Rewrite .spr RGB to the live map palette so ProcessSprite MapColor exact-matches
-/// instead of allocating (or returning 0xFF when the table is full).
-unsafe fn quantize_to_map_palette(pal_ctx: *mut u8, spr: &mut [u8]) -> Result<u32, String> {
-    if spr.len() < 12 {
-        return Err("truncated .spr".into());
-    }
-    let pal_n = u16::from_le_bytes([spr[10], spr[11]]) as usize;
-    if pal_n == 0 {
-        return Ok(0);
-    }
-    let cache_n = unsafe { *(pal_ctx.add(PAL_CACHE_COUNT) as *const i16) };
-    let use_cache_only = cache_n >= 256;
-    let mut snapped = 0u32;
-    for i in 0..pal_n {
-        let o = 12 + i * 3;
-        if o + 2 >= spr.len() {
-            break;
-        }
-        let rgb = spr[o] as u32 | ((spr[o + 1] as u32) << 8) | ((spr[o + 2] as u32) << 16);
-        let Some(slot) = (unsafe {
-            if use_cache_only {
-                nearest_in_cache(pal_ctx, rgb)
-            } else {
-                nearest_in_use(pal_ctx, rgb)
-            }
-        }) else {
-            return Err("map palette has no in-use colours".into());
-        };
-        let [r, g, b] = unsafe { rgb_at(pal_ctx, slot) };
-        if [r, g, b] != [spr[o], spr[o + 1], spr[o + 2]] {
-            spr[o] = r;
-            spr[o + 1] = g;
-            spr[o + 2] = b;
-            snapped += 1;
-        }
-        unsafe {
-            ensure_cached(pal_ctx, slot);
-        }
-    }
-    Ok(snapped)
-}
-
-unsafe fn ensure_cached(ctx: *mut u8, slot: u32) {
-    if slot == 0 || slot > 255 {
-        return;
-    }
-    unsafe {
-        let n = *(ctx.add(PAL_CACHE_COUNT) as *const i16);
-        let search = (n as usize).min(256);
-        for i in 0..search {
-            if *ctx.add(PAL_CACHE + i) as u32 == slot {
-                return;
-            }
-        }
-        if n >= 256 {
-            return;
-        }
-        *ctx.add(PAL_CACHE + n as usize) = slot as u8;
-        *(ctx.add(PAL_CACHE_COUNT) as *mut i16) = n + 1;
-    }
-}
-
-unsafe fn nearest_in_cache(ctx: *mut u8, rgb: u32) -> Option<u32> {
-    let tr = (rgb & 0xff) as i32;
-    let tg = ((rgb >> 8) & 0xff) as i32;
-    let tb = ((rgb >> 16) & 0xff) as i32;
-    let mut best = i32::MAX;
-    let mut slot = 0u32;
-    unsafe {
-        let n = (*(ctx.add(PAL_CACHE_COUNT) as *const i16) as usize).min(256);
-        for i in 0..n {
-            let s = *ctx.add(PAL_CACHE + i) as u32;
-            if s == 0 {
-                continue;
-            }
-            let [r, g, b] = rgb_at(ctx, s);
-            let dist =
-                (r as i32 - tr).abs() * 3 + (g as i32 - tg).abs() * 5 + (b as i32 - tb).abs() * 2;
-            if dist < best {
-                best = dist;
-                slot = s;
-            }
-        }
-    }
-    if slot == 0 {
-        None
-    } else {
-        Some(slot)
-    }
-}
-
-unsafe fn rgb_at(ctx: *mut u8, slot: u32) -> [u8; 3] {
-    unsafe {
-        let p = ctx.add(PAL_RGB + slot as usize * 4);
-        [*p, *p.add(1), *p.add(2)]
-    }
-}
-
-unsafe fn nearest_in_use(ctx: *mut u8, rgb: u32) -> Option<u32> {
-    let tr = (rgb & 0xff) as i32;
-    let tg = ((rgb >> 8) & 0xff) as i32;
-    let tb = ((rgb >> 16) & 0xff) as i32;
-    let mut best = i32::MAX;
-    let mut slot = 0u32;
-    unsafe {
-        let in_use = ctx.add(PAL_IN_USE);
-        for i in 1..=255u32 {
-            if *in_use.add(i as usize) == 0 {
-                continue;
-            }
-            let [r, g, b] = rgb_at(ctx, i);
-            let dist =
-                (r as i32 - tr).abs() * 3 + (g as i32 - tg).abs() * 5 + (b as i32 - tb).abs() * 2;
-            if dist < best {
-                best = dist;
-                slot = i;
-            }
-        }
-    }
-    if slot == 0 {
-        None
-    } else {
-        Some(slot)
-    }
-}
-
 unsafe fn construct_sprite(sprite: *mut u8, cache: *mut u8) {
     let f = rb(CONSTRUCT_SPRITE) as usize;
     unsafe {
@@ -573,6 +430,7 @@ unsafe fn construct_sprite(sprite: *mut u8, cache: *mut u8) {
             "call {f}",
             f = in(reg) f,
             inout("eax") sprite => _,
+            // ConstructSprite may clobber ECX; do not assume cache survives.
             inout("ecx") cache => _,
             out("edx") _,
             options(nostack),
@@ -590,7 +448,9 @@ unsafe fn process_sprite(sprite: *mut u8, pal_ctx: *mut u8, raw: *mut u8) -> u32
             raw = in(reg) raw,
             f = in(reg) f,
             inout("eax") sprite => ret,
-            in("ecx") pal_ctx,
+            // ProcessSprite destroys ECX; `in` would wrongly keep pal_ctx in ECX
+            // for free_after → AV on display+0x311C.
+            inout("ecx") pal_ctx => _,
             out("edx") _,
             options(nostack),
         );

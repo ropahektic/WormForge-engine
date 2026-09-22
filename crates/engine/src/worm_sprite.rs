@@ -1,10 +1,15 @@
 //! Slot-scoped worm art. Stock calculates animation, slope, position and flip;
 //! this wrap changes only the resulting sprite id before the stock blit.
 //!
-//! `weaponlnk` / `u` / `d` are the custom-weapon aiming poses (stock sprite id 0
-//! while states 0x67..=0x69). Stock already writes the aim-angle phase — keep it.
-//! `wthrow`* is draw/undraw. When unset we copy the aim sheet and freeze phase
-//! (eat stock draw). Real draw GIFs (throw id ≠ link id) play via `drive_phase`.
+//! `weaponlnk` / `u` / `d` are custom aim-hold sheets. Stock may output:
+//! - sprite id 0 while states 0x67..=0x69 (generic custom-weapon path), or
+//! - a donor fire-path sheet (`wbaz*`, `wbaz2*`, …, `wthrgrn*`, …) when
+//!   `copy_from` is bazooka / homing / fuse / cluster.
+//! We map all of those to the claimed link sheets and keep stock's aim phase.
+//!
+//! `wthrow`* and the donor draw/appear sheets (`wbazlnk*`, `wgrnlnk*`, …) are
+//! draw/undraw. Unset throw claims copy the aim sheet and freeze; real draw
+//! GIFs play via `drive_phase`.
 
 use crate::{log_line, rebase::rb, sprite};
 use game::{
@@ -36,6 +41,38 @@ const THROW: i32 = 591;
 const THROW_U: i32 = 592;
 const THROW_D: i32 = 593;
 
+/// Stock aim-hold triads (flat, up, down) remapped to `weaponlnk*`.
+/// Covers bazooka / HM / pigeon / MB barrels plus fuse/cluster throw-holds.
+const AIM_HOLD: &[(i32, i32, i32)] = &[
+    (525, 526, 527), // wbaz
+    (531, 532, 533), // wbaz2
+    (534, 535, 536), // wbaz3
+    (685, 686, 687), // wbaz4
+    (688, 689, 690), // wbaz5
+    (528, 529, 530), // wflm
+    (576, 577, 578), // wthrgrn
+    (579, 580, 581), // wthrcls
+    (582, 583, 584), // wthrban
+    (585, 586, 587), // wthrpbm
+    (588, 589, 590), // wthrhgr
+];
+
+/// Stock draw/appear triads remapped to `wthrow*`.
+const AIM_DRAW: &[(i32, i32, i32)] = &[
+    (591, 592, 593), // wthrow
+    (436, 437, 438), // wbazlnk
+    (442, 443, 444), // wbz2lnk
+    (445, 446, 447), // wbz3lnk
+    (691, 692, 693), // wbz4lnk
+    (694, 695, 696), // wbz5lnk
+    (439, 440, 441), // wflmlnk
+    (313, 314, 315), // wgrnlnk
+    (316, 317, 318), // wclslnk
+    (319, 320, 321), // wbanlnk
+    (322, 323, 324), // wpbmlnk
+    (325, 326, 327), // whgrlnk
+];
+
 fn is_link(pose: i32) -> bool {
     matches!(pose, LINK | LINK_U | LINK_D)
 }
@@ -44,17 +81,50 @@ fn is_throw(pose: i32) -> bool {
     matches!(pose, THROW | THROW_U | THROW_D)
 }
 
+fn slope_link(slope: i32) -> i32 {
+    match slope.cmp(&0) {
+        std::cmp::Ordering::Less => LINK_U,
+        std::cmp::Ordering::Greater => LINK_D,
+        std::cmp::Ordering::Equal => LINK,
+    }
+}
+
+fn triad_to(
+    stock: i32,
+    flat: i32,
+    up: i32,
+    down: i32,
+    to_flat: i32,
+    to_up: i32,
+    to_down: i32,
+) -> Option<i32> {
+    if stock == flat {
+        Some(to_flat)
+    } else if stock == up {
+        Some(to_up)
+    } else if stock == down {
+        Some(to_down)
+    } else {
+        None
+    }
+}
+
 fn pose_key(original: u32, state: i32, slope: i32) -> i32 {
     let stock = (original & 0xffff) as i32;
     if stock == 0 && matches!(state, 0x67..=0x69) {
-        match slope.cmp(&0) {
-            std::cmp::Ordering::Less => LINK_U,
-            std::cmp::Ordering::Greater => LINK_D,
-            std::cmp::Ordering::Equal => LINK,
-        }
-    } else {
-        stock
+        return slope_link(slope);
     }
+    for &(flat, up, down) in AIM_HOLD {
+        if let Some(pose) = triad_to(stock, flat, up, down, LINK, LINK_U, LINK_D) {
+            return pose;
+        }
+    }
+    for &(flat, up, down) in AIM_DRAW {
+        if let Some(pose) = triad_to(stock, flat, up, down, THROW, THROW_U, THROW_D) {
+            return pose;
+        }
+    }
+    stock
 }
 
 pub fn clear() {
@@ -121,11 +191,16 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
     let va = catalog
         .function_va("WormEntity__calc_sprite")
         .ok_or("missing WormEntity__calc_sprite catalog entry")?;
-    let trampoline = unsafe {
+    let original = unsafe {
         MinHook::create_hook(rb(va) as *mut c_void, calc_sprite_hook as *mut c_void)
             .map_err(|e| format!("worm sprite hook: {e:?}"))?
     };
-    ORIGINAL.store(trampoline, Ordering::SeqCst);
+    ORIGINAL.store(original, Ordering::SeqCst);
+    unsafe {
+        MinHook::enable_hook(rb(va) as *mut c_void)
+            .map_err(|e| format!("enable worm sprite hook: {e:?}"))?;
+    }
+    log_line("worm sprite wrap installed");
     Ok(())
 }
 
@@ -242,6 +317,25 @@ mod tests {
         assert_eq!(pose_key(0x40000, 0x69, 1), LINK_D);
         assert_eq!(pose_key(0x4024f, 0x6a, 0), THROW);
         assert_eq!(pose_key(0x40000, 0x6a, 0), 0);
+    }
+
+    #[test]
+    fn bazooka_and_homing_barrels_map_to_link() {
+        assert_eq!(pose_key(525, 0x67, 0), LINK);
+        assert_eq!(pose_key(526, 0x67, 0), LINK_U);
+        assert_eq!(pose_key(527, 0x67, 0), LINK_D);
+        assert_eq!(pose_key(531, 0x67, 0), LINK); // wbaz2 — HM family
+        assert_eq!(pose_key(532, 0x67, 0), LINK_U);
+        assert_eq!(pose_key(535, 0x67, 0), LINK_U); // wbaz3u
+        assert_eq!(pose_key(536, 0x67, 0), LINK_D); // wbaz3d
+    }
+
+    #[test]
+    fn fuse_and_cluster_holds_map_to_link() {
+        assert_eq!(pose_key(576, 0x67, 0), LINK); // wthrgrn
+        assert_eq!(pose_key(579, 0x67, 0), LINK); // wthrcls
+        assert_eq!(pose_key(436, 0x6a, 0), THROW); // wbazlnk draw
+        assert_eq!(pose_key(313, 0x6a, 0), THROW); // wgrnlnk
     }
 
     #[test]

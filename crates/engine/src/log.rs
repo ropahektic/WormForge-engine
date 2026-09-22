@@ -106,14 +106,14 @@ pub fn init() {
         prev(info);
     }));
 
-    log_line("wkLua build 20260922-aimpng");
+    log_line("wkLua build 20260922-aimgen");
     log_line(&format!("log file {}", path.display()));
     log_line(&format!("error log {}", err_path.display()));
     if wa_err != err_path {
         log_line(&format!("error log copy {}", wa_err.display()));
     }
     write_err(&format!(
-        "=== wkLua session 20260921-homevis ===\r\nerror log {}\r\n",
+        "=== wkLua session 20260922-aimgen ===\r\nerror log {}\r\n",
         err_path.display()
     ));
 }

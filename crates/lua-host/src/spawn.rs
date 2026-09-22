@@ -679,13 +679,17 @@ fn parse_cluster(lua: &Lua, s: &Table, explode_on: bool) -> mlua::Result<Option<
             ..ClusterSpec::default()
         }
     };
-    apply_cluster_fields(lua, s, &mut spec, named)?;
+    let mut bounce_set = false;
+    apply_cluster_fields(lua, s, &mut spec, named, &mut bounce_set)?;
     if let Some(Some(inner)) = nested {
-        apply_cluster_fields(lua, &inner, &mut spec, true)?;
+        apply_cluster_fields(lua, &inner, &mut spec, true, &mut bounce_set)?;
     }
     let active = named
         || spec.count > 1
         || spec.bounce_pct > 0
+        || spec.bounces > 0
+        || spec.fuse_ms > 0
+        || spec.proximity > 0
         || spec.homing != ClusterHoming::Off
         || spec.trail != 0
         || spec.trail_path.is_some();
@@ -696,6 +700,17 @@ fn parse_cluster(lua: &Lua, s: &Table, explode_on: bool) -> mlua::Result<Option<
     if named && spec.spread == 0 {
         spec.spread = 45;
     }
+    // power = 0 means "default" (editor omits or writes 0). Do not leave bits at
+    // rest — stock CreateClusters launches upward; zero vel + blast knock looks
+    // like a flat sideways spray.
+    if named && spec.power <= 0 {
+        spec.power = ClusterSpec::STOCK_POWER;
+    }
+    // No impact + bounce omitted → grenade restitution (else land() despawns).
+    // Explicit bounce=false stays 0 (drop / fuse / proximity mine bits).
+    if named && !spec.impact && !bounce_set {
+        spec.bounce_pct = 100;
+    }
     Ok(Some(spec))
 }
 
@@ -704,6 +719,7 @@ fn apply_cluster_fields(
     s: &Table,
     spec: &mut ClusterSpec,
     sprites: bool,
+    bounce_set: &mut bool,
 ) -> mlua::Result<()> {
     if let Some(n) = get_i32(s, "count")? {
         spec.count = n;
@@ -716,6 +732,16 @@ fn apply_cluster_fields(
     }
     if let Some(b) = parse_bounce(s)? {
         spec.bounce_pct = b;
+        *bounce_set = true;
+    }
+    if let Some(n) = get_i32(s, "bounces")? {
+        spec.bounces = n.max(0);
+    }
+    if let Some(n) = get_i32(s, "fuse")?.or(get_i32(s, "fuse_ms")?) {
+        spec.fuse_ms = n.max(0);
+    }
+    if let Some(n) = get_i32(s, "proximity")? {
+        spec.proximity = n.max(0);
     }
     if let Some(h) = parse_cluster_homing(s)? {
         spec.homing = h;
