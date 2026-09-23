@@ -40,6 +40,12 @@ plate_comment = "Partial. weapon_table confirmed: InitWeaponTable memset *(world
   comment = "Lockstep network RNG, advanced by GameTask__netrandom (0x53F300) and inlined users."
 
   [[struct.field]]
+  offset = 0x7EF0
+  name = "recorded_frame_counter"
+  type = "int"
+  comment = "Recording-side frame counter, -1 while a replay is playing back. WA's own equivalent of Project X's IsReplay()."
+
+  [[struct.field]]
   offset = 0x510
   name = "weapon_table"
   type = "WeaponTable *"

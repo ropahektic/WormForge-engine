@@ -9,3 +9,9 @@ va = 0x007A0884
 name = "G_GAME_SESSION"
 type = "GameSession *"
 comment = "Session pointer. Not required for InitWeaponTable wrap (runtime is the stdcall arg)."
+
+[[global]]
+va = 0x0087D3F8
+name = "G_REPLAY_PREFIX"
+type = "ReplayPrefix"
+comment = "Frontend replay metadata singleton. Immediate operand at ReferencesDDMain (0x4E3B40) + 0x24; wkFOW calls this address DDMain - 0x40."
