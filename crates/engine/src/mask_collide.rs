@@ -1,8 +1,12 @@
-//! First-frame opaque GIF/PNG masks vs land, worms, weapons, and other actors.
+//! GIF/PNG masks vs land, worms, weapons, and other actors.
 //!
 //! `mask_worms` / `mask_weapons` stamp the silhouette into the landscape walk
 //! bitgrid so stock worm locomotion and hitscan see it as dirt. Custom probes
-//! handle actor↔land (mask_land) and actor↔actor (mask_actors).
+//! handle actor↔land (`mask_land`) and actor↔actor (`mask_actors`).
+//!
+//! **Experimental:** multi-frame GIFs restamp each `FRAME_FINISH` from the
+//! current anim frame so the solid tracks the moving outline. Fine for
+//! playtests; standing on a morphing roof is intentionally weird.
 
 use crate::sprite;
 use game::entity::{read_i32, write_i32};
@@ -41,7 +45,8 @@ pub unsafe fn prepare_frame(_from: *mut u8) {
             continue;
         }
         let sid = read_i32(this, ACTOR_SPRITE);
-        let Some(mask) = sprite::mask_for_id(sid) else {
+        let phase = read_i32(this, ACTOR_PHASE) as u32;
+        let Some(mask) = sprite::mask_for_phase(sid, phase) else {
             continue;
         };
         let Some(geom) = sprite_geom(this) else {
@@ -71,7 +76,8 @@ pub unsafe fn resolve_all(_from: *mut u8) {
             continue;
         }
         let sid = read_i32(this, ACTOR_SPRITE);
-        let Some(mask) = sprite::mask_for_id(sid) else {
+        let phase = read_i32(this, ACTOR_PHASE) as u32;
+        let Some(mask) = sprite::mask_for_phase(sid, phase) else {
             continue;
         };
         let Some(geom) = sprite_geom(this) else {
@@ -234,7 +240,8 @@ pub unsafe fn mask_land_support(this: *mut u8) -> bool {
         return false;
     }
     let sid = read_i32(this, ACTOR_SPRITE);
-    let Some(mask) = sprite::mask_for_id(sid) else {
+    let phase = read_i32(this, ACTOR_PHASE) as u32;
+    let Some(mask) = sprite::mask_for_phase(sid, phase) else {
         return false;
     };
     let Some(geom) = sprite_geom(this) else {

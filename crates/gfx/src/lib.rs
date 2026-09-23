@@ -125,9 +125,15 @@ impl SpriteStrip {
         feet_platform(&self.frames)
     }
 
-    /// First-frame opaque bitmask for `mask = true` collision.
+    /// First-frame opaque bitmask (static PNG / single-frame GIF).
     pub fn opaque_mask(&self) -> Option<OpaqueMask> {
-        OpaqueMask::from_strip(self)
+        self.frames.first().map(OpaqueMask::from_frame)
+    }
+
+    /// Per-frame opaque bitmasks. Multi-frame GIFs enable **experimental**
+    /// animated collision (walk-grid stamp follows `animation_phase`).
+    pub fn opaque_masks(&self) -> Vec<OpaqueMask> {
+        self.frames.iter().map(OpaqueMask::from_frame).collect()
     }
 }
 

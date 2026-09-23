@@ -36,7 +36,14 @@ static SPRITE_KEYS: Mutex<Vec<(String, SpriteRef)>> = Mutex::new(Vec::new());
 /// stock donkey's horizontal rectangle in `masks.bmp`.
 static SPRITE_FEET: Mutex<Vec<(i32, FeetPlatform)>> = Mutex::new(Vec::new());
 /// First-frame opaque silhouette for `mask = true` actors.
-static SPRITE_MASKS: Mutex<Vec<(i32, OpaqueMask)>> = Mutex::new(Vec::new());
+/// Multi-frame sheets keep one mask per GIF frame (phase picks which) —
+/// experimental animated collision.
+struct MaskSheet {
+    looping: bool,
+    frames: Vec<OpaqueMask>,
+}
+
+static SPRITE_MASKS: Mutex<Vec<(i32, MaskSheet)>> = Mutex::new(Vec::new());
 static RGBA_SHEETS: Mutex<Vec<RgbaSheet>> = Mutex::new(Vec::new());
 
 pub struct RgbaSheet {
@@ -297,20 +304,43 @@ pub fn feet_for_id(id: i32) -> Option<FeetPlatform> {
 }
 
 pub fn mask_for_id(id: i32) -> Option<OpaqueMask> {
+    mask_for_phase(id, 0)
+}
+
+/// Mask for the same frame the blit shows (`animation_phase` / `ACTOR_PHASE`).
+pub fn mask_for_phase(id: i32, phase: u32) -> Option<OpaqueMask> {
     let g = SPRITE_MASKS.lock().ok()?;
-    g.iter().find(|(sid, _)| *sid == id).map(|(_, m)| m.clone())
+    let sheet = g.iter().find(|(sid, _)| *sid == id).map(|(_, s)| s)?;
+    if sheet.frames.is_empty() {
+        return None;
+    }
+    let idx = gfx::composite::frame_index(phase, sheet.frames.len(), sheet.looping)
+        .unwrap_or(0)
+        .min(sheet.frames.len() - 1);
+    Some(sheet.frames[idx].clone())
 }
 
 fn remember_mask(id: i32, strip: &SpriteStrip) {
-    let Some(mask) = strip.opaque_mask() else {
+    let frames = strip.opaque_masks();
+    if frames.is_empty() {
         return;
-    };
-    let bits = mask.width.saturating_mul(mask.height);
+    }
+    let n = frames.len();
+    let bits = frames[0].width.saturating_mul(frames[0].height);
     if let Ok(mut g) = SPRITE_MASKS.lock() {
         g.retain(|(sid, _)| *sid != id);
-        g.push((id, mask));
+        g.push((
+            id,
+            MaskSheet {
+                looping: strip.looping,
+                frames,
+            },
+        ));
     }
-    log_line(&format!("sprite {id} mask bits={bits} (frame 0)"));
+    log_line(&format!(
+        "sprite {id} mask frames={n} bits/frame={bits} looping={}",
+        strip.looping
+    ));
 }
 
 fn remember_rgba(id: i32, strip: &SpriteStrip) {

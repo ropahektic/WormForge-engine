@@ -214,9 +214,12 @@ pub struct ActorSpawn {
     pub drown: bool,
     /// Draw the body. `false` / `sprite = false` uses the 1023 blit reject.
     pub visible: bool,
-    /// Bake first-frame opaque silhouette from the GIF/PNG. Sub-toggles below
-    /// choose what the mask collides with; when `mask` is true and a sub-flag
-    /// is omitted, that sub-flag defaults to true.
+    /// Bake opaque silhouette(s) from the GIF/PNG. Sub-toggles below choose
+    /// what the mask collides with; when `mask` is true and a sub-flag is
+    /// omitted, that sub-flag defaults to true.
+    ///
+    /// Multi-frame GIFs swap the walk-grid stamp each anim frame (**experimental**
+    /// — works, but standing worms on a morphing outline can feel cursed).
     pub mask: bool,
     pub mask_worms: bool,
     pub mask_land: bool,
