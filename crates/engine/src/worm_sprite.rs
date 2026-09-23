@@ -89,6 +89,34 @@ fn is_throw(pose: i32) -> bool {
     matches!(pose, THROW | THROW_U | THROW_D)
 }
 
+/// The draw pose matching an undraw pose, and vice versa.
+fn partner_pose(pose: i32) -> Option<i32> {
+    Some(match pose {
+        LINK => THROW,
+        LINK_U => THROW_U,
+        LINK_D => THROW_D,
+        THROW => LINK,
+        THROW_U => LINK_U,
+        THROW_D => LINK_D,
+        _ => return None,
+    })
+}
+
+/// True when one sheet serves both the draw and the undraw pose.
+///
+/// That is the shape the web-editor aim wizard produces, and only there does
+/// the phase mean an aim angle instead of a frame number. A pack supplying two
+/// distinct sheets wants two animations played, so it must not be treated this
+/// way.
+fn is_aim_sheet(claims: &[(usize, i32, i32)], slot: usize, pose: i32, id: i32) -> bool {
+    let Some(partner) = partner_pose(pose) else {
+        return false;
+    };
+    claims
+        .iter()
+        .any(|(s, p, sheet)| *s == slot && *p == partner && *sheet == id)
+}
+
 fn slope_link(slope: i32) -> i32 {
     match slope.cmp(&0) {
         std::cmp::Ordering::Less => LINK_U,
@@ -275,28 +303,39 @@ unsafe extern "C" fn after_calc(
         .find(|(s, claimed, _)| *s == slot && *claimed == stock)
     {
         *sprite_out = (original & !0xffff) | *id as u32;
-        if is_link(stock) {
-            // Stock phase is the aim angle across the 180° sheet.
-        } else if is_throw(stock) {
-            let link_pose = match stock {
-                THROW_U => LINK_U,
-                THROW_D => LINK_D,
-                _ => LINK,
-            };
-            let eaten = claims
-                .iter()
-                .any(|(s, pose, sheet)| *s == slot && *pose == link_pose && *sheet == *id);
-            if eaten {
-                // Eat draw/undraw: hold a mid frame of the aim sheet, no play-through.
+        // The aim wizard supplies ONE sheet and lets it serve both the draw
+        // and undraw pose, where the phase means an aim angle rather than a
+        // frame number. `expand_aim_claims` implements that by falling the
+        // throw poses back to the link sheet, so "one sheet for both" is
+        // exactly the signal that this is a wizard pack.
+        //
+        // A pack supplying its own distinct draw AND undraw sheets is not
+        // doing that -- it has two animations it wants played. Testing the
+        // signal on both branches, instead of treating every link pose as an
+        // aim sheet, keeps the wizard's behaviour intact while letting custom
+        // draw/hide animations run.
+        if is_aim_sheet(&claims, slot, stock, *id) {
+            if is_throw(stock) {
+                // Eat draw/undraw: hold a mid frame, no play-through.
                 if !phase_out.is_null() {
                     *phase_out = 0x8000;
                 }
-            } else {
-                drive_phase(worm as usize, stock, *id, phase_out);
             }
+            // Link: leave the stock phase, which is the aim angle.
         } else {
             drive_phase(worm as usize, stock, *id, phase_out);
         }
+    } else if let Ok(mut anim) = ANIM.lock() {
+        // On a claimed slot but not currently in a claimed pose -- walking
+        // between equips, say. `drive_phase` only resets a worm's stored phase
+        // when the pose or sheet differs from last time, so if the next equip
+        // lands on the SAME pose key (same slope sign is common, the worm
+        // rarely moves between shots) the stale entry is still sitting at its
+        // old phase: the final held frame. The animation would then appear to
+        // jump straight to its last frame instead of playing. Dropping the
+        // entry the moment the worm leaves a claimed pose guarantees the next
+        // one starts fresh.
+        anim.retain(|(w, _, _, _)| *w != worm as usize);
     }
 }
 

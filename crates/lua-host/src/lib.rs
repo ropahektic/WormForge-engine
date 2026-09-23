@@ -11,7 +11,7 @@ mod sandbox;
 mod spawn;
 
 pub use actor::{
-    actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
+    gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
     weapon_fire, weapon_select, ActorEvent, ActorNative, SpawnArgs,
 };
 pub use dispatch::{gravity_after, gravity_before, hurt, missile_frame, run_hud, worm_message, Hurt};
@@ -246,6 +246,22 @@ mod tests {
         let lua = sandbox::new_lua().unwrap();
         let is_nil: bool = lua.load("return coroutine == nil").eval().unwrap();
         assert!(is_nil, "coroutine must stay nil");
+    }
+
+    #[test]
+    fn sentry_placement_firing_and_reload_are_deterministic() {
+        let lua = Lua::new();
+        let test: mlua::Function = lua
+            .load(include_str!("../tests/fixtures/test_sentry.lua"))
+            .eval()
+            .unwrap();
+        let pack = lua
+            .load(include_str!(
+                "../../../mods/examples/sentry_gun/weapons.lua"
+            ))
+            .into_function()
+            .unwrap();
+        test.call::<()>(pack).unwrap();
     }
 
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
