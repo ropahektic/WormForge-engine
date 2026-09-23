@@ -89,6 +89,7 @@ dependencies = [
  "minhook",
  "re-catalog",
  "render",
+ "replay",
  "weapons",
  "windows-sys 0.59.0",
 ]
@@ -403,6 +404,13 @@ name = "render"
 version = "0.1.0"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "replay"
+version = "0.1.0"
+dependencies = [
+ "flate2",
 ]
 
 [[package]]

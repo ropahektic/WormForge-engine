@@ -3,8 +3,8 @@
 
 use crate::log::{log_error, log_line};
 use crate::rebase::rb;
-use game::latch::FrameLatch;
 use game::entity::{read_i32, write_i32};
+use game::latch::FrameLatch;
 use game::offsets::*;
 use std::collections::VecDeque;
 use std::ffi::CString;
@@ -384,9 +384,7 @@ fn advance_rng_verified() -> bool {
     match RNG_OK.load(Ordering::Relaxed) {
         0 => {
             let addr = rb(GAME_WORLD_ADVANCE_RNG) as *const u8;
-            let found = unsafe {
-                std::slice::from_raw_parts(addr, ADVANCE_RNG_PROLOGUE.len())
-            };
+            let found = unsafe { std::slice::from_raw_parts(addr, ADVANCE_RNG_PROLOGUE.len()) };
             let ok = found == ADVANCE_RNG_PROLOGUE;
             RNG_OK.store(if ok { 2 } else { 1 }, Ordering::Relaxed);
             if !ok {
@@ -443,6 +441,9 @@ fn keys_latched() -> u32 {
 
 fn resolved_input() -> Option<(u32, i32, i32, bool)> {
     let frame = sim_frame()?;
+    if let Some(sample) = crate::replay::playback_input(frame) {
+        return Some(sample);
+    }
     if is_networked() {
         // A networked reader must never fall through to OS-local input. WA's
         // lockstep dispatch normally populates this before simulation code;
@@ -450,6 +451,15 @@ fn resolved_input() -> Option<(u32, i32, i32, bool)> {
         return Some(crate::sync::input(frame).unwrap_or((0, 0, 0, false)));
     }
     None
+}
+
+/// The exact per-frame samples consumed by packs and the engine. Calling this
+/// at FRAME_FINISH returns an earlier sample if something already read input
+/// this frame, or takes the one and only sample otherwise.
+pub(crate) fn replay_input() -> (u32, i32, i32, bool) {
+    let keys = keys_latched();
+    let (px, py, down) = pointer_latched();
+    (keys, px, py, down)
 }
 
 /// The OS-local sample contributed to the lockstep carrier. This is separate

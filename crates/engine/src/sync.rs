@@ -855,8 +855,9 @@ unsafe fn hash_actors() -> u32 {
     h.finish()
 }
 
-/// Shared state digest used by the live network diagnostics.
-unsafe fn checkpoint(world: *mut u8) -> (u32, u32, u32) {
+/// The recorder's checkpoint payload. Kept here so the diagnostic probe and
+/// replay files hash exactly the same fields in exactly the same order.
+pub(crate) unsafe fn checkpoint(world: *mut u8) -> (u32, u32, u32) {
     (hash_rng(world), hash_worms(), hash_actors())
 }
 
@@ -888,9 +889,7 @@ pub unsafe fn observe(world: *mut u8) {
         ));
     }
 
-    let rng = hash_rng(world);
-    let worms = hash_worms();
-    let actors = hash_actors();
+    let (rng, worms, actors) = checkpoint(world);
 
     let n = FRAMES.fetch_add(1, Ordering::Relaxed) + 1;
     if n % REPORT_EVERY == 0 {
