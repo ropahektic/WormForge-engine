@@ -336,7 +336,11 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    completed. Presentation-only `fxrandom` drift remained visible as expected.
    A focused Q/WASD/Shift/Space/Worm Toss control matrix is still useful as a
    broader follow-up, but the transport and the original sentry failure are
-   accepted.
+   accepted. `tools/sync-input-matrix.py` now makes that follow-up a repeatable
+   two-way gate: it requires press/release coverage for every key bit, a held
+   pointer drag, downstream Q/Space actions, matching stock checks, checkpoint
+   coverage, and a cleanly completed round on both peers. The live run is
+   pending.
 
    Replay playback still has first priority. Live recording now captures the
    merged input actually consumed by packs. Offline games keep the previous
@@ -557,6 +561,12 @@ should exercise Q, WASD/W/Shift, Space charge and release, and Worm Toss
 drag/release while checkpoints confirm `game-rng`, `net-rng`, worms, and actors all compare
 `OK`; `fx-rng` may report drift.
 
+That follow-up is specified in
+[the input matrix recipe](replay.md#two-way-input-matrix). Run
+`tools/sync-input-matrix.py` on the paired logs; it rejects missing control
+edges, missing downstream Q/Space actions, divergent stock checks, component
+desyncs, and incomplete rounds.
+
 The first paired snapshots found the concrete placement mismatch in empty
 sprite animation metadata (four uninitialized words, including worm addresses),
 rather than transported input. The current `empty-sprite-info` build supplies
@@ -571,6 +581,7 @@ The state snapshots remain automatic for future action-path diagnostics; no
 crates/engine/src/sync.rs     ✅ state hash, keyed to WA's frame counter
 crates/game/src/hash.rs       ✅ FNV-1a (here, not in engine: darwin can't build engine)
 mods/examples/synctest/       ✅ the input-free control pack for test B
+tools/sync-input-matrix.py    ✅ two-way synchronized-input acceptance gate
 tools/sync-{run,diff,gate}.sh ✅ harness (gitignored: machine-local paths)
 docs/replay.md                ✅ procedure + results
 crates/engine/src/replay.rs   ✅ recorder/player state machine (W2/W3)

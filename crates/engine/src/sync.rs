@@ -23,8 +23,7 @@
 //!
 //! Synchronized input is always active in networked matches and publishes
 //! change-driven records plus a low-rate heartbeat. The heavier checkpoint
-//! probe remains gated behind a `sync.txt` marker next to `wkLua.log`, exactly
-//! like `queue_census`.
+//! probe is compiled in only with the `sync-diagnostics` feature.
 
 use crate::{log_error, log_line};
 use game::entity::read_i32;
@@ -41,8 +40,6 @@ use std::fmt::Write as _;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
-/// 0 unknown, 1 off, 2 on. Resolved once from the marker file.
-static ENABLED: AtomicU32 = AtomicU32::new(0);
 /// Last frame we hashed, so a repeated or rewound counter is visible.
 static LAST_FRAME: AtomicU64 = AtomicU64::new(u64::MAX);
 static FRAMES: AtomicU64 = AtomicU64::new(0);
@@ -51,7 +48,7 @@ static ANNOUNCED: AtomicU32 = AtomicU32::new(0);
 /// can be entered more than once without advancing the simulation.
 static LAST_SENT_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
 /// Input is essential rather than diagnostic, so it has its own per-frame
-/// sampling guard and is active in every networked match without `sync.txt`.
+/// sampling guard and is active in every networked match.
 static LAST_INPUT_OBSERVED_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
 static LAST_INPUT_SENT_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
 
@@ -109,21 +106,8 @@ static STOCK_TRACE_UNTIL: AtomicU32 = AtomicU32::new(u32::MAX);
 /// dense enough to bisect a divergence and still readable by eye.
 const REPORT_EVERY: u64 = 50;
 
-fn enabled() -> bool {
-    match ENABLED.load(Ordering::Relaxed) {
-        0 => {
-            let on = crate::log::wormforge_dir().join("sync.txt").exists();
-            ENABLED.store(if on { 2 } else { 1 }, Ordering::Relaxed);
-            if on {
-                log_line(
-                    "sync probe enabled; hashing simulation state every frame \
-                     (rng / worms / actors)",
-                );
-            }
-            on
-        }
-        v => v == 2,
-    }
+const fn diagnostics_enabled() -> bool {
+    cfg!(feature = "sync-diagnostics")
 }
 
 #[repr(C)]
@@ -219,7 +203,7 @@ unsafe fn push_input(buffer: *mut BufferObject, sample: InputSample) -> bool {
 /// Runs immediately before WA collects authoritative local input. Controls are
 /// published on change, pointer motion while it is in use, and otherwise with
 /// a one-second heartbeat. The optional five-record checkpoint remains gated
-/// by `sync.txt`.
+/// by the `sync-diagnostics` build feature.
 unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
     let result = std::panic::catch_unwind(|| unsafe {
         if runtime.is_null() {
@@ -351,7 +335,7 @@ unsafe extern "C" fn receive_live_checkpoint(
                 log_error(&format!("sync input: malformed control bits {frame:#010x}"));
                 return 1;
             };
-            if sample.keys & 0x80 != 0 && current >= 0 {
+            if diagnostics_enabled() && sample.keys & 0x80 != 0 && current >= 0 {
                 STOCK_TRACE_LINES.store(0, Ordering::Relaxed);
                 STOCK_TRACE_UNTIL.store((current as u32).saturating_add(25), Ordering::Relaxed);
                 log_line(&format!(
@@ -368,6 +352,18 @@ unsafe extern "C" fn receive_live_checkpoint(
                 sample.down
             ));
             return 1;
+        }
+        // Always consume known checkpoint tags for wire compatibility, but a
+        // normal build does not spend time hashing or logging diagnostics.
+        if !diagnostics_enabled() {
+            return match tag {
+                TAG_RNG | TAG_WORMS | TAG_ACTORS | TAG_GAME_RNG | TAG_FX_RNG
+                | TAG_NET_RNG => 1,
+                _ => {
+                    log_error(&format!("sync transport: unknown payload tag {tag:#010x}"));
+                    1
+                }
+            };
         }
         let component = match tag {
             TAG_RNG => "rng-legacy",
@@ -487,6 +483,9 @@ unsafe extern "system" fn serialize_state_hook(runtime: *mut u8, buffer: *mut u8
 /// or extra files. Limit volume to eight snapshots per match; hex goes only
 /// to disk, not the console. Capture precedes checksum calculation and dispatch.
 fn dump_stock_state(expected_frame: i32) {
+    if !diagnostics_enabled() {
+        return;
+    }
     if STOCK_STATE_DUMPS.load(Ordering::Relaxed) >= MAX_STATE_DUMPS {
         return;
     }
@@ -540,6 +539,9 @@ unsafe extern "C" fn trace_stock_dispatch(
     msg_type: u32,
     size: u32,
 ) {
+    if !diagnostics_enabled() {
+        return;
+    }
     let result = std::panic::catch_unwind(|| unsafe {
         if runtime.is_null() || msg_type == SYNC_MESSAGE || msg_type == LEGACY_SYNC_MESSAGE {
             return;

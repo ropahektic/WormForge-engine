@@ -391,6 +391,41 @@ network RNG, worms, and actors stayed equal. Only the expected client-effects
 the empty-sprite fix for the sentry/Wormcraft path. The broader Q/WASD/Shift,
 Space charge/release, and Worm Toss drag/release matrix remains a follow-up.
 
+### Two-way input matrix
+
+Use only the current `pooz`, `q_bazooka`, and `worm_toss` example packs for
+this gate, plus the same WormForge DLL on both peers. Older copies of these
+packs deliberately disable their local-input features in network games, so
+replace the complete pack directories rather than copying only `mod.toml`.
+Keep `sync.txt` beside `wkLua.log` on both peers and restart WA after changing
+the DLL or packs.
+
+Use a scheme with unlimited turn time and enough bazooka ammunition. Each
+player performs the following sequence during their own turns, so both network
+directions are covered:
+
+1. Select Shotgun to enter POOZ. Tap A, D, Up-arrow, S, and W; then hold D+Shift
+   long enough to see the sprint. Tap W once more in the air if convenient.
+2. Press Q. The worm must leave POOZ and equip a bazooka. Hold Space until the
+   power bar is visible, then release it to fire.
+3. On another turn, select Battle Axe for Worm Toss. Click near a worm, move
+   the pointer while holding the button, then release to throw or drop it.
+
+Finish or surrender the round cleanly, then run:
+
+```sh
+python3 tools/sync-input-matrix.py first-wkLua.log second-wkLua.log
+```
+
+The gate requires all eight wire bits (A/Left, D/Right, Up, S/Down, W, Shift,
+Q, and Space) to press and release in both peers' transmitted and received
+streams. It also requires pointer press, held motion, and release; at least two
+downstream Q equips, Space charges, and Space releases in each log; all four
+simulation checkpoint components; identical stock kind-8 frame/checksum
+sequences; no error/desync line; and completed replay recording on both peers.
+`fxrandom` drift does not fail the gate. Exit status is 0 for a pass, 1 for an
+incomplete or divergent matrix, and 2 for unreadable logs.
+
 Compare the automatic state snapshots with
 `python3 tools/sync-state-diff.py first-wkLua.log second-wkLua.log`. It selects
 the latest launch and recorded round in each log, validates complete dumps,
