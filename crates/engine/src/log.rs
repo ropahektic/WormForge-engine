@@ -1,19 +1,27 @@
-use std::fs::{create_dir_all, OpenOptions};
+use std::fs::{OpenOptions, create_dir_all};
 use std::io::Write;
 use std::os::windows::ffi::OsStringExt;
 use std::panic;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::Console::{
-    AllocConsole, GetStdHandle, SetConsoleTitleW, WriteConsoleA, STD_OUTPUT_HANDLE,
+    AllocConsole, GetStdHandle, STD_OUTPUT_HANDLE, SetConsoleTitleW, WriteConsoleA,
 };
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
 static FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
 static ERR: Mutex<Vec<std::fs::File>> = Mutex::new(Vec::new());
 static CONSOLE: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
+
+pub(crate) const BUILD_ID: &str = "20260923-network-sync";
+
+/// Bounded binary diagnostic dumps belong in the log without flooding the
+/// live console. The caller supplies complete lines including CRLF.
+pub(crate) fn diagnostic_file(text: &str) {
+    write_file(&FILE, text);
+}
 
 pub fn log_path() -> PathBuf {
     wormforge_dir().join("wkLua.log")
@@ -106,14 +114,14 @@ pub fn init() {
         prev(info);
     }));
 
-    log_line("wkLua build 20260922-gpu");
+    log_line(&format!("wkLua build {BUILD_ID}"));
     log_line(&format!("log file {}", path.display()));
     log_line(&format!("error log {}", err_path.display()));
     if wa_err != err_path {
         log_line(&format!("error log copy {}", wa_err.display()));
     }
     write_err(&format!(
-        "=== wkLua session 20260922-gpu ===\r\nerror log {}\r\n",
+        "=== wkLua session {BUILD_ID} ===\r\nerror log {}\r\n",
         err_path.display()
     ));
 }

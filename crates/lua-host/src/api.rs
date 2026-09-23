@@ -2,7 +2,7 @@ use crate::dispatch::{self, HudLine};
 use crate::spawn::{self, get_bool, get_i32, get_string};
 use actors::kind_id;
 use gfx::{is_sheet_path, load_sprite_path, sprite_key, stock_sprite_id, SpriteStrip};
-use mlua::{Function, Lua, Table, Value};
+use mlua::{Function, Lua, MultiValue, Table, Value};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -26,7 +26,15 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     let mod_id_log = ctx.mod_id.clone();
     let log_fn = lua
         .create_function(move |_, msg: String| {
-            logs.borrow_mut().push(format!("[{mod_id_log}] {msg}"));
+            let line = format!("[{mod_id_log}] {msg}");
+            // Straight to wkLua.log, so a pack logging from a hook or a brain
+            // is visible. The Vec below is only the load-time transcript, and
+            // it is snapshotted once after loading -- anything pushed to it
+            // later is never read by anyone.
+            if let Some(write) = crate::actor::native_log() {
+                write(&line);
+            }
+            logs.borrow_mut().push(line);
             Ok(())
         })
         .map_err(|e| e.to_string())?;
@@ -86,6 +94,7 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     Ok(())
 }
 
+/// Build the `wa` table if this Lua state has none yet.
 fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     let globals = lua.globals();
     if let Ok(wa) = globals.get::<Table>("wa") {
@@ -165,29 +174,119 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     hud.set("line", line).map_err(|e| e.to_string())?;
     wa.set("hud", hud).map_err(|e| e.to_string())?;
 
+    // Lockstep: `pairs()` order over string-keyed tables varies per process
+    // (Lua 5.4 randomises its string-hash seed), so packs get `wa.sorted(t)`
+    // -- a deterministic key order to iterate instead. Array return, so the
+    // call site is `for _, k in ipairs(wa.sorted(t)) do ... t[k] ... end`.
+    let sorted = lua
+        .create_function(|lua, t: Table| {
+            let mut keys: Vec<Value> = t
+                .pairs::<Value, Value>()
+                .map(|kv| kv.map(|(k, _)| k))
+                .collect::<Result<_, _>>()?;
+            // Fail before sorting, not during: `sort_by` takes an infallible
+            // comparator, and an `unwrap_or(Equal)` there would silently emit
+            // an address-influenced order -- the bug this exists to prevent.
+            for k in &keys {
+                cmp_key(k, k).map_err(mlua::Error::external)?;
+            }
+            keys.sort_by(|a, b| cmp_key(a, b).unwrap_or(std::cmp::Ordering::Equal));
+            let out = lua.create_table()?;
+            for (i, k) in keys.into_iter().enumerate() {
+                out.set((i + 1) as i64, k)?;
+            }
+            Ok(out)
+        })
+        .map_err(|e| e.to_string())?;
+    wa.set("sorted", sorted).map_err(|e| e.to_string())?;
+
     spawn::bind_world(lua, &wa.get("actors").map_err(|e| e.to_string())?, &wa)?;
 
     globals.set("wa", wa.clone()).map_err(|e| e.to_string())?;
     Ok(wa)
 }
 
+/// Register a `wa.on.<name>` hook, remembering which pack registered it.
+///
+/// The remembering is the point. `wa.actors.spawn` resolves a relative sprite
+/// path against `wa._mod`, and only the weapon-event dispatchers used to set
+/// that. A hook registered here used to run with whatever `_mod` the last
+/// weapon event left behind, so with several packs installed a path resolved
+/// against the wrong pack and the spawn failed with "sprite is not installed"
+/// while the sheet sat in the atlas.
+///
+/// The owner is read from `wa._mod` at registration time -- the same way
+/// brains and fire/click specs pick up their pack (`actor.rs`). During a
+/// pack's load script `install` has just set `_mod` to that pack, and from a
+/// weapon-event context the dispatcher has set it to the running pack, so a
+/// hook registered at runtime is attributed correctly too. Wrapping at
+/// registration rather than fixing each dispatcher keeps it to one place and
+/// covers hooks added later for free.
 fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
     let f = lua
         .create_function(move |lua, cb: Function| {
             let wa: Table = lua.globals().get("wa")?;
             let hooks: Table = wa.get("_hooks")?;
             let list: Table = hooks.get(name)?;
+            // The pack in whose name this hook is registered. Empty means
+            // nobody had set `_mod` yet; such a hook keeps the old
+            // stale-field behaviour rather than guessing a pack.
+            let owner: String = wa.get("_mod").unwrap_or_default();
+            // MultiValue so every hook shape passes through untouched --
+            // arguments in, and return values (worm_message's "eat", hurt's
+            // rewritten amount) back out.
+            let wrapped = lua.create_function(move |lua, args: MultiValue| {
+                let wa: Table = lua.globals().get("wa")?;
+                wa.set("_mod", owner.clone())?;
+                cb.call::<MultiValue>(args)
+            })?;
             let n = list.len()?;
-            list.set(n + 1, cb)?;
+            list.set(n + 1, wrapped)?;
             Ok(())
         })
         .map_err(|e| e.to_string())?;
     on.set(name, f).map_err(|e| e.to_string())
 }
 
-fn make_push(
-    ctx: &BindContext,
-) -> Rc<dyn Fn(OverlayClaim, &str) -> mlua::Result<()>> {
+/// Total order over Lua keys so `wa.sorted` is deterministic.
+///
+/// Rank first by a coarse type order both peers compute identically, then
+/// within a rank by value: integers numerically, floats by `total_cmp`
+/// (NaN sorts after everything, deterministically), strings byte-wise,
+/// booleans with false before true. Integers always sort before floats,
+/// even across the same numeric value -- `t[1]` and `t[1.0]` are distinct
+/// keys in Lua 5.4, so the order must not depend on which one `pairs()`
+/// happened to visit first.
+///
+/// Anything without a same-process-independent order (tables, functions,
+/// threads, userdata, lightuserdata, nil) is refused with an error rather
+/// than sorted by address: addresses are exactly what made `pairs()` vary,
+/// so sorting by them would reintroduce the nondeterminism under a new name.
+fn cmp_key(a: &Value, b: &Value) -> Result<std::cmp::Ordering, String> {
+    use std::cmp::Ordering;
+    fn rank(v: &Value) -> Result<u8, String> {
+        match v {
+            Value::Integer(_) => Ok(0),
+            Value::Number(_) => Ok(1),
+            Value::String(_) => Ok(2),
+            Value::Boolean(_) => Ok(3),
+            other => Err(format!(
+                "wa.sorted cannot order {} keys deterministically; use string, integer, float or boolean keys",
+                other.type_name()
+            )),
+        }
+    }
+    Ok(rank(a)?.cmp(&rank(b)?).then_with(|| match (a, b) {
+        (Value::Integer(x), Value::Integer(y)) => x.cmp(y),
+        (Value::Number(x), Value::Number(y)) => x.total_cmp(y),
+        (Value::String(x), Value::String(y)) => x.as_bytes().as_ref().cmp(y.as_bytes().as_ref()),
+        (Value::Boolean(x), Value::Boolean(y)) => x.cmp(y),
+        // Different ranks already decided; same-type pairs are covered.
+        _ => Ordering::Equal,
+    }))
+}
+
+fn make_push(ctx: &BindContext) -> Rc<dyn Fn(OverlayClaim, &str) -> mlua::Result<()>> {
     let allowed_slots = ctx.allowed_slots.clone();
     let allowed_register = ctx.allowed_register.clone();
     let claims = Rc::clone(&ctx.claims);
@@ -623,3 +722,166 @@ fn load_sprite_field(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ctx(mod_id: &str) -> BindContext {
+        BindContext {
+            mod_id: mod_id.to_string(),
+            root: PathBuf::new(),
+            allowed_slots: HashSet::new(),
+            allowed_register: HashSet::new(),
+            claims: Rc::new(RefCell::new(Vec::new())),
+            logs: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+
+    /// Gap 7: hooks that no weapon dispatcher drives (`hud` here, and the same
+    /// path serves worm_message / hurt / gravity_*) used to run with whatever
+    /// `wa._mod` the last weapon event left behind. With two packs installed
+    /// that resolves spawn sprite paths against the wrong pack. Registration
+    /// must remember the owner, and the wrapper must re-establish it.
+    #[test]
+    fn non_weapon_hooks_run_with_their_own_pack_id() {
+        let lua = Lua::new();
+        // The load order run_mods produces: install a, run a's script, install
+        // b, run b's script. install sets wa._mod, so each registration reads
+        // its own pack -- and the wrapper must keep that alive at dispatch.
+        install(&lua, &ctx("packa")).unwrap();
+        lua.load(
+            r#"
+            hits = {}
+            wa.on.hud(function() hits[#hits + 1] = wa._mod end)  -- pack a's script
+        "#,
+        )
+        .exec()
+        .unwrap();
+        install(&lua, &ctx("packb")).unwrap();
+        lua.load(
+            r#"
+            wa.on.hud(function() hits[#hits + 1] = wa._mod end)  -- pack b's script
+        "#,
+        )
+        .exec()
+        .unwrap();
+
+        // Poison the field the way a pack-a weapon event would have, then
+        // dispatch both hooks the way dispatch.rs does: walk the list, call
+        // each entry, read back whatever the handler saw.
+        lua.load(r#"wa._mod = "packa""#).exec().unwrap();
+        let wa: Table = lua.globals().get("wa").unwrap();
+        let hooks: Table = wa.get("_hooks").unwrap();
+        let list: Table = hooks.get("hud").unwrap();
+        for i in 1..=list.len().unwrap() {
+            let f: mlua::Function = list.get(i).unwrap();
+            f.call::<()>(()).unwrap();
+        }
+
+        let hits: Table = lua.globals().get("hits").unwrap();
+        assert_eq!(hits.get::<String>(1).unwrap(), "packa");
+        assert_eq!(hits.get::<String>(2).unwrap(), "packb");
+        assert_eq!(hits.len().unwrap(), 2);
+    }
+
+    /// The wrapper must stay transparent: worm_message dispatch reads the
+    /// callback's return to spot "eat", hurt's pre phase does the same for a
+    /// rewritten amount. Wrap-and-call must hand return values through.
+    #[test]
+    fn hook_wrapper_passes_return_values_through() {
+        let lua = Lua::new();
+        install(&lua, &ctx("packa")).unwrap();
+        lua.load(
+            r#"
+            seen = nil
+            wa.on.worm_message(function() seen = wa._mod return "eat" end)
+        "#,
+        )
+        .exec()
+        .unwrap();
+        let wa: Table = lua.globals().get("wa").unwrap();
+        let list: Table = wa
+            .get::<Table>("_hooks")
+            .unwrap()
+            .get("worm_message")
+            .unwrap();
+        let f: mlua::Function = list.get(1).unwrap();
+        lua.load(r#"wa._mod = "stale""#).exec().unwrap();
+        let ret: String = f
+            .call::<String>((lua.create_table().unwrap(), 0x24u32))
+            .unwrap();
+        assert_eq!(ret, "eat");
+        assert_eq!(lua.globals().get::<String>("seen").unwrap(), "packa");
+    }
+
+    /// Gap 5 remainder: `pairs()` over string-keyed tables varies per process
+    /// (Lua 5.4 randomises its string-hash seed), so packs iterating one with
+    /// gameplay effects would desync. `wa.sorted` returns the same key order
+    /// on both peers for the orderable key types.
+    #[test]
+    fn sorted_returns_string_keys_in_byte_order() {
+        let lua = Lua::new();
+        install(&lua, &ctx("sort")).unwrap();
+        let order: Vec<String> = lua
+            .load(r#"return wa.sorted({ zebra = 1, apple = 2, Mango = 3 })"#)
+            .eval::<Table>()
+            .unwrap()
+            .sequence_values::<String>()
+            .collect::<mlua::Result<_>>()
+            .unwrap();
+        assert_eq!(order, vec!["Mango", "apple", "zebra"]);
+    }
+
+    /// Integers sort among themselves numerically, and always before floats
+    /// even for equal numeric values -- `t[1]` and `t[1.0]` are distinct keys
+    /// in Lua 5.4, so the order must not depend on visit order. Booleans sort
+    /// false before true, after strings.
+    #[test]
+    fn sorted_orders_mixed_scalar_keys_deterministically() {
+        let lua = Lua::new();
+        install(&lua, &ctx("sort")).unwrap();
+        let order: Vec<String> = lua
+            .load(
+                r#"
+                local t = { [10] = 1, [2] = 2, [1.5] = 3, [1] = 4, b = 5, [true] = 6, [false] = 7 }
+                local names = {}
+                for _, k in ipairs(wa.sorted(t)) do names[#names + 1] = type(k) .. ":" .. tostring(k) end
+                return names
+                "#,
+            )
+            .eval::<Table>()
+            .unwrap()
+            .sequence_values::<String>()
+            .collect::<mlua::Result<_>>()
+            .unwrap();
+        assert_eq!(
+            order,
+            vec![
+                "number:1",
+                "number:2",
+                "number:10",
+                "number:1.5",
+                "string:b",
+                "boolean:false",
+                "boolean:true",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+    }
+
+    /// Keys with no same-process-independent order are refused: sorting table
+    /// keys by address would reintroduce the nondeterminism under a new name.
+    #[test]
+    fn sorted_refuses_unsortable_keys() {
+        let lua = Lua::new();
+        install(&lua, &ctx("sort")).unwrap();
+        let err = lua
+            .load(r#"return wa.sorted({ [{}] = 1 })"#)
+            .exec()
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("wa.sorted"), "unexpected error: {err}");
+    }
+}

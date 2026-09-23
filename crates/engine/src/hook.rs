@@ -46,6 +46,7 @@ pub fn install() -> Result<(), String> {
     crate::shader::install(&catalog)?;
     crate::render_queue::install()?;
     crate::gpu::install_rq_draw()?;
+    crate::sync::install(&catalog)?;
     unsafe {
         MinHook::enable_all_hooks().map_err(|e| format!("MinHook enable: {e:?}"))?;
     }

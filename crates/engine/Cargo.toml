@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+sync-diagnostics = []
+
 [dependencies]
 game = { path = "../game" }
 gfx = { path = "../gfx" }

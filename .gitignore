@@ -31,7 +31,12 @@ Desktop.ini
 credentials.json
 user/
 logs/
+local/
 *.log
+
+# Python tooling caches
+__pycache__/
+*.pyc
 
 # Game leftovers
 WA.exe

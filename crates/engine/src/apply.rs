@@ -46,6 +46,10 @@ pub fn on_gfx_ready(display: *mut u8) {
     crate::worm_sprite::clear();
     crate::mine::clear();
     crate::missile_boom::clear();
+    // Flush the previous match's diagnostics before their counters are reused.
+    crate::queue_census::finish();
+    crate::sync::finish();
+    world::clear_input_latch();
     crate::gpu::clear();
     crate::truecolor::clear();
     crate::render_queue::clear_depths();
@@ -72,9 +76,8 @@ pub fn on_gfx_ready(display: *mut u8) {
             return;
         }
     };
-    for line in &scripts.logs {
-        log_line(line);
-    }
+    // wa.log writes straight to the log now, so re-printing the load-time
+    // transcript here would duplicate every line.
     for skip in &scripts.resolved.skipped {
         log_line(&format!(
             "slot {} kept by {}; skipped claim from {}",

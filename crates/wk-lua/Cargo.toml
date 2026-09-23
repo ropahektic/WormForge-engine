@@ -8,6 +8,9 @@ license.workspace = true
 name = "wkLua"
 crate-type = ["cdylib"]
 
+[features]
+sync-diagnostics = ["engine/sync-diagnostics"]
+
 [dependencies]
 engine = { path = "../engine" }
 windows-sys = { workspace = true }

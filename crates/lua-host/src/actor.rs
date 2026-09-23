@@ -5,7 +5,8 @@
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
     ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAG_MIRROR_X, ACTOR_FLAGS,
-    ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE, CLASS_MINE,
+    ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SEQ, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE,
+    CLASS_MINE, WORM_INDEX,
     CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
     WORM_FACING, WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE,
@@ -71,6 +72,16 @@ pub struct ActorNative {
     pub look: fn(handle: u32, sprite: i32, delta: u32, w: i32, h: i32),
     /// Keyboard bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint, 64 Q, 128 Space.
     pub keys: fn() -> u32,
+    /// True when peers exist. Packs reading local input need this to guard
+    /// themselves: `keys()` and `pointer()` are local-only, so acting on them
+    /// in a networked game desyncs the peers.
+    pub networked: fn() -> bool,
+    /// One draw from WA's shared RNG, or None if it is unavailable.
+    pub random: fn() -> Option<u32>,
+    /// Write a line to wkLua.log now. `wa.log` collects into a Vec that is
+    /// snapshotted once after loading, so without this a pack logging from a
+    /// hook or a brain writes into a buffer nobody ever reads.
+    pub log: fn(&str),
     pub hide_worm: fn(handle: u32, hide: bool),
     pub worm_hidden: fn(handle: u32) -> bool,
     /// Stock SelectWeapon (F1 path). Returns ammo after equip, 0 if not this worm's turn.
@@ -87,6 +98,9 @@ impl Default for ActorNative {
         Self {
             explode: |_, _, _, _| {},
             despawn: |_| {},
+            networked: || false,
+            random: || None,
+            log: |_| {},
             in_water: |_| false,
             on_feet: |_| false,
             gravity: |_| {},
@@ -434,7 +448,11 @@ pub struct WormHandle(pub u32);
 
 impl UserData for ActorHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("id", |_, this| Ok(this.0));
+        // The spawn-order id, not the entity pointer. An address is not an
+        // identity: it differs between peers and between runs, so comparing
+        // ids or iterating a table keyed by them gave a different answer on
+        // every machine.
+        fields.add_field_method_get("id", |_, this| Ok(read_handle(this.0, ACTOR_SEQ)));
         fields.add_field_method_get("kind", |_, _| Ok("actor"));
         bind_pos_fields(fields, |h| h.0);
         fields.add_field_method_get("owner", |lua, this| {
@@ -597,7 +615,12 @@ impl UserData for ActorHandle {
 
 impl UserData for WormHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("id", |_, this| Ok(this.0));
+        // `team * 16 + index` -- not invented here: it is the key WA itself
+        // uses to find a worm in its shared-data table, so it is stable across
+        // peers and runs where the pointer is not.
+        fields.add_field_method_get("id", |_, this| {
+            Ok(stable_worm_id(this.0))
+        });
         fields.add_field_method_get("facing", |_, this| {
             Ok(if this.0 == 0 {
                 1
@@ -852,6 +875,18 @@ pub fn native_land_solid() -> Option<fn(i32, i32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_solid)
 }
 
+pub fn native_log() -> Option<fn(&str)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.log)
+}
+
+pub fn native_random() -> Option<fn() -> Option<u32>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.random)
+}
+
+pub fn native_networked() -> Option<fn() -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.networked)
+}
+
 pub fn native_land_trace() -> Option<fn(i32, i32, i32, i32) -> Option<(i32, i32)>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_trace)
 }
@@ -983,6 +1018,18 @@ fn hit_table(lua: &Lua, bits: i32) -> mlua::Result<Table> {
 
 fn empty_hit(lua: &Lua) -> mlua::Result<Table> {
     hit_table(lua, 0)
+}
+
+/// A worm's identity as WA itself keys it: `team * 16 + index`.
+///
+/// Returns 0 for a null handle, which no live worm can be.
+fn stable_worm_id(handle: u32) -> i32 {
+    if handle == 0 {
+        return 0;
+    }
+    let team = read_handle(handle, ENT_WORM_TEAM);
+    let index = read_handle(handle, WORM_INDEX);
+    team.wrapping_mul(16).wrapping_add(index)
 }
 
 fn actor_dead(handle: u32) -> bool {

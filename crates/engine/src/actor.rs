@@ -100,6 +100,8 @@ struct DeferredEmit {
     emit: AttachedSpawn,
     wait: u8,
 }
+/// Actor ids, handed out in spawn order. Starts at 1 so 0 can mean "none".
+static NEXT_SEQ: AtomicU32 = AtomicU32::new(1);
 
 pub fn install(catalog: &Catalog) -> Result<(), String> {
     build_vtable();
@@ -148,6 +150,9 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         drop_carry: crate::physics::drop_carry,
         look: native_look,
         keys: crate::world::keys,
+        networked: crate::world::is_networked,
+        random: crate::world::draw_random,
+        log: |m| crate::log_line(m),
         hide_worm: crate::physics::hide_worm,
         worm_hidden: crate::physics::worm_hidden,
         equip: crate::world::equip_weapon,
@@ -262,6 +267,7 @@ pub fn clear_claims() {
     if let Ok(mut g) = LIVE.lock() {
         g.clear();
     }
+    NEXT_SEQ.store(1, Ordering::SeqCst);
 }
 
 fn drop_for_slot(slot: usize) -> Option<DropClaim> {
@@ -423,6 +429,16 @@ unsafe fn try_lua_projectile(worm: *mut u8, ctx: *mut u8) -> bool {
         read_i32(ctx, CTX_VEL_Y)
     };
     if claim.fire_id != 0 {
+        let world = read_i32(worm, ENT_WORLD) as *mut u8;
+        let frame = if world.is_null() {
+            -1
+        } else {
+            read_i32(world, GAME_WORLD_FRAME_COUNTER)
+        };
+        log_line(&format!(
+            "LuaActor on_fire frame={frame} slot={slot} worm={:#x} ctx={:#x}",
+            worm as usize, ctx as usize
+        ));
         if let Err(e) = lua_host::weapon_fire(claim.fire_id, worm as u32, slot as i32, x, y, vx, vy)
         {
             log_error(&format!("on_fire: {e}"));
@@ -551,6 +567,9 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         },
     );
     write_i32(this, ACTOR_DEAD, 0);
+    // Identity that survives being looked at from another machine. Assigned
+    // in spawn order, which is reproducible; the address is not.
+    write_i32(this, ACTOR_SEQ, NEXT_SEQ.fetch_add(1, Ordering::SeqCst) as i32);
     write_i32(this, ACTOR_OWNER, owner as i32);
     let (dmg, boom) = spawn
         .explode
@@ -1851,6 +1870,20 @@ fn native_spawn(args: &SpawnArgs) -> Result<u32, String> {
 
 fn native_list_actors() -> Vec<u32> {
     LIVE.lock().map(|g| g.clone()).unwrap_or_default()
+}
+
+/// Live worms for the determinism probe, walked by (team, index) rather than
+/// by address so two runs enumerate them in the same order. Resolves the
+/// tables from the global session, so it needs no entity to start from.
+pub fn live_worms() -> Vec<u32> {
+    unsafe { list_worms(std::ptr::null_mut()) }
+}
+
+/// Our own live actors, in spawn order: `LIVE` is a `Vec` and `retain`
+/// preserves it, so this is reproducible where an address-keyed set would not
+/// be.
+pub fn live_actors() -> Vec<u32> {
+    native_list_actors()
 }
 
 fn native_list_worms(from: u32) -> Vec<u32> {

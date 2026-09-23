@@ -4,10 +4,40 @@ size = 0x98D8
 plate_comment = "Partial. weapon_table confirmed: InitWeaponTable memset *(world+0x510) for 0x80b0 bytes."
 
   [[struct.field]]
+  offset = 0x1C
+  name = "net_session"
+  type = "void *"
+  comment = "Per-game network session. Non-null is WA's online/offline discriminator; confirmed by OpenWA's constructor and main-loop branches."
+
+  [[struct.field]]
   offset = 0x20
   name = "landscape"
   type = "Landscape *"
   comment = "Walk mask at Landscape+0x914. +0x910/+0x91C are paint. Map size at +0x77C0/+0x77C4."
+
+  [[struct.field]]
+  offset = 0x5CC
+  name = "frame_counter"
+  type = "int"
+  comment = "Sim frame counter, incremented at the end of each frame in GameFrameDispatcher. WA keeps its own clock, so the determinism probe and any replay stream key off this rather than counting hook calls."
+
+  [[struct.field]]
+  offset = 0x45EC
+  name = "game_rng"
+  type = "uint"
+  comment = "Game RNG state: rng = (frame_counter + rng) * 0x19660D + 0x3C6EF35F. ONE shared RNG for gameplay and visual effects alike -- there is no visual-only code in a lockstep engine. Divergence here means something perturbed WA itself."
+
+  [[struct.field]]
+  offset = 0x72EC
+  name = "fx_rng"
+  type = "uint"
+  comment = "Client presentation RNG, advanced by GameTask__fxrandom (0x53F2E0) and inlined users including score bubbles, smoke, and sea bubbles. It may differ across peers."
+
+  [[struct.field]]
+  offset = 0x72F0
+  name = "net_rng"
+  type = "uint"
+  comment = "Lockstep network RNG, advanced by GameTask__netrandom (0x53F300) and inlined users."
 
   [[struct.field]]
   offset = 0x510
