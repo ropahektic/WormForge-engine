@@ -3,12 +3,13 @@
 
 use crate::log::{log_error, log_line};
 use crate::rebase::rb;
+use game::latch::FrameLatch;
 use game::entity::{read_i32, write_i32};
 use game::offsets::*;
 use std::collections::VecDeque;
 use std::ffi::CString;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::sync::Mutex;
 
 const MAX_WALK: usize = 8192;
@@ -159,6 +160,19 @@ pub fn view_cam() -> (i32, i32, i32, i32) {
 /// OS mouse (so a held drag tracks). Client pixels are scaled onto the
 /// display so windowed / DPI stretch still covers the whole map.
 pub fn pointer() -> (i32, i32, bool) {
+    POINTER_SYNC_REQUESTED.store(1, Ordering::Relaxed);
+    pointer_latched()
+}
+
+fn pointer_latched() -> (i32, i32, bool) {
+    latched(&POINTER, || {
+        resolved_input()
+            .map(|sample| (sample.1, sample.2, sample.3))
+            .unwrap_or_else(local_pointer_latched)
+    })
+}
+
+fn poll_pointer() -> (i32, i32, bool) {
     let down = mouse_down();
     let (cx, cy, vw, vh) = view_cam();
     if let Some((mx, my, cw, ch)) = client_mouse() {
@@ -269,8 +283,202 @@ fn key_down(vk: i32) -> bool {
     }
 }
 
+/// Input, sampled once per simulation frame.
+///
+/// Everything that reads input goes through here -- packs via
+/// `wa.world.keys()` / `pointer()`, and `pump_space_fire` below -- so that
+/// within one frame they all see the same thing. Live network games resolve
+/// the peer aggregate supplied by `sync`; offline games resolve the OS-local
+/// latches below; replay playback resolves its recorded sample first.
+///
+/// It is also the one place a recorder needs to tap: "the input this frame was
+/// X" now has a single answer to write down.
+///
+/// Keyed on WA's own frame counter. A consequence worth knowing: while the
+/// simulation is not advancing, the sample does not change either. That is
+/// correct for anything that feeds the simulation. A pack wanting a live
+/// cursor for pure decoration would need a separate, explicitly-unlatched
+/// call, which does not exist yet because nothing has asked for one.
+/// The public pair and OS-local pair are separate: the process-input hook must
+/// be able to sample this peer without recursively asking for the aggregate.
+static KEYS: FrameLatch<u32> = FrameLatch::new();
+static POINTER: FrameLatch<(i32, i32, bool)> = FrameLatch::new();
+static LOCAL_KEYS: FrameLatch<u32> = FrameLatch::new();
+static LOCAL_POINTER: FrameLatch<(i32, i32, bool)> = FrameLatch::new();
+static POINTER_SYNC_REQUESTED: AtomicU32 = AtomicU32::new(0);
+
+/// WA's sim frame, or `None` outside a game (frontend, map editor).
+fn sim_frame() -> Option<i64> {
+    let world = session_world();
+    if world.is_null() {
+        return None;
+    }
+    Some(unsafe { read_i32(world, GAME_WORLD_FRAME_COUNTER) } as i64)
+}
+
+/// Outside a game there is no frame to be consistent with, so answer live
+/// rather than serving a sample held over from the last match.
+fn latched<T: Copy>(latch: &FrameLatch<T>, sample: impl FnOnce() -> T) -> T {
+    match sim_frame() {
+        None => sample(),
+        Some(frame) => latch.get(frame, sample),
+    }
+}
+
+/// Draw from WA's own shared RNG.
+///
+/// **This is the only randomness a pack may have, and the reason is lockstep.**
+/// `math.random` is nil in the sandbox because a host RNG is seeded per
+/// process, so two peers would draw different numbers immediately. WA's RNG is
+/// part of the simulation: both peers advance it in step, and a replay
+/// reproduces it exactly. Project X reached the same conclusion — the LCG
+/// multiplier `0x19660D` appears zero times in `wkPX.dll`, so all ~227 of its
+/// `GS->GetRandom()` script calls defer to WA's.
+///
+/// We call WA's function rather than reimplementing the formula. It is six
+/// instructions and we know them, but calling cannot drift: if WA's arithmetic
+/// ever differed from our copy by one detail, every draw afterwards would
+/// diverge and the cause would be invisible.
+///
+/// **Drawing advances shared state.** The next stock draw — crate placement,
+/// barrel spread, damage jitter — gets the value after ours rather than the
+/// one it would have had. That is deliberate and safe for lockstep, because
+/// both peers and a replay all take the same draws in the same order. But a
+/// game played with a pack that draws is not the same game as one played
+/// without it, which is a thing to know rather than a bug.
+///
+/// Returns `None` before the world exists, or if the function's first
+/// instruction is not the one we verified.
+pub fn draw_random() -> Option<u32> {
+    let world = session_world();
+    if world.is_null() {
+        return None;
+    }
+    if !advance_rng_verified() {
+        return None;
+    }
+    let f = rb(GAME_WORLD_ADVANCE_RNG) as u32;
+    let args = [world as u32, f];
+    let out: u32;
+    unsafe {
+        core::arch::asm!(
+            "push esi",
+            "push edi",
+            "mov ecx, dword ptr [ebx]",
+            "call dword ptr [ebx + 4]",
+            "pop edi",
+            "pop esi",
+            in("ebx") args.as_ptr(),
+            lateout("eax") out,
+            out("ecx") _,
+            out("edx") _,
+        );
+    }
+    Some(out)
+}
+
+/// Check the prologue once, the way `render_queue` checks its dispatcher.
+/// Calling a hardcoded address on a build whose layout moved would corrupt
+/// the game; refusing to draw only costs the pack its randomness.
+fn advance_rng_verified() -> bool {
+    match RNG_OK.load(Ordering::Relaxed) {
+        0 => {
+            let addr = rb(GAME_WORLD_ADVANCE_RNG) as *const u8;
+            let found = unsafe {
+                std::slice::from_raw_parts(addr, ADVANCE_RNG_PROLOGUE.len())
+            };
+            let ok = found == ADVANCE_RNG_PROLOGUE;
+            RNG_OK.store(if ok { 2 } else { 1 }, Ordering::Relaxed);
+            if !ok {
+                log_error(&format!(
+                    "GameWorld__AdvanceRNG at {addr:?} does not start with the \
+                     verified prologue (found {found:02x?}); wa.random() is \
+                     disabled rather than calling into the wrong place"
+                ));
+            }
+            ok
+        }
+        v => v == 2,
+    }
+}
+
+static RNG_OK: AtomicU32 = AtomicU32::new(0);
+
+/// True when peers exist. Input itself is synchronized; packs can use this for
+/// behavior that intentionally differs between offline and network play.
+///
+/// `GameWorld+0x1C` is WA's per-game network session. OpenWA's constructor and
+/// every online/offline branch agree on this field; `GameWorld+0x28` is a
+/// different network object and was observed null in a real online round.
+pub fn is_networked() -> bool {
+    let world = session_world();
+    if world.is_null() {
+        return false;
+    }
+    unsafe { read_i32(world, GAME_WORLD_NET_SESSION) != 0 }
+}
+
+/// Drop all held samples. A new match restarts WA's frame counter, and the
+/// first frame must not inherit the last frame of the previous game.
+pub fn clear_input_latch() {
+    KEYS.clear();
+    POINTER.clear();
+    LOCAL_KEYS.clear();
+    LOCAL_POINTER.clear();
+    POINTER_SYNC_REQUESTED.store(0, Ordering::Relaxed);
+}
+
 /// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint (shift), 64 Q, 128 Space (shoot).
 pub fn keys() -> u32 {
+    keys_latched()
+}
+
+fn keys_latched() -> u32 {
+    latched(&KEYS, || {
+        resolved_input()
+            .map(|sample| sample.0)
+            .unwrap_or_else(local_keys_latched)
+    })
+}
+
+fn resolved_input() -> Option<(u32, i32, i32, bool)> {
+    let frame = sim_frame()?;
+    if is_networked() {
+        // A networked reader must never fall through to OS-local input. WA's
+        // lockstep dispatch normally populates this before simulation code;
+        // neutral input is the deterministic failure mode if it did not.
+        return Some(crate::sync::input(frame).unwrap_or((0, 0, 0, false)));
+    }
+    None
+}
+
+/// The OS-local sample contributed to the lockstep carrier. This is separate
+/// from `keys_latched` / `pointer_latched`, which expose the merged peer value.
+pub(crate) fn local_input_for_sync() -> (u32, i32, i32, bool) {
+    let keys = local_keys_latched();
+    let (px, py, down) = local_pointer_latched();
+    (keys, px, py, down)
+}
+
+pub(crate) fn take_pointer_sync_request() -> bool {
+    POINTER_SYNC_REQUESTED.swap(0, Ordering::Relaxed) != 0
+}
+
+fn local_keys_latched() -> u32 {
+    latched(&LOCAL_KEYS, poll_keys)
+}
+
+fn local_pointer_latched() -> (i32, i32, bool) {
+    latched(&LOCAL_POINTER, poll_pointer)
+}
+
+/// True while Space is held, as sampled for this frame. `pump_space_fire` and
+/// a pack reading `keys().space` therefore always agree.
+fn space_held() -> bool {
+    keys_latched() & 128 != 0
+}
+
+fn poll_keys() -> u32 {
     let mut m = 0u32;
     if key_down(0x25) || key_down(0x41) {
         m |= 1;
@@ -370,7 +578,10 @@ pub fn pump_space_fire(worm: *mut u8) {
     unsafe {
         keep_stock_fire_armed(worm);
     }
-    let down = key_down(0x20);
+    // The latched sample, not a fresh poll: this runs inside a worm's
+    // FRAME_FINISH, and a pack's keys() may run in the same frame. Polling
+    // separately let them disagree about whether Space was held.
+    let down = space_held();
     let mut was = false;
     if let Ok(mut g) = SPACE_FIRE.lock() {
         if let Some(s) = g.iter_mut().find(|s| s.handle == handle) {

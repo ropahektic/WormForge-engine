@@ -129,6 +129,125 @@ mod tests {
 
     static HOST: Mutex<()> = Mutex::new(());
 
+    /// `.id` must be an identity, never a handle. Accepting a number where an
+    /// actor belongs used to be survivable only because ids WERE pointers;
+    /// now a number there would be dereferenced as an address.
+    #[test]
+    fn a_number_is_refused_where_an_actor_or_worm_belongs() {
+        let _guard = lock_host();
+        actor::bind_actor_native(actor::ActorNative::default());
+        let lua = sandbox::new_lua().unwrap();
+        let ctx = test_ctx();
+        api::install(&lua, &ctx).unwrap();
+        let err = lua
+            .load("return wa.actors.spawn({ sprite = 'grenade', owner = 12345 })")
+            .eval::<mlua::Value>()
+            .expect_err("a raw number must not be taken for an entity");
+        let text = err.to_string();
+        assert!(
+            text.contains("not a handle") || text.contains("not a number"),
+            "the error should explain that an id is not a handle: {text}"
+        );
+    }
+
+    /// A minimal bind context: these tests exercise `wa.*` directly rather
+    /// than loading a pack, so nothing here needs to be a real mod.
+    fn test_ctx() -> BindContext {
+        BindContext {
+            mod_id: "test.random".into(),
+            root: std::env::temp_dir(),
+            allowed_slots: Default::default(),
+            allowed_register: Default::default(),
+            claims: Rc::new(RefCell::new(Vec::new())),
+            logs: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+
+    /// `wa.random` is the only randomness a pack may have, so its range
+    /// arithmetic is worth pinning down: it is pure logic, and getting it
+    /// wrong would be a gameplay bug that looks like bad luck.
+    #[test]
+    fn wa_random_maps_a_draw_onto_the_requested_range() {
+        let _guard = lock_host();
+        // A fixed draw, so the mapping is the only variable.
+        const DRAW: u32 = 0x1234_5678;
+        actor::bind_actor_native(actor::ActorNative {
+            random: || Some(DRAW),
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        let ctx = test_ctx();
+        api::install(&lua, &ctx).unwrap();
+
+        let raw: i64 = lua.load("return wa.random()").eval().unwrap();
+        assert_eq!(raw, DRAW as i64, "no args gives the raw draw");
+
+        // 1..n, matching math.random's form.
+        let n: i64 = lua.load("return wa.random(6)").eval().unwrap();
+        assert!((1..=6).contains(&n), "got {n}, want 1..=6");
+        assert_eq!(n, 1 + (DRAW as i64 % 6));
+
+        // a..b inclusive at both ends.
+        let v: i64 = lua.load("return wa.random(10, 20)").eval().unwrap();
+        assert!((10..=20).contains(&v), "got {v}, want 10..=20");
+
+        // A single-value range is legal and must return that value.
+        let one: i64 = lua.load("return wa.random(7, 7)").eval().unwrap();
+        assert_eq!(one, 7);
+
+        // Negative ranges are ordinary (offsets, deltas).
+        let neg: i64 = lua.load("return wa.random(-3, -1)").eval().unwrap();
+        assert!((-3..=-1).contains(&neg), "got {neg}");
+
+        // An inverted range is a pack bug; say so rather than returning
+        // something arbitrary.
+        assert!(lua.load("return wa.random(5, 2)").eval::<i64>().is_err());
+    }
+
+    /// With no RNG available the call must fail loudly. Returning nil would
+    /// surface as an error somewhere later and further from the cause, and
+    /// substituting a host RNG would desync every peer.
+    #[test]
+    fn wa_random_errors_rather_than_substituting_when_unavailable() {
+        let _guard = lock_host();
+        actor::bind_actor_native(actor::ActorNative::default());
+        let lua = sandbox::new_lua().unwrap();
+        let ctx = test_ctx();
+        api::install(&lua, &ctx).unwrap();
+        let err = lua
+            .load("return wa.random(6)")
+            .eval::<i64>()
+            .expect_err("must not silently succeed");
+        assert!(
+            err.to_string().contains("desync"),
+            "the error should say why it cannot be substituted: {err}"
+        );
+    }
+
+    /// `wa.random` exists, but Lua's own RNG must stay unavailable: it is
+    /// seeded per process, so two peers would diverge on the first call.
+    #[test]
+    fn lua_own_rng_stays_nil() {
+        let _guard = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        for expr in ["math.random", "math.randomseed"] {
+            let is_nil: bool = lua.load(format!("return {expr} == nil")).eval().unwrap();
+            assert!(is_nil, "{expr} must stay nil");
+        }
+    }
+
+    /// W1 item 7: `coroutine` stays out of the sandbox. Suspend/resume points
+    /// are driven by whoever yields rather than by the sim, so a pack using
+    /// them would desync; assert the strip so a future edit to the list is
+    /// caught rather than silently reopened.
+    #[test]
+    fn coroutine_stays_nil() {
+        let _guard = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        let is_nil: bool = lua.load("return coroutine == nil").eval().unwrap();
+        assert!(is_nil, "coroutine must stay nil");
+    }
+
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
     }

@@ -30,7 +30,8 @@ If Lua can already do it with actors + `wa.land` + sprites, do not add a native 
 4. Lockstep: if it moves or damages, it runs on messages both peers already see.
    - HUD must not write physics.
    - No `math.random`, no clock, no `GetAsyncKeyState` as sim.
-   - `wa.world.keys()` / `pointer()` are local until extra packets exist.
+   - `pairs()` order over **string-keyed** tables varies per process (Lua randomises its string-hash seed). Integer keys — actor/worm `id`s — iterate reproducibly; for anything else use `wa.sorted(t)` before iterating.
+   - `wa.world.keys()` / `pointer()` use WormForge's synchronized input channel in networked games; every peer must run the same WormForge build.
 5. `cargo test --workspace` and a 3.8.1 launch that logs `wkLua build …`.
 
 Draw primitives (line, blit-without-actor) belong in the DLL. Named effects (lightning, fire) belong in Lua that call those primitives.
