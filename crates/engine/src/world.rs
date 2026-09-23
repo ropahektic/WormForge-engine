@@ -9,7 +9,7 @@ use game::offsets::*;
 use std::collections::VecDeque;
 use std::ffi::CString;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 use std::sync::Mutex;
 
 const MAX_WALK: usize = 8192;
@@ -155,12 +155,89 @@ pub fn view_cam() -> (i32, i32, i32, i32) {
     }
 }
 
-/// Live mouse in world 16.16, plus left button. Game thread only.
+/// Last RQ dispatch view: clip origin (Fixed) + Display cam (pixels).
+/// Same pair GPU entity resolve uses — **not** HUD screen-absolutes.
+static VIEW_CLIP_X: AtomicI32 = AtomicI32::new(0);
+static VIEW_CLIP_Y: AtomicI32 = AtomicI32::new(0);
+static VIEW_CAM_X: AtomicI32 = AtomicI32::new(0);
+static VIEW_CAM_Y: AtomicI32 = AtomicI32::new(0);
+static VIEW_SURF_W: AtomicI32 = AtomicI32::new(0);
+static VIEW_SURF_H: AtomicI32 = AtomicI32::new(0);
+static VIEW_XFORM: AtomicBool = AtomicBool::new(false);
+
+/// Latch from render-queue dispatch (`display`, `clip`). Entity path only.
+pub fn latch_entity_view(display: usize, clip: usize) {
+    if display == 0 || clip == 0 {
+        return;
+    }
+    unsafe {
+        VIEW_CLIP_X.store(*(clip as *const i32), Ordering::Relaxed);
+        VIEW_CLIP_Y.store(*((clip + 4) as *const i32), Ordering::Relaxed);
+        VIEW_CAM_X.store(*((display + DISPLAY_VIEW_X) as *const i32), Ordering::Relaxed);
+        VIEW_CAM_Y.store(*((display + DISPLAY_VIEW_Y) as *const i32), Ordering::Relaxed);
+        VIEW_SURF_W.store(*((display + DISPLAY_WIDTH) as *const i32), Ordering::Relaxed);
+        VIEW_SURF_H.store(*((display + DISPLAY_HEIGHT) as *const i32), Ordering::Relaxed);
+    }
+    VIEW_XFORM.store(true, Ordering::Relaxed);
+}
+
+/// Inverse of GPU entity resolve: `world_px = screen + clip_px - cam`.
+/// `sx`/`sy` are Display surface pixels (same space as `DISPLAY_VIEW_*`).
+pub fn screen_to_world_fixed(sx: i32, sy: i32) -> (i32, i32) {
+    if !VIEW_XFORM.load(Ordering::Relaxed) {
+        // Before first frame: proven spawn point = camera centre in world Fixed.
+        let (cx, cy, _, _) = view_cam();
+        return (cx, cy);
+    }
+    let clip_x = VIEW_CLIP_X.load(Ordering::Relaxed) >> 16;
+    let clip_y = VIEW_CLIP_Y.load(Ordering::Relaxed) >> 16;
+    let cam_x = VIEW_CAM_X.load(Ordering::Relaxed);
+    let cam_y = VIEW_CAM_Y.load(Ordering::Relaxed);
+    let wx = (sx as i64 + clip_x as i64 - cam_x as i64) as i32;
+    let wy = (sy as i64 + clip_y as i64 - cam_y as i64) as i32;
+    (wx << 16, wy << 16)
+}
+
+/// Client hwnd pixel → Display surface pixel, then entity screen→world.
+fn client_to_world_fixed(mx: i32, my: i32, cw: i32, ch: i32) -> Option<(i32, i32)> {
+    if cw <= 0 || ch <= 0 {
+        return None;
+    }
+    let sw = VIEW_SURF_W.load(Ordering::Relaxed);
+    let sh = VIEW_SURF_H.load(Ordering::Relaxed);
+    let (sx, sy) = if VIEW_XFORM.load(Ordering::Relaxed) && sw > 0 && sh > 0 {
+        (
+            ((mx as i64 * sw as i64) / cw as i64) as i32,
+            ((my as i64 * sh as i64) / ch as i64) as i32,
+        )
+    } else {
+        // No latch yet: map through GameWorld viewport onto camera centre.
+        let (cx, cy, vw, vh) = view_cam();
+        if vw <= 0 || vh <= 0 {
+            return Some((cx, cy));
+        }
+        let gx = ((mx as i64 * vw as i64) / cw as i64) as i32;
+        let gy = ((my as i64 * vh as i64) / ch as i64) as i32;
+        return Some((
+            cx.wrapping_sub(vw << 15).wrapping_add(gx << 16),
+            cy.wrapping_sub(vh << 15).wrapping_add(gy << 16),
+        ));
+    };
+    Some(screen_to_world_fixed(sx, sy))
+}
+
+/// Live aim in world 16.16 + left button. Game thread only.
 ///
-/// OS mouse (so a held drag tracks). Client pixels are scaled onto the
-/// display so windowed / DPI stretch still covers the whole map.
+/// Strike packs with land-cursor mode still read `World+0x7380/84`.
+/// Otherwise: OS mouse → Display surface → entity screen→world (GPU inverse).
+/// Never the HUD path (screen absolutes that track the camera).
 pub fn pointer() -> (i32, i32, bool) {
     POINTER_SYNC_REQUESTED.store(1, Ordering::Relaxed);
+    if let Some(frame) = sim_frame() {
+        POINTER_SYNC_UNTIL.store((frame as u32).saturating_add(60), Ordering::Relaxed);
+    } else {
+        POINTER_SYNC_UNTIL.store(u32::MAX, Ordering::Relaxed);
+    }
     pointer_latched()
 }
 
@@ -174,34 +251,127 @@ fn pointer_latched() -> (i32, i32, bool) {
 
 fn poll_pointer() -> (i32, i32, bool) {
     let down = mouse_down();
-    let (cx, cy, vw, vh) = view_cam();
-    if let Some((mx, my, cw, ch)) = client_mouse() {
-        if vw > 0 && vh > 0 && cw > 0 && ch > 0 {
-            let (dw, dh) = display_wh();
-            let dw = if dw > 0 { dw } else { cw };
-            let dh = if dh > 0 { dh } else { ch };
-            let gx = (mx as i64 * dw as i64) / cw as i64;
-            let gy = (my as i64 * dh as i64) / ch as i64;
-            let x = cx
-                .wrapping_sub((vw as i32) << 15)
-                .wrapping_add((gx as i32) << 16);
-            let y = cy
-                .wrapping_sub((vh as i32) << 15)
-                .wrapping_add((gy as i32) << 16);
+    if land_aim_mode() {
+        if let Some((x, y)) = land_cursor() {
             return (x, y, down);
         }
     }
-    let world = session_world();
-    if world.is_null() {
-        return (0, 0, down);
+    let (cx, cy, _, _) = view_cam();
+    if let Some((mx, my, cw, ch)) = client_mouse() {
+        if let Some((x, y)) = client_to_world_fixed(mx, my, cw, ch) {
+            return (x, y, down);
+        }
+    }
+    // Proven fallback: camera centre is already world Fixed.
+    (cx, cy, down)
+}
+
+/// TeamEntity for a team index (`ENT_WORM_TEAM` of any worm on it), or null.
+pub fn team_entity(team: i32) -> *mut u8 {
+    if team < 0 {
+        return std::ptr::null_mut();
     }
     unsafe {
+        let root = session_root_ptr();
+        if root.is_null() {
+            return std::ptr::null_mut();
+        }
+        let shared = read_i32(root, ENT_SHARED_DATA) as *mut u8;
+        shared_lookup(shared, team as u32, SHARED_KEY_TEAM).unwrap_or(std::ptr::null_mut())
+    }
+}
+
+/// True when WA is in land-cursor input mode (not camera-pan mode).
+fn land_aim_mode() -> bool {
+    unsafe {
+        for h in crate::actor::list_worms_pub(0) {
+            if h == 0 {
+                continue;
+            }
+            let w = h as *mut u8;
+            if read_i32(w, WORM_TURN_ACTIVE) != 0 && read_i32(w, WORM_SHOW_CURSOR) != 0 {
+                return true;
+            }
+        }
+        let root = session_root_ptr();
+        if root.is_null() {
+            return false;
+        }
+        let shared = read_i32(root, ENT_SHARED_DATA) as *mut u8;
+        if shared.is_null() {
+            return false;
+        }
+        for team in 0..=8u32 {
+            if let Some(team_ent) = shared_lookup(shared, team, SHARED_KEY_TEAM) {
+                if read_i32(team_ent, TEAM_CURSOR_MOVE) != 0 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
+/// Teleport / strike land aim (Fixed 16.16), lockstep-updated by WA.
+fn land_cursor() -> Option<(i32, i32)> {
+    let world = session_world();
+    if world.is_null() {
+        return None;
+    }
+    let (x, y) = unsafe {
         (
             read_i32(world, GAME_WORLD_LAND_CURSOR_X),
             read_i32(world, GAME_WORLD_LAND_CURSOR_Y),
-            down,
         )
+    };
+    if x == 0 && y == 0 {
+        return None;
     }
+    Some((x, y))
+}
+
+/// Clear planted strike X without touching the live MOVE aim bit.
+/// `TeamEntity__reset_cursor` is EAX-usercall (not thiscall) — calling it wrong
+/// AVs. Writing MARK is enough for presentation; MOVE stays so aim continues.
+pub fn reset_strike_cursors() {
+    unsafe {
+        let root = session_root_ptr();
+        if root.is_null() {
+            return;
+        }
+        let shared = read_i32(root, ENT_SHARED_DATA) as *mut u8;
+        if shared.is_null() {
+            return;
+        }
+        for team in 0..=8u32 {
+            if let Some(team_ent) = shared_lookup(shared, team, SHARED_KEY_TEAM) {
+                write_i32(team_ent, TEAM_CURSOR_MARK, 0);
+            }
+        }
+    }
+}
+
+unsafe fn shared_lookup(table: *mut u8, key_esi: u32, key_edi: u32) -> Option<*mut u8> {
+    if table.is_null() {
+        return None;
+    }
+    let bucket = (key_esi.wrapping_mul(0x11).wrapping_add(key_edi) & 0xFF) as usize;
+    let mut node = *(table.add(bucket * 4) as *const *mut u8);
+    let mut hops = 0u32;
+    while !node.is_null() && hops < 64 {
+        hops += 1;
+        let n_edi = *(node.add(4) as *const u32);
+        let n_esi = *(node.add(8) as *const u32);
+        if n_edi == key_edi && n_esi == key_esi {
+            let found = *(node.add(12) as *const *mut u8);
+            if !found.is_null() {
+                return Some(found);
+            }
+            return None;
+        }
+        node = *(node as *const *mut u8);
+    }
+    None
 }
 
 struct FrozenTurn {
@@ -306,6 +476,11 @@ static POINTER: FrameLatch<(i32, i32, bool)> = FrameLatch::new();
 static LOCAL_KEYS: FrameLatch<u32> = FrameLatch::new();
 static LOCAL_POINTER: FrameLatch<(i32, i32, bool)> = FrameLatch::new();
 static POINTER_SYNC_REQUESTED: AtomicU32 = AtomicU32::new(0);
+/// Keep sending pointer motion for a while after a pack last called `pointer()`.
+/// The one-shot `POINTER_SYNC_REQUESTED` bit is sampled in the net queue *before*
+/// Lua brains run, so without stickiness a cursor actor only got the ~1s heartbeat
+/// and spawned/stuck near world (0,0).
+static POINTER_SYNC_UNTIL: AtomicU32 = AtomicU32::new(0);
 
 /// WA's sim frame, or `None` outside a game (frontend, map editor).
 fn sim_frame() -> Option<i64> {
@@ -426,6 +601,7 @@ pub fn clear_input_latch() {
     LOCAL_KEYS.clear();
     LOCAL_POINTER.clear();
     POINTER_SYNC_REQUESTED.store(0, Ordering::Relaxed);
+    POINTER_SYNC_UNTIL.store(0, Ordering::Relaxed);
 }
 
 /// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint (shift), 64 Q, 128 Space (shoot).
@@ -444,12 +620,22 @@ fn keys_latched() -> u32 {
 fn resolved_input() -> Option<(u32, i32, i32, bool)> {
     let frame = sim_frame()?;
     if is_networked() {
-        // A networked reader must never fall through to OS-local input. WA's
-        // lockstep dispatch normally populates this before simulation code;
-        // neutral input is the deterministic failure mode if it did not.
-        return Some(crate::sync::input(frame).unwrap_or((0, 0, 0, false)));
+        // Never fall through to OS-local input online. Prefer the last latched
+        // sync sample; if none has arrived yet, use map-centre (not 0,0) so a
+        // cursor actor does not spawn in the corner during the first heartbeat.
+        return Some(crate::sync::input(frame).unwrap_or_else(neutral_network_input));
     }
     None
+}
+
+/// Deterministic placeholder before the first lockstep input record arrives.
+fn neutral_network_input() -> (u32, i32, i32, bool) {
+    let (w, h) = map_size_px();
+    if w > 0 && h > 0 {
+        (0, (w / 2) << 16, (h / 2) << 16, false)
+    } else {
+        (0, 0, 0, false)
+    }
 }
 
 /// The OS-local sample contributed to the lockstep carrier. This is separate
@@ -461,7 +647,14 @@ pub(crate) fn local_input_for_sync() -> (u32, i32, i32, bool) {
 }
 
 pub(crate) fn take_pointer_sync_request() -> bool {
-    POINTER_SYNC_REQUESTED.swap(0, Ordering::Relaxed) != 0
+    let one_shot = POINTER_SYNC_REQUESTED.swap(0, Ordering::Relaxed) != 0;
+    let until = POINTER_SYNC_UNTIL.load(Ordering::Relaxed);
+    let sticky = match sim_frame() {
+        Some(frame) => (frame as u32) <= until,
+        // Frontend / no world: if something asked, keep requesting.
+        None => until != 0,
+    };
+    one_shot || sticky
 }
 
 fn local_keys_latched() -> u32 {
@@ -918,23 +1111,6 @@ fn client_mouse() -> Option<(i32, i32, i32, i32)> {
             return None;
         }
         Some((pt.x, pt.y, cw, ch))
-    }
-}
-
-fn display_wh() -> (i32, i32) {
-    let world = session_world();
-    if world.is_null() {
-        return (0, 0);
-    }
-    unsafe {
-        let display = *(world.add(GAME_WORLD_DISPLAY) as *const *mut u8);
-        if display.is_null() {
-            return (0, 0);
-        }
-        (
-            *(display.add(DISPLAY_WIDTH) as *const i32),
-            *(display.add(DISPLAY_HEIGHT) as *const i32),
-        )
     }
 }
 

@@ -172,10 +172,31 @@ pub const GAME_WORLD_WORM_ACTIVE: usize = 0x7234;
 pub const SHARED_KEY_TEAM: u32 = 0x15;
 /// `TeamEntity__reset_cursor` — thiscall, clears planted strike X.
 pub const TEAM_RESET_CURSOR: u32 = 0x0055_6D00;
+/// `TeamEntity` land-cursor blit (markerr / bounce aim). EAX=this. Skip like worm DrawSprite.
+pub const TEAM_DRAW_CURSOR: u32 = 0x0055_6AD0;
+/// `TeamEntity` vtable message handler (`0x669eec` slot → `FUN_00557310`).
+/// thiscall(this, a, msg, b, data). Msg `0x32` = lockstep land-cursor click:
+/// plants X (`+0x400/404/408`), calls reset_cursor, forwards to the worm
+/// (which runs FireWeapon → launch anim + turn end). Eat here for cursor packs.
+pub const TEAM_MSG_HANDLER: u32 = 0x0055_7310;
+pub const TEAM_MSG_CURSOR_CLICK: u32 = 0x32;
+/// TeamEntity index (`+0x38`); `data[0]` of every team message.
+pub const TEAM_INDEX: usize = 0x38;
+/// TeamEntity selected weapon slot (`+0x60`).
+pub const TEAM_SELECTED_WEAPON: usize = 0x60;
+/// TeamEntity colour index (`+0x50`). Stock land cursor sprite is
+/// `colour + 0x20` (`cursorr`..`cursorc`, ids 32..=37); planted X is `+0x26`.
+pub const TEAM_COLOUR: usize = 0x50;
 pub const TEAM_CURSOR_MOVE: usize = 0x3D0;
+/// Live cursor anim phase (`+0x3D4`). `show_cursor` resets it to 0 and eases
+/// it to `TEAM_CURSOR_PHASE_END` (20 % of the gap per frame, min step 0x400).
 pub const TEAM_CURSOR_SPRITE: usize = 0x3D4;
+pub const TEAM_CURSOR_PHASE_END: i32 = 0x9FFB;
 pub const TEAM_CURSOR_MARK: usize = 0x3E0;
 pub const STRIKE_FIRE: u32 = 0x0051_E2C0;
+/// `FireWeapon` type switch (EAX=weapon entry, stack worm, ECX=ctx). RET 4.
+/// After StrikeFire it sets `worm+0x3C` (ENT_ACTIVE) — click-only packs must eat here.
+pub const FIRE_WEAPON_DISPATCH: u32 = 0x0051_EE60;
 pub const CREATE_WEAPON_PROJECTILE: u32 = 0x0051_E0F0;
 pub const WORLD_ENTITY_CTOR: u32 = 0x004F_ED50;
 pub const WORLD_ENTITY_FREE: u32 = 0x004F_EF10;
@@ -326,6 +347,9 @@ pub const ACTOR_FLAG_MASK_LAND: i32 = 32768;
 pub const ACTOR_FLAG_MASK_WEAPONS: i32 = 65536;
 /// Mask separates from other `mask_actors` LuaActors.
 pub const ACTOR_FLAG_MASK_ACTORS: i32 = 131072;
+/// `wa.cursor.spawn`: follow `world::pointer()` every frame; stock cursor
+/// sheets (32..=37) play WA's ease-in instead of looping.
+pub const ACTOR_FLAG_CURSOR: i32 = 262144;
 /// `RQ_DrawSpriteLocal` sprite-id flag: flip X.
 pub const SPRITE_MIRROR_X: u32 = 0x0004_0000;
 pub const ACTOR_FEET_X0: usize = 0x12C;
@@ -403,12 +427,15 @@ pub const GAME_WORLD_MAP_W: usize = 0x77C0;
 /// GameWorld.viewport_pixel_width / height (GameRender).
 pub const GAME_WORLD_VIEWPORT_W: usize = 0x77AC;
 pub const GAME_WORLD_VIEWPORT_H: usize = 0x77B0;
-/// `viewport_coords[3]` camera centre (Fixed 16.16). WA packs **Y then X**
-/// at these offsets (verified: swapping broke overlay into off-screen Y and
-/// washed-only fallback). `view_cam()` still returns `(cx, cy)`.
-pub const GAME_WORLD_VIEW_CY: usize = 0x8CEC;
-pub const GAME_WORLD_VIEW_CX: usize = 0x8CF0;
-/// GameWorld land targeting cursor (16.16). Blas / teleport marker.
+/// `viewport_coords[3]` camera centre (Fixed 16.16). Entry starts at
+/// `GameWorld+0x8CEC` with `center_x` then `center_y` (openWA CoordEntry;
+/// worm draw compares pos.x to `+0x8CEC` as midpoint X). A prior swap to
+/// "Y then X" broke `wa.world.pointer()` (displaced / axis-scrambled cursor).
+pub const GAME_WORLD_VIEW_CX: usize = 0x8CEC;
+pub const GAME_WORLD_VIEW_CY: usize = 0x8CF0;
+/// GameWorld land targeting cursor (16.16). Teleport / girder / strike marker
+/// written by `TeamEntity__process_cursor` (wkAimbot `sample_aim_cursor`).
+/// openWA mislabels these as `viewport_width/height`; do not treat as pixels.
 pub const GAME_WORLD_LAND_CURSOR_X: usize = 0x7380;
 pub const GAME_WORLD_LAND_CURSOR_Y: usize = 0x7384;
 pub const GAME_WORLD_LAND_CURSOR_X_LAST: usize = 0x7388;
@@ -514,6 +541,7 @@ mod tests {
         assert_eq!(WEAPON_CREATES_PROJECTILE, 0x20);
         assert_eq!(WEAPON_AVAILABILITY, 0x24);
         assert_eq!(STRIKE_FIRE, 0x0051E2C0);
+        assert_eq!(FIRE_WEAPON_DISPATCH, 0x0051_EE60);
         assert_eq!(CREATE_WEAPON_PROJECTILE, 0x0051E0F0);
         assert_eq!(SHARED_KEY_WORM, 0x02);
         assert_eq!(SHARED_KEY_TEAM, 0x15);
@@ -521,6 +549,8 @@ mod tests {
         assert_eq!(WORLD_ROOT_TURN_TIMER, 0x18C);
         assert_eq!(GAME_WORLD_WORM_ACTIVE, 0x7234);
         assert_eq!(TEAM_CURSOR_MARK, 0x3E0);
+        assert_eq!(TEAM_DRAW_CURSOR, 0x0055_6AD0);
+        assert_eq!(TEAM_RESET_CURSOR, 0x0055_6D00);
         assert_eq!(CTX_SPAWN_X, 0x08);
         assert_eq!(WORLD_ENTITY_CTOR, 0x004FED50);
         assert_eq!(GAME_WORLD_RENDER_QUEUE, 0x524);
@@ -556,8 +586,8 @@ mod tests {
         assert_eq!(LANDSCAPE_SOIL, 0x91C);
         assert_eq!(GAME_WORLD_MAP_W, 0x77C0);
         assert_eq!(GAME_WORLD_VIEWPORT_W, 0x77AC);
-        assert_eq!(GAME_WORLD_VIEW_CY, 0x8CEC);
-        assert_eq!(GAME_WORLD_VIEW_CX, 0x8CF0);
+        assert_eq!(GAME_WORLD_VIEW_CX, 0x8CEC);
+        assert_eq!(GAME_WORLD_VIEW_CY, 0x8CF0);
         assert_eq!(GAME_WORLD_LAND_CURSOR_X, 0x7380);
         assert_eq!(WORM_START_FIRING, 0x0051B7F0);
         assert_eq!(WORM_RELEASE_WEAPON, 0x0051C010);

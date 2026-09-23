@@ -206,16 +206,15 @@ fn opaque_pixel(frame: &RgbaFrame, x: u32, y: u32) -> bool {
     let g = frame.rgba[i + 1];
     let b = frame.rgba[i + 2];
     let a = frame.rgba[i + 3];
-    // Alpha is the hole test. Dark fur (ear tips, stockings) must stay solid —
-    // do not require a luminance floor when the pixel is already opaque.
-    if a < 40 {
+    // Alpha is the hole test. Dark fur / hair / outlines must stay solid.
+    if a < 20 {
         return false;
     }
     if a < 255 {
         return true;
     }
     // Fully opaque sources with no alpha (keyed black empty): need some chroma.
-    (r as u16) + (g as u16) + (b as u16) >= 8
+    (r as u16) + (g as u16) + (b as u16) >= 6
 }
 
 /// Packed opaque-pixel collision silhouette (1 bit per pixel, row-major).
@@ -246,7 +245,9 @@ impl OpaqueMask {
             height: h,
             bits,
         };
-        // Thin features (fox ears) fall between worm collision samples.
+        // Thin features / AA fringes (ears, hair, antennae) need a fatter solid
+        // so worm feet and hitscan catch them. Three steps covers ~3px tips.
+        mask.dilate_once();
         mask.dilate_once();
         mask.dilate_once();
         mask

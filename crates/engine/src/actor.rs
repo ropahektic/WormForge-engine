@@ -22,9 +22,12 @@ type WorldCtorFn = unsafe extern "system" fn(*mut u8, *mut u8, u32, u32);
 type ApplyGravityFn = unsafe extern "thiscall" fn(*mut u8, *mut u8);
 type WorldFreeFn = unsafe extern "thiscall" fn(*mut u8, u32) -> *mut u8;
 type WorldMsgFn = unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut u8);
+type TeamMsgFn = unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut i32);
 type CrtMallocFn = unsafe extern "C" fn(usize) -> *mut u8;
 
 static ORIG_STRIKE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_TEAM_MSG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_FIRE_DISPATCH: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_CREATE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static VTABLE: OnceLock<[usize; WORLD_ENTITY_VTABLE_SLOTS]> = OnceLock::new();
 static ORIG_FREE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -51,6 +54,8 @@ struct FireClaim {
 struct SelectClaim {
     slot: usize,
     select_id: u32,
+    /// Swallow stock FireWeapon for this slot (no axe swing / no strike).
+    eat_fire: bool,
 }
 
 static DROPS: Mutex<Vec<DropClaim>> = Mutex::new(Vec::new());
@@ -112,6 +117,15 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
     };
     ORIG_STRIKE.store(trampoline, Ordering::SeqCst);
 
+    let dispatch_tr = unsafe {
+        MinHook::create_hook(
+            rb(FIRE_WEAPON_DISPATCH) as *mut c_void,
+            fire_weapon_dispatch_hook as *mut c_void,
+        )
+        .map_err(|e| format!("FireWeapon dispatch hook: {e:?}"))?
+    };
+    ORIG_FIRE_DISPATCH.store(dispatch_tr, Ordering::SeqCst);
+
     let create_va = catalog
         .function_va("FireWeapon__CreateWeaponProjectile")
         .unwrap_or(CREATE_WEAPON_PROJECTILE);
@@ -123,6 +137,17 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         .map_err(|e| format!("CreateWeaponProjectile hook: {e:?}"))?
     };
     ORIG_CREATE.store(create_tr, Ordering::SeqCst);
+
+    // Land-cursor click (team msg 0x32) is eaten at its source for eat_fire
+    // slots: no planted X, no reset_cursor, no worm FireWeapon / turn end.
+    let team_tr = unsafe {
+        MinHook::create_hook(
+            rb(TEAM_MSG_HANDLER) as *mut c_void,
+            team_msg_hook as *mut c_void,
+        )
+        .map_err(|e| format!("TeamEntity message hook: {e:?}"))?
+    };
+    ORIG_TEAM_MSG.store(team_tr, Ordering::SeqCst);
 
     lua_host::bind_actor_native(lua_host::ActorNative {
         explode: native_explode,
@@ -160,8 +185,99 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         ammo: crate::world::ammo,
         hurt: crate::physics::hit_worm,
     });
-    log_line("LuaActor: StrikeFire + CreateWeaponProjectile wrap; land/objects/sound");
+    log_line("LuaActor: FireWeapon dispatch + StrikeFire + CreateWeaponProjectile + TeamEntity msg wrap");
     Ok(())
+}
+
+/// True when `slot` was claimed with `eat_fire = true`.
+pub fn slot_eats_fire(slot: usize) -> bool {
+    SELECTS
+        .lock()
+        .ok()
+        .map(|g| g.iter().any(|c| c.slot == slot && c.eat_fire))
+        .unwrap_or(false)
+}
+
+/// The turn worm has an `eat_fire` (land-cursor) pack selected: WA's own
+/// cursor / planted-X draws are skipped so only the pack's actor shows.
+pub fn hide_team_cursor() -> bool {
+    for h in list_worms_pub(0) {
+        if h == 0 {
+            continue;
+        }
+        let w = h as *mut u8;
+        unsafe {
+            if read_i32(w, WORM_TURN_ACTIVE) != 0 {
+                return slot_eats_fire(read_i32(w, WORM_SELECTED_WEAPON) as usize);
+            }
+        }
+    }
+    false
+}
+
+fn turn_worm() -> *mut u8 {
+    for h in list_worms_pub(0) {
+        if h == 0 {
+            continue;
+        }
+        let w = h as *mut u8;
+        if unsafe { read_i32(w, WORM_TURN_ACTIVE) } != 0 {
+            return w;
+        }
+    }
+    std::ptr::null_mut()
+}
+
+/// TeamEntity message handler. Msg 0x32 (lockstep cursor click) for an
+/// `eat_fire` slot runs the pack's `on_click` and is NOT forwarded: WA never
+/// plants the X, never resets the cursor (MOVE stays → cursor keeps moving),
+/// and the worm never fires (no launch anim, no turn end).
+unsafe extern "thiscall" fn team_msg_hook(
+    this: *mut u8,
+    a: u32,
+    msg: u32,
+    b: u32,
+    data: *mut i32,
+) {
+    if msg == TEAM_MSG_CURSOR_CLICK && !this.is_null() && !data.is_null() {
+        let team = unsafe { read_i32(this, TEAM_INDEX) };
+        if unsafe { *data } == team {
+            let slot = unsafe { read_i32(this, TEAM_SELECTED_WEAPON) } as usize;
+            if slot_eats_fire(slot) {
+                let packed = unsafe { *data.add(2) };
+                let x = ((packed & 0xFFFF) as i16 as i32) << 16;
+                let y = ((packed >> 16) as i16 as i32) << 16;
+                crate::log::log_line(&format!(
+                    "TeamEntity click EAT slot={slot} at {x:#x},{y:#x}"
+                ));
+                if let Some(claim) = drop_for_slot(slot) {
+                    if claim.click_id != 0 {
+                        let worm = turn_worm();
+                        if !worm.is_null() {
+                            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                if let Err(e) = lua_host::weapon_click(
+                                    claim.click_id,
+                                    worm as u32,
+                                    slot as i32,
+                                    x,
+                                    y,
+                                    DROP_SKY_Y,
+                                ) {
+                                    log_error(&format!("on_click: {e}"));
+                                }
+                            }));
+                        }
+                    }
+                }
+                return;
+            }
+        }
+    }
+    let orig = ORIG_TEAM_MSG.load(Ordering::SeqCst);
+    if !orig.is_null() {
+        let f: TeamMsgFn = unsafe { std::mem::transmute(orig) };
+        unsafe { f(this, a, msg, b, data) };
+    }
 }
 
 pub fn claim_drop(
@@ -202,13 +318,17 @@ pub fn claim_fire(
     }
 }
 
-pub fn claim_select(slot: usize, select_id: u32) {
-    if select_id == 0 {
+pub fn claim_select(slot: usize, select_id: u32, eat_fire: bool) {
+    if select_id == 0 && !eat_fire {
         return;
     }
     if let Ok(mut g) = SELECTS.lock() {
         g.retain(|c| c.slot != slot);
-        g.push(SelectClaim { slot, select_id });
+        g.push(SelectClaim {
+            slot,
+            select_id,
+            eat_fire,
+        });
     }
 }
 
@@ -310,19 +430,104 @@ fn build_vtable() {
 }
 
 unsafe extern "system" fn strike_fire_hook(worm: *mut u8, fire_params: *mut u8, ctx: *mut u8) {
-    let spawned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-        try_spawn_drop(worm, ctx)
-    }));
-    match spawned {
-        Ok(true) => return,
-        Ok(false) => {}
-        Err(p) => log_error(&format!("drop spawn panic: {}", panic_text(p))),
+    // Spawn-style drop claims still eat here (caller sets ENT_ACTIVE afterward).
+    // Click-only claims are eaten in fire_weapon_dispatch_hook so ENT_ACTIVE
+    // is never set (that bit starts the stock "launch attack" anim).
+    let slot = if worm.is_null() {
+        usize::MAX
+    } else {
+        unsafe { read_i32(worm, WORM_SELECTED_WEAPON) as usize }
+    };
+    if let Some(claim) = drop_for_slot(slot) {
+        if claim.click_id != 0 && claim.spawn.is_none() {
+            crate::log::log_line(&format!("StrikeFire EAT(click) slot={slot}"));
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                let _ = try_spawn_drop(worm, ctx);
+            }));
+            crate::world::reset_strike_cursors();
+            unsafe {
+                write_i32(worm, ENT_ACTIVE, 0);
+            }
+            return;
+        }
+        crate::log::log_line(&format!("StrikeFire EAT slot={slot}"));
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            let _ = try_spawn_drop(worm, ctx);
+        }));
+        crate::world::reset_strike_cursors();
+        return;
     }
     let orig = ORIG_STRIKE.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: StrikeFireFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(worm, fire_params, ctx) };
     }
+}
+
+/// EAX=weapon entry, ECX=ctx, `[esp+4]`=worm, `RET 4`.
+/// Click-only cursor packs: run Lua and return without setting `ENT_ACTIVE`.
+#[unsafe(naked)]
+unsafe extern "C" fn fire_weapon_dispatch_hook() {
+    core::arch::naked_asm!(
+        "push ecx",
+        "push eax",
+        "push dword ptr [esp + 12]",
+        "call {check}",
+        "add esp, 4",
+        "test al, al",
+        "pop eax",
+        "pop ecx",
+        "jnz 2f",
+        "jmp dword ptr [{orig}]",
+        "2:",
+        "xor eax, eax",
+        "ret 4",
+        check = sym fire_weapon_click_only_eat,
+        orig = sym ORIG_FIRE_DISPATCH,
+    );
+}
+
+/// Args: worm, weapon, ctx (cdecl push order). Returns 1 when dispatch is eaten.
+unsafe extern "C" fn fire_weapon_click_only_eat(
+    worm: *mut u8,
+    weapon: *mut u8,
+    ctx: *mut u8,
+) -> u8 {
+    if worm.is_null() || weapon.is_null() {
+        return 0;
+    }
+    let slot = unsafe { read_i32(worm, WORM_SELECTED_WEAPON) as usize };
+    let eat_fire = SELECTS
+        .lock()
+        .ok()
+        .and_then(|g| g.iter().find(|c| c.slot == slot).map(|c| c.eat_fire))
+        .unwrap_or(false);
+    if eat_fire {
+        crate::log::log_line(&format!("FireWeapon EAT(eat_fire) slot={slot}"));
+        unsafe {
+            write_i32(worm, ENT_ACTIVE, 0);
+        }
+        return 1;
+    }
+    let fire_type = unsafe { read_i32(weapon, WEAPON_FIRE_TYPE) };
+    if fire_type != 3 {
+        return 0;
+    }
+    let Some(claim) = drop_for_slot(slot) else {
+        return 0;
+    };
+    if claim.click_id == 0 || claim.spawn.is_some() {
+        return 0;
+    }
+    crate::log::log_line(&format!("FireWeapon EAT(click-only) slot={slot}"));
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let _ = try_spawn_drop(worm, ctx);
+    }));
+    crate::world::reset_strike_cursors();
+    unsafe {
+        write_i32(worm, ENT_ACTIVE, 0);
+    }
+    1
 }
 
 unsafe extern "thiscall" fn create_proj_hook(
@@ -355,6 +560,9 @@ unsafe fn try_spawn_drop(worm: *mut u8, ctx: *mut u8) -> bool {
     };
     let (cursor_x, cursor_y) = cursor_xy(worm, ctx);
     if claim.click_id != 0 {
+        crate::log::log_line(&format!(
+            "on_click dispatch slot={slot} at {cursor_x:#x},{cursor_y:#x}"
+        ));
         if let Err(e) = lua_host::weapon_click(
             claim.click_id,
             worm as u32,
@@ -474,16 +682,25 @@ unsafe fn try_lua_projectile(worm: *mut u8, ctx: *mut u8) -> bool {
 }
 
 fn cursor_xy(worm: *mut u8, ctx: *mut u8) -> (i32, i32) {
-    let wx = unsafe { read_i32(worm, WORM_CURSOR_X) };
-    let wy = unsafe { read_i32(worm, WORM_CURSOR_Y) };
-    if (wx != 0 || wy != 0) || ctx.is_null() {
-        (wx, wy)
-    } else {
-        (
+    // Land cursor is the live Teleport/strike aim point. Worm +0x2E0/+0x2E4
+    // stay stale (wkAimbot CURSOR.md) — do not prefer them.
+    let (px, py, _) = crate::world::pointer();
+    if px != 0 || py != 0 {
+        return (px, py);
+    }
+    if !ctx.is_null() {
+        return (
             unsafe { read_i32(ctx, CTX_CURSOR_X) },
             unsafe { read_i32(ctx, CTX_CURSOR_Y) },
-        )
+        );
     }
+    if !worm.is_null() {
+        return (
+            unsafe { read_i32(worm, WORM_CURSOR_X) },
+            unsafe { read_i32(worm, WORM_CURSOR_Y) },
+        );
+    }
+    (0, 0)
 }
 
 struct SpawnBody {
@@ -547,11 +764,23 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         }
     }
     write_i32(this, ACTOR_MAGIC, LUA_ACTOR_MAGIC as i32);
+    let mut sprite_id = body.sprite;
+    if spawn.cursor && sprite_id == SPRITE_CURSOR_R && !owner.is_null() {
+        // `sprite = "cursor"` means the stock land cursor, which WA draws in
+        // the owner's team colour: TeamEntity+0x50 + 0x20 (cursorr..cursorc).
+        let team = crate::world::team_entity(read_i32(owner, ENT_WORM_TEAM));
+        if !team.is_null() {
+            let colour = read_i32(team, TEAM_COLOUR);
+            if (0..6).contains(&colour) {
+                sprite_id = SPRITE_CURSOR_R + colour;
+            }
+        }
+    }
     write_i32(
         this,
         ACTOR_SPRITE,
         if spawn.visible {
-            body.sprite
+            sprite_id
         } else {
             CUSTOM_SPRITE_SENTINEL
         },
@@ -659,6 +888,9 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     if spawn.explode.is_some_and(|e| e.below) {
         flags |= ACTOR_FLAG_EXPLODE_BELOW;
     }
+    if spawn.cursor {
+        flags |= ACTOR_FLAG_CURSOR;
+    }
     match spawn.screen {
         ScreenBlit::Fill => flags |= ACTOR_FLAG_SCREEN_FILL,
         ScreenBlit::Front => flags |= ACTOR_FLAG_SCREEN_FRONT,
@@ -667,6 +899,11 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     write_i32(this, ACTOR_FLAGS, flags);
     write_i32(this, ACTOR_CONTACT, 0);
     write_i32(this, ACTOR_BRAIN, spawn.brain_id as i32);
+    // GPU presentation defaults (entity path). Scale 0 would hide the quad.
+    write_i32(this, ACTOR_ANGLE, 0);
+    write_i32(this, ACTOR_SCALE, 0x10000);
+    write_i32(this, ACTOR_TINT, -1); // 0xFFFFFFFF
+    write_i32(this, ACTOR_DEPTH, 0x000D_0000); // in front of terrain
     lua_host::actor_spawned(this as u32, spawn.brain_id);
     remember_live(this as u32);
     if let Some(c) = spawn.cluster.as_ref() {
@@ -796,6 +1033,14 @@ unsafe fn tick(this: *mut u8) {
     if read_i32(this, ACTOR_DEAD) != 0 {
         return;
     }
+    if (flags & ACTOR_FLAG_CURSOR) != 0 {
+        // The body *is* the world cursor: land cursor in land-cursor mode
+        // (Teleport-style select), lockstep-synced pointer otherwise. Done
+        // before the brain so Lua sees a.x/a.y already on the pointer.
+        let (px, py, _) = crate::world::pointer();
+        write_i32(this, ENT_POS_X, px);
+        write_i32(this, ENT_POS_Y, py);
+    }
     let worm_hit = false;
     let mut land_now = false;
     let mut left_ground = false;
@@ -837,13 +1082,38 @@ unsafe fn tick(this: *mut u8) {
         return;
     }
     let y = read_i32(this, ENT_POS_Y);
-    if y > 0x1800_0000 || y < -0x2000_0000 {
+    // Invisible tick actors (sprite sentinel) may sit on the land cursor
+    // anywhere on the map — do not cull them by Y.
+    let invisible = read_i32(this, ACTOR_SPRITE) == CUSTOM_SPRITE_SENTINEL;
+    if !invisible && (y > 0x1800_0000 || y < -0x2000_0000) {
         die(this);
         return;
     }
-    if (flags & ACTOR_FLAG_LOOP) != 0 {
+    let sprite_id = read_i32(this, ACTOR_SPRITE);
+    if (flags & ACTOR_FLAG_CURSOR) != 0 && (SPRITE_CURSOR_R..SPRITE_CURSOR_R + 6).contains(&sprite_id) {
+        ease_cursor_phase(this);
+    } else if (flags & ACTOR_FLAG_LOOP) != 0 {
         advance_anim(this);
     }
+}
+
+/// Stock cursor sheet ease-in (TeamEntity msg 5 on `+0x3D4`): close 20 % of
+/// the gap to `TEAM_CURSOR_PHASE_END` per frame, at least 0x400, then hold.
+unsafe fn ease_cursor_phase(this: *mut u8) {
+    let phase = read_i32(this, ACTOR_PHASE);
+    let gap = TEAM_CURSOR_PHASE_END - phase;
+    if gap == 0 {
+        return;
+    }
+    let step = ((gap as i64 * 0x3333) >> 16) as i32;
+    let next = if step.abs() >= 0x400 {
+        phase + step
+    } else if gap.abs() < 0x400 {
+        TEAM_CURSOR_PHASE_END
+    } else {
+        phase + if gap > 0 { 0x400 } else { -0x400 }
+    };
+    write_i32(this, ACTOR_PHASE, next);
 }
 
 unsafe fn blit(this: *mut u8) {
@@ -903,7 +1173,7 @@ unsafe fn blit(this: *mut u8) {
             0
         };
     let anim = read_i32(this, ACTOR_PHASE) as u32;
-    draw_sprite_local(rq, 0x0005_0001, blit_x, blit_y, sprite, anim);
+    draw_sprite_local(rq, 0x0005_0001, blit_x, blit_y, sprite, anim, this);
     draw_puffs(this);
 }
 
@@ -922,7 +1192,7 @@ pub(crate) unsafe fn enqueue_sprite(
     if rq.is_null() {
         return;
     }
-    draw_sprite_local(rq, 0x0005_0001, x, y, sprite, anim);
+    draw_sprite_local(rq, 0x0005_0001, x, y, sprite, anim, std::ptr::null_mut());
 }
 
 unsafe fn apply_gravity(this: *mut u8) {
@@ -1725,7 +1995,7 @@ pub fn draw_puffs(entity: *mut u8) {
     for p in g.iter() {
         let anim = (p.age as u32) << 12;
         unsafe {
-            draw_sprite_local(rq, 0x0005_0001, p.x, p.y, p.sprite as u32, anim);
+            draw_sprite_local(rq, 0x0005_0001, p.x, p.y, p.sprite as u32, anim, std::ptr::null_mut());
         }
     }
 }
@@ -2202,8 +2472,16 @@ unsafe fn try_move(this: *mut u8, x: i32, y: i32) -> u32 {
     ret
 }
 
-unsafe fn draw_sprite_local(queue: *mut u8, layer: u32, x: i32, y: i32, sprite: u32, anim: u32) {
-    if crate::gpu::intercept(layer, x, y, sprite, anim, std::ptr::null_mut()) {
+unsafe fn draw_sprite_local(
+    queue: *mut u8,
+    layer: u32,
+    x: i32,
+    y: i32,
+    sprite: u32,
+    anim: u32,
+    actor: *mut u8,
+) {
+    if crate::gpu::intercept(layer, x, y, sprite, anim, actor) {
         return;
     }
     let f = rb(RQ_DRAW_SPRITE_LOCAL) as u32;

@@ -777,14 +777,22 @@ unsafe fn surface_reader(display: usize) -> Option<(usize, usize, usize, impl Fn
 static ORIG_RQ_DRAW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 unsafe extern "C" fn rq_should_intercept(layer: u32, x: i32, y: i32, sprite: u32, anim: u32) -> u8 {
+    // TeamEntity draw_cursor: 0x18000 = live land cursor, 0x18001 = planted X.
+    // An eat_fire pack draws its own cursor actor; skip WA's so there is one.
+    if (layer == 0x1_8000 || layer == 0x1_8001) && crate::actor::hide_team_cursor() {
+        return 1;
+    }
     // Only steal draws that are definitely ours. The broader `intercept`
     // path also swallows unknown virtual ids; doing that on every stock
     // RQ_DrawSpriteLocal call can drop the aim cursor / crosshair.
     if !is_active() {
         return 0;
     }
-    let id = sprite & !game::offsets::SPRITE_MIRROR_X;
-    if !crate::sprite::is_gpu_sheet(id) {
+    // Virtual ids are 0x01000000|n — never mask to 16 bits here. Worm aim
+    // sheets (worm_sprites) arrive with the mirror bit OR'd in and must match
+    // on the full id.
+    let gpu_id = sprite & !game::offsets::SPRITE_MIRROR_X;
+    if !crate::sprite::is_gpu_sheet(gpu_id) {
         return 0;
     }
     intercept(layer, x, y, sprite, anim, std::ptr::null_mut()) as u8

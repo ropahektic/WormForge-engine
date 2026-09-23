@@ -29,6 +29,33 @@ a:gfx({
 })
 ```
 
+### What is on the GPU path without asking
+
+`worm_sprites` (the `weaponlnk*` / `wthrow*` aim-hold and draw sheets) go to
+the atlas **by default**. They are only ever blitted through the stock
+`RQ_DrawSpriteLocal` intercept — never handed to a `MissileEntity` — so the
+8-bit palette wash bought nothing but washed-out colours. The web editor's
+"generate custom" aiming GIFs therefore render truecolor with no extra line
+in the pack. Opt out per pack with:
+
+```lua
+params = { gpu_worm_sprites = false }   -- keep the palette path
+```
+
+The weapon body sprite (`sprite = ...`) stays a real WA slot regardless of
+prefix matching: `MissileEntity` indexes WA's sprite table with it.
+
+### Stock cursor as an actor
+
+`wa.cursor.spawn{ owner = worm, on = fn }` spawns an actor that *is* the world
+cursor: native code snaps it to `wa.world.pointer()` every frame before `on`
+runs, and with the default `sprite = "cursor"` it wears the stock land cursor
+in the owner's team colour, playing WA's ease-in (Teleport's look). Pass any
+pack sheet as `sprite` for a custom cursor (add it to `gpu_prefix` for
+truecolor). Pair with `on_select = { cursor = true }` (land-cursor input mode)
+and `eat_fire = true` (the click reaches `on_click` and nothing else); WA's own
+cursor draw is skipped for such a slot so exactly one cursor is on screen.
+
 Each field has a single-purpose setter too, for when only one is changing:
 
 ```lua

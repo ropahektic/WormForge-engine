@@ -54,7 +54,9 @@ pub fn should_send(
     if current.down && pointer_changed {
         return true;
     }
-    if pointer_requested && pointer_changed && since_last >= 5 {
+    // While a pack is reading the pointer, publish motion quickly so cursor
+    // actors (worm toss, etc.) track the mouse under lockstep.
+    if pointer_requested && pointer_changed && since_last >= 1 {
         return true;
     }
     since_last >= 50
@@ -120,8 +122,7 @@ mod tests {
         let previous = sample(0, 300, 400, false);
         let moved = sample(0, 301, 400, false);
         assert!(!should_send(Some(previous), moved, 2, 1, false));
-        assert!(!should_send(Some(previous), moved, 4, 1, true));
-        assert!(should_send(Some(previous), moved, 6, 1, true));
+        assert!(should_send(Some(previous), moved, 2, 1, true));
         assert!(should_send(
             Some(sample(0, 300, 400, true)),
             sample(0, 301, 400, true),

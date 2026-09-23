@@ -61,6 +61,7 @@ pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
     spawn.mask_land = get_bool(s, "mask_land")?.unwrap_or(mask_default);
     spawn.mask_weapons = get_bool(s, "mask_weapons")?.unwrap_or(mask_default);
     spawn.mask_actors = get_bool(s, "mask_actors")?.unwrap_or(mask_default);
+    spawn.cursor = get_bool(s, "cursor")?.unwrap_or(false);
     spawn.on_explode = parse_nested_emit(lua, s, "on_explode")?;
     spawn.cluster = parse_cluster(lua, s, explode_on)?;
     spawn.screen = match get_string(s, "screen")?.as_deref() {
@@ -110,7 +111,19 @@ pub fn parse_select(lua: &Lua, spec: &Table) -> mlua::Result<(bool, u32)> {
     match spec.get::<Value>("on_select")? {
         Value::Nil => Ok((false, 0)),
         Value::Function(f) => Ok((false, crate::actor::register_select(lua, f)?)),
-        Value::Table(t) => Ok((get_bool(&t, "cursor")?.unwrap_or(false), 0)),
+        Value::Table(t) => {
+            let cursor = get_bool(&t, "cursor")?.unwrap_or(false);
+            let id = match t.get::<Value>("on")? {
+                Value::Nil => 0,
+                Value::Function(f) => crate::actor::register_select(lua, f)?,
+                other => {
+                    return Err(mlua::Error::external(format!(
+                        "on_select.on must be a function, got {other:?}"
+                    )))
+                }
+            };
+            Ok((cursor, id))
+        }
         other => Err(mlua::Error::external(format!(
             "on_select must be a function or table, got {other:?}"
         ))),
@@ -298,6 +311,15 @@ pub fn bind_world(lua: &Lua, actors: &Table, wa: &Table) -> Result<(), String> {
         .create_function(|lua, spec: Table| runtime_spawn(lua, spec, None))
         .map_err(|e| e.to_string())?;
     actors.set("spawn", spawn_fn).map_err(|e| e.to_string())?;
+
+    // wa.cursor.spawn{ owner=, on=, sprite=, x=, y= } -> actor that IS the
+    // world cursor. Pair with `on_select = { cursor = true }` + `eat_fire = true`.
+    let cursor = lua.create_table().map_err(|e| e.to_string())?;
+    let cursor_spawn = lua
+        .create_function(|lua, spec: Table| cursor_spawn(lua, spec))
+        .map_err(|e| e.to_string())?;
+    cursor.set("spawn", cursor_spawn).map_err(|e| e.to_string())?;
+    wa.set("cursor", cursor).map_err(|e| e.to_string())?;
 
     let all = lua
         .create_function(|lua, ()| handles_table(lua, native_list_actors(), true))
@@ -581,6 +603,47 @@ pub fn runtime_spawn(
     })
     .map_err(mlua::Error::external)?;
     Ok(ActorHandle(handle))
+}
+
+/// `wa.cursor.spawn`: `wa.actors.spawn` with cursor defaults.
+///
+/// - `sprite` defaults to `"cursor"`: the stock land cursor in the owner's
+///   team colour, playing WA's ease-in (what Teleport shows).
+/// - no gravity / collision / drowning; custom sheets loop.
+/// - `x`/`y` default to the current pointer.
+/// - native code snaps the body to `wa.world.pointer()` every frame before
+///   `on` runs, so the brain only needs grab/drag/throw logic.
+fn cursor_spawn(lua: &Lua, spec: Table) -> mlua::Result<ActorHandle> {
+    let out = lua.create_table()?;
+    for pair in spec.pairs::<Value, Value>() {
+        let (k, v) = pair?;
+        out.set(k, v)?;
+    }
+    if out.get::<Value>("sprite")?.is_nil() {
+        out.set("sprite", "cursor")?;
+    }
+    for key in ["gravity", "collide", "drown"] {
+        if out.get::<Value>(key)?.is_nil() {
+            out.set(key, false)?;
+        }
+    }
+    if out.get::<Value>("loop")?.is_nil() {
+        out.set("loop", true)?;
+    }
+    out.set("cursor", true)?;
+    if out.get::<Value>("x")?.is_nil() || out.get::<Value>("y")?.is_nil() {
+        let wa: Table = lua.globals().get("wa")?;
+        let world: Table = wa.get("world")?;
+        let pointer: Function = world.get("pointer")?;
+        let p: Table = pointer.call(())?;
+        if out.get::<Value>("x")?.is_nil() {
+            out.set("x", p.get::<Value>("x")?)?;
+        }
+        if out.get::<Value>("y")?.is_nil() {
+            out.set("y", p.get::<Value>("y")?)?;
+        }
+    }
+    runtime_spawn(lua, out, None)
 }
 
 pub(crate) fn resolve_sprite_name(lua: &Lua, name: &str) -> mlua::Result<(i32, u32, i32, i32)> {

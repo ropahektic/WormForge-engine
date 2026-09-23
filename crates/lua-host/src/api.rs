@@ -343,6 +343,7 @@ fn table_to_claim(
     };
     let actor: Option<String> = spec.get("actor")?;
     let is_weapon = get_bool(&spec, "is_weapon")?.unwrap_or(true);
+    let eat_fire = get_bool(&spec, "eat_fire")?.unwrap_or(false);
     let (cursor_on_select, on_select_id) = spawn::parse_select(lua, &spec)?;
 
     let mut damage = None;
@@ -462,6 +463,7 @@ fn table_to_claim(
     let mut gpu_prefix = None;
     let mut truecolor_prefix = None;
     let mut reserve_prefix = None;
+    let mut gpu_worm_sprites = true;
     if let Some(p) = spec.get::<Option<Table>>("params")? {
         layer = get_i32(&p, "layer")?.map(|v| v as u32);
         depth = get_i32(&p, "depth")?.map(|v| v as u32);
@@ -469,6 +471,7 @@ fn table_to_claim(
         gpu_prefix = get_string(&p, "gpu_prefix")?;
         truecolor_prefix = get_string(&p, "truecolor_prefix")?;
         reserve_prefix = get_string(&p, "reserve_prefix")?;
+        gpu_worm_sprites = get_bool(&p, "gpu_worm_sprites")?.unwrap_or(true);
     }
 
 let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
@@ -578,6 +581,7 @@ let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
             actor,
             is_weapon,
             cursor_on_select,
+            eat_fire,
             on_select_id,
             spawn,
             on_click_id,
@@ -592,6 +596,7 @@ let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
             reserve_prefix,
             gpu_prefix,
             truecolor_prefix,
+            gpu_worm_sprites,
             extra_sounds,
             cluster_sprite_id,
             cluster_damage,

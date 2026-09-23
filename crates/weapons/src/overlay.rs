@@ -225,6 +225,9 @@ pub struct ActorSpawn {
     pub mask_land: bool,
     pub mask_weapons: bool,
     pub mask_actors: bool,
+    /// `wa.cursor.spawn`: the body is the world cursor. Native code moves it to
+    /// `wa.world.pointer()` every frame and plays the stock cursor ease-in.
+    pub cursor: bool,
     /// Non-zero: Lua `on.frame` / `on.land` owns policy. `0` keeps native sugar.
     pub brain_id: u32,
     pub explode: Option<SpawnExplode>,
@@ -258,6 +261,7 @@ impl Default for ActorSpawn {
             mask_land: false,
             mask_weapons: false,
             mask_actors: false,
+            cursor: false,
             brain_id: 0,
             explode: None,
             on_explode: None,
@@ -287,6 +291,8 @@ pub struct OverlayParams {
     pub is_weapon: bool,
     /// On select, show the strike targeting cursor.
     pub cursor_on_select: bool,
+    /// Swallow stock FireWeapon for this slot (pointer-driven weapons).
+    pub eat_fire: bool,
     /// Lua `on_select` callback id (`0` = none). Runs when the slot is chosen.
     pub on_select_id: u32,
     /// On cursor click, spawn a LuaActor with these options (GUI statuses).
@@ -309,6 +315,11 @@ pub struct OverlayParams {
     pub reserve_prefix: Option<String>,
     pub gpu_prefix: Option<String>,
     pub truecolor_prefix: Option<String>,
+    /// `worm_sprites` sheets go to the GPU atlas (truecolor) by default: they
+    /// are only ever drawn through the RQ intercept, never as WA missile
+    /// sprites, so the palette wash buys nothing. `params.gpu_worm_sprites =
+    /// false` keeps the 8-bit path.
+    pub gpu_worm_sprites: bool,
     /// Pack-relative WAV paths (`sounds = { ... }`) loaded into DSSound slot 451+.
     pub extra_sounds: Vec<(String, std::path::PathBuf)>,
     pub cluster_sprite_id: Option<i32>,
@@ -355,6 +366,7 @@ impl Default for OverlayParams {
             actor: None,
             is_weapon: true,
             cursor_on_select: false,
+            eat_fire: false,
             on_select_id: 0,
             spawn: None,
             on_click_id: 0,
@@ -369,6 +381,7 @@ impl Default for OverlayParams {
             reserve_prefix: None,
             gpu_prefix: None,
             truecolor_prefix: None,
+            gpu_worm_sprites: true,
             extra_sounds: Vec::new(),
             cluster_sprite_id: None,
             cluster_damage: None,
@@ -438,7 +451,10 @@ impl OverlayParams {
     }
 
     pub fn uses_click_actor(&self) -> bool {
-        self.actor_spawn().is_some() || self.cursor_on_select || self.on_click_id != 0
+        // Strike/airstrike fire_type only when Lua asked for the land cursor or a
+        // click-spawn. A bare `on_click` callback must NOT flip the slot to
+        // fire_type 3 (that plants markerr and ends the turn).
+        self.actor_spawn().is_some() || self.cursor_on_select
     }
 
     /// Launch-time LuaActor (bazooka-style). Not a strike click.
@@ -765,7 +781,7 @@ mod tests {
     }
 
     #[test]
-    fn click_function_applies_strike_cursor() {
+    fn click_function_alone_does_not_force_strike() {
         let mut entry = WeaponEntry::default();
         entry.set_requires_aiming(1);
         entry.set_fire_type(1);
@@ -776,10 +792,31 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(entry.requires_aiming(), 0);
+        // Bare on_click is not a land-cursor weapon — keep stock fire type.
+        assert_eq!(entry.fire_type(), 1);
+        assert!(!OverlayParams {
+            on_click_id: 7,
+            ..Default::default()
+        }
+        .uses_click_actor());
+    }
+
+    #[test]
+    fn click_function_with_cursor_applies_strike() {
+        let mut entry = WeaponEntry::default();
+        entry.set_fire_type(1);
+        apply_params(
+            &mut entry,
+            &OverlayParams {
+                on_click_id: 7,
+                cursor_on_select: true,
+                ..Default::default()
+            },
+        );
         assert_eq!(entry.fire_type(), 3);
         assert!(OverlayParams {
             on_click_id: 7,
+            cursor_on_select: true,
             ..Default::default()
         }
         .uses_click_actor());

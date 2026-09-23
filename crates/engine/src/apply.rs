@@ -96,8 +96,19 @@ pub fn on_gfx_ready(display: *mut u8) {
                 (Some(prefix), Some(p)) => p.starts_with(prefix.as_str()),
                 _ => false,
             };
-            if let (Some(prefix), Some(p)) = (&claim.params.gpu_prefix, path.as_ref()) {
-                if p.starts_with(prefix.as_str()) {
+            if let Some(p) = path.as_ref() {
+                let by_prefix = claim
+                    .params
+                    .gpu_prefix
+                    .as_ref()
+                    .is_some_and(|prefix| p.starts_with(prefix.as_str()));
+                // Worm aim/draw sheets are only ever blitted through the RQ
+                // intercept, so they default to truecolor. The weapon body
+                // (as_weapon) must stay a real WA slot for MissileEntity.
+                let worm_sheet = !as_weapon
+                    && claim.params.gpu_worm_sprites
+                    && claim.params.worm_sprites.iter().any(|(_, wp)| wp == p);
+                if by_prefix || worm_sheet {
                     gpu_sheets.push((gfx::sprite_key(&claim.mod_id, p), sheet.clone()));
                     return;
                 }
@@ -256,11 +267,11 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 claim.mod_id, claim.params.on_click_id
             ));
         }
-        if claim.params.on_select_id != 0 {
-            actor::claim_select(idx, claim.params.on_select_id);
+        if claim.params.on_select_id != 0 || claim.params.eat_fire {
+            actor::claim_select(idx, claim.params.on_select_id, claim.params.eat_fire);
             log_line(&format!(
-                "{} LuaActor on_select={} on slot {idx}",
-                claim.mod_id, claim.params.on_select_id
+                "{} LuaActor on_select={} eat_fire={} on slot {idx}",
+                claim.mod_id, claim.params.on_select_id, claim.params.eat_fire
             ));
         }
         if claim.params.uses_lua_projectile() {
@@ -362,33 +373,27 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 claim.mod_id
             ));
         }
+        let mut tags = String::new();
+        if claim.params.cursor_on_select {
+            tags.push_str(" cursor");
+        }
+        if claim.params.eat_fire {
+            tags.push_str(" eat_fire");
+        }
+        if claim.params.on_click_id != 0 {
+            tags.push_str(" on_click");
+        }
+        if claim.params.on_fire_id != 0 {
+            tags.push_str(" on_fire");
+        }
+        if claim.params.spawn.is_some() {
+            tags.push_str(" spawn");
+        }
         log_line(&format!(
-            "applied {} -> slot {} ({}){}",
+            "applied {} -> slot {} ({}){tags}",
             claim.mod_id,
             idx,
             claim.slot.name(),
-            claim
-                .params
-                .spawn
-                .as_ref()
-                .map(|_| " spawn".to_string())
-                .or_else(|| {
-                    (claim.params.on_click_id != 0).then(|| " on_click".to_string())
-                })
-                .or_else(|| {
-                    claim
-                        .params
-                        .actor
-                        .as_ref()
-                        .map(|a| format!(" actor {a}"))
-                })
-                .or_else(|| {
-                    claim
-                        .params
-                        .copy_from
-                        .map(|s| format!(" copy_from {}", s.name()))
-                })
-                .unwrap_or_default()
         ));
     }
 

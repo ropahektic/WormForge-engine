@@ -926,4 +926,5 @@ pub fn finish() {
     if let Ok(mut live) = LIVE_INPUT.lock() {
         *live = None;
     }
+    crate::world::clear_input_latch();
 }

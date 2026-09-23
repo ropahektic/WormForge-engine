@@ -9,7 +9,12 @@ The carrier uses provisional message kind `0x80`. Stock WA does not understand
 this kind, so every peer in the match must run the same WormForge build. Input
 records are emitted on key/button changes, while a requested pointer is moving,
 and as a low-rate heartbeat. A networked reader never falls back to local OS
-input if a record is absent; it receives neutral input instead.
+input if a record is absent; it keeps the last sample, or map-centre before the
+first record (never world 0,0 — that parked cursor actors in the corner).
+
+`wa.world.pointer()` stickies the "pointer in use" send flag for ~1s after each
+read so lockstep queue sampling (which runs before Lua brains) still publishes
+cursor motion for packs like worm toss.
 
 The production DLL always enables synchronized input and needs no marker file.
 `sync.txt` is not read. Expensive state hashing, stock-message traces, and dump
