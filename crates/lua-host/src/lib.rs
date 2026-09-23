@@ -844,6 +844,50 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn mask_spawn_toggles_parse() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-mask");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("m"),
+            "m.mask",
+            r#"
+id = "m.mask"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["prod"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "prod",
+  on_click = {
+    spawn = {
+      mask = true,
+      mask_worms = false,
+      mask_weapons = true,
+      from = "cursor",
+      gravity = false,
+      collide = false,
+    },
+  },
+})
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        let spawn = scripts.resolved.applied[0]
+            .params
+            .spawn
+            .as_ref()
+            .expect("spawn");
+        assert!(spawn.mask);
+        assert!(!spawn.mask_worms);
+        assert!(spawn.mask_land); // defaults to mask
+        assert!(spawn.mask_weapons);
+        assert!(spawn.mask_actors); // defaults to mask
+    }
+
+    #[test]
     fn actor_brain_explodes_on_land() {
         let _host = lock_host();
         use game::entity::write_i32;

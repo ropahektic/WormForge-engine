@@ -10,6 +10,7 @@ mod hud;
 mod hurt;
 mod overlay;
 mod log;
+mod mask_collide;
 mod mine;
 mod missile_boom;
 mod physics;

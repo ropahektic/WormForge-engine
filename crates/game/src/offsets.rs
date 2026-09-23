@@ -314,6 +314,16 @@ pub const ACTOR_FLAG_SCREEN_FILL: i32 = 1024;
 pub const ACTOR_FLAG_SCREEN_FRONT: i32 = 2048;
 /// Mirror the actor sprite on X (art faces right). OR'd into the blit id.
 pub const ACTOR_FLAG_MIRROR_X: i32 = 4096;
+/// Use first-frame opaque GIF/PNG silhouette for collision probes.
+pub const ACTOR_FLAG_MASK: i32 = 8192;
+/// Mask blocks / supports worms.
+pub const ACTOR_FLAG_MASK_WORMS: i32 = 16384;
+/// Mask vs landscape (stand on dirt / push out of soil).
+pub const ACTOR_FLAG_MASK_LAND: i32 = 32768;
+/// Mask bounces stock missiles / grenades.
+pub const ACTOR_FLAG_MASK_WEAPONS: i32 = 65536;
+/// Mask separates from other `mask_actors` LuaActors.
+pub const ACTOR_FLAG_MASK_ACTORS: i32 = 131072;
 /// `RQ_DrawSpriteLocal` sprite-id flag: flip X.
 pub const SPRITE_MIRROR_X: u32 = 0x0004_0000;
 pub const ACTOR_FEET_X0: usize = 0x12C;

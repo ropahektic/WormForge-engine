@@ -12,7 +12,7 @@ use game::offsets::{
     DISPLAY_SPRITE_CACHE, DISPLAY_SPRITE_LAYERS, DISPLAY_SPRITE_PTRS, MISSILE_ANIM_PHASE,
     MISSILE_RENDER_SPRITE, PROCESS_SPRITE,
 };
-use gfx::{encode_spr, spr_key, FeetPlatform, SpriteStrip};
+use gfx::{encode_spr, spr_key, FeetPlatform, OpaqueMask, SpriteStrip};
 use std::sync::Mutex;
 
 #[repr(C, align(8))]
@@ -35,6 +35,8 @@ static SPRITE_KEYS: Mutex<Vec<(String, SpriteRef)>> = Mutex::new(Vec::new());
 /// Bottom opaque row of an installed GIF/PNG — the collision platform, like
 /// stock donkey's horizontal rectangle in `masks.bmp`.
 static SPRITE_FEET: Mutex<Vec<(i32, FeetPlatform)>> = Mutex::new(Vec::new());
+/// First-frame opaque silhouette for `mask = true` actors.
+static SPRITE_MASKS: Mutex<Vec<(i32, OpaqueMask)>> = Mutex::new(Vec::new());
 static RGBA_SHEETS: Mutex<Vec<RgbaSheet>> = Mutex::new(Vec::new());
 
 pub struct RgbaSheet {
@@ -85,6 +87,9 @@ pub fn clear() {
     }
     if let Ok(mut f) = SPRITE_FEET.lock() {
         f.clear();
+    }
+    if let Ok(mut m) = SPRITE_MASKS.lock() {
+        m.clear();
     }
     if let Ok(mut r) = RGBA_SHEETS.lock() {
         r.clear();
@@ -271,6 +276,7 @@ pub fn install_sheet(display: *mut u8, strip: &SpriteStrip) -> Result<i32, Strin
             feet.x0, feet.x1, feet.y, feet.width, feet.height
         ));
     }
+    remember_mask(id, strip);
     remember_rgba(id, strip);
     Ok(id)
 }
@@ -288,6 +294,23 @@ pub fn frame_count(id: i32) -> Option<usize> {
 pub fn feet_for_id(id: i32) -> Option<FeetPlatform> {
     let g = SPRITE_FEET.lock().ok()?;
     g.iter().find(|(sid, _)| *sid == id).map(|(_, f)| *f)
+}
+
+pub fn mask_for_id(id: i32) -> Option<OpaqueMask> {
+    let g = SPRITE_MASKS.lock().ok()?;
+    g.iter().find(|(sid, _)| *sid == id).map(|(_, m)| m.clone())
+}
+
+fn remember_mask(id: i32, strip: &SpriteStrip) {
+    let Some(mask) = strip.opaque_mask() else {
+        return;
+    };
+    let bits = mask.width.saturating_mul(mask.height);
+    if let Ok(mut g) = SPRITE_MASKS.lock() {
+        g.retain(|(sid, _)| *sid != id);
+        g.push((id, mask));
+    }
+    log_line(&format!("sprite {id} mask bits={bits} (frame 0)"));
 }
 
 fn remember_rgba(id: i32, strip: &SpriteStrip) {
@@ -757,6 +780,7 @@ pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) 
             g.push((id, feet));
         }
     }
+    remember_mask(id, strip);
     let delta = strip.phase_delta();
     if delta > 0 {
         if let Ok(mut g) = LOOP_DELTA.lock() {

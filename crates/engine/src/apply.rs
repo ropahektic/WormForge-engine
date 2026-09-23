@@ -42,6 +42,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     sprite::clear();
     world::clear_sounds();
     actor::clear_claims();
+    crate::mask_collide::clear();
     crate::worm_sprite::clear();
     crate::mine::clear();
     crate::missile_boom::clear();

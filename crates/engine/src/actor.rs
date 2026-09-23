@@ -616,6 +616,27 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     if spawn.drown {
         flags |= ACTOR_FLAG_DROWN;
     }
+    if spawn.mask {
+        flags |= ACTOR_FLAG_MASK;
+        if spawn.mask_worms {
+            flags |= ACTOR_FLAG_MASK_WORMS;
+        }
+        if spawn.mask_land {
+            flags |= ACTOR_FLAG_MASK_LAND;
+        }
+        if spawn.mask_weapons {
+            flags |= ACTOR_FLAG_MASK_WEAPONS;
+        }
+        if spawn.mask_actors {
+            flags |= ACTOR_FLAG_MASK_ACTORS;
+        }
+        if sprite::mask_for_id(body.sprite).is_none() {
+            log_line(&format!(
+                "LuaActor mask=true but sprite {} has no opaque mask (stock?)",
+                body.sprite
+            ));
+        }
+    }
     if spawn.explode.is_some_and(|e| e.below) {
         flags |= ACTOR_FLAG_EXPLODE_BELOW;
     }
@@ -1055,6 +1076,14 @@ fn forget_live(handle: u32) {
     if let Ok(mut g) = CLUSTERS.lock() {
         g.retain(|(h, _)| *h != handle);
     }
+}
+
+pub(crate) fn live_handles() -> Vec<u32> {
+    LIVE.lock().map(|g| g.clone()).unwrap_or_default()
+}
+
+pub(crate) fn list_worms_pub(from: u32) -> Vec<u32> {
+    native_list_worms(from)
 }
 
 fn remember_child(handle: u32, emit: AttachedSpawn) {
@@ -2088,6 +2117,14 @@ unsafe extern "thiscall" fn actor_free(this: *mut u8, flags: u32) -> *mut u8 {
 
 /// Solid collision under the sprite's bottom opaque row.
 unsafe fn terrain_under_feet(this: *mut u8) -> bool {
+    let flags = read_i32(this, ACTOR_FLAGS);
+    if (flags & ACTOR_FLAG_MASK) != 0 && (flags & ACTOR_FLAG_MASK_LAND) != 0 {
+        if crate::mask_collide::mask_land_support(this) {
+            return true;
+        }
+        // Fall through to feet bar when silhouette contour has no dirt contact
+        // yet (e.g. still airborne) — keeps land events working on drop-in.
+    }
     let world = read_i32(this, ENT_WORLD) as *mut u8;
     if world.is_null() {
         return false;

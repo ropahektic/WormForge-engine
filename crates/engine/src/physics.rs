@@ -445,6 +445,11 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         crate::gpu::begin_frame();
         crate::actor::begin_puff_frame();
     }
+    // Stamp mask silhouettes into the walk grid before stock physics so worms,
+    // hitscan, and missile bounce treat GIF/PNG solids as dirt.
+    if msg == MSG_FRAME_FINISH {
+        unsafe { crate::mask_collide::prepare_frame(this) };
+    }
     let orig = ORIG_ROOT.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
@@ -453,6 +458,7 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if msg == MSG_FRAME_FINISH {
         crate::actor::flush_deferred();
         crate::actor::tick_puffs();
+        unsafe { crate::mask_collide::resolve_all(this) };
     }
     if msg == MSG_RENDER_SCENE {
         crate::truecolor::begin_frame();
@@ -467,6 +473,7 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if msg == MSG_FRAME_FINISH && !this.is_null() {
         let ended = unsafe { read_i32(this, WORLD_ROOT_TURN_ENDED) != 0 };
         if ended {
+            crate::mask_collide::clear();
             drop_all();
         }
     }

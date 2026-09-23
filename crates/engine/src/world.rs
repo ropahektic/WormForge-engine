@@ -751,7 +751,7 @@ pub fn session_world() -> *mut u8 {
 }
 
 struct GridView {
-    bits: *const u8,
+    bits: *mut u8,
     stride: usize,
     width: usize,
     height: usize,
@@ -773,10 +773,48 @@ impl GridView {
             y as usize,
         )
     }
+
+    /// Set or clear one collision bit. Returns the previous solid state, or
+    /// `None` if out of bounds.
+    fn set_solid_px(&self, x: i32, y: i32, solid: bool) -> Option<bool> {
+        if x < 0 || y < 0 {
+            return None;
+        }
+        let x = x as usize;
+        let y = y as usize;
+        if x >= self.width || y >= self.height || self.bits.is_null() {
+            return None;
+        }
+        if self.bpp >= 8 {
+            let i = y.saturating_mul(self.stride).saturating_add(x);
+            let prev = unsafe { *self.bits.add(i) != 0 };
+            unsafe {
+                *self.bits.add(i) = if solid { 1 } else { 0 };
+            }
+            return Some(prev);
+        }
+        let i = y.saturating_mul(self.stride).saturating_add(x >> 3);
+        let mask = 1u8 << (x & 7);
+        let prev = unsafe { (*self.bits.add(i) & mask) != 0 };
+        unsafe {
+            if solid {
+                *self.bits.add(i) |= mask;
+            } else {
+                *self.bits.add(i) &= !mask;
+            }
+        }
+        Some(prev)
+    }
 }
 
 fn live_grid() -> Option<GridView> {
     unsafe { read_grid() }
+}
+
+/// Stamp / clear a walk-mask pixel. Used by actor `mask` silhouettes so stock
+/// worm walk and hitscan see GIF/PNG solids as dirt.
+pub fn set_collision_px(x: i32, y: i32, solid: bool) -> Option<bool> {
+    live_grid()?.set_solid_px(x, y, solid)
 }
 
 unsafe fn read_grid() -> Option<GridView> {
@@ -792,7 +830,7 @@ unsafe fn read_grid() -> Option<GridView> {
     if grid.is_null() {
         return None;
     }
-    let bits = *(grid.add(BITGRID_BITS) as *const *const u8);
+    let bits = *(grid.add(BITGRID_BITS) as *const *mut u8);
     let stride = read_i32(grid, BITGRID_STRIDE) as usize;
     let mut w = read_i32(grid, BITGRID_W);
     let mut h = read_i32(grid, BITGRID_H);

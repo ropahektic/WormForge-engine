@@ -61,6 +61,8 @@ static ANNOUNCED: AtomicBool = AtomicBool::new(false);
 static RESOLVED_IDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static NO_SHADER_LOGGED: AtomicBool = AtomicBool::new(false);
 static MASK_LOGGED: AtomicBool = AtomicBool::new(false);
+#[cfg(debug_assertions)]
+static DEPTHS_LOGGED: AtomicBool = AtomicBool::new(false);
 static HIDDEN_LOGGED: Mutex<Vec<(i32, i32)>> = Mutex::new(Vec::new());
 static WARNED: AtomicBool = AtomicBool::new(false);
 

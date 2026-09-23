@@ -124,6 +124,11 @@ impl SpriteStrip {
     pub fn feet_platform(&self) -> Option<FeetPlatform> {
         feet_platform(&self.frames)
     }
+
+    /// First-frame opaque bitmask for `mask = true` collision.
+    pub fn opaque_mask(&self) -> Option<OpaqueMask> {
+        OpaqueMask::from_strip(self)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -195,7 +200,114 @@ fn opaque_pixel(frame: &RgbaFrame, x: u32, y: u32) -> bool {
     let g = frame.rgba[i + 1];
     let b = frame.rgba[i + 2];
     let a = frame.rgba[i + 3];
-    a >= 16 && (r as u16) + (g as u16) + (b as u16) >= 12
+    // Alpha is the hole test. Dark fur (ear tips, stockings) must stay solid —
+    // do not require a luminance floor when the pixel is already opaque.
+    if a < 40 {
+        return false;
+    }
+    if a < 255 {
+        return true;
+    }
+    // Fully opaque sources with no alpha (keyed black empty): need some chroma.
+    (r as u16) + (g as u16) + (b as u16) >= 8
+}
+
+/// Packed opaque-pixel collision silhouette (1 bit per pixel, row-major).
+/// Built once from the sheet's first frame — GIF anim does not swap it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OpaqueMask {
+    pub width: u32,
+    pub height: u32,
+    bits: Vec<u8>,
+}
+
+impl OpaqueMask {
+    pub fn from_frame(frame: &RgbaFrame) -> Self {
+        let w = frame.width;
+        let h = frame.height;
+        let pixels = (w as usize).saturating_mul(h as usize);
+        let mut bits = vec![0u8; pixels.div_ceil(8)];
+        for y in 0..h {
+            for x in 0..w {
+                if opaque_pixel(frame, x, y) {
+                    let i = (y as usize) * (w as usize) + (x as usize);
+                    bits[i / 8] |= 1 << (i % 8);
+                }
+            }
+        }
+        let mut mask = Self {
+            width: w,
+            height: h,
+            bits,
+        };
+        // Thin features (fox ears) fall between worm collision samples.
+        mask.dilate_once();
+        mask.dilate_once();
+        mask
+    }
+
+    pub fn from_strip(strip: &SpriteStrip) -> Option<Self> {
+        strip.frames.first().map(Self::from_frame)
+    }
+
+    #[inline]
+    pub fn test(&self, x: i32, y: i32) -> bool {
+        if x < 0 || y < 0 || x as u32 >= self.width || y as u32 >= self.height {
+            return false;
+        }
+        let i = (y as usize) * (self.width as usize) + (x as usize);
+        (self.bits[i / 8] & (1 << (i % 8))) != 0
+    }
+
+    fn set_bit(&mut self, x: i32, y: i32) {
+        if x < 0 || y < 0 || x as u32 >= self.width || y as u32 >= self.height {
+            return;
+        }
+        let i = (y as usize) * (self.width as usize) + (x as usize);
+        self.bits[i / 8] |= 1 << (i % 8);
+    }
+
+    fn dilate_once(&mut self) {
+        let w = self.width as i32;
+        let h = self.height as i32;
+        let mut add: Vec<(i32, i32)> = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                if !self.test(x, y) {
+                    continue;
+                }
+                for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                    let nx = x + dx;
+                    let ny = y + dy;
+                    if !self.test(nx, ny) {
+                        add.push((nx, ny));
+                    }
+                }
+            }
+        }
+        for (x, y) in add {
+            self.set_bit(x, y);
+        }
+    }
+
+    /// Any opaque bit in the rectangle [x0,x1]×[y0,y1] (inclusive).
+    pub fn any_in_rect(&self, x0: i32, y0: i32, x1: i32, y1: i32) -> bool {
+        let x0 = x0.max(0);
+        let y0 = y0.max(0);
+        let x1 = x1.min(self.width as i32 - 1);
+        let y1 = y1.min(self.height as i32 - 1);
+        if x1 < x0 || y1 < y0 {
+            return false;
+        }
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                if self.test(x, y) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 pub fn is_sheet_path(name: &str) -> bool {
@@ -819,6 +931,28 @@ mod tests {
         assert_eq!(feet.y, 3);
         assert_eq!(feet.x0, 1);
         assert_eq!(feet.x1, 2);
+    }
+
+    #[test]
+    fn opaque_mask_from_first_frame() {
+        let mut rgba = vec![0u8; 4 * 4 * 4];
+        // Opaque diagonal.
+        for i in 0..4 {
+            let o = ((i * 4 + i) * 4) as usize;
+            rgba[o] = 255;
+            rgba[o + 1] = 0;
+            rgba[o + 2] = 0;
+            rgba[o + 3] = 255;
+        }
+        let mask = OpaqueMask::from_frame(&RgbaFrame {
+            width: 4,
+            height: 4,
+            rgba,
+        });
+        assert!(mask.test(0, 0));
+        assert!(mask.test(3, 3));
+        assert!(!mask.test(1, 0));
+        assert!(!mask.test(-1, 0));
     }
 
     #[test]

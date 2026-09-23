@@ -55,6 +55,12 @@ pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
     spawn.damage_worms = get_bool(s, "damage_worms")?.unwrap_or(explode_on);
     spawn.persist = get_bool(s, "persist")?.unwrap_or(explode_on && auto && spawn.visible);
     spawn.drown = get_bool(s, "drown")?.unwrap_or(auto && spawn.visible);
+    spawn.mask = get_bool(s, "mask")?.unwrap_or(false);
+    let mask_default = spawn.mask;
+    spawn.mask_worms = get_bool(s, "mask_worms")?.unwrap_or(mask_default);
+    spawn.mask_land = get_bool(s, "mask_land")?.unwrap_or(mask_default);
+    spawn.mask_weapons = get_bool(s, "mask_weapons")?.unwrap_or(mask_default);
+    spawn.mask_actors = get_bool(s, "mask_actors")?.unwrap_or(mask_default);
     spawn.on_explode = parse_nested_emit(lua, s, "on_explode")?;
     spawn.cluster = parse_cluster(lua, s, explode_on)?;
     spawn.screen = match get_string(s, "screen")?.as_deref() {

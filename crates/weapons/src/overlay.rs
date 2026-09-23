@@ -214,6 +214,14 @@ pub struct ActorSpawn {
     pub drown: bool,
     /// Draw the body. `false` / `sprite = false` uses the 1023 blit reject.
     pub visible: bool,
+    /// Bake first-frame opaque silhouette from the GIF/PNG. Sub-toggles below
+    /// choose what the mask collides with; when `mask` is true and a sub-flag
+    /// is omitted, that sub-flag defaults to true.
+    pub mask: bool,
+    pub mask_worms: bool,
+    pub mask_land: bool,
+    pub mask_weapons: bool,
+    pub mask_actors: bool,
     /// Non-zero: Lua `on.frame` / `on.land` owns policy. `0` keeps native sugar.
     pub brain_id: u32,
     pub explode: Option<SpawnExplode>,
@@ -242,6 +250,11 @@ impl Default for ActorSpawn {
             persist: false,
             drown: true,
             visible: true,
+            mask: false,
+            mask_worms: false,
+            mask_land: false,
+            mask_weapons: false,
+            mask_actors: false,
             brain_id: 0,
             explode: None,
             on_explode: None,
