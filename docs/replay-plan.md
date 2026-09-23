@@ -1,9 +1,10 @@
 # WormForge replay: `.WF_WAgame`
 
-> **Status: W0 complete and passed (2026-09-22). W2 recording and W3 playback
-> are complete and live-accepted. W4 packet exchange is experimental: idle
-> delivery works, but the first stock sentry fire currently stops one peer.
-> Gap 1 therefore remains open.**
+> **Status: W0 complete and passed (2026-09-22). W2 recording, W3 playback,
+> and the W4 synchronized-input path are live-accepted. The final W4 build
+> completed a two-peer, multi-turn sentry/Wormcraft round with all 77 stock
+> checks equal and no simulation desync. A broader control matrix remains a
+> follow-up for Gap 1.**
 >
 > This is the canonical plan. `docs/replay.md` is its companion: what W0
 > measures, how to run the gate, and the results. Sections below are annotated
@@ -278,9 +279,9 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    **Verified behaviour-preserving in-game**: the W0 gate re-run produced hashes
    bit-identical to the pre-latch run, sample for sample. The probe proved a
    refactor safe, which is the instrument paying for itself outside replay.
-2. ⚠️ **Synchronize pack input — IMPLEMENTED, NOT YET ACCEPTED.**
+2. ✅ **Synchronize pack input — LIVE-ACCEPTED FOR SENTRY/WORMCRAFT.**
 
-   The experimental W4 compact-codec bridge carries input records independent
+   The W4 compact-codec bridge carries input records independent
    of `sync.txt`. Input is sampled immediately before WA collects it at
    `Game__process_input` and travels through WA's compact network stream. The 12-byte payload
    is `[tag, controls, pointer]`: eight key bits and the mouse button fit in
@@ -316,6 +317,26 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    zero; it does not assume frame one establishes authority. A live two-peer
    run remains the acceptance gate, and the original placement mismatch may
    need further diagnosis using these snapshots.
+
+   The next `dispatch-state` round identified the failing bytes: frame 188
+   matches completely; frame 321 differs only in the worm animator's current
+   and queued flags/frame-count words. They contain peer-local addresses.
+   `GetSpriteInfo(0)` leaves its outputs untouched, and `SpriteAnimation__play_1`
+   copies uninitialized stack locals into those serialized fields.
+   Build `20260923-replay-w4-empty-sprite-info` initializes empty-sprite
+   metadata at the lookup, retaining its failure return. Clearing just these
+   four words in the captured dumps reconciles the entire stock checksum.
+   See [the evidence and addresses](replay.md#2026-09-23-empty-sprite-metadata-in-the-placement-checksum).
+
+   The live acceptance round completed multiple turns on both peers. It
+   exercised sentry placement and automatic fire plus Wormcraft actions, and
+   all 77 stock kind-8 checks matched through the end of the round. The first
+   eight serialized-state snapshots were byte-identical, no gameplay/network
+   RNG, worm, or actor comparison diverged, and both replay recorders
+   completed. Presentation-only `fxrandom` drift remained visible as expected.
+   A focused Q/WASD/Shift/Space/Worm Toss control matrix is still useful as a
+   broader follow-up, but the transport and the original sentry failure are
+   accepted.
 
    Replay playback still has first priority. Live recording now captures the
    merged input actually consumed by packs. Offline games keep the previous
@@ -490,7 +511,7 @@ A second round recorded by the final W3a build also passed container inspection:
 byte-identical 5,951-byte `[wa]` section (SHA-256
 `510f4e48e5c45c76a9803d1ea4ea78cf2ce889ddff4aed55885e04e0de4b560e`).
 
-### W4 — Live desync compare (experimental; action-path failure under diagnosis)
+### W4 — Live desync compare (sentry/Wormcraft path accepted)
 
 WormForge now exchanges the W0 checkpoint through WA's network message fanout every
 50 frames. The transport was initially patterned after Project X: PX hooks the 3.6.31
@@ -517,7 +538,7 @@ sends all three words separately. Gameplay RNG and `netrandom` mismatches are
 errors; `fxrandom` differences remain visible as `sync fx drift` telemetry.
 The same-machine replay hash deliberately still covers all three words.
 
-Experimental input transport is always active in networked games; `sync.txt` gates only
+Synchronized input transport is always active in networked games; `sync.txt` gates only
 the five diagnostic checkpoint records. The codec and consumer stay installed
 without the marker. A network peer cannot be mixed with stock WA: every peer
 must run this WormForge DLL, because stock WA rejects unknown compact input
@@ -526,13 +547,22 @@ diagnostic `.WAgame` compatibility. The sentry stall coincides with a stock
 kind-8 simulation-state checksum mismatch. Earlier claims that input FIFO
 bytes were hashed, or that PX applies input in its decoder, were incorrect.
 The current build fixes early/duplicate input application and the dispatch
-return status, and automatically logs the first eight serialized-state
+return status, initializes the empty-sprite metadata that caused the stock
+checksum failure, and automatically logs the first eight serialized-state
 snapshots (128 KiB maximum each) for comparison. Kind-8 tracing retains the
-incoming and expected frame/checksum pairs. Run a two-peer placement round
-to check whether the mismatch remains, then run a broader round
-exercising Q, WASD/W/Shift, Space charge and release, and Worm Toss drag/release
-while checkpoints confirm `game-rng`, `net-rng`, worms, and actors all compare
+incoming and expected frame/checksum pairs. The two-peer acceptance round
+completed multiple sentry and Wormcraft actions across several turns: all 77
+stock checks matched and both replay recorders completed. A broader follow-up
+should exercise Q, WASD/W/Shift, Space charge and release, and Worm Toss
+drag/release while checkpoints confirm `game-rng`, `net-rng`, worms, and actors all compare
 `OK`; `fx-rng` may report drift.
+
+The first paired snapshots found the concrete placement mismatch in empty
+sprite animation metadata (four uninitialized words, including worm addresses),
+rather than transported input. The current `empty-sprite-info` build supplies
+rate=0, flags=0, frames=1 for sprite-ID-0 metadata before delegating to stock WA.
+The state snapshots remain automatic for future action-path diagnostics; no
+`sync.txt` setup is needed to collect them.
 
 ## Files
 

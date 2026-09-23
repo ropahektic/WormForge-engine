@@ -30,3 +30,9 @@ plate_comment = "Inside D3D9ShaderPresent, after WA binds its palette texture an
 va = 0x0000001C
 name = "D3D9Renderer_width"
 plate_comment = "Offsets from the shader renderer object, not absolute VAs: width 0x1C, height 0x20, device 0x40, frame texture 0x7C, pixel shader 0x84, palette texture 0x88."
+
+[[function]]
+va = 0x00523500
+name = "DisplayGfx__GetSpriteInfo"
+calling_convention = "__thiscall"
+plate_comment = "WA 3.8.1: ECX=display; stack=(sprite_id, rate_out, flags_out, frames_out), RET 16. IDs outside 1..1023 return 0 without initializing any outputs. SpriteAnimation__play_1 at 0x4F5BD0 ignores failure: it copies the two untouched stack locals into animator+0x14/+0x18 and queue+0x30/+0x34. An empty equip pose (ID 0) can therefore leak process addresses into the stock checksum. WormForge supplies rate=0, flags=0, frames=1 for ID 0 before delegating, retaining failure. The one-frame fallback also prevents division by zero when the animator sprite word has only high flag bits."

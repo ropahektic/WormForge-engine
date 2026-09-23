@@ -257,7 +257,7 @@ simulation did not — invisible.
 
 ## Cost
 
-Experimental synchronized input is active in networked matches. Records are sent when
+Synchronized input is active in networked matches. Records are sent when
 controls change, while a used pointer moves, and as a one-second heartbeat.
 Checkpoint generation and its five additional records are off unless a
 `sync.txt` marker sits beside `wkLua.log` (`%LOCALAPPDATA%\WormForge\`) when WA
@@ -269,7 +269,7 @@ dump WA's serialized state into `wkLua.log` automatically (up to 128 KiB of raw
 state each). These bounded diagnostics do not require `sync.txt`; hex data is
 written only to the file, not the live console.
 
-## W4: experimental live peer comparison
+## W4: live peer comparison
 
 With `sync.txt` present, WormForge inserts five records into WA's compact network
 stream every 50 frames: gameplay RNG, client effects RNG, network RNG, worms,
@@ -309,7 +309,7 @@ comparison on WA 3.6.31, where it hooks the encoder/decoder at `0x531560` /
 counterparts are `0x5648B0` / `0x564EA0`. Project X's numbers do not validate
 the kind or delivery path on 3.8.1.
 
-The current 3.8.1 integration is not accepted for lockstep use. In the
+The first 3.8.1 action-path tests failed at sentry placement. In the
 `20260923-replay-w4-decoder-route` round, both peers agree on the kind-8 checksum
 at frame 273 (`f281054f`). At sentry placement, frame 411, the sender has
 `e160ec74` and Naja expects `923979f7`; Naja never reaches sentry `on_fire`.
@@ -330,7 +330,66 @@ authority test: both peers were observed producing input during the ready
 period too. The first eight kind-8 checks include serialized-state snapshots
 for byte comparison if the placement mismatch persists. A new two-peer round
 is still required; the timing corrections do not prove the original sentry
-failure fixed.
+failure fixed. The subsequent round below confirms the failure persisted and
+identifies the exact differing state.
+
+### 2026-09-23: empty sprite metadata in the placement checksum
+
+The `20260923-replay-w4-dispatch-state` round at `13.34.52` (Naja's
+`wkLua (3).log`, paired with the local log) passes the frame-188 check:
+all 41,028 serialized bytes match. At frame 321, all 42,132 bytes match except
+four words at `0x8E94`, `0x8E98`, `0x8EB0`, and `0x8EB4`. The local values
+are `054fe9d8,05632430`, repeated; Naja has `068e7468,06a1cd50`, repeated.
+The second value in each pair is that peer's firing worm address. Naja fails
+the stock check before `on_fire`.
+
+These words are inside the firing worm's **SpriteAnimation** block, tagged
+`0x20`: current flags/frame count at animator `+0x14/+0x18`, and the same
+metadata in the first animation queue entry at `+0x30/+0x34`.
+Disassembly establishes the producer:
+
+- `SpriteAnimation__play_1` (`0x4F5BD0`) passes two uninitialized stack locals
+  as outputs to `DisplayGfx__GetSpriteInfo` (`0x523500`).
+- Sprite ID 0 is rejected without writing outputs. The sentry's empty stock
+  equip pose takes this path; its serialized sprite ID and rate are both zero.
+- The animator ignores the failure return and copies the untouched locals
+  into the current and queued metadata. `0x4F5700` serializes these words,
+  so process-local addresses reach WA's simulation-state checksum.
+
+The serialized hashes are `2c311dd8` locally and `3b3c5388` on Naja's side;
+the separate world-object contribution is `036ea604` on both peers. As a
+forensic check, clearing only the four bad metadata words in the saved dumps
+makes the complete byte arrays identical, yielding stream hash `9e2313f5`
+and full checksum `a191b9f9`. No checksum or serialized-state masking is used
+by the runtime fix.
+
+Build `20260923-replay-w4-empty-sprite-info` supplies rate=0, flags=0, frames=1
+for sprite ID 0 before calling the original lookup. The stock failure return
+is preserved, and real sprite lookups pass through. A one-frame fallback
+keeps the divisor valid even if the animator's sprite word has high flag bits;
+its advance routine (`0x4F5AE0`) skips only a completely zero sprite word.
+Dispatch-only synchronized input and automatic state dumps remain enabled.
+
+Validation: applying the implemented defaults (flags=0, frames=1 in both
+locations) to the captured states also makes every byte identical, with
+stream hash `be2513f5` and reconstructed full checksum `c193b9f9` on both
+sides. The 30 Rust and 5 snapshot-tool tests pass, the Windows DLL builds,
+and its compiled hook preserves ECX/stack arguments while delegating to the
+original lookup. The new DLL and sentry pack were installed locally with
+backup and hash verification.
+
+The subsequent two-peer acceptance round (Naja's `wkLua.log`, replay timestamps
+`13.46.31` / `13.46.32`) used this build on both sides and completed several
+turns. Each peer recorded the same 77 stock kind-8
+frame/checksum pairs through the end of the round, including sentry placement,
+64 sentry fire callbacks, and four Wormcraft callbacks. The first eight state
+snapshots matched byte for byte, from frame 176 (46,648 bytes) through frame
+719 (50,512 bytes). The round continued beyond frame 11,000; no `sync DESYNC`
+or error was logged, and both replay recorders completed. Gameplay RNG,
+network RNG, worms, and actors stayed equal. Only the expected client-effects
+`fxrandom` drift appeared. This accepts the synchronized-input transport and
+the empty-sprite fix for the sentry/Wormcraft path. The broader Q/WASD/Shift,
+Space charge/release, and Worm Toss drag/release matrix remains a follow-up.
 
 Compare the automatic state snapshots with
 `python3 tools/sync-state-diff.py first-wkLua.log second-wkLua.log`. It selects

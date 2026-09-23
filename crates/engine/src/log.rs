@@ -15,7 +15,7 @@ static FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
 static ERR: Mutex<Vec<std::fs::File>> = Mutex::new(Vec::new());
 static CONSOLE: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
 
-pub(crate) const BUILD_ID: &str = "20260923-replay-w4-dispatch-state";
+pub(crate) const BUILD_ID: &str = "20260923-replay-w4-empty-sprite-info";
 
 /// Bounded binary diagnostic dumps belong in the log without flooding the
 /// live console. The caller supplies complete lines including CRLF.
