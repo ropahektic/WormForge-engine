@@ -942,23 +942,25 @@ mod tests {
 
     #[test]
     fn opaque_mask_from_first_frame() {
-        let mut rgba = vec![0u8; 4 * 4 * 4];
-        // Opaque diagonal.
-        for i in 0..4 {
-            let o = ((i * 4 + i) * 4) as usize;
-            rgba[o] = 255;
-            rgba[o + 1] = 0;
-            rgba[o + 2] = 0;
-            rgba[o + 3] = 255;
-        }
+        // One opaque pixel in the middle of a 16x16 frame. The mask is
+        // dilated three times (4-neighbourhood), so bits within Manhattan
+        // distance 3 are solid and anything further is not.
+        let w = 16usize;
+        let mut rgba = vec![0u8; w * w * 4];
+        let o = (8 * w + 8) * 4;
+        rgba[o] = 255;
+        rgba[o + 3] = 255;
         let mask = OpaqueMask::from_frame(&RgbaFrame {
-            width: 4,
-            height: 4,
+            width: w as u32,
+            height: w as u32,
             rgba,
         });
-        assert!(mask.test(0, 0));
-        assert!(mask.test(3, 3));
-        assert!(!mask.test(1, 0));
+        assert!(mask.test(8, 8));
+        assert!(mask.test(8, 11));
+        assert!(mask.test(5, 8));
+        assert!(!mask.test(8, 12));
+        assert!(!mask.test(4, 8));
+        assert!(!mask.test(0, 0));
         assert!(!mask.test(-1, 0));
     }
 
