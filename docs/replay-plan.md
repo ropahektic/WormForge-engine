@@ -287,8 +287,9 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    `controls`; signed 16-bit world-pixel X/Y fit in `pointer`. The sender also
    consumes this quantized value, so both sides see identical pointer precision.
 
-   Live runs establish that this hook runs continuously only on the peer whose
-   input WA currently treats as authoritative. The channel is state/event driven:
+   After the ready period, this hook runs continuously on the peer whose input
+   WA treats as authoritative. Both peers also enter it during the ready period;
+   frame number alone does not establish authority. The channel is state/event driven:
    key and button edges send immediately,
    pointer movement sends while a pack is using it, and an idle heartbeat sends
    once per second. Unchanged state persists until a replacement arrives.
@@ -298,18 +299,23 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    correct 3.8.1 integration. The initial `0xFE` kind remains decode-only for
    diagnostic replay compatibility.
 
-   Two-peer runs disproved the claim that network delivery is a lockstep
-   barrier: diagnostic records continued arriving while one simulation was
-   stopped. Both peers reached `on_fire` on the same simulation frame and
-   produced identical post-spawn state, ruling out sentry simulation drift.
-   Kind-8 tracing then found an exact stock checksum mismatch: the sender
-   expected the transmitted checksum while the receiver had a different one.
-   The cause was WormForge's extra broadcast-classifier hook, which admitted
-   the decoded private record to the receiver's stock per-peer FIFO. Project X
-   leaves that classifier unchanged and consumes 0x80/0x81 directly in its
-   decoder hook. WormForge now follows that route. Sending also begins at frame
-   one, after WA selects the authoritative input producer. A live two-peer run
-   remains the acceptance gate.
+   The latest decoder-route round shows input applied early and twice: a Space
+   record for frame 272 was consumed at local frame 219, then again at 272.
+   The stock checksum matches at 273 but differs at sentry placement, frame 411;
+   the receiver does not reach `on_fire`. Contrary to the earlier diagnosis,
+   WA hashes serialized simulation state, not its input FIFO, and PX's decoder
+   copies payload bytes without applying input. The broadcast classifier is
+   bypassed for the accepted source; its extension was unnecessary, but was
+   not established as the cause of the mismatch.
+
+   Build `20260923-replay-w4-dispatch-state` consumes input only in the stock
+   dispatch hook on both peers, removing enqueue- and decoder-side application.
+   The hook returns `EAX=1` (handled) instead of the restored payload address.
+   Bounded serialized-state snapshots accompany the first eight kind-8 checks
+   in `wkLua.log`, without a marker. Sending still skips initialization frame
+   zero; it does not assume frame one establishes authority. A live two-peer
+   run remains the acceptance gate, and the original placement mismatch may
+   need further diagnosis using these snapshots.
 
    Replay playback still has first priority. Live recording now captures the
    merged input actually consumed by packs. Offline games keep the previous
@@ -495,10 +501,10 @@ fixed 12-byte payload. The 3.8.1 equivalents are `EncodeInputMessage` at
 WormForge provisionally reserves kind `0x80` and sends five 12-byte records: gameplay RNG
 (`GameWorld+0x45EC`), `fxrandom` (`+0x72EC`), `netrandom` (`+0x72F0`), worms,
 and actors. Each record is `[namespaced component tag, frame, value]`, adding 65
-uncompressed bytes per checkpoint. The receive path also extends
-compact decoder, which consumes the private kind before WA's stock per-peer
-FIFO and `GameRuntime__DispatchInputMsg` switch. The stock broadcast classifier
-is deliberately unchanged. The initial W4 test builds used `0xFE`;
+uncompressed bytes per checkpoint. The compact decoder only copies payloads;
+WA queues them and the `GameRuntime__DispatchInputMsg` hook consumes them at
+simulation time. The stock broadcast classifier is deliberately unchanged;
+the accepted-source path queues messages without consulting it. The initial W4 test builds used `0xFE`;
 it remains decode-only for their diagnostic replays.
 
 An idle two-peer round proved byte delivery in both directions: both
@@ -516,13 +522,14 @@ the five diagnostic checkpoint records. The codec and consumer stay installed
 without the marker. A network peer cannot be mixed with stock WA: every peer
 must run this WormForge DLL, because stock WA rejects unknown compact input
 kinds. The old combined-RNG tag and initial `0xFE` carrier remain decodable for
-diagnostic `.WAgame` compatibility. The sentry stall was traced to a stock
-kind-8 checksum mismatch. WormForge had classified private records as stock
-broadcast input, adding them to the receiver's checksummed per-peer FIFO;
-Project X handles them directly in its decoder and leaves the classifier false.
-WormForge now does the same. Sending starts at frame one, and kind-8 tracing
-records the incoming and expected frame/checksum pairs. Run a two-peer
-round to accept the fix, then run a broader round
+diagnostic `.WAgame` compatibility. The sentry stall coincides with a stock
+kind-8 simulation-state checksum mismatch. Earlier claims that input FIFO
+bytes were hashed, or that PX applies input in its decoder, were incorrect.
+The current build fixes early/duplicate input application and the dispatch
+return status, and automatically logs the first eight serialized-state
+snapshots (128 KiB maximum each) for comparison. Kind-8 tracing retains the
+incoming and expected frame/checksum pairs. Run a two-peer placement round
+to check whether the mismatch remains, then run a broader round
 exercising Q, WASD/W/Shift, Space charge and release, and Worm Toss drag/release
 while checkpoints confirm `game-rng`, `net-rng`, worms, and actors all compare
 `OK`; `fx-rng` may report drift.

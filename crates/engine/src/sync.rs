@@ -37,6 +37,7 @@ use game::offsets::{
 use game::sync_input::{self, InputSample};
 use minhook::MinHook;
 use std::ffi::c_void;
+use std::fmt::Write as _;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
@@ -60,9 +61,8 @@ static LAST_INPUT_SENT_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
 /// establish either the number or its delivery semantics on WA 3.8.1.
 const SYNC_MESSAGE: u32 = 0x80;
 /// The initial W4 builds used 0xfe. Keep decoding it so their diagnostic
-/// replays remain readable, but never emit it: Project X's proven custom range
-/// starts at 0x80, while 0xfe is liable to be treated as a signed sentinel by
-/// code outside the compact codec.
+/// replays remain readable, but never emit it. Neither private kind is part of
+/// WA's stock protocol.
 const LEGACY_SYNC_MESSAGE: u32 = 0xfe;
 const SYNC_PAYLOAD_SIZE: u32 = 12;
 /// Legacy W4 combined-RNG record. Keep decoding it so a diagnostic `.WAgame`
@@ -86,15 +86,21 @@ const PROCESS_INPUT: u32 = 0x0053_05e0;
 const DISPATCH_INPUT_MSG: u32 = 0x0053_0f80;
 const ENCODE_INPUT_MSG: u32 = 0x0056_48b0;
 const DECODE_INPUT_MSG: u32 = 0x0056_4ea0;
+const SERIALIZE_STATE: u32 = 0x0053_2330;
 
 static ORIGINAL_PROCESS_INPUT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_DISPATCH_INPUT_MSG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_ENCODE_INPUT_MSG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_DECODE_INPUT_MSG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-/// Most recently active runtime. The network decoder does not receive this as
-/// an argument, but Project X's proven transport consumes its private records
-/// directly from that decoder rather than admitting them to WA's stock FIFO.
-static ACTIVE_RUNTIME: AtomicPtr<u8> = AtomicPtr::new(std::ptr::null_mut());
+static ORIGINAL_SERIALIZE_STATE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+struct StockState {
+    frame: i32,
+    bytes: Vec<u8>,
+}
+static STOCK_STATE: Mutex<Option<StockState>> = Mutex::new(None);
+static STOCK_STATE_DUMPS: AtomicU32 = AtomicU32::new(0);
+const MAX_STATE_DUMPS: u32 = 8;
+const MAX_STATE_BYTES: usize = 128 * 1024;
 /// Bounded stock-protocol trace for the live 3.8.1 sentry-placement failure.
 static STOCK_TRACE_LINES: AtomicU32 = AtomicU32::new(0);
 static STOCK_TRACE_UNTIL: AtomicU32 = AtomicU32::new(u32::MAX);
@@ -219,7 +225,6 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
         if runtime.is_null() {
             return;
         }
-        ACTIVE_RUNTIME.store(runtime, Ordering::Release);
         let world = *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8);
         if world.is_null() || read_i32(world, GAME_WORLD_NET_SESSION) == 0 {
             return;
@@ -229,12 +234,9 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
             return;
         }
         let frame_u32 = frame as u32;
-        // Both peers enter this function at frame zero, before WA has settled
-        // which runtime owns authoritative input. Injecting here gives each
-        // peer a different local-only record batch (pointer and fxrandom are
-        // normally different), which poisons WA's compact-stream checksum.
-        // From frame one onward only the authoritative runtime keeps entering
-        // the local-input path, matching the stock message producer.
+        // Do not inject during frame-zero initialization. This is not an
+        // authority test: both peers also enter during the ready period. Only
+        // records dispatched by WA may update the simulation's input state.
         if frame_u32 == 0 {
             return;
         }
@@ -264,7 +266,6 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
             );
             if should_send {
                 if push_input(buffer, wire) {
-                    set_input(frame, wire);
                     LAST_INPUT_SENT_FRAME.store(frame_u32, Ordering::Relaxed);
                     log_line(&format!(
                         "sync input tx f={frame} keys={:#04x} pointer={},{} down={}",
@@ -312,14 +313,6 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
             crate::log::panic_text(p)
         ));
     }
-}
-
-/// Project X handles its 0x80/0x81 records as a compact-decoder side effect.
-/// The stock broadcast classifier stays unchanged, so the private record never
-/// enters the per-peer FIFO whose bytes WA checks at the kind-8 barrier.
-unsafe extern "C" fn receive_decoded_custom(payload: *const u8, msg_type: u32) {
-    let runtime = ACTIVE_RUNTIME.load(Ordering::Acquire);
-    let _ = receive_live_checkpoint(payload, runtime, msg_type, SYNC_PAYLOAD_SIZE);
 }
 
 /// Consume one decoded WormForge carrier before WA's stock input dispatcher,
@@ -444,11 +437,103 @@ unsafe extern "C" fn receive_live_checkpoint(
     }
 }
 
-/// Record the stock messages surrounding the first custom-weapon fire. The
-/// W4 records are consumed directly by the compact decoder, so their arrival
-/// alone cannot explain why simulation stopped. Kind 8 compares the stock
-/// compact-stream frame/checksum pair; kind 9 carries the periodic game-state
-/// checksum.
+/// Capture WA's own serialization, without calling it a second time or
+/// changing its bytes. 0x532330 takes (runtime, buffer), RET 8; the main stream
+/// is buffer[0] with byte length buffer+0x0c, as read by 0x546140. Kind 8 hashes
+/// this simulation state and adds the world+0x20 object's virtual +0x48 result.
+unsafe extern "system" fn serialize_state_hook(runtime: *mut u8, buffer: *mut u8) -> u32 {
+    let original: unsafe extern "system" fn(*mut u8, *mut u8) -> u32 =
+        std::mem::transmute(ORIGINAL_SERIALIZE_STATE.load(Ordering::Relaxed));
+    let result = original(runtime, buffer);
+    let captured = std::panic::catch_unwind(|| unsafe {
+        if runtime.is_null()
+            || buffer.is_null()
+            || STOCK_STATE_DUMPS.load(Ordering::Relaxed) >= MAX_STATE_DUMPS
+        {
+            return;
+        }
+        let world = *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8);
+        if world.is_null() || read_i32(world, GAME_WORLD_NET_SESSION) == 0 {
+            return;
+        }
+        let bytes = *(buffer as *const *const u8);
+        let size = read_i32(buffer, 0x0c);
+        if bytes.is_null() || size < 0 || size as usize > MAX_STATE_BYTES {
+            if let Ok(mut state) = STOCK_STATE.lock() {
+                *state = None;
+            }
+            log_error(&format!(
+                "stock state: invalid or oversized snapshot ({size} bytes)"
+            ));
+            return;
+        }
+        if let Ok(mut state) = STOCK_STATE.lock() {
+            *state = Some(StockState {
+                frame: read_i32(world, GAME_WORLD_FRAME_COUNTER),
+                bytes: std::slice::from_raw_parts(bytes, size as usize).to_vec(),
+            });
+        }
+    });
+    if let Err(p) = captured {
+        log_error(&format!(
+            "panic capturing stock state: {}",
+            crate::log::panic_text(p)
+        ));
+    }
+    result
+}
+
+/// Keep evidence in the ordinary log, so the next comparison needs no marker
+/// or extra files. Limit volume to eight snapshots per match; hex goes only
+/// to disk, not the console. Capture precedes checksum calculation and dispatch.
+fn dump_stock_state(expected_frame: i32) {
+    if STOCK_STATE_DUMPS.load(Ordering::Relaxed) >= MAX_STATE_DUMPS {
+        return;
+    }
+    let Ok(mut state) = STOCK_STATE.lock() else {
+        return;
+    };
+    let Some(snapshot) = state.as_ref() else {
+        return;
+    };
+    if snapshot.frame != expected_frame {
+        log_line(&format!(
+            "stock state missing f={expected_frame} captured-f={}",
+            snapshot.frame
+        ));
+        return;
+    }
+    let snapshot = state.take().unwrap();
+    drop(state);
+    STOCK_STATE_DUMPS.fetch_add(1, Ordering::Relaxed);
+    // Same rotate/add operation as WA 3.8.1's 0x546140, excluding the separate
+    // world-object contribution and the alternate 0x546170 checksum variant.
+    let hash = snapshot.bytes.iter().fold(0u32, |sum, &byte| {
+        sum.rotate_left(3).wrapping_add(byte as u32)
+    });
+    log_line(&format!(
+        "stock state f={expected_frame} bytes={} stream-hash={hash:08x}",
+        snapshot.bytes.len()
+    ));
+    let mut text = String::new();
+    for (i, chunk) in snapshot.bytes.chunks(128).enumerate() {
+        let _ = write!(
+            text,
+            "stock state data f={expected_frame} off={:08x} hex=",
+            i * 128
+        );
+        for byte in chunk {
+            let _ = write!(text, "{byte:02x}");
+        }
+        text.push_str("\r\n");
+    }
+    let _ = write!(text, "stock state end f={expected_frame}\r\n");
+    crate::log::diagnostic_file(&text);
+}
+
+/// Record stock messages surrounding custom-weapon fire and the incoming and
+/// locally expected kind-8 state checksums. A checksum-state of -1 means WA is
+/// waiting for its peer's checksum, not that it has already detected an error.
 unsafe extern "C" fn trace_stock_dispatch(
     payload: *const u8,
     runtime: *mut u8,
@@ -458,6 +543,9 @@ unsafe extern "C" fn trace_stock_dispatch(
     let result = std::panic::catch_unwind(|| unsafe {
         if runtime.is_null() || msg_type == SYNC_MESSAGE || msg_type == LEGACY_SYNC_MESSAGE {
             return;
+        }
+        if msg_type == 8 {
+            dump_stock_state(read_i32(runtime, 0x264));
         }
         let world = *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8);
         let frame = if world.is_null() {
@@ -567,6 +655,10 @@ unsafe extern "C" fn dispatch_input_hook() {
         "popad",
         "popfd",
         "pop ebp",
+        // Dispatch's caller at 0x531f0d branches on EAX: positive means
+        // handled, zero forwards to the game task, negative stops dispatch.
+        // Returning the restored payload pointer was an undefined status.
+        "mov eax, 1",
         "ret 12",
         "3:",
         "jmp dword ptr [{original}]",
@@ -606,6 +698,8 @@ unsafe extern "C" fn encode_input_hook() {
 
 /// Matching decoder ABI: EAX=kind out, ECX=wire src, ESI=payload out,
 /// stack=(wire bytes, payload-size out, three protocol fields), pops 20.
+/// Decode only. Network packets may arrive many simulation frames ahead;
+/// applying input here bypasses WA's queue timing and duplicates dispatch.
 #[unsafe(naked)]
 unsafe extern "C" fn decode_input_hook() {
     core::arch::naked_asm!(
@@ -626,15 +720,6 @@ unsafe extern "C" fn decode_input_hook() {
         "mov dword ptr [esi+8], edx",
         "mov edx, dword ptr [esp+8]",
         "mov dword ptr [edx], {size}",
-        "pushfd",
-        "pushad",
-        "movzx eax, byte ptr [ecx]",
-        "push eax",
-        "push esi",
-        "call {receive}",
-        "add esp, 8",
-        "popad",
-        "popfd",
         "mov eax, 13",
         "ret 20",
         "2:",
@@ -642,7 +727,6 @@ unsafe extern "C" fn decode_input_hook() {
         kind = const SYNC_MESSAGE,
         legacy_kind = const LEGACY_SYNC_MESSAGE,
         size = const SYNC_PAYLOAD_SIZE,
-        receive = sym receive_decoded_custom,
         original = sym ORIGINAL_DECODE_INPUT_MSG,
     );
 }
@@ -706,6 +790,13 @@ pub(crate) fn install(catalog: &re_catalog::Catalog) -> Result<(), String> {
             decode_input_hook as *mut c_void,
             &ORIGINAL_DECODE_INPUT_MSG,
             "input decoder",
+        )?;
+        create_hook(
+            SERIALIZE_STATE,
+            &[0x33, 0xc0, 0x53, 0x8b, 0x5c, 0x24, 0x0c],
+            serialize_state_hook as *mut c_void,
+            &ORIGINAL_SERIALIZE_STATE,
+            "state serializer diagnostic",
         )?;
     }
     log_line(
@@ -848,7 +939,12 @@ pub fn finish() {
     LAST_SENT_FRAME.store(u32::MAX, Ordering::Relaxed);
     LAST_INPUT_OBSERVED_FRAME.store(u32::MAX, Ordering::Relaxed);
     LAST_INPUT_SENT_FRAME.store(u32::MAX, Ordering::Relaxed);
-    ACTIVE_RUNTIME.store(std::ptr::null_mut(), Ordering::Release);
+    STOCK_TRACE_LINES.store(0, Ordering::Relaxed);
+    STOCK_TRACE_UNTIL.store(u32::MAX, Ordering::Relaxed);
+    STOCK_STATE_DUMPS.store(0, Ordering::Relaxed);
+    if let Ok(mut state) = STOCK_STATE.lock() {
+        *state = None;
+    }
     if let Ok(mut live) = LIVE_INPUT.lock() {
         *live = None;
     }

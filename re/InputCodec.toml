@@ -16,4 +16,10 @@ plate_comment = "Decode one compact network/replay input message. Custom ABI: EA
 [[function]]
 va = 0x0053E7D0
 name = "GameNet__IsBroadcastTag"
-plate_comment = "Returns AL=1 for message kinds which GameNet queues into each peer input FIFO after decoding. It must remain false for private codec records: admitting them changes the receiver's stock compact-stream checksum."
+plate_comment = "Returns AL=1 for selected stock kinds admitted even when the source predicate at GameNet+vtable[0x1C] is false. At 0x53E22C the true-source path queues all decoded kinds without consulting this classifier. Leave stock behavior unchanged; this is not a checksum over input bytes."
+
+[[function]]
+va = 0x00532330
+name = "GameRuntime__SerializeChecksumState"
+calling_convention = "__stdcall"
+plate_comment = "Stack=(runtime, buffer), RET 8. Serializes simulation state before kind-8 checksum calculation at 0x532B89. Main stream pointer at buffer+0, byte count at buffer+0x0C. 0x546140 rotates accumulator left 3 and adds each byte; 0x532C06 adds the world+0x20 object's virtual +0x48 result. Alternate checksum path calls 0x546170."

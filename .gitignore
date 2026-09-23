@@ -43,7 +43,9 @@ target/local-install-backups/
 # Local-only tooling: pack bake/extract scripts and the personal install
 # helper. Packs ship baked assets, and these reference machine-local paths
 # (PX extraction, GOG install dir), so they stay out of the repo.
-tools/
+/tools/*
+!/tools/sync-state-diff.py
+!/tools/test_sync_state_diff.py
 
 # Game leftovers
 WA.exe

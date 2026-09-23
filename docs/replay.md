@@ -264,6 +264,11 @@ Checkpoint generation and its five additional records are off unless a
 starts. The compact-codec bridge remains installed so WormForge input and
 diagnostic replay records can always be decoded.
 
+During the current W4 investigation, the first eight stock kind-8 checks also
+dump WA's serialized state into `wkLua.log` automatically (up to 128 KiB of raw
+state each). These bounded diagnostics do not require `sync.txt`; hex data is
+written only to the file, not the live console.
+
 ## W4: experimental live peer comparison
 
 With `sync.txt` present, WormForge inserts five records into WA's compact network
@@ -304,18 +309,36 @@ comparison on WA 3.6.31, where it hooks the encoder/decoder at `0x531560` /
 counterparts are `0x5648B0` / `0x564EA0`. Project X's numbers do not validate
 the kind or delivery path on 3.8.1.
 
-The current 3.8.1 integration is not accepted for lockstep use. Live evidence
-shows custom records continuing to arrive while one peer's simulation is
-stopped, so delivery is out of band. Stock tracing found that both peers reach
-the sentry's `on_fire` hook on the same simulation frame and produce the same
-actor state. The stop occurs in WA's kind-8 compact-stream checksum barrier:
-the sender's transmitted and expected checksums matched, while the receiver's
-expected checksum differed. WormForge had admitted private records to the
-receiver's checksummed stock FIFO by extending `GameNet__IsBroadcastTag`.
-Project X leaves that classifier unchanged and consumes 0x80/0x81 directly in
-its decoder hook; WormForge now follows that route. Sending also begins at
-frame one, after WA selects the authoritative producer. A two-peer round
-remains the acceptance gate.
+The current 3.8.1 integration is not accepted for lockstep use. In the
+`20260923-replay-w4-decoder-route` round, both peers agree on the kind-8 checksum
+at frame 273 (`f281054f`). At sentry placement, frame 411, the sender has
+`e160ec74` and Naja expects `923979f7`; Naja never reaches sentry `on_fire`.
+The decoder callback also applies input early (Space at frame 219 instead of
+272 on one peer), then dispatch applies it again at the proper frame.
+
+Rechecking the executables disproved two earlier explanations: PX's compact
+decoder copies payload bytes without applying simulation input, and WA's
+kind-8 checksum covers serialized **simulation state**, not input FIFO bytes.
+The stock classifier is bypassed for the accepted source at `0x53E22C`;
+private records from that source already reach the input queue.
+
+Build `20260923-replay-w4-dispatch-state` removes decoder-side and enqueue-side
+input application. Both peers consume input only at `GameRuntime__DispatchInputMsg`,
+whose hook now returns the defined handled status (`EAX=1`). The classifier
+remains unchanged. Frame-zero sending remains suppressed, but this is not an
+authority test: both peers were observed producing input during the ready
+period too. The first eight kind-8 checks include serialized-state snapshots
+for byte comparison if the placement mismatch persists. A new two-peer round
+is still required; the timing corrections do not prove the original sentry
+failure fixed.
+
+Compare the automatic state snapshots with
+`python3 tools/sync-state-diff.py first-wkLua.log second-wkLua.log`. It selects
+the latest launch and recorded round in each log, validates complete dumps,
+and reports differing byte offsets. Exit status is 0 for matching common
+snapshots, 1 for differing bytes, and 2 for missing/corrupt evidence. Matching
+serialized bytes alone does not validate the separate world-object checksum
+contribution or prove successful network play.
 
 ## Synchronized pack input
 
