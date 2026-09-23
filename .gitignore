@@ -31,6 +31,7 @@ Desktop.ini
 credentials.json
 user/
 logs/
+local/
 *.log
 
 # Personal agent/machine files and bytecode

@@ -21,19 +21,24 @@
 //! "which part drifted" is most of the diagnosis: RNG alone means we
 //! perturbed WA, actors alone means the fault is ours.
 //!
-//! Gated behind a `sync.txt` marker next to `wkLua.log`, exactly like
-//! `queue_census`, so a normal install pays one relaxed atomic load per frame
-//! and writes nothing.
+//! Synchronized input is always active in networked matches and publishes
+//! change-driven records plus a low-rate heartbeat. The heavier checkpoint
+//! probe remains gated behind a `sync.txt` marker next to `wkLua.log`, exactly
+//! like `queue_census`.
 
-use crate::log_line;
+use crate::{log_error, log_line};
 use game::entity::read_i32;
 use game::hash::Fnv;
 use game::offsets::{
-    ACTOR_PHASE, ACTOR_SPRITE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y,
-    GAME_WORLD_FRAME_COUNTER, GAME_WORLD_GAME_RNG, GAME_WORLD_RECORDED_FRAME,
-    GAME_WORLD_RNG_STATE_1, GAME_WORLD_RNG_STATE_2,
+    ACTOR_PHASE, ACTOR_SPRITE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y, GAME_RUNTIME_WORLD,
+    GAME_WORLD_FRAME_COUNTER, GAME_WORLD_GAME_RNG, GAME_WORLD_NET_SESSION,
+    GAME_WORLD_RECORDED_FRAME, GAME_WORLD_RNG_STATE_1, GAME_WORLD_RNG_STATE_2,
 };
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use game::sync_input::{self, InputSample};
+use minhook::MinHook;
+use std::ffi::c_void;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
 /// 0 unknown, 1 off, 2 on. Resolved once from the marker file.
 static ENABLED: AtomicU32 = AtomicU32::new(0);
@@ -41,6 +46,58 @@ static ENABLED: AtomicU32 = AtomicU32::new(0);
 static LAST_FRAME: AtomicU64 = AtomicU64::new(u64::MAX);
 static FRAMES: AtomicU64 = AtomicU64::new(0);
 static ANNOUNCED: AtomicU32 = AtomicU32::new(0);
+/// Last frame for which the live transport queued a checkpoint. `process_input`
+/// can be entered more than once without advancing the simulation.
+static LAST_SENT_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
+/// Input is essential rather than diagnostic, so it has its own per-frame
+/// sampling guard and is active in every networked match without `sync.txt`.
+static LAST_INPUT_OBSERVED_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
+static LAST_INPUT_SENT_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
+
+/// WormForge's provisional private input-message kind. WA's stock compact
+/// codec only knows kinds through 0x74; the two codec hooks below add this one
+/// fixed-size kind. Project X also used 0x80 on WA 3.6.31, but that does not
+/// establish either the number or its delivery semantics on WA 3.8.1.
+const SYNC_MESSAGE: u32 = 0x80;
+/// The initial W4 builds used 0xfe. Keep decoding it so their diagnostic
+/// replays remain readable, but never emit it: Project X's proven custom range
+/// starts at 0x80, while 0xfe is liable to be treated as a signed sentinel by
+/// code outside the compact codec.
+const LEGACY_SYNC_MESSAGE: u32 = 0xfe;
+const SYNC_PAYLOAD_SIZE: u32 = 12;
+/// Legacy W4 combined-RNG record. Keep decoding it so a diagnostic `.WAgame`
+/// made by the first carrier build remains playable.
+const TAG_RNG: u32 = 0x5746_0101;
+const TAG_WORMS: u32 = 0x5746_0102;
+const TAG_ACTORS: u32 = 0x5746_0103;
+const TAG_GAME_RNG: u32 = 0x5746_0104;
+const TAG_FX_RNG: u32 = 0x5746_0105;
+const TAG_NET_RNG: u32 = 0x5746_0106;
+const TAG_INPUT: u32 = 0x5746_0107;
+
+#[derive(Clone, Copy)]
+struct LiveInput {
+    sample: InputSample,
+}
+
+static LIVE_INPUT: Mutex<Option<LiveInput>> = Mutex::new(None);
+
+const PROCESS_INPUT: u32 = 0x0053_05e0;
+const DISPATCH_INPUT_MSG: u32 = 0x0053_0f80;
+const ENCODE_INPUT_MSG: u32 = 0x0056_48b0;
+const DECODE_INPUT_MSG: u32 = 0x0056_4ea0;
+
+static ORIGINAL_PROCESS_INPUT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIGINAL_DISPATCH_INPUT_MSG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIGINAL_ENCODE_INPUT_MSG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIGINAL_DECODE_INPUT_MSG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+/// Most recently active runtime. The network decoder does not receive this as
+/// an argument, but Project X's proven transport consumes its private records
+/// directly from that decoder rather than admitting them to WA's stock FIFO.
+static ACTIVE_RUNTIME: AtomicPtr<u8> = AtomicPtr::new(std::ptr::null_mut());
+/// Bounded stock-protocol trace for the live 3.8.1 sentry-placement failure.
+static STOCK_TRACE_LINES: AtomicU32 = AtomicU32::new(0);
+static STOCK_TRACE_UNTIL: AtomicU32 = AtomicU32::new(u32::MAX);
 
 /// Log a line this often. 50 frames is one second of WA at 50 fps, which is
 /// dense enough to bisect a divergence and still readable by eye.
@@ -63,13 +120,622 @@ fn enabled() -> bool {
     }
 }
 
-/// The three RNG words. Divergence here means **we perturbed WA itself**,
-/// which is a different and more serious bug than our own actors drifting.
+#[repr(C)]
+struct BufferMsgNode {
+    size: u32,
+    next: *mut BufferMsgNode,
+    msg_type: u32,
+}
+
+/// The fields WA's `BufferObject__AllocSlot` uses. `GameRuntime+0x40` points
+/// at this queue; messages put here are collected by `Game__process_input`.
+#[repr(C)]
+struct BufferObject {
+    ring_start: *mut u8,
+    capacity: u32,
+    tail_offset: u32,
+    read_offset: u32,
+    tail_node: *mut BufferMsgNode,
+    queue_head: *mut BufferMsgNode,
+    queue_count: i32,
+}
+
+unsafe fn alloc_slot(buffer: *mut BufferObject, body_size: u32) -> *mut u32 {
+    if buffer.is_null() || (*buffer).ring_start.is_null() {
+        return std::ptr::null_mut();
+    }
+    let mut tail = (*buffer).tail_offset;
+    let head = (*buffer).read_offset;
+    let slot_bytes = body_size.wrapping_add(11) & !3;
+    if tail < head {
+        if head <= tail.wrapping_add(slot_bytes) {
+            return std::ptr::null_mut();
+        }
+    } else if (*buffer).capacity <= tail.wrapping_add(slot_bytes) {
+        if head <= slot_bytes {
+            return std::ptr::null_mut();
+        }
+        tail = 0;
+    }
+
+    let node = (*buffer).ring_start.add(tail as usize) as *mut BufferMsgNode;
+    (*node).size = body_size;
+    (*node).next = std::ptr::null_mut();
+    if !(*buffer).tail_node.is_null() {
+        (*(*buffer).tail_node).next = node;
+    }
+    (*buffer).tail_node = node;
+    if (*buffer).queue_head.is_null() {
+        (*buffer).queue_head = node;
+    }
+    (*buffer).queue_count = (*buffer).queue_count.wrapping_add(1);
+    (*buffer).tail_offset = tail.wrapping_add(slot_bytes);
+    &raw mut (*node).msg_type
+}
+
+unsafe fn push_checkpoint(buffer: *mut BufferObject, tag: u32, frame: u32, hash: u32) -> bool {
+    let slot = alloc_slot(buffer, 4 + SYNC_PAYLOAD_SIZE);
+    if slot.is_null() {
+        return false;
+    }
+    *slot = SYNC_MESSAGE;
+    *slot.add(1) = tag;
+    *slot.add(2) = frame;
+    *slot.add(3) = hash;
+    true
+}
+
+fn set_input(_frame: i32, sample: InputSample) {
+    let Ok(mut live) = LIVE_INPUT.lock() else {
+        return;
+    };
+    *live = Some(LiveInput { sample });
+}
+
+fn current_input() -> Option<InputSample> {
+    let live = LIVE_INPUT.lock().ok()?;
+    Some(live.as_ref()?.sample)
+}
+
+/// Latest state published by the player whose WA input queue is authoritative.
+/// State records are change-driven, so an unchanged key remains held across
+/// frames until the corresponding release record arrives.
+pub(crate) fn input(_frame: i64) -> Option<(u32, i32, i32, bool)> {
+    let sample = current_input()?;
+    Some((sample.keys, sample.px, sample.py, sample.down))
+}
+
+unsafe fn push_input(buffer: *mut BufferObject, sample: InputSample) -> bool {
+    let (controls, pointer) = sync_input::pack(sample);
+    push_checkpoint(buffer, TAG_INPUT, controls, pointer)
+}
+
+/// Runs immediately before WA collects authoritative local input. Controls are
+/// published on change, pointer motion while it is in use, and otherwise with
+/// a one-second heartbeat. The optional five-record checkpoint remains gated
+/// by `sync.txt`.
+unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
+    let result = std::panic::catch_unwind(|| unsafe {
+        if runtime.is_null() {
+            return;
+        }
+        ACTIVE_RUNTIME.store(runtime, Ordering::Release);
+        let world = *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8);
+        if world.is_null() || read_i32(world, GAME_WORLD_NET_SESSION) == 0 {
+            return;
+        }
+        let frame = read_i32(world, GAME_WORLD_FRAME_COUNTER);
+        if frame < 0 {
+            return;
+        }
+        let frame_u32 = frame as u32;
+        // Both peers enter this function at frame zero, before WA has settled
+        // which runtime owns authoritative input. Injecting here gives each
+        // peer a different local-only record batch (pointer and fxrandom are
+        // normally different), which poisons WA's compact-stream checksum.
+        // From frame one onward only the authoritative runtime keeps entering
+        // the local-input path, matching the stock message producer.
+        if frame_u32 == 0 {
+            return;
+        }
+        let buffer = *(runtime.add(0x40) as *const *mut BufferObject);
+
+        if LAST_INPUT_OBSERVED_FRAME.swap(frame_u32, Ordering::Relaxed) != frame_u32 {
+            let local = crate::world::local_input_for_sync();
+            // Quantize locally through the wire representation too, so the
+            // sender consumes exactly the value received by its peers.
+            let local = InputSample {
+                keys: local.0,
+                px: local.1,
+                py: local.2,
+                down: local.3,
+            };
+            let (controls, pointer) = sync_input::pack(local);
+            let wire =
+                sync_input::unpack(controls, pointer).expect("locally packed input is valid");
+            let pointer_requested = crate::world::take_pointer_sync_request();
+            let last_sent = LAST_INPUT_SENT_FRAME.load(Ordering::Relaxed);
+            let should_send = sync_input::should_send(
+                current_input(),
+                wire,
+                frame_u32,
+                last_sent,
+                pointer_requested,
+            );
+            if should_send {
+                if push_input(buffer, wire) {
+                    set_input(frame, wire);
+                    LAST_INPUT_SENT_FRAME.store(frame_u32, Ordering::Relaxed);
+                    log_line(&format!(
+                        "sync input tx f={frame} keys={:#04x} pointer={},{} down={}",
+                        wire.keys,
+                        wire.px >> 16,
+                        wire.py >> 16,
+                        wire.down
+                    ));
+                } else {
+                    log_error(&format!(
+                        "sync input: WA input queue full at frame {frame}; input not sent"
+                    ));
+                    return;
+                }
+            }
+        }
+
+        if !enabled() || frame_u32 as u64 % REPORT_EVERY != 0 {
+            return;
+        }
+        if LAST_SENT_FRAME.swap(frame_u32, Ordering::Relaxed) == frame_u32 {
+            return;
+        }
+        let (game_rng, fx_rng, net_rng) = rng_words(world);
+        let (_, worms, actors) = checkpoint(world);
+        let ok = push_checkpoint(buffer, TAG_GAME_RNG, frame_u32, game_rng)
+            && push_checkpoint(buffer, TAG_FX_RNG, frame_u32, fx_rng)
+            && push_checkpoint(buffer, TAG_NET_RNG, frame_u32, net_rng)
+            && push_checkpoint(buffer, TAG_WORMS, frame_u32, worms)
+            && push_checkpoint(buffer, TAG_ACTORS, frame_u32, actors);
+        if ok {
+            log_line(&format!(
+                "sync tx f={frame} game-rng={game_rng:08x} fx-rng={fx_rng:08x} \
+                 net-rng={net_rng:08x} worms={worms:08x} actors={actors:08x}"
+            ));
+        } else {
+            log_error(&format!(
+                "sync transport: input queue full at frame {frame}; checkpoint not sent"
+            ));
+        }
+    });
+    if let Err(p) = result {
+        log_error(&format!(
+            "panic queuing sync checkpoint: {}",
+            crate::log::panic_text(p)
+        ));
+    }
+}
+
+/// Project X handles its 0x80/0x81 records as a compact-decoder side effect.
+/// The stock broadcast classifier stays unchanged, so the private record never
+/// enters the per-peer FIFO whose bytes WA checks at the kind-8 barrier.
+unsafe extern "C" fn receive_decoded_custom(payload: *const u8, msg_type: u32) {
+    let runtime = ACTIVE_RUNTIME.load(Ordering::Acquire);
+    let _ = receive_live_checkpoint(payload, runtime, msg_type, SYNC_PAYLOAD_SIZE);
+}
+
+/// Consume one decoded WormForge carrier before WA's stock input dispatcher,
+/// which intentionally has no case for either private kind.
+unsafe extern "C" fn receive_live_checkpoint(
+    payload: *const u8,
+    runtime: *mut u8,
+    msg_type: u32,
+    size: u32,
+) -> u32 {
+    let result = std::panic::catch_unwind(|| unsafe {
+        if msg_type != SYNC_MESSAGE && msg_type != LEGACY_SYNC_MESSAGE {
+            return 0;
+        }
+        if payload.is_null() || size != SYNC_PAYLOAD_SIZE {
+            log_error(&format!(
+                "sync transport: malformed kind {msg_type:#04x} payload ({size} bytes)"
+            ));
+            return 1;
+        }
+        let tag = std::ptr::read_unaligned(payload as *const u32);
+        let frame = std::ptr::read_unaligned(payload.add(4) as *const u32);
+        let remote = std::ptr::read_unaligned(payload.add(8) as *const u32);
+        if tag == TAG_INPUT {
+            if runtime.is_null() {
+                log_error("sync input: received input without a runtime");
+                return 1;
+            }
+            let world = *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8);
+            if world.is_null() {
+                log_error("sync input: received input without a world");
+                return 1;
+            }
+            let current = read_i32(world, GAME_WORLD_FRAME_COUNTER);
+            let Some(sample) = sync_input::unpack(frame, remote) else {
+                log_error(&format!("sync input: malformed control bits {frame:#010x}"));
+                return 1;
+            };
+            if sample.keys & 0x80 != 0 && current >= 0 {
+                STOCK_TRACE_LINES.store(0, Ordering::Relaxed);
+                STOCK_TRACE_UNTIL.store((current as u32).saturating_add(25), Ordering::Relaxed);
+                log_line(&format!(
+                    "stock dispatch trace armed at frame {current} through {}",
+                    (current as u32).saturating_add(25)
+                ));
+            }
+            set_input(current, sample);
+            log_line(&format!(
+                "sync input rx f={current} keys={:#04x} pointer={},{} down={}",
+                sample.keys,
+                sample.px >> 16,
+                sample.py >> 16,
+                sample.down
+            ));
+            return 1;
+        }
+        let component = match tag {
+            TAG_RNG => "rng-legacy",
+            TAG_WORMS => "worms",
+            TAG_ACTORS => "actors",
+            TAG_GAME_RNG => "game-rng",
+            TAG_FX_RNG => "fx-rng",
+            TAG_NET_RNG => "net-rng",
+            _ => {
+                log_error(&format!("sync transport: unknown payload tag {tag:#010x}"));
+                return 1;
+            }
+        };
+        if runtime.is_null() {
+            log_error("sync transport: received checkpoint without a runtime");
+            return 1;
+        }
+        let world = *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8);
+        if world.is_null() {
+            log_error("sync transport: received checkpoint without a world");
+            return 1;
+        }
+        let current = read_i32(world, GAME_WORLD_FRAME_COUNTER);
+        let (rng, worms, actors) = checkpoint(world);
+        let (game_rng, fx_rng, net_rng) = rng_words(world);
+        let local = match tag {
+            TAG_RNG => rng,
+            TAG_WORMS => worms,
+            TAG_ACTORS => actors,
+            TAG_GAME_RNG => game_rng,
+            TAG_FX_RNG => fx_rng,
+            _ => net_rng,
+        };
+        if current < 0 || current as u32 != frame {
+            log_error(&format!(
+                "sync DESYNC f={frame} {component}: checkpoint arrived at local frame {current}"
+            ));
+        }
+        if local == remote {
+            log_line(&format!(
+                "sync rx f={frame} {component}={remote:08x} local={local:08x} OK"
+            ));
+        } else if tag == TAG_FX_RNG {
+            // `fxrandom` drives client presentation entities such as smoke,
+            // score bubbles and sea bubbles. Peers may render a different
+            // number of those, so retain the drift as renderer telemetry
+            // without declaring the lockstep simulation desynchronised.
+            log_line(&format!(
+                "sync fx drift f={frame}: remote={remote:08x} local={local:08x}"
+            ));
+        } else {
+            log_error(&format!(
+                "sync DESYNC f={frame} {component}: remote={remote:08x} local={local:08x}"
+            ));
+        }
+        1
+    });
+    match result {
+        Ok(handled) => handled,
+        Err(p) => {
+            log_error(&format!(
+                "panic receiving sync checkpoint: {}",
+                crate::log::panic_text(p)
+            ));
+            1
+        }
+    }
+}
+
+/// Record the stock messages surrounding the first custom-weapon fire. The
+/// W4 records are consumed directly by the compact decoder, so their arrival
+/// alone cannot explain why simulation stopped. Kind 8 compares the stock
+/// compact-stream frame/checksum pair; kind 9 carries the periodic game-state
+/// checksum.
+unsafe extern "C" fn trace_stock_dispatch(
+    payload: *const u8,
+    runtime: *mut u8,
+    msg_type: u32,
+    size: u32,
+) {
+    let result = std::panic::catch_unwind(|| unsafe {
+        if runtime.is_null() || msg_type == SYNC_MESSAGE || msg_type == LEGACY_SYNC_MESSAGE {
+            return;
+        }
+        let world = *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8);
+        let frame = if world.is_null() {
+            -1
+        } else {
+            read_i32(world, GAME_WORLD_FRAME_COUNTER)
+        };
+        let until = STOCK_TRACE_UNTIL.load(Ordering::Relaxed);
+        let trace_armed = until != u32::MAX && frame >= 0 && frame as u32 <= until;
+        if msg_type != 8 && msg_type != 9 && !trace_armed {
+            return;
+        }
+        if STOCK_TRACE_LINES.fetch_add(1, Ordering::Relaxed) >= 256 {
+            return;
+        }
+        let word = |offset: usize| {
+            if !payload.is_null() && size as usize >= offset + 4 {
+                std::ptr::read_unaligned(payload.add(offset) as *const u32)
+            } else {
+                0
+            }
+        };
+        let checksum = if msg_type == 8 || msg_type == 9 {
+            format!(
+                " expected-frame={} expected-checksum={:08x} checksum-state={} local-input={} remote-input={}",
+                read_i32(runtime, 0x264),
+                read_i32(runtime, 0x268) as u32,
+                read_i32(runtime, 0x270),
+                *runtime.add(0x490),
+                *runtime.add(0x491)
+            )
+        } else {
+            String::new()
+        };
+        log_line(&format!(
+            "stock dispatch f={frame} kind={msg_type:#04x} size={size} \
+             data={:08x},{:08x},{:08x}{checksum}",
+            word(0),
+            word(4),
+            word(8)
+        ));
+    });
+    if let Err(p) = result {
+        log_error(&format!(
+            "panic tracing stock input: {}",
+            crate::log::panic_text(p)
+        ));
+    }
+}
+
+/// EAX=GameRuntime, no stack arguments.
+#[unsafe(naked)]
+unsafe extern "C" fn process_input_hook() {
+    core::arch::naked_asm!(
+        "pushfd",
+        "pushad",
+        "push eax",
+        "call {queue}",
+        "add esp, 4",
+        "popad",
+        "popfd",
+        "jmp dword ptr [{original}]",
+        queue = sym queue_live_checkpoint,
+        original = sym ORIGINAL_PROCESS_INPUT,
+    );
+}
+
+/// EAX=payload; stack=(runtime, kind, payload_size), callee pops 12.
+#[unsafe(naked)]
+unsafe extern "C" fn dispatch_input_hook() {
+    core::arch::naked_asm!(
+        "push ebp",
+        "mov ebp, esp",
+        "pushfd",
+        "pushad",
+        "push dword ptr [ebp+16]",
+        "push dword ptr [ebp+12]",
+        "push dword ptr [ebp+8]",
+        "push eax",
+        "call {trace}",
+        "add esp, 16",
+        "popad",
+        "popfd",
+        "pop ebp",
+        "cmp dword ptr [esp+8], {kind}",
+        "je 1f",
+        "cmp dword ptr [esp+8], {legacy_kind}",
+        "jne 3f",
+        "1:",
+        "push ebp",
+        "mov ebp, esp",
+        "pushfd",
+        "pushad",
+        "push dword ptr [ebp+16]",
+        "push dword ptr [ebp+12]",
+        "push dword ptr [ebp+8]",
+        "push eax",
+        "call {receive}",
+        "add esp, 16",
+        "test eax, eax",
+        "jnz 2f",
+        "popad",
+        "popfd",
+        "pop ebp",
+        "jmp dword ptr [{original}]",
+        "2:",
+        "popad",
+        "popfd",
+        "pop ebp",
+        "ret 12",
+        "3:",
+        "jmp dword ptr [{original}]",
+        kind = const SYNC_MESSAGE,
+        legacy_kind = const LEGACY_SYNC_MESSAGE,
+        trace = sym trace_stock_dispatch,
+        receive = sym receive_live_checkpoint,
+        original = sym ORIGINAL_DISPATCH_INPUT_MSG,
+    );
+}
+
+/// 3.8.1 compact encoder ABI: ECX=wire dst, EDX=payload, stack=
+/// (wire capacity, kind, protocol fields), callee pops 16. Payload size is
+/// implicit in the kind, which is why this private kind must always be 12 bytes.
+#[unsafe(naked)]
+unsafe extern "C" fn encode_input_hook() {
+    core::arch::naked_asm!(
+        "cmp dword ptr [esp+8], {kind}",
+        "jne 2f",
+        "cmp dword ptr [esp+4], 13",
+        "jb 2f",
+        "mov byte ptr [ecx], {kind}",
+        "mov eax, dword ptr [edx]",
+        "mov dword ptr [ecx+1], eax",
+        "mov eax, dword ptr [edx+4]",
+        "mov dword ptr [ecx+5], eax",
+        "mov eax, dword ptr [edx+8]",
+        "mov dword ptr [ecx+9], eax",
+        "mov eax, 13",
+        "ret 16",
+        "2:",
+        "jmp dword ptr [{original}]",
+        kind = const SYNC_MESSAGE,
+        original = sym ORIGINAL_ENCODE_INPUT_MSG,
+    );
+}
+
+/// Matching decoder ABI: EAX=kind out, ECX=wire src, ESI=payload out,
+/// stack=(wire bytes, payload-size out, three protocol fields), pops 20.
+#[unsafe(naked)]
+unsafe extern "C" fn decode_input_hook() {
+    core::arch::naked_asm!(
+        "cmp dword ptr [esp+4], 13",
+        "jb 2f",
+        "cmp byte ptr [ecx], {kind}",
+        "je 1f",
+        "cmp byte ptr [ecx], {legacy_kind}",
+        "jne 2f",
+        "1:",
+        "movzx edx, byte ptr [ecx]",
+        "mov dword ptr [eax], edx",
+        "mov edx, dword ptr [ecx+1]",
+        "mov dword ptr [esi], edx",
+        "mov edx, dword ptr [ecx+5]",
+        "mov dword ptr [esi+4], edx",
+        "mov edx, dword ptr [ecx+9]",
+        "mov dword ptr [esi+8], edx",
+        "mov edx, dword ptr [esp+8]",
+        "mov dword ptr [edx], {size}",
+        "pushfd",
+        "pushad",
+        "movzx eax, byte ptr [ecx]",
+        "push eax",
+        "push esi",
+        "call {receive}",
+        "add esp, 8",
+        "popad",
+        "popfd",
+        "mov eax, 13",
+        "ret 20",
+        "2:",
+        "jmp dword ptr [{original}]",
+        kind = const SYNC_MESSAGE,
+        legacy_kind = const LEGACY_SYNC_MESSAGE,
+        size = const SYNC_PAYLOAD_SIZE,
+        receive = sym receive_decoded_custom,
+        original = sym ORIGINAL_DECODE_INPUT_MSG,
+    );
+}
+
+unsafe fn create_hook(
+    va: u32,
+    expected: &[u8],
+    detour: *mut c_void,
+    original: &AtomicPtr<c_void>,
+    name: &str,
+) -> Result<(), String> {
+    let target = crate::rebase::rb(va) as *mut c_void;
+    if std::slice::from_raw_parts(target as *const u8, expected.len()) != expected {
+        return Err(format!(
+            "sync transport {name}: WA bytes differ at {va:#010x}"
+        ));
+    }
+    let trampoline = MinHook::create_hook(target, detour)
+        .map_err(|e| format!("sync transport {name}: {e:?}"))?;
+    original.store(trampoline, Ordering::SeqCst);
+    Ok(())
+}
+
+/// Install the carrier codec and input injector. Synchronized input is always
+/// active in networked matches; `sync.txt` controls only checkpoint telemetry.
+/// A live sender's network peers still need WormForge because stock WA does
+/// not know message kind 0x80.
+pub(crate) fn install(catalog: &re_catalog::Catalog) -> Result<(), String> {
+    let send_enabled = enabled();
+    let encode_input_msg = catalog
+        .function_va("EncodeInputMessage")
+        .unwrap_or(ENCODE_INPUT_MSG);
+    let decode_input_msg = catalog
+        .function_va("DecodeInputMessage")
+        .unwrap_or(DECODE_INPUT_MSG);
+    unsafe {
+        create_hook(
+            PROCESS_INPUT,
+            &[0x81, 0xec, 0x0c, 0x04, 0x00, 0x00, 0x53, 0x56, 0x8b, 0xf0],
+            process_input_hook as *mut c_void,
+            &ORIGINAL_PROCESS_INPUT,
+            "process input",
+        )?;
+        create_hook(
+            DISPATCH_INPUT_MSG,
+            &[0x81, 0xec, 0x08, 0x04, 0x00, 0x00, 0x53],
+            dispatch_input_hook as *mut c_void,
+            &ORIGINAL_DISPATCH_INPUT_MSG,
+            "dispatch input",
+        )?;
+        create_hook(
+            encode_input_msg,
+            &[0x8b, 0x44, 0x24, 0x08, 0x83, 0xf8, 0x74],
+            encode_input_hook as *mut c_void,
+            &ORIGINAL_ENCODE_INPUT_MSG,
+            "input encoder",
+        )?;
+        create_hook(
+            decode_input_msg,
+            &[0x55, 0x8b, 0xec, 0x83, 0xe4, 0xf8, 0x8b, 0x55, 0x18],
+            decode_input_hook as *mut c_void,
+            &ORIGINAL_DECODE_INPUT_MSG,
+            "input decoder",
+        )?;
+    }
+    log_line(
+        "EXPERIMENTAL synchronized input enabled (provisional kind 0x80, change-driven 12-byte records); network peers require WormForge",
+    );
+    if send_enabled {
+        log_line(
+            "EXPERIMENTAL sync transport sending enabled (provisional kind 0x80, 12-byte records); network peers require WormForge",
+        );
+    }
+    Ok(())
+}
+
+unsafe fn rng_words(world: *mut u8) -> (u32, u32, u32) {
+    (
+        read_i32(world, GAME_WORLD_GAME_RNG) as u32,
+        read_i32(world, GAME_WORLD_RNG_STATE_1) as u32,
+        read_i32(world, GAME_WORLD_RNG_STATE_2) as u32,
+    )
+}
+
+/// Hash all three RNG words for same-machine replay verification. The live
+/// peer carrier sends the words separately because `fxrandom` is deliberately
+/// client-local while gameplay RNG and `netrandom` must agree across peers.
 unsafe fn hash_rng(world: *mut u8) -> u32 {
     let mut h = Fnv::new();
-    h.write_i32(read_i32(world, GAME_WORLD_GAME_RNG));
-    h.write_i32(read_i32(world, GAME_WORLD_RNG_STATE_1));
-    h.write_i32(read_i32(world, GAME_WORLD_RNG_STATE_2));
+    let (game_rng, fx_rng, net_rng) = rng_words(world);
+    h.write_i32(game_rng as i32);
+    h.write_i32(fx_rng as i32);
+    h.write_i32(net_rng as i32);
     h.finish()
 }
 
@@ -142,10 +808,10 @@ pub unsafe fn observe(world: *mut u8) {
     if ANNOUNCED.swap(1, Ordering::Relaxed) == 0 {
         // -1 here means WA is playing a replay back rather than recording one.
         let recorded = read_i32(world, GAME_WORLD_RECORDED_FRAME);
-        let net = read_i32(world, game::offsets::GAME_WORLD_NET_GAME);
+        let net = read_i32(world, game::offsets::GAME_WORLD_NET_SESSION);
         log_line(&format!(
             "sync probe: world {world:?} first frame {frame}, \
-             recorded_frame_counter {recorded} ({}), net_game {net:#x} ({})",
+             recorded_frame_counter {recorded} ({}), net_session {net:#x} ({})",
             if recorded < 0 {
                 "REPLAY PLAYBACK"
             } else {
@@ -170,14 +836,20 @@ pub unsafe fn observe(world: *mut u8) {
 /// Flush a final line at match end, so a short session still yields a tail to
 /// compare even if it did not reach a report boundary.
 pub fn finish() {
-    if !enabled() {
-        return;
-    }
-    let frames = FRAMES.load(Ordering::Relaxed);
-    if frames > 0 {
-        log_line(&format!("sync probe: {frames} frames hashed this match"));
+    if enabled() {
+        let frames = FRAMES.load(Ordering::Relaxed);
+        if frames > 0 {
+            log_line(&format!("sync probe: {frames} frames hashed this match"));
+        }
     }
     FRAMES.store(0, Ordering::Relaxed);
     LAST_FRAME.store(u64::MAX, Ordering::Relaxed);
     ANNOUNCED.store(0, Ordering::Relaxed);
+    LAST_SENT_FRAME.store(u32::MAX, Ordering::Relaxed);
+    LAST_INPUT_OBSERVED_FRAME.store(u32::MAX, Ordering::Relaxed);
+    LAST_INPUT_SENT_FRAME.store(u32::MAX, Ordering::Relaxed);
+    ACTIVE_RUNTIME.store(std::ptr::null_mut(), Ordering::Release);
+    if let Ok(mut live) = LIVE_INPUT.lock() {
+        *live = None;
+    }
 }

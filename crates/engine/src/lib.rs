@@ -5,6 +5,8 @@
 
 mod actor;
 mod apply;
+#[cfg(target_os = "windows")]
+mod crt;
 mod fog;
 mod gpu;
 mod hook;
@@ -36,7 +38,13 @@ pub fn start() {
     if STARTED.swap(true, Ordering::SeqCst) {
         return;
     }
+    #[cfg(target_os = "windows")]
+    let legacy_printf_options = unsafe { crt::use_standard_printf_options() };
     log::init();
+    #[cfg(target_os = "windows")]
+    log_line(&format!(
+        "CRT printf options {legacy_printf_options:#x} -> 0x0 (Wine-compatible)"
+    ));
     log_line("wkLua starting");
     unsafe {
         rebase::init_rebase();

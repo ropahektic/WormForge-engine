@@ -138,6 +138,7 @@ impl Catalog {
         c.merge_toml(include_str!("../../../re/FireWeapon.toml"))?;
         c.merge_toml(include_str!("../../../re/Display.toml"))?;
         c.merge_toml(include_str!("../../../re/hurt.toml"))?;
+        c.merge_toml(include_str!("../../../re/InputCodec.toml"))?;
         Ok(c)
     }
 
@@ -211,6 +212,9 @@ mod tests {
             Some(0x0051E0F0)
         );
         assert_eq!(c.function_va("FireWeapon__StrikeFire"), Some(0x0051E2C0));
+        assert_eq!(c.function_va("EncodeInputMessage"), Some(0x005648B0));
+        assert_eq!(c.function_va("DecodeInputMessage"), Some(0x00564EA0));
+        assert_eq!(c.function_va("GameNet__IsBroadcastTag"), Some(0x0053E7D0));
     }
 
     #[test]

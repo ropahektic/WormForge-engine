@@ -1,9 +1,9 @@
 # WormForge replay: `.WF_WAgame`
 
-> **Status: W0 complete and passed (2026-09-22). W1 complete: items 1, 3, 4,
-> 5, 6 and 7 done; item 2 shipped as detection only because the underlying
-> gap needs lockstep packets. W2 recording and W3 playback are complete and
-> live-accepted on 2026-09-22. W4 live packet exchange remains optional.**
+> **Status: W0 complete and passed (2026-09-22). W2 recording and W3 playback
+> are complete and live-accepted. W4 packet exchange is experimental: idle
+> delivery works, but the first stock sentry fire currently stops one peer.
+> Gap 1 therefore remains open.**
 >
 > This is the canonical plan. `docs/replay.md` is its companion: what W0
 > measures, how to run the gate, and the results. Sections below are annotated
@@ -278,28 +278,52 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    **Verified behaviour-preserving in-game**: the W0 gate re-run produced hashes
    bit-identical to the pre-latch run, sample for sample. The probe proved a
    refactor safe, which is the instrument paying for itself outside replay.
-2. ⚠️ **Make gap 1 visible — DONE. It is NOT fixed, and cannot be yet.**
+2. ⚠️ **Synchronize pack input — IMPLEMENTED, NOT YET ACCEPTED.**
 
-   The earlier claim here, that the latch was its fix, was wrong. Latching makes
-   a peer consistent *with itself* inside a frame; it does nothing about two
-   peers pressing different keys. `pump_space_fire` still calls `start_firing`,
-   `release_shot` and `spend_gift` off this machine's keyboard, and none of it
-   goes on the wire. The real answer is a synchronised input channel — Project
-   X's `keySync`, 1,123 uses across its scripts — which needs lockstep packets
-   WormForge does not have. That is a larger piece of work than all of W1.
+   The experimental W4 compact-codec bridge carries input records independent
+   of `sync.txt`. Input is sampled immediately before WA collects it at
+   `Game__process_input` and travels through WA's compact network stream. The 12-byte payload
+   is `[tag, controls, pointer]`: eight key bits and the mouse button fit in
+   `controls`; signed 16-bit world-pixel X/Y fit in `pointer`. The sender also
+   consumes this quantized value, so both sides see identical pointer precision.
 
-   What shipped instead is detection, because a desync that announces itself is
-   a bug report and one that does not is a mystery:
+   Live runs establish that this hook runs continuously only on the peer whose
+   input WA currently treats as authoritative. The channel is state/event driven:
+   key and button edges send immediately,
+   pointer movement sends while a pack is using it, and an idle heartbeat sends
+   once per second. Unchanged state persists until a replacement arrives.
 
-   - `world::is_networked()` reads `GameWorld+0x28` (the network game object).
-     Verified `0x0` in an offline replay; the networked half is assumed. The
-     asymmetry is safe by design — a wrong reading can only produce a missed
-     warning, which is today's behaviour, never a false one.
-   - `pump_space_fire` and the Lua-facing `keys()` / `pointer()` each log once,
-     loudly, when they act during a networked game.
-   - **`wa.world.networked()`** is exposed so packs can guard themselves. The
-     three packs using local input today — `pooz`, `q_bazooka`, `worm_toss` —
-     now have a way to opt out of desyncing instead of no option at all.
+   New traffic provisionally uses kind `0x80`. Project X used `0x80` and `0x81`
+   on WA 3.6.31, but neither those values nor its hook addresses prove the
+   correct 3.8.1 integration. The initial `0xFE` kind remains decode-only for
+   diagnostic replay compatibility.
+
+   Two-peer runs disproved the claim that network delivery is a lockstep
+   barrier: diagnostic records continued arriving while one simulation was
+   stopped. Both peers reached `on_fire` on the same simulation frame and
+   produced identical post-spawn state, ruling out sentry simulation drift.
+   Kind-8 tracing then found an exact stock checksum mismatch: the sender
+   expected the transmitted checksum while the receiver had a different one.
+   The cause was WormForge's extra broadcast-classifier hook, which admitted
+   the decoded private record to the receiver's stock per-peer FIFO. Project X
+   leaves that classifier unchanged and consumes 0x80/0x81 directly in its
+   decoder hook. WormForge now follows that route. Sending also begins at frame
+   one, after WA selects the authoritative input producer. A live two-peer run
+   remains the acceptance gate.
+
+   Replay playback still has first priority. Live recording now captures the
+   merged input actually consumed by packs. Offline games keep the previous
+   per-frame OS latch.
+
+   - `world::is_networked()` reads `GameWorld+0x1C` (`net_session`), the field
+     WA itself uses for its online/offline branches. The earlier `+0x28`
+     `net_game` assumption was disproved by the first W4 round: it remained
+     null on both online peers and suppressed both warnings and W4 sending.
+   - The temporary local-input warnings and network guards are gone.
+     `pump_space_fire`, `pooz`, `q_bazooka`, and `worm_toss` all consume the
+     synchronized values in networked games.
+   - **`wa.world.networked()`** remains exposed for packs whose behavior may
+     legitimately differ between offline and network play.
 3. ✅ **`wa.random()` — DONE.** Calls `GameWorld__AdvanceRNG` (0x53F320),
    byte-verified before the first call the way `render_queue` verifies its
    dispatcher. Calling rather than reimplementing: the six instructions are
@@ -460,11 +484,48 @@ A second round recorded by the final W3a build also passed container inspection:
 byte-identical 5,951-byte `[wa]` section (SHA-256
 `510f4e48e5c45c76a9803d1ea4ea78cf2ce889ddff4aed55885e04e0de4b560e`).
 
-### W4 — Live desync compare (unlocked by W0, not blocking)
+### W4 — Live desync compare (experimental; action-path failure under diagnosis)
 
-The W0 hash already runs in live games. Exchanging it needs a packet, which is the
-same missing capability as `keySync`. Defer until W0–W3 land; until then, log the
-local hash stream so two players can diff logs after the fact.
+WormForge now exchanges the W0 checkpoint through WA's network message fanout every
+50 frames. The transport was initially patterned after Project X: PX hooks the 3.6.31
+compact encoder/decoder at `0x531560` / `0x531B50` and gives each custom kind a
+fixed 12-byte payload. The 3.8.1 equivalents are `EncodeInputMessage` at
+`0x5648B0` and `DecodeInputMessage` at `0x564EA0`.
+
+WormForge provisionally reserves kind `0x80` and sends five 12-byte records: gameplay RNG
+(`GameWorld+0x45EC`), `fxrandom` (`+0x72EC`), `netrandom` (`+0x72F0`), worms,
+and actors. Each record is `[namespaced component tag, frame, value]`, adding 65
+uncompressed bytes per checkpoint. The receive path also extends
+compact decoder, which consumes the private kind before WA's stock per-peer
+FIFO and `GameRuntime__DispatchInputMsg` switch. The stock broadcast classifier
+is deliberately unchanged. The initial W4 test builds used `0xFE`;
+it remains decode-only for their diagnostic replays.
+
+An idle two-peer round proved byte delivery in both directions: both
+peers emitted `sync tx`, consumed `sync rx`, and agreed on every compared worm
+and actor checkpoint. Its combined RNG hash disagreed intermittently. That was
+a probe bug, not evidence of a gameplay desync: disassembly identifies
+`+0x72EC` as `GameTask__fxrandom`, with inlined users in client presentation
+entities including score bubbles, sea bubbles, and smoke. The revised carrier
+sends all three words separately. Gameplay RNG and `netrandom` mismatches are
+errors; `fxrandom` differences remain visible as `sync fx drift` telemetry.
+The same-machine replay hash deliberately still covers all three words.
+
+Experimental input transport is always active in networked games; `sync.txt` gates only
+the five diagnostic checkpoint records. The codec and consumer stay installed
+without the marker. A network peer cannot be mixed with stock WA: every peer
+must run this WormForge DLL, because stock WA rejects unknown compact input
+kinds. The old combined-RNG tag and initial `0xFE` carrier remain decodable for
+diagnostic `.WAgame` compatibility. The sentry stall was traced to a stock
+kind-8 checksum mismatch. WormForge had classified private records as stock
+broadcast input, adding them to the receiver's checksummed per-peer FIFO;
+Project X handles them directly in its decoder and leaves the classifier false.
+WormForge now does the same. Sending starts at frame one, and kind-8 tracing
+records the incoming and expected frame/checksum pairs. Run a two-peer
+round to accept the fix, then run a broader round
+exercising Q, WASD/W/Shift, Space charge and release, and Worm Toss drag/release
+while checkpoints confirm `game-rng`, `net-rng`, worms, and actors all compare
+`OK`; `fx-rng` may report drift.
 
 ## Files
 
@@ -480,6 +541,7 @@ crates/replay/                ✅ container format, host-testable, no WA
   src/{lib.rs,format.rs,pack.rs}
 re/GameWorld.toml             ✅ probe fields added (frame counter, RNG, replay flag)
 re/Replay.toml                ✅ prefix offsets, ported from openwa + wkFOW
+re/InputCodec.toml            ✅ 3.8.1 compact input codec + classifier boundary
 re/Random.toml                   RNG state + advance
 docs/replay.md
 ```
@@ -517,9 +579,10 @@ like `crates/render`.
   the installed pack, and embed fully only on request.
 - **`pairs()` ordering** (gap 5) may force either a `CFLAGS` hack or an upstream
   conversation. Neither is pleasant; the hash tells us whether it is real first.
-- **Recorded local input records one peer's view.** In a networked game where a pack
-  reads `keys()`, the peers already disagree, so the replay is faithful to the
-  recorder and not to "the game". Say this in `docs/replay.md` rather than pretending.
+- ~~**Recorded input captures one peer's view.**~~ **RESOLVED by synchronized
+  input.** Network recordings store the deterministic peer aggregate consumed
+  by the simulation, rather than whichever OS sample the recorder happened to
+  see locally.
 - **Casing:** real files on disk are `.WAgame`, not `.WAGAME`. Use `.WF_WAgame` to
   match, and match case-insensitively when loading.
 

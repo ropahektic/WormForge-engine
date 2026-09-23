@@ -379,6 +379,16 @@ unsafe fn try_lua_projectile(worm: *mut u8, ctx: *mut u8) -> bool {
         read_i32(ctx, CTX_VEL_Y)
     };
     if claim.fire_id != 0 {
+        let world = read_i32(worm, ENT_WORLD) as *mut u8;
+        let frame = if world.is_null() {
+            -1
+        } else {
+            read_i32(world, GAME_WORLD_FRAME_COUNTER)
+        };
+        log_line(&format!(
+            "LuaActor on_fire frame={frame} slot={slot} worm={:#x} ctx={:#x}",
+            worm as usize, ctx as usize
+        ));
         if let Err(e) = lua_host::weapon_fire(claim.fire_id, worm as u32, slot as i32, x, y, vx, vy)
         {
             log_error(&format!("on_fire: {e}"));

@@ -1,13 +1,13 @@
-use std::fs::{create_dir_all, OpenOptions};
+use std::fs::{OpenOptions, create_dir_all};
 use std::io::Write;
 use std::os::windows::ffi::OsStringExt;
 use std::panic;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::Console::{
-    AllocConsole, GetStdHandle, SetConsoleTitleW, WriteConsoleA, STD_OUTPUT_HANDLE,
+    AllocConsole, GetStdHandle, STD_OUTPUT_HANDLE, SetConsoleTitleW, WriteConsoleA,
 };
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
@@ -15,7 +15,7 @@ static FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
 static ERR: Mutex<Vec<std::fs::File>> = Mutex::new(Vec::new());
 static CONSOLE: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
 
-pub(crate) const BUILD_ID: &str = "20260922-replay-w3a";
+pub(crate) const BUILD_ID: &str = "20260923-replay-w4-decoder-route";
 
 pub fn log_path() -> PathBuf {
     wormforge_dir().join("wkLua.log")

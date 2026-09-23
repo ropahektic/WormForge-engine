@@ -160,16 +160,15 @@ pub fn view_cam() -> (i32, i32, i32, i32) {
 /// OS mouse (so a held drag tracks). Client pixels are scaled onto the
 /// display so windowed / DPI stretch still covers the whole map.
 pub fn pointer() -> (i32, i32, bool) {
-    warn_local_input_desync("a pack calling wa.world.pointer()");
+    POINTER_SYNC_REQUESTED.store(1, Ordering::Relaxed);
     pointer_latched()
 }
 
 fn pointer_latched() -> (i32, i32, bool) {
     latched(&POINTER, || {
-        sim_frame()
-            .and_then(crate::replay::playback_input)
+        resolved_input()
             .map(|sample| (sample.1, sample.2, sample.3))
-            .unwrap_or_else(poll_pointer)
+            .unwrap_or_else(local_pointer_latched)
     })
 }
 
@@ -285,13 +284,13 @@ fn key_down(vk: i32) -> bool {
     }
 }
 
-/// Local input, sampled once per simulation frame.
+/// Input, sampled once per simulation frame.
 ///
-/// Everything that reads local input goes through here -- packs via
+/// Everything that reads input goes through here -- packs via
 /// `wa.world.keys()` / `pointer()`, and `pump_space_fire` below -- so that
-/// within one frame they all see the same thing. Before this, each call polled
-/// `GetAsyncKeyState` afresh, so two reads in one frame could disagree while
-/// the simulation had not advanced at all.
+/// within one frame they all see the same thing. Live network games resolve
+/// the peer aggregate supplied by `sync`; offline games resolve the OS-local
+/// latches below; replay playback resolves its recorded sample first.
 ///
 /// It is also the one place a recorder needs to tap: "the input this frame was
 /// X" now has a single answer to write down.
@@ -301,10 +300,13 @@ fn key_down(vk: i32) -> bool {
 /// correct for anything that feeds the simulation. A pack wanting a live
 /// cursor for pure decoration would need a separate, explicitly-unlatched
 /// call, which does not exist yet because nothing has asked for one.
-/// Two latches rather than one: keys and cursor are independent inputs, and a
-/// pack reading only `keys()` should not pay for the cursor's scaling maths.
+/// The public pair and OS-local pair are separate: the process-input hook must
+/// be able to sample this peer without recursively asking for the aggregate.
 static KEYS: FrameLatch<u32> = FrameLatch::new();
 static POINTER: FrameLatch<(i32, i32, bool)> = FrameLatch::new();
+static LOCAL_KEYS: FrameLatch<u32> = FrameLatch::new();
+static LOCAL_POINTER: FrameLatch<(i32, i32, bool)> = FrameLatch::new();
+static POINTER_SYNC_REQUESTED: AtomicU32 = AtomicU32::new(0);
 
 /// WA's sim frame, or `None` outside a game (frontend, map editor).
 fn sim_frame() -> Option<i64> {
@@ -401,79 +403,55 @@ fn advance_rng_verified() -> bool {
 
 static RNG_OK: AtomicU32 = AtomicU32::new(0);
 
-/// True when peers exist, so that anything driven by local input is a desync
-/// rather than a local quirk.
+/// True when peers exist. Input itself is synchronized; packs can use this for
+/// behavior that intentionally differs between offline and network play.
 ///
-/// `GameWorld+0x28` is the network game object. Verified null (`0x0`) in an
-/// offline replay; assumed non-null with peers, which is the half that cannot
-/// be checked from a single machine. The asymmetry is deliberate and safe: a
-/// wrong reading can only produce a missed warning, which is exactly today's
-/// behaviour, never a false one.
+/// `GameWorld+0x1C` is WA's per-game network session. OpenWA's constructor and
+/// every online/offline branch agree on this field; `GameWorld+0x28` is a
+/// different network object and was observed null in a real online round.
 pub fn is_networked() -> bool {
     let world = session_world();
     if world.is_null() {
         return false;
     }
-    unsafe { read_i32(world, GAME_WORLD_NET_GAME) != 0 }
+    unsafe { read_i32(world, GAME_WORLD_NET_SESSION) != 0 }
 }
 
-/// Say once, loudly, that local input just changed shared game state in a
-/// networked game.
-///
-/// This is not a fix. `pump_space_fire` and `equip_weapon` act on *this*
-/// machine's keyboard and write real state -- posting MSG_RELEASE_WEAPON,
-/// spending ammo, enabling weapons -- without any of it going on the wire.
-/// The other peer never runs them, so the two simulations part company. The
-/// real answer is a synchronised input channel (Project X's keySync), which
-/// needs lockstep packets WormForge does not have.
-///
-/// Until then the least we can do is stop it being invisible: a desync that
-/// announces itself is a bug report, one that does not is a mystery.
-fn warn_local_input_desync(path: &'static str) {
-    if !is_networked() {
-        return;
-    }
-    if let Ok(mut seen) = LOCAL_INPUT_WARNED.lock() {
-        if seen.iter().any(|p| *p == path) {
-            return;
-        }
-        seen.push(path);
-    } else {
-        return;
-    }
-    log_error(&format!(
-        "{path} acted on LOCAL input during a networked game. This machine's \
-         keyboard just changed shared game state that never went on the wire, \
-         so the other peer did not do the same thing and the simulations have \
-         diverged. Not fixable without a synchronised input channel; see \
-         docs/replay-plan.md gap 1."
-    ));
-}
-
-static LOCAL_INPUT_WARNED: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
-
-/// Drop both held samples. A new match restarts WA's frame counter, and the
+/// Drop all held samples. A new match restarts WA's frame counter, and the
 /// first frame must not inherit the last frame of the previous game.
 pub fn clear_input_latch() {
     KEYS.clear();
     POINTER.clear();
+    LOCAL_KEYS.clear();
+    LOCAL_POINTER.clear();
+    POINTER_SYNC_REQUESTED.store(0, Ordering::Relaxed);
 }
 
 /// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint (shift), 64 Q, 128 Space (shoot).
 pub fn keys() -> u32 {
-    // Bound as `wa.world.keys()` and called from nowhere else in the engine,
-    // so reaching here means a pack read local input.
-    warn_local_input_desync("a pack calling wa.world.keys()");
     keys_latched()
 }
 
 fn keys_latched() -> u32 {
     latched(&KEYS, || {
-        sim_frame()
-            .and_then(crate::replay::playback_input)
+        resolved_input()
             .map(|sample| sample.0)
-            .unwrap_or_else(poll_keys)
+            .unwrap_or_else(local_keys_latched)
     })
+}
+
+fn resolved_input() -> Option<(u32, i32, i32, bool)> {
+    let frame = sim_frame()?;
+    if let Some(sample) = crate::replay::playback_input(frame) {
+        return Some(sample);
+    }
+    if is_networked() {
+        // A networked reader must never fall through to OS-local input. WA's
+        // lockstep dispatch normally populates this before simulation code;
+        // neutral input is the deterministic failure mode if it did not.
+        return Some(crate::sync::input(frame).unwrap_or((0, 0, 0, false)));
+    }
+    None
 }
 
 /// The exact per-frame samples consumed by packs and the engine. Calling this
@@ -485,11 +463,29 @@ pub(crate) fn replay_input() -> (u32, i32, i32, bool) {
     (keys, px, py, down)
 }
 
+/// The OS-local sample contributed to the lockstep carrier. This is separate
+/// from `keys_latched` / `pointer_latched`, which expose the merged peer value.
+pub(crate) fn local_input_for_sync() -> (u32, i32, i32, bool) {
+    let keys = local_keys_latched();
+    let (px, py, down) = local_pointer_latched();
+    (keys, px, py, down)
+}
+
+pub(crate) fn take_pointer_sync_request() -> bool {
+    POINTER_SYNC_REQUESTED.swap(0, Ordering::Relaxed) != 0
+}
+
+fn local_keys_latched() -> u32 {
+    latched(&LOCAL_KEYS, poll_keys)
+}
+
+fn local_pointer_latched() -> (i32, i32, bool) {
+    latched(&LOCAL_POINTER, poll_pointer)
+}
+
 /// True while Space is held, as sampled for this frame. `pump_space_fire` and
 /// a pack reading `keys().space` therefore always agree.
 fn space_held() -> bool {
-    // The un-warned reader: pump_space_fire warns under its own name, and
-    // reporting it twice for one cause would just be noise.
     keys_latched() & 128 != 0
 }
 
@@ -605,13 +601,11 @@ pub fn pump_space_fire(worm: *mut u8) {
         }
     }
     if down && !was {
-        warn_local_input_desync("pump_space_fire");
         unsafe {
             start_firing(worm);
         }
         log_line(&format!("space charge worm={handle:#x}"));
     } else if !down && was {
-        warn_local_input_desync("pump_space_fire");
         unsafe {
             release_shot(worm);
             spend_gift(worm, handle);

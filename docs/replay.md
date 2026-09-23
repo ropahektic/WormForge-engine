@@ -69,18 +69,21 @@ Every sim frame, at the end of the world root's `FRAME_FINISH`, three hashes:
 
 | component | covers | a divergence means |
 |---|---|---|
-| `rng` | `GameWorld+0x45EC` and the two secondary RNG words | **we perturbed WA itself** — the most serious result |
+| `rng` | gameplay RNG, client effects RNG, and network RNG | same-machine simulation or presentation changed; live peer comparison splits these words |
 | `worms` | every live worm's position, velocity and HP | stock simulation drifted |
 | `actors` | every live Lua actor's position, velocity, sprite, phase | only our own layer drifted; WA is still in step |
 
 They are separate numbers on purpose: *which* one moved is most of the
 diagnosis.
 
-**The RNG is the canary.** WA has exactly one RNG, shared by gameplay and
-visual effects, so "visual-only" is not a category that exists here. OpenWA's
-desync journal traced a whole-match divergence to a skipped `debris.spr` load
-that changed how often `GenerateDebrisParticles` ticked that word — 15,470
-writes against 17,106 — and the simulation cascaded apart from there.
+**The gameplay RNG is the canary.** WA's `GameWorld+0x45EC` RNG is shared by
+gameplay and some visual effects, so seemingly decorative code can still alter
+the simulation. OpenWA's desync journal traced a whole-match divergence to a
+skipped `debris.spr` load that changed how often `GenerateDebrisParticles`
+ticked that word — 15,470 writes against 17,106 — and the simulation cascaded
+apart from there. WA also has `fxrandom` at `+0x72EC` for client presentation
+entities and `netrandom` at `+0x72F0`; W0 hashes all three for same-machine
+replay verification, while W4 compares them separately across peers.
 
 ## Running the gate
 
@@ -254,9 +257,84 @@ simulation did not — invisible.
 
 ## Cost
 
-Off unless a `sync.txt` marker sits beside `wkLua.log`
-(`%LOCALAPPDATA%\WormForge\`). Off, it costs one relaxed atomic load per frame
-and writes nothing, following `queue_census`.
+Experimental synchronized input is active in networked matches. Records are sent when
+controls change, while a used pointer moves, and as a one-second heartbeat.
+Checkpoint generation and its five additional records are off unless a
+`sync.txt` marker sits beside `wkLua.log` (`%LOCALAPPDATA%\WormForge\`) when WA
+starts. The compact-codec bridge remains installed so WormForge input and
+diagnostic replay records can always be decoded.
+
+## W4: experimental live peer comparison
+
+With `sync.txt` present, WormForge inserts five records into WA's compact network
+stream every 50 frames: gameplay RNG, client effects RNG, network RNG, worms,
+and actors. Put the marker on both peers and restart WA before the round. Both
+peers must use this WormForge DLL; a stock peer does not understand the private
+input kind and cannot safely join a marker-enabled sender.
+
+For a live comparison, create an empty `sync.txt` beside the `wkLua.log` on
+**every** peer before starting WA. The startup log prints that directory. For
+example, Naja's installation reports
+`C:\\users\\crossover\\Local Settings\\Application Data\\WormForge\\wkLua.log`,
+so its marker is
+`C:\\users\\crossover\\Local Settings\\Application Data\\WormForge\\sync.txt`.
+An empty file is correct; the marker is existence-only. Each peer's startup log
+must say both `sync probe enabled` and `sync transport sending enabled` before
+joining the round.
+
+Successful traffic looks like this in `wkLua.log`:
+
+```text
+sync tx f=50 game-rng=1a2b3c4d fx-rng=01020304 net-rng=a0b0c0d0 worms=55667788 actors=811c9dc5
+sync rx f=50 game-rng=1a2b3c4d local=1a2b3c4d OK
+sync rx f=50 fx-rng=01020304 local=01020304 OK
+sync rx f=50 net-rng=a0b0c0d0 local=a0b0c0d0 OK
+sync rx f=50 worms=55667788 local=55667788 OK
+sync rx f=50 actors=811c9dc5 local=811c9dc5 OK
+```
+
+A differing gameplay RNG, network RNG, worm, or actor value is logged as
+`sync DESYNC`, naming the frame and component. Client `fxrandom` differences
+are logged as `sync fx drift`: those effects are not shared simulation state,
+but the value remains useful when diagnosing renderer changes. Delivery at a
+different simulation frame is always an error. The wire format uses a one-byte
+private message kind plus a fixed 12-byte payload. Project X provides a useful
+comparison on WA 3.6.31, where it hooks the encoder/decoder at `0x531560` /
+`0x531B50` and handles kinds `0x80` and `0x81`. WormForge's 3.8.1 codec
+counterparts are `0x5648B0` / `0x564EA0`. Project X's numbers do not validate
+the kind or delivery path on 3.8.1.
+
+The current 3.8.1 integration is not accepted for lockstep use. Live evidence
+shows custom records continuing to arrive while one peer's simulation is
+stopped, so delivery is out of band. Stock tracing found that both peers reach
+the sentry's `on_fire` hook on the same simulation frame and produce the same
+actor state. The stop occurs in WA's kind-8 compact-stream checksum barrier:
+the sender's transmitted and expected checksums matched, while the receiver's
+expected checksum differed. WormForge had admitted private records to the
+receiver's checksummed stock FIFO by extending `GameNet__IsBroadcastTag`.
+Project X leaves that classifier unchanged and consumes 0x80/0x81 directly in
+its decoder hook; WormForge now follows that route. Sending also begins at
+frame one, after WA selects the authoritative producer. A two-peer round
+remains the acceptance gate.
+
+## Synchronized pack input
+
+The peer whose input WA currently treats as authoritative publishes its eight
+key bits, mouse button, and signed world-pixel pointer coordinates. Key and
+button changes send immediately. Pointer movement sends while the button is
+down or a pack is reading the pointer, throttled to avoid starving stock input;
+an idle heartbeat refreshes the complete state once per second. Unchanged state
+persists on every peer until a replacement arrives. `wa.world.keys()`,
+`wa.world.pointer()`, and native Space charge/release read that state.
+
+Input uses pixel precision on the wire. The OS source is also screen-pixel based,
+and the sender consumes its own encoded value so there is no local/remote
+precision difference. New records provisionally use custom kind `0x80`. Kind
+`0xFE` from the first W4 build is accepted only when decoding old diagnostic
+replays.
+
+All network peers must run the same WormForge DLL even when `sync.txt` is absent.
+Stock WA does not recognize WormForge's private message kind.
 
 ## Notes that cost time to learn
 

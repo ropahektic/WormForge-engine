@@ -1,0 +1,19 @@
+# WA 3.8.1's compact input-message codec. Project X hooks the corresponding
+# 3.6.31 pair (0x531560 / 0x531B50) to add fixed 12-byte message payloads.
+
+[[function]]
+va = 0x005648B0
+name = "EncodeInputMessage"
+calling_convention = "__stdcall"
+plate_comment = "Compact one queued input message into the network/replay byte stream. Custom ABI: ECX=destination, EDX=payload; stack=(capacity, kind, protocol fields), RET 0x10. Stock kinds end at 0x74."
+
+[[function]]
+va = 0x00564EA0
+name = "DecodeInputMessage"
+calling_convention = "__stdcall"
+plate_comment = "Decode one compact network/replay input message. Custom ABI: EAX=kind out, ECX=source, ESI=payload out; stack=(available bytes, payload-size out, protocol fields), RET 0x14. Stock kinds end at 0x74."
+
+[[function]]
+va = 0x0053E7D0
+name = "GameNet__IsBroadcastTag"
+plate_comment = "Returns AL=1 for message kinds which GameNet queues into each peer input FIFO after decoding. It must remain false for private codec records: admitting them changes the receiver's stock compact-stream checksum."

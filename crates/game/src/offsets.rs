@@ -344,9 +344,12 @@ pub const GAME_WORLD_ADVANCE_RNG: u32 = 0x0053_F320;
 /// First six bytes of the above, checked before we ever call it.
 pub const ADVANCE_RNG_PROLOGUE: [u8; 6] = [0x8b, 0x81, 0xcc, 0x05, 0x00, 0x00];
 
-/// `GameWorld.net_game` — the network game object, param_9 to the GameRuntime
-/// constructor. Non-null is the signal that peers exist, and therefore that
-/// anything driven by local input is a desync rather than a local quirk.
+/// `GameWorld.net_session` — the per-match peer session. This, rather than the
+/// adjacent `net_game`, is WA's online/offline discriminator.
+pub const GAME_WORLD_NET_SESSION: usize = 0x1C;
+/// `GameWorld.net_game` — a separate network game object passed to the world
+/// constructor. It can be null during an online round and must not be used as
+/// the online/offline discriminator.
 pub const GAME_WORLD_NET_GAME: usize = 0x28;
 pub const GAME_WORLD_FRAME_COUNTER: usize = 0x5CC;
 /// `GameWorld.game_rng` — `rng = (frame_counter + rng) * 0x19660D + 0x3C6EF35F`.
@@ -356,8 +359,10 @@ pub const GAME_WORLD_FRAME_COUNTER: usize = 0x5CC;
 /// often `GenerateDebrisParticles` ticked this word (15,470 writes vs 17,106)
 /// and the whole simulation drifted. Treat it as the canary.
 pub const GAME_WORLD_GAME_RNG: usize = 0x45EC;
-/// Secondary RNG words, both of which change every frame.
+/// Client presentation RNG (`GameTask__fxrandom`). Used by score bubbles,
+/// smoke, sea bubbles, and similar effects; it need not match across peers.
 pub const GAME_WORLD_RNG_STATE_1: usize = 0x72EC;
+/// Network RNG (`GameTask__netrandom`). This is part of lockstep state.
 pub const GAME_WORLD_RNG_STATE_2: usize = 0x72F0;
 /// `GameWorld.recorded_frame_counter` — **-1 while a replay is playing back**.
 /// This is WA's own answer to Project X's `IsReplay()`, for free.
@@ -533,6 +538,7 @@ mod tests {
         assert_eq!(ACTOR_SEQ, 0x150);
         // The sequence id must fit inside the allocation.
         assert!(ACTOR_SEQ + 4 <= LUA_ACTOR_SIZE);
+        assert_eq!(GAME_WORLD_NET_SESSION, 0x1C);
         assert_eq!(GAME_WORLD_NET_GAME, 0x28);
         assert_eq!(GAME_WORLD_ADVANCE_RNG, 0x0053_F320);
         // The prologue must load frame_counter, or the offsets disagree with
