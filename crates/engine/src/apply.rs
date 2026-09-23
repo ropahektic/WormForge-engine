@@ -49,17 +49,20 @@ pub fn on_gfx_ready(display: *mut u8) {
     // Flush the previous match's diagnostics before their counters are reused.
     crate::queue_census::finish();
     crate::sync::finish();
+    crate::replay::finish_recording();
     world::clear_input_latch();
     crate::gpu::clear();
     crate::truecolor::clear();
     crate::render_queue::clear_depths();
 
-    let mods_dir = mods_root_from(&wa_directory());
+    let mods_dir =
+        crate::replay::playback_mods_root().unwrap_or_else(|| mods_root_from(&wa_directory()));
     log_line(&format!("loading mods from {}", mods_dir.display()));
     let discovered = match discover_mods(&mods_dir) {
         Ok(d) => d,
         Err(e) => {
             log_error(&format!("InitGraphic discover: {e}"));
+            crate::replay::playback_failed(format!("cannot discover archived packs: {e}"));
             return;
         }
     };
@@ -68,11 +71,15 @@ pub fn on_gfx_ready(display: *mut u8) {
         log_line(&s);
     }
     log_line(&format!("modset {}", modset_fingerprint(&mods)));
+    if !crate::replay::prepare(&mods) {
+        return;
+    }
 
     let scripts = match run_mods(&mods) {
         Ok(s) => s,
         Err(e) => {
             log_error(&format!("InitGraphic lua: {e}"));
+            crate::replay::playback_failed(format!("cannot load archived packs: {e}"));
             return;
         }
     };
@@ -236,7 +243,12 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 icon.name()
             ));
         }
-        crate::worm_sprite::claim(idx, &claim.mod_id, &claim.params.worm_sprites);
+        crate::worm_sprite::claim(
+            idx,
+            &claim.mod_id,
+            &claim.params.worm_sprites,
+            claim.params.worm_sprites_animate,
+        );
         if let Some(spawn) = spawn {
             let id = pass
                 .sprite_ids

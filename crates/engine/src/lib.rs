@@ -17,6 +17,7 @@ mod mine;
 mod missile_boom;
 mod physics;
 mod rebase;
+mod replay;
 mod sprite;
 mod queue_census;
 mod sync;

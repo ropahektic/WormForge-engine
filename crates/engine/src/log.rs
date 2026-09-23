@@ -15,7 +15,7 @@ static FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
 static ERR: Mutex<Vec<std::fs::File>> = Mutex::new(Vec::new());
 static CONSOLE: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
 
-pub(crate) const BUILD_ID: &str = "20260923-wa-cursor-verb";
+pub(crate) const BUILD_ID: &str = "20260923-v0.5-cursor-replay-gfx";
 
 /// Bounded binary diagnostic dumps belong in the log without flooding the
 /// live console. The caller supplies complete lines including CRLF.
@@ -32,7 +32,7 @@ pub fn error_log_path() -> PathBuf {
     wormforge_dir().join("wkluaerror.txt")
 }
 
-fn wormforge_dir() -> PathBuf {
+pub(crate) fn wormforge_dir() -> PathBuf {
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));

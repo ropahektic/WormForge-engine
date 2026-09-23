@@ -45,6 +45,15 @@ params = { gpu_worm_sprites = false }   -- keep the palette path
 The weapon body sprite (`sprite = ...`) stays a real WA slot regardless of
 prefix matching: `MissileEntity` indexes WA's sprite table with it.
 
+Two kinds of pack use `worm_sprites`, and the engine cannot tell them apart
+from the sheets alone (both may ship a distinct `wthrow*` draw sheet):
+
+- **aim wizard (default):** `weaponlnk*` is an aim-angle sheet; the stock
+  phase selects the frame. Draw poses hold a mid frame when they fall back to
+  the aim sheet, or play when a separate draw GIF is supplied.
+- **`params = { worm_sprites_animate = true }`** (sentry gun): every claimed
+  pose, link poses included, is a one-shot animation played frame by frame.
+
 ### Stock cursor as an actor
 
 `wa.cursor.spawn{ owner = worm, on = fn }` spawns an actor that *is* the world

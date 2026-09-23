@@ -464,6 +464,7 @@ fn table_to_claim(
     let mut truecolor_prefix = None;
     let mut reserve_prefix = None;
     let mut gpu_worm_sprites = true;
+    let mut worm_sprites_animate = false;
     if let Some(p) = spec.get::<Option<Table>>("params")? {
         layer = get_i32(&p, "layer")?.map(|v| v as u32);
         depth = get_i32(&p, "depth")?.map(|v| v as u32);
@@ -472,6 +473,7 @@ fn table_to_claim(
         truecolor_prefix = get_string(&p, "truecolor_prefix")?;
         reserve_prefix = get_string(&p, "reserve_prefix")?;
         gpu_worm_sprites = get_bool(&p, "gpu_worm_sprites")?.unwrap_or(true);
+        worm_sprites_animate = get_bool(&p, "worm_sprites_animate")?.unwrap_or(false);
     }
 
 let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
@@ -597,6 +599,7 @@ let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
             gpu_prefix,
             truecolor_prefix,
             gpu_worm_sprites,
+            worm_sprites_animate,
             extra_sounds,
             cluster_sprite_id,
             cluster_damage,

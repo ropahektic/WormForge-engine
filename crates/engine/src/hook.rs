@@ -5,8 +5,8 @@ use crate::log::{log_error, log_line, panic_text};
 use crate::physics;
 use crate::rebase::rb;
 use game::offsets::{
-    GAME_RUNTIME_DISPLAY, GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY, GFX_HANDLER_LOAD_SPRITES,
-    INIT_WEAPON_TABLE,
+    GAME_ENGINE_SHUTDOWN, GAME_RUNTIME_DISPLAY, GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY,
+    GFX_HANDLER_LOAD_SPRITES, INIT_WEAPON_TABLE, REPLAY_LOADER,
 };
 use minhook::MinHook;
 use re_catalog::Catalog;
@@ -17,6 +17,8 @@ type InitWeaponTableFn = unsafe extern "system" fn(*mut u8);
 
 static ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_LS: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIGINAL_SHUTDOWN: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIGINAL_REPLAY_LOADER: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 pub fn install() -> Result<(), String> {
     let catalog = Catalog::builtin()?;
@@ -37,6 +39,20 @@ pub fn install() -> Result<(), String> {
     };
     ORIGINAL_LS.store(ls_tr, Ordering::SeqCst);
 
+    let shutdown = rb(GAME_ENGINE_SHUTDOWN) as *mut c_void;
+    let shutdown_tr = unsafe {
+        MinHook::create_hook(shutdown, shutdown_hook as *mut c_void)
+            .map_err(|e| format!("MinHook GameEngine::Shutdown: {e:?}"))?
+    };
+    ORIGINAL_SHUTDOWN.store(shutdown_tr, Ordering::SeqCst);
+
+    let replay_loader = rb(REPLAY_LOADER) as *mut c_void;
+    let replay_loader_tr = unsafe {
+        MinHook::create_hook(replay_loader, replay_loader_hook as *mut c_void)
+            .map_err(|e| format!("MinHook ReplayLoader: {e:?}"))?
+    };
+    ORIGINAL_REPLAY_LOADER.store(replay_loader_tr, Ordering::SeqCst);
+
     physics::install(&catalog)?;
     hud::install(&catalog)?;
     actor::install(&catalog)?;
@@ -51,6 +67,63 @@ pub fn install() -> Result<(), String> {
         MinHook::enable_all_hooks().map_err(|e| format!("MinHook enable: {e:?}"))?;
     }
     Ok(())
+}
+
+/// `ReplayLoader(prefix, mode)`. Mode 1 is playback; the other modes extract
+/// maps/schemes or repair an ordinary `.WAgame` and pass through unchanged.
+unsafe extern "system" fn replay_loader_hook(prefix: *mut u8, mode: i32) -> u32 {
+    let result = std::panic::catch_unwind(|| unsafe {
+        let orig = ORIGINAL_REPLAY_LOADER.load(Ordering::SeqCst);
+        if orig.is_null() {
+            return u32::MAX;
+        }
+        let f: unsafe extern "system" fn(*mut u8, i32) -> u32 = std::mem::transmute(orig);
+        if mode != 1 {
+            log_line(&format!("replay loader mode {mode}: stock pass-through"));
+            return f(prefix, mode);
+        }
+        match crate::replay::redirect_playback(prefix) {
+            Ok(false) => f(prefix, mode),
+            Ok(true) => {
+                let code = f(prefix, mode);
+                if code != 0 {
+                    crate::replay::playback_loader_failed(code);
+                }
+                code
+            }
+            Err(e) => {
+                log_error(&format!("WormForge replay refused: {e}"));
+                // WA's own `InvalidFormat` code. Its caller supplies the UI;
+                // the WormForge log preserves the precise refusal above.
+                (-2i32) as u32
+            }
+        }
+    });
+    match result {
+        Ok(code) => code,
+        Err(p) => {
+            log_error(&format!("panic in ReplayLoader wrap: {}", panic_text(p)));
+            (-2i32) as u32
+        }
+    }
+}
+
+/// WA closes and destroys the replay writer inside GameEngine::Shutdown. Run
+/// phase two after the original returns so the `.WAgame` bytes are final and
+/// no longer held open when we embed them.
+unsafe extern "system" fn shutdown_hook(state_buf: *mut u8) {
+    let orig = ORIGINAL_SHUTDOWN.load(Ordering::SeqCst);
+    if !orig.is_null() {
+        let f: unsafe extern "system" fn(*mut u8) = std::mem::transmute(orig);
+        f(state_buf);
+    }
+    let result = std::panic::catch_unwind(crate::replay::finish);
+    if let Err(p) = result {
+        log_error(&format!(
+            "panic after GameEngine::Shutdown: {}",
+            panic_text(p)
+        ));
+    }
 }
 
 unsafe extern "system" fn init_weapon_table_hook(runtime: *mut u8) {

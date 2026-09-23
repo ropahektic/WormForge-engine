@@ -40,10 +40,95 @@ pub struct SpawnArgs {
     pub spawn: ActorSpawn,
 }
 
+/// Which presentation fields a `set_gfx` call is setting. Anything not named
+/// keeps its current value, so the single-field setters do not clobber each
+/// other.
+pub mod gfx_field {
+    pub const ANGLE: u32 = 1 << 0;
+    pub const SCALE: u32 = 1 << 1;
+    /// The tint word's colour bits only. Its alpha byte is `BLEND`.
+    pub const TINT: u32 = 1 << 2;
+    /// The tint word's alpha byte only.
+    pub const BLEND: u32 = 1 << 3;
+    pub const DEPTH: u32 = 1 << 4;
+}
+
+/// Alpha byte meaning ordinary alpha blending.
+const OPAQUE: u32 = 0xFF00_0000;
+
+/// Blend mode as the tint word's alpha byte. Premultiplied alpha 0 IS additive
+/// under the renderer's blend state, so "add" needs no second pipeline and can
+/// share a batch with opaque sprites.
+fn blend_alpha(mode: &str) -> mlua::Result<u32> {
+    match mode {
+        "add" | "additive" => Ok(0),
+        "normal" | "alpha" => Ok(OPAQUE),
+        other => Err(mlua::Error::external(format!(
+            "blend: expected \"normal\" or \"add\", got {other:?}"
+        ))),
+    }
+}
+
+/// Decode an `a:gfx{...}` table into the native call's arguments. Split out
+/// from the method so the mask can be tested without a live actor.
+fn gfx_args(spec: &Table) -> mlua::Result<(u32, f32, f32, u32, u32)> {
+    let angle = spec.get::<Option<f32>>("angle")?;
+    let scale = spec.get::<Option<f32>>("scale")?;
+    let rgb = spec.get::<Option<u32>>("tint")?;
+    let blend = spec.get::<Option<String>>("blend")?;
+    let depth = spec.get::<Option<u32>>("depth")?;
+    let mut mask = 0;
+    for (present, bit) in [
+        (angle.is_some(), gfx_field::ANGLE),
+        (scale.is_some(), gfx_field::SCALE),
+        (rgb.is_some(), gfx_field::TINT),
+        (blend.is_some(), gfx_field::BLEND),
+        (depth.is_some(), gfx_field::DEPTH),
+    ] {
+        if present {
+            mask |= bit;
+        }
+    }
+    let alpha = match blend.as_deref() {
+        Some(mode) => blend_alpha(mode)?,
+        None => OPAQUE,
+    };
+    Ok((
+        mask,
+        angle.unwrap_or(0.0),
+        scale.unwrap_or(1.0),
+        alpha | (rgb.unwrap_or(0x00FF_FFFF) & 0x00FF_FFFF),
+        depth.unwrap_or(0),
+    ))
+}
+
+/// Shared by `a:gfx` and the single-field setters.
+fn apply_gfx(
+    handle: u32,
+    mask: u32,
+    angle: f32,
+    scale: f32,
+    tint: u32,
+    depth: u32,
+) -> mlua::Result<()> {
+    if handle == 0 || actor_dead(handle) {
+        return Ok(());
+    }
+    if let Some(set) = native_set_gfx() {
+        set(handle, mask, angle, scale, tint, depth);
+    }
+    Ok(())
+}
+
 pub struct ActorNative {
     pub explode: fn(handle: u32, damage: i32, explosion_id: i32, below: bool),
     /// Hold the actor on one frame of its current sheet.
     pub set_frame: fn(handle: u32, frame: i32),
+    /// GPU renderer presentation: angle in degrees, scale, premultiplied tint.
+    /// `mask` says which of the fields the caller actually supplied; the rest
+    /// keep whatever the actor already has. Without it every setter would be
+    /// a full overwrite, so `a:angle(30)` would silently reset scale and tint.
+    pub set_gfx: fn(handle: u32, mask: u32, angle: f32, scale: f32, tint: u32, depth: u32),
     pub despawn: fn(handle: u32),
     pub in_water: fn(handle: u32) -> bool,
     pub on_feet: fn(handle: u32) -> bool,
@@ -107,6 +192,7 @@ impl Default for ActorNative {
             move_body: |_, _, _| 0,
             advance: |_| {},
             set_frame: |_, _| {},
+            set_gfx: |_, _, _, _, _, _| {},
             spawn: |_| Err("spawn not bound".into()),
             list_actors: Vec::new,
             list_worms: |_| Vec::new(),
@@ -574,6 +660,27 @@ impl UserData for ActorHandle {
             advance(this.0);
             Ok(())
         });
+        // Set several presentation fields at once. Only the keys actually
+        // present are written -- `a:gfx{angle = 30}` leaves scale, tint and
+        // depth exactly as they were.
+        methods.add_method("gfx", |_, this, spec: Table| {
+            let (mask, angle, scale, tint, depth) = gfx_args(&spec)?;
+            apply_gfx(this.0, mask, angle, scale, tint, depth)
+        });
+        // Single-field setters. They forward to the same native call with a
+        // one-bit mask, so each is genuinely independent of the others.
+        methods.add_method("angle", |_, this, degrees: f32| {
+            apply_gfx(this.0, gfx_field::ANGLE, degrees, 1.0, 0, 0)
+        });
+        methods.add_method("scale", |_, this, factor: f32| {
+            apply_gfx(this.0, gfx_field::SCALE, 0.0, factor, 0, 0)
+        });
+        methods.add_method("tint", |_, this, rgb: u32| {
+            apply_gfx(this.0, gfx_field::TINT, 0.0, 1.0, rgb & 0x00FF_FFFF, 0)
+        });
+        methods.add_method("blend", |_, this, mode: String| {
+            apply_gfx(this.0, gfx_field::BLEND, 0.0, 1.0, blend_alpha(&mode)?, 0)
+        });
         methods.add_method("frame", |_, this, frame: i32| {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
@@ -935,6 +1042,10 @@ pub fn native_look() -> Option<fn(u32, i32, u32, i32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.look)
 }
 
+pub fn native_set_gfx() -> Option<fn(u32, u32, f32, f32, u32, u32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.set_gfx)
+}
+
 pub fn native_set_frame() -> Option<fn(u32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.set_frame)
 }
@@ -1080,4 +1191,64 @@ fn opt_bool(t: &Table, key: &str) -> mlua::Result<Option<bool>> {
 pub fn worm_userdata(lua: &Lua, handle: u32) -> Result<mlua::AnyUserData, String> {
     lua.create_userdata(WormHandle(handle))
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(src: &str) -> mlua::Result<(u32, f32, f32, u32, u32)> {
+        let lua = Lua::new();
+        gfx_args(&lua.load(src).eval::<Table>()?)
+    }
+
+    /// The reason the mask exists: before it, `a:gfx{angle = 30}` also wrote
+    /// scale 1.0 and tint white, so any single-field setter built on top of
+    /// `gfx` would silently undo the others.
+    #[test]
+    fn only_the_keys_present_are_marked_for_writing() {
+        let (mask, angle, ..) = args("return {angle = 30}").unwrap();
+        assert_eq!(mask, gfx_field::ANGLE);
+        assert_eq!(angle, 30.0);
+
+        let (mask, ..) = args("return {}").unwrap();
+        assert_eq!(mask, 0, "an empty table must write nothing at all");
+
+        let (mask, _, _, tint, depth) =
+            args("return {scale = 2, tint = 0x00FF00, blend = 'add', depth = 5}").unwrap();
+        assert_eq!(
+            mask,
+            gfx_field::SCALE | gfx_field::TINT | gfx_field::BLEND | gfx_field::DEPTH
+        );
+        assert_eq!(tint, 0x0000_FF00, "additive is alpha 0, colour preserved");
+        assert_eq!(depth, 5);
+    }
+
+    /// depth 0 used to be the "leave it alone" sentinel, which made layer 0
+    /// unreachable. The mask carries that meaning now, so 0 is a real value.
+    #[test]
+    fn depth_zero_is_a_value_not_a_sentinel() {
+        let (mask, _, _, _, depth) = args("return {depth = 0}").unwrap();
+        assert_eq!(mask, gfx_field::DEPTH);
+        assert_eq!(depth, 0);
+    }
+
+    #[test]
+    fn blend_modes_map_to_the_tint_alpha_byte_and_typos_are_refused() {
+        assert_eq!(blend_alpha("add").unwrap(), 0);
+        assert_eq!(blend_alpha("additive").unwrap(), 0);
+        assert_eq!(blend_alpha("normal").unwrap(), OPAQUE);
+        assert_eq!(blend_alpha("alpha").unwrap(), OPAQUE);
+        // Silently treating a typo as "normal" would show up as a missing
+        // glow, which is a slow thing to track down from a screenshot.
+        assert!(blend_alpha("addative").is_err());
+        assert!(args("return {blend = 'screen'}").is_err());
+    }
+
+    #[test]
+    fn a_tint_without_a_blend_is_opaque() {
+        let (mask, _, _, tint, _) = args("return {tint = 0xFF8000}").unwrap();
+        assert_eq!(mask, gfx_field::TINT);
+        assert_eq!(tint, 0xFFFF_8000);
+    }
 }

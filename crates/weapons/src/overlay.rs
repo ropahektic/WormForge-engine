@@ -320,6 +320,10 @@ pub struct OverlayParams {
     /// sprites, so the palette wash buys nothing. `params.gpu_worm_sprites =
     /// false` keeps the 8-bit path.
     pub gpu_worm_sprites: bool,
+    /// `weaponlnk*` sheets are one-shot animations (equip / unfold) driven
+    /// frame by frame, not aim-angle sheets. Default false = aim-wizard
+    /// semantics (phase is the aim angle; draw poses hold or play).
+    pub worm_sprites_animate: bool,
     /// Pack-relative WAV paths (`sounds = { ... }`) loaded into DSSound slot 451+.
     pub extra_sounds: Vec<(String, std::path::PathBuf)>,
     pub cluster_sprite_id: Option<i32>,
@@ -382,6 +386,7 @@ impl Default for OverlayParams {
             gpu_prefix: None,
             truecolor_prefix: None,
             gpu_worm_sprites: true,
+            worm_sprites_animate: false,
             extra_sounds: Vec::new(),
             cluster_sprite_id: None,
             cluster_damage: None,

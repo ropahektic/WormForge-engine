@@ -158,6 +158,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         move_body: native_move,
         advance: native_advance,
         set_frame: native_set_frame,
+        set_gfx: native_set_gfx,
         spawn: native_spawn,
         list_actors: native_list_actors,
         list_worms: native_list_worms,
@@ -730,6 +731,15 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         return Err("malloc failed".into());
     }
     std::ptr::write_bytes(this, 0, LUA_ACTOR_SIZE);
+    // Presentation defaults. The zeroed allocation above would otherwise mean
+    // scale 0 -- an actor that exists, moves and shoots, but is invisible.
+    // This was latent while every draw passed a null actor and the renderer
+    // substituted its own defaults; reading the real fields makes it real.
+    write_i32(this, ACTOR_SCALE, 0x1_0000);
+    write_i32(this, ACTOR_TINT, 0xFFFF_FFFFu32 as i32);
+    // Behind terrain by default: the conservative choice, matching how a stock
+    // sprite at this depth would behave.
+    write_i32(this, ACTOR_DEPTH, 0x0019_0000);
 
     let parent = physics_parent(owner).unwrap_or(owner);
     let ctor: WorldCtorFn = std::mem::transmute(rb(WORLD_ENTITY_CTOR) as usize);
@@ -899,11 +909,10 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     write_i32(this, ACTOR_FLAGS, flags);
     write_i32(this, ACTOR_CONTACT, 0);
     write_i32(this, ACTOR_BRAIN, spawn.brain_id as i32);
-    // GPU presentation defaults (entity path). Scale 0 would hide the quad.
-    write_i32(this, ACTOR_ANGLE, 0);
-    write_i32(this, ACTOR_SCALE, 0x10000);
-    write_i32(this, ACTOR_TINT, -1); // 0xFFFFFFFF
-    write_i32(this, ACTOR_DEPTH, 0x000D_0000); // in front of terrain
+    if spawn.cursor {
+        // A cursor is UI: only the HUD may hide it, never the landscape.
+        write_i32(this, ACTOR_DEPTH, 0x000D_0000);
+    }
     lua_host::actor_spawned(this as u32, spawn.brain_id);
     remember_live(this as u32);
     if let Some(c) = spawn.cluster.as_ref() {
@@ -1320,6 +1329,44 @@ fn native_look(handle: u32, id: i32, delta: u32, w: i32, h: i32) {
             write_i32(this, ACTOR_FEET_X0, feet.x0);
             write_i32(this, ACTOR_FEET_X1, feet.x1);
             write_i32(this, ACTOR_FEET_Y, feet.y);
+        }
+    }
+}
+
+/// Presentation state for the GPU renderer: rotation, scale and tint.
+///
+/// Writes only into our own actor struct and is read only by the renderer, so
+/// it cannot reach the simulation and cannot desync a lockstep game. An actor
+/// on the palette path ignores all of it.
+fn native_set_gfx(handle: u32, mask: u32, angle: f32, scale: f32, tint: u32, depth: u32) {
+    use lua_host::gfx_field as f;
+    let this = handle as *mut u8;
+    unsafe {
+        if !is_actor(this) || read_i32(this, ACTOR_DEAD) != 0 {
+            return;
+        }
+        let fixed = |v: f32| (v * 65536.0) as i32;
+        if mask & f::ANGLE != 0 {
+            write_i32(this, ACTOR_ANGLE, fixed(angle));
+        }
+        if mask & f::SCALE != 0 {
+            // Guard against a pack asking for an invisible or absurd sprite.
+            write_i32(this, ACTOR_SCALE, fixed(scale.clamp(0.01, 64.0)));
+        }
+        // Colour and blend share one word, so a partial write has to merge
+        // rather than overwrite: `a:blend("add")` must keep the team colour.
+        if mask & (f::TINT | f::BLEND) != 0 {
+            let mut word = read_i32(this, ACTOR_TINT) as u32;
+            if mask & f::TINT != 0 {
+                word = (word & 0xFF00_0000) | (tint & 0x00FF_FFFF);
+            }
+            if mask & f::BLEND != 0 {
+                word = (word & 0x00FF_FFFF) | (tint & 0xFF00_0000);
+            }
+            write_i32(this, ACTOR_TINT, word as i32);
+        }
+        if mask & f::DEPTH != 0 {
+            write_i32(this, ACTOR_DEPTH, depth as i32);
         }
     }
 }
@@ -2472,6 +2519,13 @@ unsafe fn try_move(this: *mut u8, x: i32, y: i32) -> u32 {
     ret
 }
 
+/// `actor` is the LuaActor this draw belongs to, or null for draws that have
+/// none (stock worm/body blits routed through here).
+///
+/// It matters because the GPU renderer reads rotation, scale, tint and depth
+/// off the actor. Passing null unconditionally -- as this did -- makes every
+/// Lua actor take the renderer's `actor.is_null()` fallback and render with
+/// angle 0, scale 1 and opaque white, no matter what `a:gfx` was given.
 unsafe fn draw_sprite_local(
     queue: *mut u8,
     layer: u32,
