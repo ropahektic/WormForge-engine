@@ -66,6 +66,19 @@ fn inspect(container: &Container<'_>) -> Result<(), String> {
         inputs.len(),
         wf.len()
     );
+    let keys = inputs.iter().fold(0, |mask, sample| mask | sample.keys);
+    let button_frames = inputs.iter().filter(|sample| sample.down).count();
+    let drag_moves = inputs
+        .windows(2)
+        .filter(|pair| {
+            pair[0].down
+                && pair[1].down
+                && (pair[0].px, pair[0].py) != (pair[1].px, pair[1].py)
+        })
+        .count();
+    println!(
+        "input controls: keys={keys:#04x}, button frames={button_frames}, drag moves={drag_moves}"
+    );
     println!(
         "checkpoints:  {} ({} encoded bytes)",
         checkpoints.len(),

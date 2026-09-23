@@ -76,6 +76,7 @@ unsafe extern "system" fn replay_loader_hook(prefix: *mut u8, mode: i32) -> u32 
         }
         let f: unsafe extern "system" fn(*mut u8, i32) -> u32 = std::mem::transmute(orig);
         if mode != 1 {
+            log_line(&format!("replay loader mode {mode}: stock pass-through"));
             return f(prefix, mode);
         }
         match crate::replay::redirect_playback(prefix) {

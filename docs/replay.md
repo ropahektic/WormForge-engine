@@ -27,12 +27,15 @@ cmp "/path/to/round.WAgame" /tmp/round.WAgame
 and checkpoints before printing their counts and frame range. `extract` writes
 the embedded vanilla section unchanged.
 
-Playback hooks WA's mode-1 `ReplayLoader` before it opens the selected file. For
-a `.WF_WAgame`, WormForge validates the container, extracts `[wa]`, redirects WA
-to that ordinary replay, and loads the archived packs from a private temporary
-directory. Installed packs are ignored. Recorded key/pointer samples replace OS
-input at their matching simulation frame; each checkpoint compares RNG, worms,
-and actors separately and records the first differing component as an error.
+Playback hooks WA's mode-1 `ReplayLoader` before it opens the selected file.
+Selecting a `.WF_WAgame` directly uses that container. Selecting an ordinary
+`.WAgame` from WA's replay browser now uses its same-name `.WF_WAgame` sibling
+when present; without a sibling it remains an ordinary stock replay. WormForge
+validates the container, extracts `[wa]`, redirects WA to that ordinary replay,
+and loads the archived packs from a private temporary directory. Installed
+packs are ignored. Recorded key/pointer samples replace OS input at their
+matching simulation frame; each checkpoint compares RNG, worms, and actors
+separately and records the first differing component as an error.
 
 The W3 acceptance replay completed all 1,057 frames and all 22 checkpoints with
 no mismatch. Run it directly with WA's command line, for example:
@@ -259,33 +262,26 @@ simulation did not — invisible.
 
 Synchronized input is active in networked matches. Records are sent when
 controls change, while a used pointer moves, and as a one-second heartbeat.
-Checkpoint generation and its five additional records are off unless a
-`sync.txt` marker sits beside `wkLua.log` (`%LOCALAPPDATA%\WormForge\`) when WA
-starts. The compact-codec bridge remains installed so WormForge input and
-diagnostic replay records can always be decoded.
+Checkpoint generation and its five additional records are compiled out of a
+normal build. Build with `--features sync-diagnostics` to include them. The
+compact-codec bridge remains installed so WormForge input and diagnostic
+replay records can always be decoded.
 
 During the current W4 investigation, the first eight stock kind-8 checks also
 dump WA's serialized state into `wkLua.log` automatically (up to 128 KiB of raw
-state each). These bounded diagnostics do not require `sync.txt`; hex data is
-written only to the file, not the live console.
+state each). These bounded diagnostics are part of the same feature build; hex
+data is written only to the file, not the live console.
 
 ## W4: live peer comparison
 
-With `sync.txt` present, WormForge inserts five records into WA's compact network
+The `sync-diagnostics` build inserts five records into WA's compact network
 stream every 50 frames: gameplay RNG, client effects RNG, network RNG, worms,
-and actors. Put the marker on both peers and restart WA before the round. Both
-peers must use this WormForge DLL; a stock peer does not understand the private
-input kind and cannot safely join a marker-enabled sender.
-
-For a live comparison, create an empty `sync.txt` beside the `wkLua.log` on
-**every** peer before starting WA. The startup log prints that directory. For
-example, Naja's installation reports
-`C:\\users\\crossover\\Local Settings\\Application Data\\WormForge\\wkLua.log`,
-so its marker is
-`C:\\users\\crossover\\Local Settings\\Application Data\\WormForge\\sync.txt`.
-An empty file is correct; the marker is existence-only. Each peer's startup log
-must say both `sync probe enabled` and `sync transport sending enabled` before
-joining the round.
+and actors. Build it with
+`tools/build-win32.sh --features sync-diagnostics`, install the resulting DLL
+on both peers, and restart WA before the round. No runtime marker file is read.
+Startup must say `sync diagnostics build enabled` before joining the round.
+Both peers should use the same build; a stock peer does not understand the
+private input kind.
 
 Successful traffic looks like this in `wkLua.log`:
 
@@ -394,11 +390,10 @@ Space charge/release, and Worm Toss drag/release matrix remains a follow-up.
 ### Two-way input matrix
 
 Use only the current `pooz`, `q_bazooka`, and `worm_toss` example packs for
-this gate, plus the same WormForge DLL on both peers. Older copies of these
-packs deliberately disable their local-input features in network games, so
-replace the complete pack directories rather than copying only `mod.toml`.
-Keep `sync.txt` beside `wkLua.log` on both peers and restart WA after changing
-the DLL or packs.
+this gate, plus the same `sync-diagnostics` WormForge DLL on both peers. Older
+copies of these packs deliberately disable their local-input features in
+network games, so replace the complete pack directories rather than copying
+only `mod.toml`. Restart WA after changing the DLL or packs.
 
 Use a scheme with unlimited turn time and enough bazooka ammunition. Each
 player performs the following sequence during their own turns, so both network
@@ -426,6 +421,23 @@ sequences; no error/desync line; and completed replay recording on both peers.
 `fxrandom` drift does not fail the gate. Exit status is 0 for a pass, 1 for an
 incomplete or divergent matrix, and 2 for unreadable logs.
 
+The 2026-09-23 round with Ropa passed the functional matrix. Both received
+streams covered all eight key bits plus pointer press, held motion, and release;
+both peers logged two Q equips, two Space charges, and two Space releases. All
+seven stock kind-8 checks matched, and the seven captured serialized states
+were byte-identical at frames 681 through 8095. No error or simulation desync
+was logged. The strict two-way gate remains intentionally narrower: each player
+did not personally transmit every control (`W`/Shift on one side and Up/Q on
+the other), so it does not yet claim exhaustive per-direction coverage.
+
+The first playback attempt selected WA's vanilla `.WAgame`, visible in the log
+because it said only `replay recorder: playback is active; not recording` and
+never `replay player: accepted`. The container itself is complete: the main
+matrix round has all 8,814 input frames, key mask `0xff`, 350 held-button
+frames, and 281 pointer moves while held. Automatic sibling selection fixes
+the replay-browser path; a real WormForge playback must log `replay player:
+accepted` before the first frame.
+
 Compare the automatic state snapshots with
 `python3 tools/sync-state-diff.py first-wkLua.log second-wkLua.log`. It selects
 the latest launch and recorded round in each log, validates complete dumps,
@@ -450,8 +462,8 @@ precision difference. New records provisionally use custom kind `0x80`. Kind
 `0xFE` from the first W4 build is accepted only when decoding old diagnostic
 replays.
 
-All network peers must run the same WormForge DLL even when `sync.txt` is absent.
-Stock WA does not recognize WormForge's private message kind.
+All network peers must run the same WormForge DLL. Stock WA does not recognize
+WormForge's private message kind.
 
 ## Notes that cost time to learn
 

@@ -219,8 +219,8 @@ comes back for free from re-simulation. Expect single-digit KB against a 1–10 
 Shipped (branch `replays`, 8 commits, `4ce7382`..`d8e4086`):
 
 - `crates/engine/src/sync.rs` — per-frame hash of `rng` / `worms` / `actors`,
-  keyed to **WA's own frame counter** at `GameWorld+0x5CC`. Marker-gated on
-  `sync.txt` exactly like `queue_census`.
+  keyed to **WA's own frame counter** at `GameWorld+0x5CC`. Originally
+  marker-gated; now compiled only with the `sync-diagnostics` feature.
 - `crates/game/src/hash.rs` — FNV-1a, placed here rather than beside its caller
   because `engine` cannot compile on darwin, so tests there would never run.
 - `re/GameWorld.toml` + `offsets.rs` — the probe fields, cross-checked against
@@ -281,8 +281,8 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    refactor safe, which is the instrument paying for itself outside replay.
 2. ✅ **Synchronize pack input — LIVE-ACCEPTED FOR SENTRY/WORMCRAFT.**
 
-   The W4 compact-codec bridge carries input records independent
-   of `sync.txt`. Input is sampled immediately before WA collects it at
+   The W4 compact-codec bridge always carries input records. Input is sampled
+   immediately before WA collects it at
    `Game__process_input` and travels through WA's compact network stream. The 12-byte payload
    is `[tag, controls, pointer]`: eight key bits and the mouse button fit in
    `controls`; signed 16-bit world-pixel X/Y fit in `pointer`. The sender also
@@ -339,8 +339,9 @@ Ordered by payoff. The first two are worth doing whether or not replay ships.
    accepted. `tools/sync-input-matrix.py` now makes that follow-up a repeatable
    two-way gate: it requires press/release coverage for every key bit, a held
    pointer drag, downstream Q/Space actions, matching stock checks, checkpoint
-   coverage, and a cleanly completed round on both peers. The live run is
-   pending.
+   coverage, and a cleanly completed round on both peers. The Ropa round passed
+   the functional matrix and every shared-state check; the stricter requirement
+   that each player personally transmit every control remains pending.
 
    Replay playback still has first priority. Live recording now captures the
    merged input actually consumed by packs. Offline games keep the previous
@@ -494,8 +495,10 @@ identical to WA's replay. No temporary files remained after finalization.
 
 ### W3 — Playback
 
-- ✅ Detect `.WF_WAgame`, extract `[wa]` to temp, point `prefix + 0xDB60` at it, set the
-  playback flag, load `[pack]` in place of the installed packs.
+- ✅ Detect `.WF_WAgame`, extract `[wa]` to temp, point `prefix + 0xDB60` at it,
+  set the playback flag, and load `[pack]` in place of the installed packs.
+  When WA's replay browser selects the sibling `.WAgame`, prefer the same-name
+  `.WF_WAgame` automatically; stock replays without a container remain stock.
 - ✅ Feed recorded local input back at the matching frame.
 - ✅ Verify `[chk]` as it goes. **Stop loudly at the first mismatch, naming the frame and
   which component diverged** — a replay that quietly stops matching is the expensive
@@ -542,13 +545,14 @@ sends all three words separately. Gameplay RNG and `netrandom` mismatches are
 errors; `fxrandom` differences remain visible as `sync fx drift` telemetry.
 The same-machine replay hash deliberately still covers all three words.
 
-Synchronized input transport is always active in networked games; `sync.txt` gates only
-the five diagnostic checkpoint records. The codec and consumer stay installed
-without the marker. A network peer cannot be mixed with stock WA: every peer
-must run this WormForge DLL, because stock WA rejects unknown compact input
-kinds. The old combined-RNG tag and initial `0xFE` carrier remain decodable for
-diagnostic `.WAgame` compatibility. The sentry stall coincides with a stock
-kind-8 simulation-state checksum mismatch. Earlier claims that input FIFO
+Synchronized input transport is always active in networked games; the
+`sync-diagnostics` feature adds the five diagnostic checkpoint records. The
+codec and consumer stay installed in ordinary builds. A network peer cannot
+be mixed with stock WA: every peer must run this WormForge DLL, because stock
+WA rejects unknown compact input kinds. The old combined-RNG tag and initial
+`0xFE` carrier remain decodable for diagnostic `.WAgame` compatibility. The
+sentry stall coincides with a stock kind-8 simulation-state checksum mismatch.
+Earlier claims that input FIFO
 bytes were hashed, or that PX applies input in its decoder, were incorrect.
 The current build fixes early/duplicate input application and the dispatch
 return status, initializes the empty-sprite metadata that caused the stock
@@ -571,8 +575,8 @@ The first paired snapshots found the concrete placement mismatch in empty
 sprite animation metadata (four uninitialized words, including worm addresses),
 rather than transported input. The current `empty-sprite-info` build supplies
 rate=0, flags=0, frames=1 for sprite-ID-0 metadata before delegating to stock WA.
-The state snapshots remain automatic for future action-path diagnostics; no
-`sync.txt` setup is needed to collect them.
+The state snapshots remain automatic in a `sync-diagnostics` build for future
+action-path diagnostics.
 
 ## Files
 

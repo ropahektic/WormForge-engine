@@ -119,15 +119,52 @@ pub unsafe fn redirect_playback(prefix: *mut u8) -> Result<bool, String> {
         return Ok(false);
     }
     let Some(raw_path) = (unsafe { prefix_path(prefix, REPLAY_INPUT_PATH) }) else {
+        log_line("replay player: mode-1 loader supplied no input path");
         return Ok(false);
     };
-    if !raw_path
-        .extension()
-        .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("WF_WAgame"))
-    {
+    let selected = absolute_wa_path(raw_path);
+    log_line(&format!(
+        "replay player: mode-1 loader selected {}",
+        selected.display()
+    ));
+    let source = if has_extension(&selected, "WF_WAgame") {
+        selected
+    } else if has_extension(&selected, "WAgame") {
+        let adjacent = container_path(&selected)?;
+        let games = wa_directory()
+            .join("User")
+            .join("Games")
+            .join(adjacent.file_name().ok_or_else(|| {
+                format!("replay path has no filename: {}", selected.display())
+            })?);
+        let sibling = if adjacent.is_file() {
+            adjacent
+        } else if games.is_file() {
+            log_line(&format!(
+                "replay player: loader path was relocated; found container in User/Games at {}",
+                games.display()
+            ));
+            games
+        } else {
+            log_line(&format!(
+                "replay player: no WormForge sibling for {} (also checked {})",
+                selected.display(),
+                games.display()
+            ));
+            return Ok(false);
+        };
+        log_line(&format!(
+            "replay player: selected vanilla replay has WormForge sibling {}",
+            sibling.display()
+        ));
+        sibling
+    } else {
+        log_line(&format!(
+            "replay player: unsupported loader filename {}; leaving it to WA",
+            selected.display()
+        ));
         return Ok(false);
-    }
-    let source = absolute_wa_path(raw_path);
+    };
     let bytes = read_all(&source)?;
     let container = replay::Container::parse(&bytes).map_err(|e| e.to_string())?;
     container
@@ -569,6 +606,11 @@ fn absolute_wa_path(path: PathBuf) -> PathBuf {
     } else {
         wa_directory().join(path)
     }
+}
+
+fn has_extension(path: &Path, expected: &str) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case(expected))
 }
 
 unsafe fn write_prefix_path(prefix: *mut u8, offset: usize, path: &Path) -> Result<(), String> {

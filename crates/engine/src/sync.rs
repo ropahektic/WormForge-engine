@@ -267,7 +267,7 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
             }
         }
 
-        if !enabled() || frame_u32 as u64 % REPORT_EVERY != 0 {
+        if !diagnostics_enabled() || frame_u32 as u64 % REPORT_EVERY != 0 {
             return;
         }
         if LAST_SENT_FRAME.swap(frame_u32, Ordering::Relaxed) == frame_u32 {
@@ -357,8 +357,7 @@ unsafe extern "C" fn receive_live_checkpoint(
         // normal build does not spend time hashing or logging diagnostics.
         if !diagnostics_enabled() {
             return match tag {
-                TAG_RNG | TAG_WORMS | TAG_ACTORS | TAG_GAME_RNG | TAG_FX_RNG
-                | TAG_NET_RNG => 1,
+                TAG_RNG | TAG_WORMS | TAG_ACTORS | TAG_GAME_RNG | TAG_FX_RNG | TAG_NET_RNG => 1,
                 _ => {
                     log_error(&format!("sync transport: unknown payload tag {tag:#010x}"));
                     1
@@ -753,11 +752,10 @@ unsafe fn create_hook(
 }
 
 /// Install the carrier codec and input injector. Synchronized input is always
-/// active in networked matches; `sync.txt` controls only checkpoint telemetry.
+/// active in networked matches; the build feature controls only diagnostics.
 /// A live sender's network peers still need WormForge because stock WA does
 /// not know message kind 0x80.
 pub(crate) fn install(catalog: &re_catalog::Catalog) -> Result<(), String> {
-    let send_enabled = enabled();
     let encode_input_msg = catalog
         .function_va("EncodeInputMessage")
         .unwrap_or(ENCODE_INPUT_MSG);
@@ -793,20 +791,22 @@ pub(crate) fn install(catalog: &re_catalog::Catalog) -> Result<(), String> {
             &ORIGINAL_DECODE_INPUT_MSG,
             "input decoder",
         )?;
-        create_hook(
-            SERIALIZE_STATE,
-            &[0x33, 0xc0, 0x53, 0x8b, 0x5c, 0x24, 0x0c],
-            serialize_state_hook as *mut c_void,
-            &ORIGINAL_SERIALIZE_STATE,
-            "state serializer diagnostic",
-        )?;
+        if diagnostics_enabled() {
+            create_hook(
+                SERIALIZE_STATE,
+                &[0x33, 0xc0, 0x53, 0x8b, 0x5c, 0x24, 0x0c],
+                serialize_state_hook as *mut c_void,
+                &ORIGINAL_SERIALIZE_STATE,
+                "state serializer diagnostic",
+            )?;
+        }
     }
     log_line(
-        "EXPERIMENTAL synchronized input enabled (provisional kind 0x80, change-driven 12-byte records); network peers require WormForge",
+        "synchronized input enabled (provisional kind 0x80, change-driven 12-byte records); network peers require WormForge",
     );
-    if send_enabled {
+    if diagnostics_enabled() {
         log_line(
-            "EXPERIMENTAL sync transport sending enabled (provisional kind 0x80, 12-byte records); network peers require WormForge",
+            "sync diagnostics build enabled; hashing simulation state and sending checkpoints",
         );
     }
     Ok(())
@@ -882,7 +882,7 @@ pub(crate) unsafe fn checkpoint(world: *mut u8) -> (u32, u32, u32) {
 /// handler has run — so this observes end-of-frame state, which is the point
 /// at which WA increments its frame counter.
 pub unsafe fn observe(world: *mut u8) {
-    if !enabled() || world.is_null() {
+    if !diagnostics_enabled() || world.is_null() {
         return;
     }
     let frame = read_i32(world, GAME_WORLD_FRAME_COUNTER);
@@ -929,7 +929,7 @@ pub unsafe fn observe(world: *mut u8) {
 /// Flush a final line at match end, so a short session still yields a tail to
 /// compare even if it did not reach a report boundary.
 pub fn finish() {
-    if enabled() {
+    if diagnostics_enabled() {
         let frames = FRAMES.load(Ordering::Relaxed);
         if frames > 0 {
             log_line(&format!("sync probe: {frames} frames hashed this match"));
