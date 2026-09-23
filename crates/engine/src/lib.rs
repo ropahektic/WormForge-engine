@@ -8,6 +8,7 @@ mod apply;
 #[cfg(target_os = "windows")]
 mod crt;
 mod hook;
+mod http;
 mod hud;
 mod hurt;
 mod overlay;
@@ -15,11 +16,13 @@ mod log;
 mod mask_collide;
 mod mine;
 mod missile_boom;
+mod modloader;
 mod physics;
 mod rebase;
 mod replay;
 mod sprite;
 mod queue_census;
+mod sha256;
 mod sync;
 mod truecolor;
 mod shader;
@@ -28,6 +31,7 @@ mod gpu;
 mod version;
 mod world;
 mod worm_sprite;
+mod zip;
 
 pub use log::{attach_console, error_log_path, log_error, log_line, log_path, panic_text};
 pub use rebase::{init_rebase, rb, wa_base};
@@ -63,4 +67,5 @@ pub fn start() {
         Ok(()) => log_line("hooks installed"),
         Err(e) => log_error(&format!("hook install failed: {e}")),
     }
+    modloader::start();
 }

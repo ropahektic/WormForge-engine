@@ -18,6 +18,10 @@ minhook = { workspace = true }
 weapons = { path = "../weapons" }
 actors = { path = "../actors" }
 windows-sys = { workspace = true }
+# Both already in the tree (gfx → png, replay → flate2): the mod loader's
+# banner decode and pack-zip inflate add no new dependency weight.
+png = { workspace = true }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
 [build-dependencies]
 cc = "1"

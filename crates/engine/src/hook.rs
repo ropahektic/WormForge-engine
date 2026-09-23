@@ -117,7 +117,10 @@ unsafe extern "system" fn shutdown_hook(state_buf: *mut u8) {
         let f: unsafe extern "system" fn(*mut u8) = std::mem::transmute(orig);
         f(state_buf);
     }
-    let result = std::panic::catch_unwind(crate::replay::finish);
+    let result = std::panic::catch_unwind(|| {
+        crate::replay::finish();
+        crate::modloader::match_ended();
+    });
     if let Err(p) = result {
         log_error(&format!(
             "panic after GameEngine::Shutdown: {}",

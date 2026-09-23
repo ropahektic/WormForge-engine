@@ -66,11 +66,22 @@ pub fn on_gfx_ready(display: *mut u8) {
             return;
         }
     };
+    let disabled = weapons::LoaderSettings::load(&mods_dir).disabled;
+    if !disabled.is_empty() {
+        log_line(&format!(
+            "disabled by {}: {}",
+            weapons::SETTINGS_FILE,
+            disabled.join(", ")
+        ));
+    }
     let (mods, req_skip) = filter_requirements(&discovered);
     for s in req_skip {
         log_line(&s);
     }
-    log_line(&format!("modset {}", modset_fingerprint(&mods)));
+    let fingerprint = modset_fingerprint(&mods);
+    log_line(&format!("modset {fingerprint}"));
+    crate::sync::set_local_modset(fingerprint);
+    crate::modloader::match_loaded(&mods);
     if !crate::replay::prepare(&mods) {
         return;
     }

@@ -83,10 +83,12 @@ version = "0.1.0"
 dependencies = [
  "actors",
  "cc",
+ "flate2",
  "game",
  "gfx",
  "lua-host",
  "minhook",
+ "png",
  "re-catalog",
  "render",
  "replay",

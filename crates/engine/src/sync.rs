@@ -54,6 +54,17 @@ const TAG_GAME_RNG: u32 = 0x5746_0104;
 const TAG_FX_RNG: u32 = 0x5746_0105;
 const TAG_NET_RNG: u32 = 0x5746_0106;
 const TAG_INPUT: u32 = 0x5746_0107;
+/// Modset announcement: `frame` = sender session tag, `hash` = byte length of
+/// the fingerprint that follows in `TAG_MODSET_DATA` records.
+const TAG_MODSET_BEGIN: u32 = 0x5746_0108;
+/// `frame` = sender session tag, `hash` = next four UTF-8 bytes of the
+/// fingerprint (zero padded). Records are queued in order and WA dispatches
+/// them in order, so no sequence number is needed.
+const TAG_MODSET_DATA: u32 = 0x5746_0109;
+/// Records per frame while a modset is being announced. Small enough never to
+/// crowd WA's own input, large enough that a typical modset lands in a second.
+const MODSET_RECORDS_PER_FRAME: usize = 4;
+const MODSET_MAX_BYTES: u32 = 4096;
 
 #[derive(Clone, Copy)]
 struct LiveInput {
@@ -61,6 +72,171 @@ struct LiveInput {
 }
 
 static LIVE_INPUT: Mutex<Option<LiveInput>> = Mutex::new(None);
+
+/// The enabled packs of this match as `modset_fingerprint`, plus how much of
+/// it has been announced to peers so far.
+struct ModsetTx {
+    fingerprint: String,
+    /// Records already queued: 0 = nothing, 1 = BEGIN sent, 1+n = n DATA sent.
+    sent: usize,
+}
+
+static LOCAL_MODSET: Mutex<Option<ModsetTx>> = Mutex::new(None);
+
+struct ModsetRx {
+    total: usize,
+    bytes: Vec<u8>,
+    reported: bool,
+}
+
+/// Peer announcements keyed by their session tag.
+static REMOTE_MODSETS: Mutex<Vec<(u32, ModsetRx)>> = Mutex::new(Vec::new());
+static SESSION_TAG: AtomicU32 = AtomicU32::new(0);
+
+/// Random-enough per-process tag so a peer can tell our announcement from its
+/// own echo (WA dispatches the local queue to the local game too).
+fn session_tag() -> u32 {
+    let cur = SESSION_TAG.load(Ordering::Relaxed);
+    if cur != 0 {
+        return cur;
+    }
+    let mut h = Fnv::new();
+    h.write_i32(std::process::id() as i32);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    h.write_i32(nanos as i32);
+    h.write_i32(&SESSION_TAG as *const _ as usize as i32);
+    let tag = h.finish().max(1);
+    SESSION_TAG.store(tag, Ordering::Relaxed);
+    tag
+}
+
+/// Called once per match from `apply::on_gfx_ready` with the packs that
+/// actually loaded. Announced to peers from the first live frame.
+pub(crate) fn set_local_modset(fingerprint: String) {
+    if let Ok(mut g) = LOCAL_MODSET.lock() {
+        *g = Some(ModsetTx {
+            fingerprint,
+            sent: 0,
+        });
+    }
+    if let Ok(mut g) = REMOTE_MODSETS.lock() {
+        g.clear();
+    }
+}
+
+fn local_fingerprint() -> String {
+    LOCAL_MODSET
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|m| m.fingerprint.clone()))
+        .unwrap_or_default()
+}
+
+/// Queue the next slice of the local modset announcement. Returns false when
+/// WA's input queue was full, in which case the same slice is retried next frame.
+unsafe fn push_modset_slice(buffer: *mut BufferObject) -> bool {
+    let Ok(mut g) = LOCAL_MODSET.lock() else {
+        return true;
+    };
+    let Some(tx) = g.as_mut() else {
+        return true;
+    };
+    let bytes = tx.fingerprint.as_bytes();
+    let data_records = bytes.len().div_ceil(4);
+    let tag = session_tag();
+    for _ in 0..MODSET_RECORDS_PER_FRAME {
+        if tx.sent > data_records {
+            return true;
+        }
+        let ok = if tx.sent == 0 {
+            push_checkpoint(buffer, TAG_MODSET_BEGIN, tag, bytes.len() as u32)
+        } else {
+            let off = (tx.sent - 1) * 4;
+            let mut word = [0u8; 4];
+            let end = (off + 4).min(bytes.len());
+            word[..end - off].copy_from_slice(&bytes[off..end]);
+            push_checkpoint(buffer, TAG_MODSET_DATA, tag, u32::from_le_bytes(word))
+        };
+        if !ok {
+            return false;
+        }
+        tx.sent += 1;
+        if tx.sent > data_records {
+            log_line(&format!(
+                "sync modset tx: announced {} ({} bytes)",
+                if tx.fingerprint.is_empty() { "<no packs>" } else { tx.fingerprint.as_str() },
+                bytes.len()
+            ));
+            return true;
+        }
+    }
+    true
+}
+
+/// Accumulate a peer's announcement; compare once it is complete.
+fn receive_modset(tag: u32, sender: u32, word: u32) {
+    if sender == session_tag() {
+        return;
+    }
+    let Ok(mut g) = REMOTE_MODSETS.lock() else {
+        return;
+    };
+    if tag == TAG_MODSET_BEGIN {
+        if word > MODSET_MAX_BYTES {
+            log_error(&format!(
+                "sync modset: peer {sender:08x} announced {word} bytes; ignored"
+            ));
+            return;
+        }
+        g.retain(|(s, _)| *s != sender);
+        g.push((
+            sender,
+            ModsetRx {
+                total: word as usize,
+                bytes: Vec::with_capacity(word as usize),
+                reported: false,
+            },
+        ));
+    } else if let Some((_, rx)) = g.iter_mut().find(|(s, _)| *s == sender) {
+        if rx.bytes.len() < rx.total {
+            let take = (rx.total - rx.bytes.len()).min(4);
+            rx.bytes.extend_from_slice(&word.to_le_bytes()[..take]);
+        }
+    } else {
+        // Data before BEGIN: WA dispatches in order, so this means we joined
+        // after the announcement started. Ignore; it repeats next match.
+        return;
+    }
+    let complete: Vec<(u32, String)> = g
+        .iter_mut()
+        .filter(|(_, rx)| !rx.reported && rx.bytes.len() >= rx.total)
+        .map(|(s, rx)| {
+            rx.reported = true;
+            (*s, String::from_utf8_lossy(&rx.bytes).into_owned())
+        })
+        .collect();
+    drop(g);
+    let local = local_fingerprint();
+    for (sender, remote) in complete {
+        match weapons::modset_diff(&local, &remote) {
+            None => {
+                log_line(&format!("sync modset rx {sender:08x}: matches ours"));
+                crate::modloader::peer_report("Peer packs match yours.");
+            }
+            Some(diff) => {
+                log_error(&format!(
+                    "sync modset MISMATCH with peer {sender:08x}: {diff} (yours: {}; peer: {})",
+                    if local.is_empty() { "<no packs>" } else { &local },
+                    if remote.is_empty() { "<no packs>" } else { &remote }
+                ));
+                crate::modloader::peer_report(&format!("PEER MISMATCH - {diff}"));
+            }
+        }
+    }
+}
 
 const PROCESS_INPUT: u32 = 0x0053_05e0;
 const DISPATCH_INPUT_MSG: u32 = 0x0053_0f80;
@@ -248,6 +424,11 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
                     return;
                 }
             }
+            if !push_modset_slice(buffer) {
+                log_line(&format!(
+                    "sync modset: WA input queue full at frame {frame}; retrying next frame"
+                ));
+            }
         }
 
         if !diagnostics_enabled() || frame_u32 as u64 % REPORT_EVERY != 0 {
@@ -334,6 +515,10 @@ unsafe extern "C" fn receive_live_checkpoint(
                 sample.py >> 16,
                 sample.down
             ));
+            return 1;
+        }
+        if tag == TAG_MODSET_BEGIN || tag == TAG_MODSET_DATA {
+            receive_modset(tag, frame, remote);
             return 1;
         }
         // Always consume known checkpoint tags for wire compatibility, but a
@@ -924,6 +1109,12 @@ pub fn finish() {
     }
     if let Ok(mut live) = LIVE_INPUT.lock() {
         *live = None;
+    }
+    if let Ok(mut g) = LOCAL_MODSET.lock() {
+        *g = None;
+    }
+    if let Ok(mut g) = REMOTE_MODSETS.lock() {
+        g.clear();
     }
     crate::world::clear_input_latch();
 }

@@ -1,0 +1,156 @@
+<#
+.SYNOPSIS
+  Build the online pack catalogue the WormForge mod loader consumes.
+
+.DESCRIPTION
+  For every folder under -Source that holds a mod.toml, write
+    <Site>\downloads\packs\<folder>.zip      one archive per pack (forward-slash names)
+  and then
+    <Site>\downloads\packs\index.toml        id / folder / version / author / slots / file / sha256 / size
+  plus, for humans who want everything at once,
+    <Site>\downloads\mods.zip
+
+  Only packs whose content changed get a new zip (compared by sha256 of a
+  deterministic re-zip), so unchanged packs keep their hash and installed
+  copies stay "up to date".
+
+.EXAMPLE
+  .\tools\publish-packs.ps1 -Site ..\WormForge-editor
+#>
+[CmdletBinding()]
+param(
+    [string] $Source = "",
+    [Parameter(Mandatory = $true)] [string] $Site,
+    [string] $BaseUrl = "https://ropahektic.github.io/WormForge/downloads/packs/",
+    [string[]] $Exclude = @()
+)
+
+$ErrorActionPreference = "Stop"
+if (-not $Source) {
+    # $PSScriptRoot is empty inside param() on Windows PowerShell 5.
+    $Source = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "..\mods\examples"
+}
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+$Source = (Resolve-Path $Source).Path
+$outDir = Join-Path (Resolve-Path $Site).Path "downloads\packs"
+New-Item -ItemType Directory -Force $outDir | Out-Null
+
+function Get-TomlString([string] $text, [string] $key) {
+    $m = [regex]::Match($text, "(?m)^\s*$key\s*=\s*""([^""]*)""")
+    if ($m.Success) { $m.Groups[1].Value } else { "" }
+}
+
+function Get-TomlArray([string] $text, [string] $key) {
+    $m = [regex]::Match($text, "(?m)^\s*$key\s*=\s*\[([^\]]*)\]")
+    if (-not $m.Success) { return @() }
+    [regex]::Matches($m.Groups[1].Value, '"([^"]*)"') | ForEach-Object { $_.Groups[1].Value }
+}
+
+# Deterministic zip: sorted entries, fixed timestamp, forward slashes, so an
+# unchanged pack produces byte-identical output and keeps its sha256.
+function Write-PackZip([string] $packDir, [string] $folder, [string] $zipPath) {
+    if (Test-Path $zipPath) { Remove-Item $zipPath }
+    $fs = [System.IO.File]::Open($zipPath, [System.IO.FileMode]::CreateNew)
+    try {
+        $zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
+        $files = Get-ChildItem $packDir -Recurse -File | Sort-Object { $_.FullName.ToLowerInvariant() }
+        foreach ($f in $files) {
+            $rel = $f.FullName.Substring($packDir.Length).TrimStart('\', '/').Replace('\', '/')
+            $entry = $zip.CreateEntry("$folder/$rel", [System.IO.Compression.CompressionLevel]::Optimal)
+            $entry.LastWriteTime = [DateTimeOffset]::new(2020, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+            $in = [System.IO.File]::OpenRead($f.FullName)
+            $out = $entry.Open()
+            $in.CopyTo($out)
+            $out.Dispose(); $in.Dispose()
+        }
+        $zip.Dispose()
+    } finally {
+        $fs.Dispose()
+    }
+}
+
+$packs = @()
+foreach ($dir in Get-ChildItem $Source -Directory | Sort-Object Name) {
+    $manifest = Join-Path $dir.FullName "mod.toml"
+    if (-not (Test-Path $manifest)) { continue }
+    if ($dir.Name.StartsWith("_") -or $dir.Name.StartsWith(".") -or $Exclude -contains $dir.Name) { continue }
+    $toml = Get-Content $manifest -Raw
+    $id = Get-TomlString $toml "id"
+    if (-not $id) { Write-Warning "$($dir.Name): mod.toml has no id; skipped"; continue }
+
+    $zipName = "$($dir.Name).zip"
+    $zipPath = Join-Path $outDir $zipName
+    $tmp = Join-Path $outDir "$($dir.Name).new.zip"
+    Write-PackZip $dir.FullName $dir.Name $tmp
+    $newHash = (Get-FileHash -Algorithm SHA256 $tmp).Hash.ToLowerInvariant()
+    $oldHash = if (Test-Path $zipPath) { (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLowerInvariant() } else { "" }
+    if ($newHash -eq $oldHash) {
+        Remove-Item $tmp
+        $state = "unchanged"
+    } else {
+        Move-Item $tmp $zipPath -Force
+        $state = if ($oldHash) { "UPDATED" } else { "new" }
+    }
+
+    $version = Get-TomlString $toml "version"; if (-not $version) { $version = "0.1.0" }
+    $author = Get-TomlString $toml "author"
+    $slots = @(Get-TomlArray $toml "replace") + @(Get-TomlArray $toml "overlay") | Sort-Object -Unique
+    $packs += [pscustomobject]@{
+        id = $id; folder = $dir.Name; version = $version; author = $author
+        slots = @($slots); file = $zipName; sha256 = $newHash
+        size = (Get-Item $zipPath).Length
+    }
+    Write-Host ("{0,-18} {1,-28} v{2,-7} {3,8} KB  {4}" -f $dir.Name, $id, $version, [int]((Get-Item $zipPath).Length / 1KB), $state)
+}
+
+# Drop zips for packs that no longer exist.
+$known = $packs | ForEach-Object { $_.file }
+Get-ChildItem $outDir -Filter *.zip | Where-Object { $known -notcontains $_.Name } | ForEach-Object {
+    Write-Host ("{0,-18} removed (no longer in source)" -f $_.Name); Remove-Item $_.FullName
+}
+
+$sb = New-Object System.Text.StringBuilder
+[void]$sb.AppendLine("# WormForge pack index. Generated by tools/publish-packs.ps1; do not edit by hand.")
+[void]$sb.AppendLine("schema = 1")
+[void]$sb.AppendLine("generated = ""$([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))""")
+[void]$sb.AppendLine("base = ""$BaseUrl""")
+foreach ($p in $packs) {
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("[[packs]]")
+    [void]$sb.AppendLine("id = ""$($p.id)""")
+    [void]$sb.AppendLine("folder = ""$($p.folder)""")
+    [void]$sb.AppendLine("version = ""$($p.version)""")
+    [void]$sb.AppendLine("author = ""$($p.author)""")
+    $slotList = ($p.slots | ForEach-Object { """$_""" }) -join ", "
+    [void]$sb.AppendLine("slots = [$slotList]")
+    [void]$sb.AppendLine("file = ""$($p.file)""")
+    [void]$sb.AppendLine("sha256 = ""$($p.sha256)""")
+    [void]$sb.AppendLine("size = $($p.size)")
+}
+$indexPath = Join-Path $outDir "index.toml"
+[System.IO.File]::WriteAllText($indexPath, $sb.ToString(), (New-Object System.Text.UTF8Encoding($false)))
+
+# Convenience bundle for manual installs (not used by the loader).
+$bundle = Join-Path (Split-Path $outDir -Parent) "mods.zip"
+if (Test-Path $bundle) { Remove-Item $bundle }
+$fs = [System.IO.File]::Open($bundle, [System.IO.FileMode]::CreateNew)
+try {
+    $zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
+    foreach ($p in $packs) {
+        $packDir = Join-Path $Source $p.folder
+        $files = Get-ChildItem $packDir -Recurse -File | Sort-Object { $_.FullName.ToLowerInvariant() }
+        foreach ($f in $files) {
+            $rel = $f.FullName.Substring($packDir.Length).TrimStart('\', '/').Replace('\', '/')
+            $entry = $zip.CreateEntry("$($p.folder)/$rel", [System.IO.Compression.CompressionLevel]::Optimal)
+            $entry.LastWriteTime = [DateTimeOffset]::new(2020, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+            $in = [System.IO.File]::OpenRead($f.FullName); $out = $entry.Open(); $in.CopyTo($out); $out.Dispose(); $in.Dispose()
+        }
+    }
+    $zip.Dispose()
+} finally { $fs.Dispose() }
+
+Write-Host ""
+Write-Host "index:  $indexPath ($($packs.Count) packs)"
+Write-Host "bundle: $bundle"
