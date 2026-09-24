@@ -1,0 +1,14 @@
+[package]
+name = "assets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The `.WFAssets` collection: content-addressed PX assets that replays refer
+# to by hash instead of embedding. Pure bytes and std only, no dependency on
+# `engine`, so the format is tested on the host like `crates/replay`.
+[dependencies]
+
+[[bin]]
+name = "wf-assets"
+path = "src/bin/wf-assets.rs"

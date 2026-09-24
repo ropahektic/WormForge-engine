@@ -22,7 +22,6 @@ mod rebase;
 mod replay;
 mod sprite;
 mod queue_census;
-mod sha256;
 mod sync;
 mod truecolor;
 mod shader;

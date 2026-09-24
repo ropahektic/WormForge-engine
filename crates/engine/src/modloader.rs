@@ -1155,7 +1155,7 @@ fn install_one(index: &PackIndex, pack: &RemotePack, mods_dir: &Path, label: &st
             set_status(&format!("{label}: downloading {} KB", got / 1024));
         }
     })?;
-    let sha = crate::sha256::hex(&bytes);
+    let sha = assets::sha256::hex(&bytes);
     if !sha.eq_ignore_ascii_case(&pack.sha256) {
         return Err(format!("sha256 mismatch (index {}, got {sha})", pack.sha256));
     }
