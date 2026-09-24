@@ -56,12 +56,8 @@ fn open_trunc(path: &PathBuf) -> Option<std::fs::File> {
     if let Some(dir) = path.parent() {
         let _ = create_dir_all(dir);
     }
-    OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)
-        .ok()
+    // Not truncate(true): see game::overwrite.
+    game::overwrite::create(path).ok()
 }
 
 /// AllocConsole so a GUI `WA.exe` has a window for `[wkLua]` lines.

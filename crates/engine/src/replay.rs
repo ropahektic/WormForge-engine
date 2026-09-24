@@ -651,24 +651,16 @@ fn create_stream(path: &Path) -> std::io::Result<BufWriter<File>> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)
-        .map(BufWriter::new)
+    // Not truncate(true): see game::overwrite.
+    game::overwrite::create(path).map(BufWriter::new)
 }
 
 fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
-    let mut file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)
-        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut file =
+        game::overwrite::create(path).map_err(|e| format!("{}: {e}", path.display()))?;
     file.write_all(bytes)
         .and_then(|_| file.flush())
         .and_then(|_| file.sync_all())
@@ -748,11 +740,9 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     {
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&temp)?;
+        // A temp left by a crash must be replaced, not truncated: see
+        // game::overwrite.
+        let mut file = game::overwrite::create(&temp)?;
         file.write_all(bytes)?;
         file.flush()?;
         file.sync_all()?;

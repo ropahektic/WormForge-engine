@@ -168,7 +168,9 @@ pub fn extract_all(data: &[u8], dest: &Path) -> Result<usize, String> {
             std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
         }
         let bytes = read(data, e)?;
-        std::fs::write(&target, bytes)
+        // Updating a pack overwrites its files; std::fs::write cannot under
+        // Wine. See game::overwrite.
+        game::overwrite::write(&target, &bytes)
             .map_err(|err| format!("write {}: {err}", target.display()))?;
         files += 1;
     }

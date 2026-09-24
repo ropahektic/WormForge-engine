@@ -4,6 +4,7 @@ pub mod entity;
 pub mod hash;
 pub mod latch;
 pub mod offsets;
+pub mod overwrite;
 pub mod sync_input;
 pub mod weapon;
 
