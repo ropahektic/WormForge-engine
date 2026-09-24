@@ -1,6 +1,6 @@
 # Landscape + PlaySoundLocal (3.8.1)
 
-Wraps, not traps. Lua sees `wa.land` / `wa.sound`, not CTask offsets.
+# Wraps, not traps. Lua sees `wa.land` / `wa.sound`, not CTask offsets.
 
 [[function]]
 va = 0x004FDFE0
@@ -11,7 +11,13 @@ plate_comment = "Usercall EAX=pitch ECX=volume EDI=entity; stack sound_id + flag
 [[struct]]
 name = "Landscape"
 size = 0xB40
-plate_comment = "Walk mask at +0x914. +0x910 fill picture, +0x91C soil overlay, +0x0D0 plot scratch. GameWorld+0x20."
+plate_comment = "GameWorld+0x20. Vtable 0x66B208: slot 2 ApplyExplosion (0x57C820), slot 3 mask cut (0x57CCF0); both take (size/shape, x_px, y_px). Walk mask +0x914, picture +0x910, soil +0x91C."
+
+  [[struct.field]]
+  offset = 0x088
+  name = "cut_shapes"
+  type = "void *[12]"
+  comment = "Preloaded WA mask pointers. Pneumatic Drill uses 2; Blow Torch uses 6..11."
 
   [[struct.field]]
   offset = 0x0D0
@@ -36,6 +42,12 @@ plate_comment = "Walk mask at +0x914. +0x910 fill picture, +0x91C soil overlay, 
   name = "soil"
   type = "BitGrid *"
   comment = "Cave-in / soil paint. Walk in front of it."
+
+  [[struct.field]]
+  offset = 0xB3C
+  name = "indestructible_control"
+  type = "uint32_t"
+  comment = "SetControlFlag control; nonzero makes ApplyExplosion and mask cut return early."
 
 [[struct]]
 name = "BitGrid"

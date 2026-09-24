@@ -8,6 +8,7 @@ mod actor;
 mod api;
 mod dispatch;
 mod sandbox;
+mod sim_context;
 mod spawn;
 
 pub use actor::{
@@ -269,6 +270,48 @@ mod tests {
 
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    #[test]
+    fn super_drill_example_claims_only_the_drill_slot() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/super_drill");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::PneumaticDrill);
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::PneumaticDrill));
+        assert!(!claim.params.eat_fire);
+        assert_eq!(claim.params.on_fire_id, 0);
+    }
+
+    #[test]
+    fn land_verbs_reach_native_only_during_simulation() {
+        let _guard = lock_host();
+        thread_local! {
+            static CUT: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
+            static DIG: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            land_cut: |shape, x, y| { CUT.with(|c| c.set(Some((shape, x, y)))); Ok(()) },
+            land_dig: |x, y, radius| { DIG.with(|c| c.set(Some((x, y, radius)))); Ok(()) },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let cut = "wa.land.cut{ x = 0x12340000, y = 0x56780000, shape = 'torch', facing = 1, angle = 0 }";
+        assert!(lua.load(cut).exec().is_err());
+        sim_context::with_sim(|| {
+            lua.load(cut).exec().unwrap();
+            lua.load("wa.land.dig{ x = 0x10000, y = 0x20000, radius = 12 }").exec().unwrap();
+        });
+        CUT.with(|c| assert_eq!(c.get(), Some((10, 0x12340000, 0x56780000))));
+        DIG.with(|c| assert_eq!(c.get(), Some((0x10000, 0x20000, 12))));
     }
 
     #[test]

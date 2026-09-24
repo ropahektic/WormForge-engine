@@ -30,14 +30,25 @@ pub fn take_hud_lines() -> Vec<HudLine> {
     HUD_LINES.with(|s| s.replace(Vec::new()))
 }
 
-fn with_lua<T>(f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
+fn with_lua_impl<T>(
+    simulation: bool,
+    f: impl FnOnce(&Lua) -> Result<T, String>,
+) -> Result<T, String> {
     PARKED_LUA.with(|slot| {
         let guard = slot.borrow();
         let Some(lua) = guard.as_ref() else {
             return Err("no lua state".into());
         };
-        f(lua)
+        if simulation {
+            crate::sim_context::with_sim(|| f(lua))
+        } else {
+            f(lua)
+        }
     })
+}
+
+fn with_lua<T>(f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
+    with_lua_impl(true, f)
 }
 
 fn hook_list<'a>(lua: &'a Lua, name: &str) -> Result<Table, String> {
@@ -161,7 +172,7 @@ pub fn worm_message(worm_id: u32, team: u32, msg: u32) -> Result<bool, String> {
 
 pub fn run_hud() -> Result<Vec<HudLine>, String> {
     HUD_LINES.with(|s| s.borrow_mut().clear());
-    let _ = with_lua(|lua| {
+    let _ = with_lua_impl(false, |lua| {
         let list = hook_list(lua, "hud")?;
         call_each(&list, ())?;
         Ok(())

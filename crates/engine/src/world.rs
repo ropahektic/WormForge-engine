@@ -121,6 +121,63 @@ pub fn solid_fixed(x: i32, y: i32) -> bool {
     grid.solid_px(x >> 16, y >> 16)
 }
 
+/// Resolve WA's own landscape methods. A different WA layout fails closed.
+unsafe fn landscape_method(slot: usize, expected: u32) -> Result<(*mut u8, u32), String> {
+    let world = session_world_ptr();
+    if world.is_null() {
+        return Err("terrain cut: no active world".into());
+    }
+    let land = *(world.add(GAME_WORLD_LANDSCAPE) as *const *mut u8);
+    if land.is_null() {
+        return Err("terrain cut: landscape unavailable".into());
+    }
+    let table = *(land as *const u32);
+    if table != rb(LANDSCAPE_VTABLE) {
+        return Err(format!(
+            "terrain cut: unexpected landscape vtable {table:#x}"
+        ));
+    }
+    let method = *((table as *const u32).add(slot));
+    if method != rb(expected) {
+        return Err(format!(
+            "terrain cut: unexpected landscape method {slot}: {method:#x}"
+        ));
+    }
+    Ok((land, method))
+}
+
+/// WA's vtable slot 2 edits picture, walk grid, soil, redraw, and checksum.
+pub fn land_dig(x: i32, y: i32, radius: i32) -> Result<(), String> {
+    if !(1..=200).contains(&radius) {
+        return Err("terrain cut: radius must be 1..200 pixels".into());
+    }
+    unsafe {
+        let (land, method) = landscape_method(2, LANDSCAPE_APPLY_EXPLOSION)?;
+        let cut: unsafe extern "thiscall" fn(*mut u8, i32, i32, i32) =
+            std::mem::transmute(method as usize);
+        cut(land, radius, x >> 16, y >> 16);
+    }
+    Ok(())
+}
+
+/// WA's vtable slot 3 stamps a preloaded drill/torch cut shape at pixel (x,y).
+pub fn land_cut(shape: i32, x: i32, y: i32) -> Result<(), String> {
+    if shape != 2 && !(6..=11).contains(&shape) {
+        return Err("terrain cut: only drill and torch shapes are supported".into());
+    }
+    unsafe {
+        let (land, method) = landscape_method(3, LANDSCAPE_MASK)?;
+        let mask = *((land.add(LANDSCAPE_SHAPES + shape as usize * 4)) as *const u32);
+        if mask == 0 {
+            return Err(format!("terrain cut: stock shape {shape} is not loaded"));
+        }
+        let cut: unsafe extern "thiscall" fn(*mut u8, i32, i32, i32) =
+            std::mem::transmute(method as usize);
+        cut(land, shape, x >> 16, y >> 16);
+    }
+    Ok(())
+}
+
 pub fn trace_fixed(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)> {
     let grid = live_grid()?;
     let hit = trace_pixels(
