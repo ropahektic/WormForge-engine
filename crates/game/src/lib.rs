@@ -6,6 +6,7 @@ pub mod latch;
 pub mod offsets;
 pub mod overwrite;
 pub mod sync_input;
+pub mod team;
 pub mod weapon;
 
 pub use offsets::{
