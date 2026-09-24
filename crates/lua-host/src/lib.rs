@@ -314,10 +314,58 @@ mod tests {
                 .iter()
                 .map(|(id, _)| *id)
                 .collect::<Vec<_>>(),
-            vec![158, 159, 160, 161]
+            vec![158, 159, 160, 161, 663],
+            "the four dig frames, plus the dive frame's underwater variant"
         );
-        assert_eq!(claim.params.extra_sheets.len(), 4);
+        assert_eq!(claim.params.extra_sheets.len(), 5);
         assert!(claim.params.extra_sheets.iter().all(|(_, s)| s.frames.len() == 17));
+        // PX's Gravler has no underwater art, so the dive sheet sinks under
+        // PX's sinking tint instead of turning back into WA's mole.
+        let sheet = |key: &str| {
+            &claim.params.extra_sheets.iter().find(|(p, _)| p == key).unwrap().1
+        };
+        let dive = sheet("sprites/gravlerdive.png");
+        assert_eq!(
+            sheet("sprites/gravlerdive.png#underwater"),
+            &dive.multiply([90, 90, 240])
+        );
+    }
+
+    #[test]
+    fn mole_dig_rotation_takes_the_packs_own_underwater_frame() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-mole-underwater");
+        let _ = std::fs::remove_dir_all(&root);
+        let gravler = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../mods/examples/gravler_strike/sprites");
+        let own = pack(
+            &root,
+            "t.mole",
+            r#"
+id = "t.mole"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["donkey"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "donkey",
+  copy_from = "mole_squadron",
+  mole_dig_rotation = { moledive = "dive.png", mole = "sink.png" },
+})
+"#,
+        );
+        std::fs::copy(gravler.join("gravlerdive.png"), root.join("dive.png")).unwrap();
+        std::fs::copy(gravler.join("gravlerdiga.png"), root.join("sink.png")).unwrap();
+        let scripts = run_mods(&[own]).unwrap();
+        let params = &scripts.resolved.applied[0].params;
+        assert_eq!(
+            params.mole_dig_rotation,
+            vec![(158, "dive.png".to_string()), (663, "sink.png".to_string())],
+            "a pack's own underwater frame is used as is"
+        );
+        assert!(!params.extra_sheets.iter().any(|(p, _)| p.ends_with("#underwater")));
     }
 
     #[test]

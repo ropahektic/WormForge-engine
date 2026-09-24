@@ -61,7 +61,7 @@ Per-worm loadouts are virtual because WA has no per-worm ammo row. `wa.inventory
 
 `a:frame(i)` holds a LuaActor on one frame of its current sheet (zeroes the loop delta). `worm.facing` is read-only (−1 left, +1 right). `worm_sprites` on `replace` remaps that slot’s worm poses only (`weaponlnk` / `wthrow` and slope variants). `ev.damage` on an actor brain is stock blast falloff this tick. Overlaying a mine’s fire (`copy_from = "mine"` plus `on_fire`) keeps placement/retreat and routes the body through the existing projectile wrap.
 
-`mole_dig_rotation = { moledive = "sprites/dive.png", moledig1 = ..., moledig2 = ..., moledig3 = ... }` replaces the mole strike's digging frames globally for the match, as PX's `SetSpriteOverride` does; any subset of the four keys works, and no other sprite is accepted. The PNG/GIF must live in the pack; the first loaded claim for a frame wins, and every mole in the match uses it.
+`mole_dig_rotation = { moledive = "sprites/dive.png", moledig1 = ..., moledig2 = ..., moledig3 = ... }` replaces the mole strike's digging frames globally for the match, as PX's `SetSpriteOverride` does; any subset of the keys works, and no other sprite is accepted. A fifth key, `mole`, is WA's underwater variant of the dive frame (a diving mole that enters water switches 158 → 663; the dig frames have none). If a pack overrides `moledive` but not `mole`, the dive sheet sinks under PX's sinking tint, `RGB(90, 90, 240)` multiplied in, instead of turning back into WA's mole. The PNG/GIF must live in the pack; the first loaded claim for a frame wins, and every mole in the match uses it.
 
 ## Verbs (engine)
 
