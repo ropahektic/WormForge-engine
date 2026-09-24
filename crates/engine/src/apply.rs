@@ -349,7 +349,11 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
         if let Some(name) = &claim.params.name {
             match CString::new(name.as_str()) {
                 Ok(c) => {
+                    // Both names: the weapon panel shows `name2`, so setting
+                    // only `name1` left a renamed weapon under its stock
+                    // name in the panel.
                     entry.set_name1(c.as_ptr());
+                    entry.set_name2(c.as_ptr());
                     names.push(c);
                 }
                 Err(_) => log_error(&format!("invalid name for {}", claim.mod_id)),

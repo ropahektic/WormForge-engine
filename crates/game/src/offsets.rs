@@ -72,6 +72,9 @@ pub const STOCK_WEAPON_COUNT: usize = 71;
 pub const WEAPON_TABLE_BYTES: usize = STOCK_WEAPON_COUNT * WEAPON_ENTRY_SIZE;
 
 pub const WEAPON_NAME1: usize = 0x00;
+/// The name the weapon panel shows under the icons: `WeaponPanelIcons`'
+/// text draw reads `[weapon_table + id*0x1D0 + 4]` (0x5680DA, 0x568145).
+pub const WEAPON_NAME2: usize = 0x04;
 pub const WEAPON_PANEL_STATE: usize = 0x08;
 pub const WEAPON_REQUIRES_AIMING: usize = 0x0C;
 pub const WEAPON_DEFINED: usize = 0x10;
