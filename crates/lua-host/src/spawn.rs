@@ -441,6 +441,12 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         .create_function(|_, ()| Ok(native_water_y().map(|f| f()).unwrap_or(0)))
         .map_err(|e| e.to_string())?;
     world.set("water", water).map_err(|e| e.to_string())?;
+    // A function, not a value: the table is built when the pack loads, which
+    // can be before WA has decided this match's borders.
+    let cavern = lua
+        .create_function(|_, ()| Ok(crate::actor::native_cavern().map(|f| f()).unwrap_or(false)))
+        .map_err(|e| e.to_string())?;
+    world.set("cavern", cavern).map_err(|e| e.to_string())?;
     let size = lua
         .create_function(|lua, ()| {
             let (w, h) = native_map_size().map(|f| f()).unwrap_or((0, 0));

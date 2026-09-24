@@ -46,6 +46,12 @@ plate_comment = "Partial. weapon_table confirmed: InitWeaponTable memset *(world
   comment = "Recording-side frame counter, -1 while a replay is playing back. WA's own equivalent of Project X's IsReplay()."
 
   [[struct.field]]
+  offset = 0x777C
+  name = "is_cavern"
+  type = "uint"
+  comment = "Nonzero on a cavern level. Set by GameRuntime__InitLandscapeBorders (0x528480) with the indestructible borders. From OpenWA's catalog; exposed as wa.world.cavern()."
+
+  [[struct.field]]
   offset = 0x510
   name = "weapon_table"
   type = "WeaponTable *"

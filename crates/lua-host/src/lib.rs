@@ -12,7 +12,7 @@ mod spawn;
 
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
-    weapon_fire, weapon_select, ActorEvent, ActorNative, SpawnArgs,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, SpawnArgs,
 };
 pub use dispatch::{gravity_after, gravity_before, hurt, missile_frame, run_hud, worm_message, Hurt};
 
