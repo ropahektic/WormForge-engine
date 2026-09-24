@@ -153,7 +153,11 @@ impl LoaderSettings {
             }
         }
         std::fs::create_dir_all(mods_dir).map_err(|e| e.to_string())?;
-        std::fs::write(mods_dir.join(SETTINGS_FILE), out).map_err(|e| e.to_string())
+        // Not std::fs::write: that truncates the existing file in place, which
+        // the Wine in the macOS WA bundles does not implement. See
+        // game::overwrite.
+        game::overwrite::write(&mods_dir.join(SETTINGS_FILE), out.as_bytes())
+            .map_err(|e| e.to_string())
     }
 
     pub fn is_disabled(&self, id: &str) -> bool {
