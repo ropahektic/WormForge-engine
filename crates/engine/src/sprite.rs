@@ -103,6 +103,31 @@ pub fn clear() {
     }
 }
 
+/// Take our sprites out of WA's sprite table before WA tears the display down.
+///
+/// `DisplayBase::Destructor` walks slots 1..0x3FF and deletes every sprite it
+/// finds (scalar deleting destructor, then WA's `free`). Ours are Rust
+/// allocations: WA must never delete them. Called by the `GameEngine::Shutdown`
+/// hook BEFORE the original. The objects themselves stay alive until the next
+/// match's `clear`, and forgetting the display keeps `clear` and `reassert`
+/// from ever writing into the freed one.
+pub fn release_before_teardown() {
+    if let Ok(mut g) = LOADED.lock() {
+        for s in g.iter_mut() {
+            if s.display.is_null() {
+                continue;
+            }
+            unsafe {
+                let ptrs = (s.display as usize + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
+                if *ptrs.add(s.id as usize) == s._sprite.0.as_ptr() as *mut u8 {
+                    *ptrs.add(s.id as usize) = std::ptr::null_mut();
+                }
+            }
+            s.display = std::ptr::null_mut();
+        }
+    }
+}
+
 /// Put installed sprites back into the display's sprite table.
 ///
 /// Sprites are installed once per match, but WA repopulates its sprite pointer

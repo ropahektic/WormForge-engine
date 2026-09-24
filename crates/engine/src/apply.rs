@@ -197,6 +197,19 @@ pub fn on_gfx_ready(display: *mut u8) {
     }
 }
 
+/// The match is over: the next one must load from scratch.
+///
+/// `on_gfx_ready` runs once per display, keyed by its address, because two
+/// hooks reach it within one match. WA frees the display at match end and can
+/// allocate the next match's at the same address; keyed on a stale entry, the
+/// new match then skipped everything -- no Lua, no rule packs, no recorder --
+/// and a player who stayed in WA between rounds desynced at frame 0.
+pub fn match_ended() {
+    if let Ok(mut g) = GFX.lock() {
+        *g = None;
+    }
+}
+
 pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
     if runtime.is_null() {
         return Err("InitWeaponTable runtime is null".into());
