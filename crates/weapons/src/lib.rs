@@ -24,6 +24,41 @@ use std::path::{Path, PathBuf};
 
 pub const API_VERSION: u32 = 1;
 
+/// What the pack primarily does. Weapons packs overlay stock slots; gameplay
+/// packs change match rules without claiming a panel weapon (Highlander, …).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PackKind {
+    Weapons,
+    Gameplay,
+}
+
+impl Default for PackKind {
+    fn default() -> Self {
+        PackKind::Weapons
+    }
+}
+
+impl PackKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PackKind::Weapons => "weapons",
+            PackKind::Gameplay => "gameplay",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            PackKind::Weapons => "Weapons",
+            PackKind::Gameplay => "Gameplay",
+        }
+    }
+}
+
+fn default_kind() -> PackKind {
+    PackKind::Weapons
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ModManifest {
     pub id: String,
@@ -35,6 +70,10 @@ pub struct ModManifest {
     pub api_version: u32,
     #[serde(default = "default_entry")]
     pub entry: String,
+    /// `weapons` (default) or `gameplay`. Omitted packs that claim no slots
+    /// are treated as gameplay so rule packs do not look like empty weapons.
+    #[serde(default = "default_kind")]
+    pub kind: PackKind,
     #[serde(default)]
     pub weapons: WeaponClaims,
     #[serde(default)]
@@ -93,7 +132,7 @@ pub struct LoadedMod {
 }
 
 pub fn parse_manifest(src: &str) -> Result<ModManifest, String> {
-    let m: ModManifest = toml::from_str(src).map_err(|e| e.to_string())?;
+    let mut m: ModManifest = toml::from_str(src).map_err(|e| e.to_string())?;
     if m.id.trim().is_empty() {
         return Err("mod.toml id is empty".into());
     }
@@ -102,6 +141,17 @@ pub fn parse_manifest(src: &str) -> Result<ModManifest, String> {
             "mod {} api_version {} is not supported (need {API_VERSION})",
             m.id, m.api_version
         ));
+    }
+    // Rule packs often omit `kind`. Empty weapon claims ⇒ gameplay so the
+    // loader can put them on the Gameplay tab without requiring a new field
+    // on every such pack — unless the author set kind explicitly to weapons.
+    if m.kind == PackKind::Weapons
+        && m.weapons.replace.is_empty()
+        && m.weapons.overlay.is_empty()
+        && m.weapons.register.is_empty()
+        && !src.contains("kind")
+    {
+        m.kind = PackKind::Gameplay;
     }
     Ok(m)
 }
@@ -253,6 +303,8 @@ pub struct RemotePack {
     pub version: String,
     #[serde(default)]
     pub author: String,
+    #[serde(default = "default_kind")]
+    pub kind: PackKind,
     #[serde(default)]
     pub slots: Vec<String>,
     pub file: String,
@@ -621,15 +673,37 @@ size = 10
 [[packs]]
 id = "x.abs"
 folder = "abs"
+kind = "gameplay"
 file = "https://cdn.example.org/abs.zip"
 sha256 = "11"
 "#;
         let idx = parse_index(src).unwrap();
         assert_eq!(idx.packs.len(), 2);
+        assert_eq!(idx.packs[0].kind, PackKind::Weapons);
+        assert_eq!(idx.packs[1].kind, PackKind::Gameplay);
         assert_eq!(idx.packs[0].url(&idx), "https://example.org/downloads/mods/worm_toss.zip");
         assert_eq!(idx.packs[1].url(&idx), "https://cdn.example.org/abs.zip");
         assert_eq!(idx.packs[1].version, "0.1.0");
         assert!(parse_index("schema = 2\nbase = \"x\"\n").is_err());
+    }
+
+    #[test]
+    fn empty_claims_without_kind_are_gameplay() {
+        let m = parse_manifest(
+            "id = \"example.highlander\"\napi_version = 1\nentry = \"rules.lua\"\n[weapons]\nregister = []\nreplace = []\n",
+        )
+        .unwrap();
+        assert_eq!(m.kind, PackKind::Gameplay);
+        let m = parse_manifest(
+            "id = \"example.keep\"\napi_version = 1\nkind = \"weapons\"\n[weapons]\nregister = []\n",
+        )
+        .unwrap();
+        assert_eq!(m.kind, PackKind::Weapons);
+        let m = parse_manifest(
+            "id = \"example.gun\"\napi_version = 1\n[weapons]\nreplace = [\"bazooka\"]\n",
+        )
+        .unwrap();
+        assert_eq!(m.kind, PackKind::Weapons);
     }
 
     #[test]

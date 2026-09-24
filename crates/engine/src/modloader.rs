@@ -15,11 +15,11 @@ use crate::log::{log_error, log_line, panic_text, wa_directory};
 use lua_host::mods_root_from;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use weapons::{
     conflict_text, list_mods, parse_index, slot_conflicts, LoaderSettings, ModEntry, PackIndex,
-    RemotePack, SlotConflict,
+    PackKind, RemotePack, SlotConflict,
 };
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
@@ -56,7 +56,19 @@ const ID_CHECK: usize = 106;
 const ID_INSTALL: usize = 107;
 const ID_UPDATE_ALL: usize = 108;
 const ID_BANNER: usize = 109;
+const ID_TAB_ALL: usize = 110;
+const ID_TAB_WEAPONS: usize = 111;
+const ID_TAB_GAMEPLAY: usize = 112;
 const NETWORK_BUTTONS: [usize; 3] = [ID_CHECK, ID_INSTALL, ID_UPDATE_ALL];
+const TAB_BUTTONS: [(usize, &str); 3] = [
+    (ID_TAB_ALL, "All"),
+    (ID_TAB_WEAPONS, "Weapons"),
+    (ID_TAB_GAMEPLAY, "Gameplay"),
+];
+
+/// 0 = all, 1 = weapons, 2 = gameplay.
+static FILTER: AtomicUsize = AtomicUsize::new(0);
+/// Full merged list; `ROWS` is the tab-filtered view shown in the list.
 
 /// Online catalogue produced by `tools/publish-packs.ps1`.
 pub const INDEX_URL: &str = "https://ropahektic.github.io/WormForge/downloads/packs/index.toml";
@@ -85,6 +97,7 @@ static POPULATING: AtomicBool = AtomicBool::new(false);
 static STATUS: Mutex<String> = Mutex::new(String::new());
 static PEER: Mutex<String> = Mutex::new(String::new());
 static ROWS: Mutex<Vec<Row>> = Mutex::new(Vec::new());
+static ALL_ROWS: Mutex<Vec<Row>> = Mutex::new(Vec::new());
 /// Last index fetched by "Check online"; merged into the list until restart.
 static REMOTE: Mutex<Option<PackIndex>> = Mutex::new(None);
 
@@ -121,6 +134,18 @@ impl Row {
 
     fn enabled(&self) -> bool {
         self.local.as_ref().is_some_and(|l| l.enabled)
+    }
+
+    fn kind(&self) -> PackKind {
+        if let Some(l) = &self.local {
+            if let Ok(m) = &l.manifest {
+                return m.kind;
+            }
+        }
+        self.remote
+            .as_ref()
+            .map(|r| r.kind)
+            .unwrap_or(PackKind::Weapons)
     }
 
     fn online(&self, settings: &LoaderSettings) -> Online {
@@ -297,6 +322,9 @@ unsafe fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option
                 ID_CHECK => check_online(hwnd),
                 ID_INSTALL => install_selected(hwnd),
                 ID_UPDATE_ALL => install_all(hwnd),
+                ID_TAB_ALL => set_filter(hwnd, 0),
+                ID_TAB_WEAPONS => set_filter(hwnd, 1),
+                ID_TAB_GAMEPLAY => set_filter(hwnd, 2),
                 _ => return None,
             }
             Some(0)
@@ -379,11 +407,11 @@ unsafe fn create_children(parent: HWND) {
     );
     LIST.store(list, Ordering::SeqCst);
     for (i, (name, width)) in [
-        ("Mod", 170),
-        ("Version", 100),
-        ("Author", 90),
-        ("Weapon slot", 130),
-        ("Status", 350),
+        ("Mod", 160),
+        ("Version", 90),
+        ("Author", 80),
+        ("Slot / role", 120),
+        ("Status", 360),
     ]
     .iter()
     .enumerate()
@@ -405,6 +433,9 @@ unsafe fn create_children(parent: HWND) {
         SendMessageW(list, LVM_INSERTCOLUMNW, i, &col as *const _ as isize);
     }
 
+    for (id, label) in TAB_BUTTONS {
+        child(button.as_ptr(), label, WS_TABSTOP, id);
+    }
     child(button.as_ptr(), "Check online", WS_TABSTOP, ID_CHECK);
     child(button.as_ptr(), "Install / update selected", WS_TABSTOP, ID_INSTALL);
     child(button.as_ptr(), "Install all updates", WS_TABSTOP, ID_UPDATE_ALL);
@@ -499,22 +530,47 @@ unsafe fn layout(hwnd: HWND) {
 
     // Header banner, centred, natural size.
     MoveWindow(ctl(ID_BANNER), ((w - bw) / 2).max(0), pad, bw, bh, 1);
-    let top = pad + bh + pad;
+    let mut y = pad + bh + pad;
+
+    // Kind tabs: All / Weapons / Gameplay.
+    let tab_w = 96;
+    for (i, (id, _)) in TAB_BUTTONS.iter().enumerate() {
+        MoveWindow(ctl(*id), pad + i as i32 * (tab_w + pad), y, tab_w, button_h, 1);
+    }
+    y += button_h + pad;
 
     // List, then one row of buttons, then the two status lines.
     let footer = button_h + pad + line_h + 4 + line_h + pad;
-    let list_h = (h - top - footer - pad).max(40);
-    MoveWindow(ctl(ID_LIST), pad, top, w - 2 * pad, list_h, 1);
-    let y = top + list_h + pad;
+    let list_h = (h - y - footer - pad).max(40);
+    MoveWindow(ctl(ID_LIST), pad, y, w - 2 * pad, list_h, 1);
+    y = y + list_h + pad;
     let buttons = [ID_CHECK, ID_INSTALL, ID_UPDATE_ALL, ID_REFRESH, ID_OPEN];
     let n = buttons.len() as i32;
     let bwidth = ((w - 2 * pad - (n - 1) * pad) / n).max(80);
     for (i, id) in buttons.iter().enumerate() {
         MoveWindow(ctl(*id), pad + i as i32 * (bwidth + pad), y, bwidth, button_h, 1);
     }
-    let y = y + button_h + pad;
+    y = y + button_h + pad;
     MoveWindow(ctl(ID_STATUS), pad, y, w - 2 * pad, line_h, 1);
     MoveWindow(ctl(ID_PEER), pad, y + line_h + 4, w - 2 * pad, line_h, 1);
+}
+
+unsafe fn set_filter(hwnd: HWND, filter: usize) {
+    FILTER.store(filter, Ordering::SeqCst);
+    paint_tabs(hwnd);
+    fill_list_from_all();
+}
+
+unsafe fn paint_tabs(hwnd: HWND) {
+    let filter = FILTER.load(Ordering::SeqCst);
+    for (i, (id, label)) in TAB_BUTTONS.iter().enumerate() {
+        let text = if i == filter {
+            format!("[{label}]")
+        } else {
+            (*label).to_string()
+        };
+        SetWindowTextW(GetDlgItem(hwnd, *id as i32), wide(&text).as_ptr());
+    }
 }
 
 unsafe fn set_network_buttons(hwnd: HWND, enabled: bool) {
@@ -552,12 +608,42 @@ fn normalise_slot(n: &str) -> String {
         .unwrap_or_else(|_| format!("{n}?"))
 }
 
-/// Stock panel slots this pack takes (`replace` + `overlay`), normalised.
 fn weapon_slots<'a>(names: impl Iterator<Item = &'a String>) -> String {
     let mut out: Vec<String> = names.map(|n| normalise_slot(n)).collect();
     out.sort();
     out.dedup();
     out.join(", ")
+}
+
+/// Stock panel slots this pack takes (`replace` + `overlay`), or a role label
+/// for gameplay packs that claim none.
+fn role_column(row: &Row) -> String {
+    match row.kind() {
+        PackKind::Gameplay => "ruleset".into(),
+        PackKind::Weapons => {
+            let slots = match (&row.local, &row.remote) {
+                (Some(l), _) => match &l.manifest {
+                    Ok(m) => weapon_slots(m.weapons.replace.iter().chain(m.weapons.overlay.iter())),
+                    Err(_) => String::new(),
+                },
+                (None, Some(r)) => weapon_slots(r.slots.iter()),
+                _ => String::new(),
+            };
+            if slots.is_empty() {
+                "—".into()
+            } else {
+                slots
+            }
+        }
+    }
+}
+
+fn row_matches_filter(row: &Row, filter: usize) -> bool {
+    match filter {
+        1 => row.kind() == PackKind::Weapons,
+        2 => row.kind() == PackKind::Gameplay,
+        _ => true,
+    }
 }
 
 /// Disk entries merged with the last fetched index, sorted by display name.
@@ -731,10 +817,7 @@ unsafe fn set_item_checked(list: HWND, item: i32, checked: bool) {
 
 /// Rescan `Mods\`, merge the cached index, rebuild every row.
 unsafe fn populate() {
-    let list = LIST.load(Ordering::SeqCst);
-    if list.is_null() {
-        return;
-    }
+    let hwnd = WINDOW.load(Ordering::SeqCst);
     let dir = mods_dir();
     let entries = match list_mods(&dir) {
         Ok(e) => e,
@@ -743,63 +826,89 @@ unsafe fn populate() {
             return;
         }
     };
-    let settings = LoaderSettings::load(&dir);
-    let rows = {
+    let all = {
         let remote = REMOTE.lock().map(|g| g.clone()).unwrap_or(None);
         build_rows(entries, remote.as_ref())
     };
-    let conflicts = slot_conflicts(&local_entries(&rows));
+    if let Ok(mut g) = ALL_ROWS.lock() {
+        *g = all;
+    }
+    if !hwnd.is_null() {
+        paint_tabs(hwnd);
+    }
+    fill_list_from_all();
+}
+
+/// Paint the current tab's rows from `ALL_ROWS` into the list view.
+unsafe fn fill_list_from_all() {
+    let list = LIST.load(Ordering::SeqCst);
+    if list.is_null() {
+        return;
+    }
+    let dir = mods_dir();
+    let settings = LoaderSettings::load(&dir);
+    let filter = FILTER.load(Ordering::SeqCst);
+    let all = ALL_ROWS.lock().map(|g| g.clone()).unwrap_or_default();
+    let conflicts = slot_conflicts(&local_entries(&all));
+    let rows: Vec<Row> = all
+        .iter()
+        .filter(|r| row_matches_filter(r, filter))
+        .cloned()
+        .collect();
 
     POPULATING.store(true, Ordering::SeqCst);
     SendMessageW(list, LVM_DELETEALLITEMS, 0, 0);
     for (i, row) in rows.iter().enumerate() {
         let i = i as i32;
-        let (name, version, author, slots) = match (&row.local, &row.remote) {
+        let (name, version, author) = match (&row.local, &row.remote) {
             (Some(l), remote) => match &l.manifest {
                 Ok(m) => {
                     let version = match remote {
-                        Some(r) if r.version != m.version && row.online(&settings) == Online::UpdateAvailable => {
+                        Some(r)
+                            if r.version != m.version
+                                && row.online(&settings) == Online::UpdateAvailable =>
+                        {
                             format!("{} -> {}", m.version, r.version)
                         }
                         _ => m.version.clone(),
                     };
-                    (
-                        display_name(&m.id),
-                        version,
-                        m.author.clone(),
-                        weapon_slots(m.weapons.replace.iter().chain(m.weapons.overlay.iter())),
-                    )
+                    (display_name(&m.id), version, m.author.clone())
                 }
                 Err(_) => (
                     format!("{} (broken mod.toml)", l.folder),
                     String::new(),
                     String::new(),
-                    String::new(),
                 ),
             },
-            (None, Some(r)) => (
-                display_name(&r.id),
-                r.version.clone(),
-                r.author.clone(),
-                weapon_slots(r.slots.iter()),
-            ),
+            (None, Some(r)) => (display_name(&r.id), r.version.clone(), r.author.clone()),
             (None, None) => continue,
         };
         set_item_text(list, i, 0, &name);
         set_item_text(list, i, 1, &version);
         set_item_text(list, i, 2, &author);
-        set_item_text(list, i, 3, &slots);
-        set_item_text(list, i, 4, &row_status(&rows, &conflicts, &settings, row));
+        set_item_text(list, i, 3, &role_column(row));
+        // Conflicts / requires use the full set so a Weapons-tab pack still
+        // shows fights against a Gameplay pack that is enabled but hidden.
+        set_item_text(list, i, 4, &row_status(&all, &conflicts, &settings, row));
         set_item_checked(list, i, row.enabled());
     }
     POPULATING.store(false, Ordering::SeqCst);
 
+    let tab = match filter {
+        1 => "Weapons",
+        2 => "Gameplay",
+        _ => "All",
+    };
     let summary = if !dir.is_dir() {
         format!("No Mods folder yet: {}", dir.display())
-    } else if rows.is_empty() {
+    } else if all.is_empty() {
         format!("No packs in {}. Press Check online.", dir.display())
+    } else if rows.is_empty() {
+        format!("No {tab} packs. Try another tab or Check online.")
     } else {
-        summary_line(&rows, &conflicts, &settings)
+        let mut s = summary_line(&all, &conflicts, &settings);
+        s.push_str(&format!(" Showing {tab} ({}/{}).", rows.len(), all.len()));
+        s
     };
     if let Ok(mut g) = ROWS.lock() {
         *g = rows;
@@ -812,12 +921,13 @@ unsafe fn refresh_status_column() {
     let Ok(rows) = ROWS.lock() else {
         return;
     };
+    let all = ALL_ROWS.lock().map(|g| g.clone()).unwrap_or_else(|_| rows.clone());
     let settings = LoaderSettings::load(&mods_dir());
-    let conflicts = slot_conflicts(&local_entries(&rows));
+    let conflicts = slot_conflicts(&local_entries(&all));
     for (i, row) in rows.iter().enumerate() {
-        set_item_text(list, i as i32, 4, &row_status(&rows, &conflicts, &settings, row));
+        set_item_text(list, i as i32, 4, &row_status(&all, &conflicts, &settings, row));
     }
-    set_status(&format!("Saved. {}", summary_line(&rows, &conflicts, &settings)));
+    set_status(&format!("Saved. {}", summary_line(&all, &conflicts, &settings)));
 }
 
 unsafe fn on_item_changed(nm: &NMLISTVIEW) {
@@ -848,7 +958,15 @@ unsafe fn on_item_changed(nm: &NMLISTVIEW) {
             Some(local) => match &local.manifest {
                 Ok(m) => {
                     local.enabled = checked;
-                    Outcome::Toggle(m.id.clone())
+                    let id = m.id.clone();
+                    if let Ok(mut all) = ALL_ROWS.lock() {
+                        if let Some(full) = all.iter_mut().find(|r| r.id() == id) {
+                            if let Some(l) = full.local.as_mut() {
+                                l.enabled = checked;
+                            }
+                        }
+                    }
+                    Outcome::Toggle(id)
                 }
                 Err(_) => Outcome::Broken,
             },

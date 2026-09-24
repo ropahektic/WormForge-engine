@@ -96,9 +96,14 @@ foreach ($dir in Get-ChildItem $Source -Directory | Sort-Object Name) {
 
     $version = Get-TomlString $toml "version"; if (-not $version) { $version = "0.1.0" }
     $author = Get-TomlString $toml "author"
+    $kind = Get-TomlString $toml "kind"
+    if (-not $kind) {
+        $slotsProbe = @(Get-TomlArray $toml "replace") + @(Get-TomlArray $toml "overlay") + @(Get-TomlArray $toml "register")
+        if ($slotsProbe.Count -eq 0) { $kind = "gameplay" } else { $kind = "weapons" }
+    }
     $slots = @(Get-TomlArray $toml "replace") + @(Get-TomlArray $toml "overlay") | Sort-Object -Unique
     $packs += [pscustomobject]@{
-        id = $id; folder = $dir.Name; version = $version; author = $author
+        id = $id; folder = $dir.Name; version = $version; author = $author; kind = $kind
         slots = @($slots); file = $zipName; sha256 = $newHash
         size = (Get-Item $zipPath).Length
     }
@@ -123,6 +128,7 @@ foreach ($p in $packs) {
     [void]$sb.AppendLine("folder = ""$($p.folder)""")
     [void]$sb.AppendLine("version = ""$($p.version)""")
     [void]$sb.AppendLine("author = ""$($p.author)""")
+    [void]$sb.AppendLine("kind = ""$($p.kind)""")
     $slotList = ($p.slots | ForEach-Object { """$_""" }) -join ", "
     [void]$sb.AppendLine("slots = [$slotList]")
     [void]$sb.AppendLine("file = ""$($p.file)""")
