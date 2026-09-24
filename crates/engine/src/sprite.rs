@@ -135,6 +135,21 @@ pub fn clear() {
 /// match's `clear`, and forgetting the display keeps `clear` and `reassert`
 /// from ever writing into the freed one.
 pub fn release_before_teardown() {
+    // Stock aliases first: a mole slot pointing at our sprite would have WA
+    // delete our object -- twice, since the custom slot holds it as well --
+    // and leak its own. Put each original back so WA frees what it owns.
+    if let Ok(mut aliases) = STOCK_ALIASES.lock() {
+        for a in aliases.drain(..) {
+            unsafe {
+                let ptrs = (a.display + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
+                let layers = (a.display + DISPLAY_SPRITE_LAYERS) as *mut u32;
+                if *ptrs.add(a.target) as usize == a.custom_ptr {
+                    *ptrs.add(a.target) = a.original_ptr as *mut u8;
+                    *layers.add(a.target) = a.original_layer;
+                }
+            }
+        }
+    }
     if let Ok(mut g) = LOADED.lock() {
         for s in g.iter_mut() {
             if s.display.is_null() {
