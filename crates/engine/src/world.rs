@@ -121,7 +121,14 @@ pub fn solid_fixed(x: i32, y: i32) -> bool {
     grid.solid_px(x >> 16, y >> 16)
 }
 
-/// Resolve WA's own landscape methods. A different WA layout fails closed.
+/// Resolve a landscape method the way WA calls it: through the vtable.
+///
+/// The vtable itself must be WA's (a different layout fails closed), but the
+/// slot may hold another module's hook -- wkFOW patches slots 2 and 3 in place
+/// to watch terrain changes, and forwards to the original. Requiring WA's
+/// exact address there made every cut fail on those machines only, while the
+/// others dug: a desync. Calling what WA would call keeps every client on the
+/// same chain, whatever is installed.
 unsafe fn landscape_method(slot: usize, expected: u32) -> Result<(*mut u8, u32), String> {
     let world = session_world_ptr();
     if world.is_null() {
@@ -138,10 +145,17 @@ unsafe fn landscape_method(slot: usize, expected: u32) -> Result<(*mut u8, u32),
         ));
     }
     let method = *((table as *const u32).add(slot));
+    if method == 0 {
+        return Err(format!("terrain cut: landscape method {slot} is null"));
+    }
     if method != rb(expected) {
-        return Err(format!(
-            "terrain cut: unexpected landscape method {slot}: {method:#x}"
-        ));
+        static REPORTED: [AtomicBool; 4] = [const { AtomicBool::new(false) }; 4];
+        if !REPORTED[slot & 3].swap(true, Ordering::Relaxed) {
+            log_line(&format!(
+                "terrain cut: landscape method {slot} is hooked by another module \
+                 ({method:#x}); calling through it, as WA does"
+            ));
+        }
     }
     Ok((land, method))
 }
