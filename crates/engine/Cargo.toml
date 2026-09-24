@@ -12,6 +12,7 @@ game = { path = "../game" }
 gfx = { path = "../gfx" }
 render = { path = "../render" }
 replay = { path = "../replay" }
+assets = { path = "../assets" }
 lua-host = { path = "../lua-host" }
 re-catalog = { path = "../re-catalog" }
 minhook = { workspace = true }

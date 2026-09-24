@@ -22,7 +22,6 @@ mod rebase;
 mod replay;
 mod sprite;
 mod queue_census;
-mod sha256;
 mod sync;
 mod truecolor;
 mod shader;
@@ -64,7 +63,11 @@ pub fn start() {
         }
     }
     match hook::install() {
-        Ok(()) => log_line("hooks installed"),
+        Ok(()) => {
+            log_line("hooks installed");
+            // Recordings a crash left unfinished get their trailer now.
+            replay::recover_pending();
+        }
         Err(e) => log_error(&format!("hook install failed: {e}")),
     }
     modloader::start();

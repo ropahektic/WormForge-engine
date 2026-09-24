@@ -1,4 +1,4 @@
-use replay::{decode_checkpoints, decode_inputs, decode_pack, Container};
+use replay::{decode_checkpoints, decode_inputs, decode_pack, Content, Trailer};
 use std::path::Path;
 
 fn main() {
@@ -18,13 +18,18 @@ fn run() -> Result<(), String> {
     }
     let bytes = std::fs::read(&input)
         .map_err(|e| format!("could not read {}: {e}", Path::new(&input).display()))?;
-    let container = Container::parse(&bytes).map_err(|e| e.to_string())?;
+    let Some(trailer) = Trailer::find(&bytes).map_err(|e| e.to_string())? else {
+        return Err(format!(
+            "{} is a vanilla WA replay: no WormForge trailer",
+            Path::new(&input).display()
+        ));
+    };
 
     match command.to_string_lossy().as_ref() {
-        "inspect" if output.is_none() => inspect(&container),
+        "inspect" if output.is_none() => inspect(&trailer),
         "extract" => {
             let output = output.ok_or_else(usage)?;
-            let wa = container.wa().map_err(|e| e.to_string())?;
+            let wa = trailer.wa_prefix();
             std::fs::write(&output, wa)
                 .map_err(|e| format!("could not write {}: {e}", Path::new(&output).display()))?;
             println!(
@@ -38,33 +43,31 @@ fn run() -> Result<(), String> {
     }
 }
 
-fn inspect(container: &Container<'_>) -> Result<(), String> {
-    let header = container.header();
+fn inspect(trailer: &Trailer<'_>) -> Result<(), String> {
+    let header = trailer.header();
     println!("format:       {}", replay::FORMAT_VERSION);
-    println!("complete:     {}", header.complete);
     println!("WA version:   {}", header.wa_version);
     println!("wkLua build:  {}", header.build_hash);
     println!("modset:       {}", header.modset);
+    println!("WFAssets:     {}", header.collection_version);
 
-    let pack_bytes = container.pack().map_err(|e| e.to_string())?;
-    let wa = container.wa().map_err(|e| e.to_string())?;
-    let wf = container.wf().map_err(|e| e.to_string())?;
-    let chk = container.chk().map_err(|e| e.to_string())?;
+    let pack_bytes = trailer.pack();
     let packs = decode_pack(pack_bytes).map_err(|e| e.to_string())?;
-    let inputs = decode_inputs(wf).map_err(|e| e.to_string())?;
-    let checkpoints = decode_checkpoints(chk).map_err(|e| e.to_string())?;
+    let inputs = decode_inputs(trailer.wf()).map_err(|e| e.to_string())?;
+    let checkpoints = decode_checkpoints(trailer.chk()).map_err(|e| e.to_string())?;
     let files: usize = packs.iter().map(|p| p.files.len()).sum();
+    let refs = replay::asset_refs(&packs).len();
 
     println!(
-        "packs:        {} ({files} files, {} encoded bytes)",
+        "packs:        {} ({files} files, {refs} collection references, {} encoded bytes)",
         packs.len(),
         pack_bytes.len()
     );
-    println!("vanilla WA:   {} bytes", wa.len());
+    println!("vanilla WA:   {} bytes", trailer.wa_prefix().len());
     println!(
         "input frames: {} ({} encoded bytes)",
         inputs.len(),
-        wf.len()
+        trailer.wf().len()
     );
     let keys = inputs.iter().fold(0, |mask, sample| mask | sample.keys);
     let button_frames = inputs.iter().filter(|sample| sample.down).count();
@@ -80,7 +83,7 @@ fn inspect(container: &Container<'_>) -> Result<(), String> {
     println!(
         "checkpoints:  {} ({} encoded bytes)",
         checkpoints.len(),
-        chk.len()
+        trailer.chk().len()
     );
     if let (Some(first), Some(last)) = (inputs.first(), inputs.last()) {
         println!("frame range:   {}..={}", first.frame, last.frame);
@@ -92,11 +95,21 @@ fn inspect(container: &Container<'_>) -> Result<(), String> {
             pack.version,
             pack.files.len()
         );
+        for file in &pack.files {
+            match &file.content {
+                Content::Raw(bytes) => println!("  {:<40} Raw({} bytes)", file.path, bytes.len()),
+                Content::Asset(sha) => println!(
+                    "  {:<40} Asset({})",
+                    file.path,
+                    assets::sha256::to_hex(sha)
+                ),
+            }
+        }
     }
     Ok(())
 }
 
 fn usage() -> String {
-    "usage: wf-replay inspect FILE.WF_WAgame\n       wf-replay extract FILE.WF_WAgame OUTPUT.WAgame"
+    "usage: wf-replay inspect FILE.WAgame\n       wf-replay extract FILE.WAgame OUTPUT.WAgame"
         .into()
 }

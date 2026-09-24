@@ -1,9 +1,9 @@
 //! Refusals a reader must be able to tell apart.
 //!
-//! W3 has to "refuse cleanly on: wrong format version, wrong WA version,
-//! missing `complete`", and those three want three different messages, not one
-//! `String` that says "bad file". So they are distinct variants, and the tests
-//! assert on the variant rather than on wording.
+//! Playback has to refuse cleanly -- wrong format version, wrong WA version, a
+//! damaged trailer, assets the local collection lacks -- and each wants its
+//! own message, not one `String` that says "bad file". So they are distinct
+//! variants, and the tests assert on the variant rather than on wording.
 
 use std::fmt;
 
@@ -13,9 +13,6 @@ pub type Offset = u32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    /// The first four bytes are not `WFRP`. Almost certainly a plain
-    /// `.WAgame` handed to the container reader.
-    NotAContainer,
     /// The file, or a section inside it, ended early.
     Truncated {
         at: Offset,
@@ -27,10 +24,19 @@ pub enum Error {
     /// The container is structurally understood but its embedded vanilla
     /// replay targets a different WA executable layout.
     WaVersion { found: String, supported: String },
-    /// The two-phase flag never reached phase two: the round was aborted
-    /// between opening the recorder and finishing the file. An unplayable
-    /// file is the intended outcome, and it must not read as a valid one.
-    Incomplete,
+    /// The footer is ours, but the lengths it records do not add up to the
+    /// file: bytes were cut out of, or added to, the replay.
+    TrailerLength {
+        wa_len: u64,
+        trailer_len: u64,
+        file_len: u64,
+    },
+    /// The footer is ours, but the trailer's CRC does not match: the file was
+    /// damaged after it was written.
+    TrailerCrc { expected: u32, found: u32 },
+    /// Pack files recorded as `.WFAssets` references that the local
+    /// collection does not have (or has, but tampered). Every one is named.
+    MissingAssets { missing: Vec<[u8; 32]> },
     /// A section the reader needs is absent.
     MissingSection { tag: &'static str },
     /// A section tag this build has never heard of. Refused rather than
@@ -68,7 +74,6 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::NotAContainer => write!(f, "not a WormForge replay: magic is not \"WFRP\""),
             Error::Truncated { at, wanted, got } => write!(
                 f,
                 "truncated at byte {at}: wanted {wanted} more bytes, {got} available"
@@ -81,10 +86,26 @@ impl fmt::Display for Error {
                 f,
                 "replay was recorded for WA {found}; this build supports {supported}"
             ),
-            Error::Incomplete => write!(
+            Error::TrailerLength {
+                wa_len,
+                trailer_len,
+                file_len,
+            } => write!(
                 f,
-                "replay is marked incomplete: recording did not reach the end of the round"
+                "replay trailer is damaged: {wa_len} WA bytes + {trailer_len} trailer bytes \
+                 do not fit a {file_len}-byte file"
             ),
+            Error::TrailerCrc { expected, found } => write!(
+                f,
+                "replay trailer is damaged: CRC {found:08x}, expected {expected:08x}"
+            ),
+            Error::MissingAssets { missing } => {
+                write!(f, "{} asset(s) missing from the .WFAssets collection:", missing.len())?;
+                for sha in missing {
+                    write!(f, " {}", assets::sha256::to_hex(sha))?;
+                }
+                Ok(())
+            }
             Error::MissingSection { tag } => {
                 write!(f, "replay is missing its {} section", tag.trim())
             }

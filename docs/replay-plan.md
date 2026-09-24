@@ -1,5 +1,9 @@
 # WormForge replay: `.WF_WAgame`
 
+> **Historical.** The `.WF_WAgame` container this plan built was replaced on
+> 2026-09-24 by a trailer on WA's own `.WAgame`; see
+> [`replay-wagame-plan.md`](replay-wagame-plan.md) and [`replay.md`](replay.md).
+
 > **Status: W0 complete and passed (2026-09-22). W2 recording, W3 playback,
 > and the W4 synchronized-input path are live-accepted. The final W4 build
 > completed a two-peer, multi-turn sentry/Wormcraft round with all 77 stock

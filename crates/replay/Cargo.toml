@@ -14,4 +14,6 @@ license.workspace = true
 # `rust_backend` keeps the deflate implementation pure Rust, which matters for
 # the i686 Windows target where a system zlib may not exist.
 [dependencies]
+# SHA-256 for `.WFAssets` references. Pure std, host-testable like this crate.
+assets = { path = "../assets" }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

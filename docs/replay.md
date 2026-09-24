@@ -1,53 +1,103 @@
 # Replay
 
-W0 and W1 established deterministic simulation and stable pack APIs. W2 recording
-and W3 playback of `.WF_WAgame` containers are live-accepted.
+A WormForge replay is WA's own `.WAgame` with a trailer appended. WA plays it
+as an ordinary replay and stops at its own end-of-stream; WormForge reads the
+trailer and re-simulates the match with the exact packs that ran. One file
+per game: nothing sits beside it. (Formats before 2026-09-24 wrote a separate
+`.WF_WAgame`; see [Old `.WF_WAgame` files](#old-wf_wagame-files).)
 
-During a recorded round, WormForge writes an incomplete container beside WA's
-ordinary replay plus capped temporary input and checkpoint streams. After WA's
-shutdown closes its replay writer, WormForge embeds the original `.WAgame`
-bytes and the exact loaded pack files, marks the container complete, and
-publishes it atomically. A crash or write failure leaves `complete = false`,
-which playback will refuse instead of trying to simulate a partial match.
-
-The first live round-trip passed on 2026-09-22. A 1,057-frame round produced a
-complete container with 22 checkpoints and 9 archived packs containing 367
-files. Extracting `[wa]` returned all 8,313 bytes with the same SHA-256 as WA's
-original, and finalization removed both temporary streams.
-
-After finishing a local round, inspect the file written beside WA's `.WAgame`:
-
-```sh
-cargo run -p replay --bin wf-replay -- inspect "/path/to/round.WF_WAgame"
-cargo run -p replay --bin wf-replay -- extract "/path/to/round.WF_WAgame" /tmp/round.WAgame
-cmp "/path/to/round.WAgame" /tmp/round.WAgame
+```text
+<name>.WAgame
+  WA's bytes, untouched
+  trailer
+    [hdr]  WA version, wkLua build, modset, .WFAssets release
+    [pack] every loaded pack: mod.toml and Lua embedded; assets embedded,
+           or referenced by SHA-256 when the .WFAssets collection holds them
+    [wf]   input stream, one sample per simulation frame
+    [chk]  sync checkpoints every 50 frames
+  footer   32 bytes: "WFTR", format, lengths, CRC32
 ```
 
-`inspect` validates the directory, complete flag, pack archive, input stream
-and checkpoints before printing their counts and frame range. `extract` writes
-the embedded vanilla section unchanged.
+The design and the evidence behind it are in
+[`replay-wagame-plan.md`](replay-wagame-plan.md); the collection is described
+in [`wfassets.md`](wfassets.md).
 
-Playback hooks WA's mode-1 `ReplayLoader` before it opens the selected file.
-Selecting a `.WF_WAgame` directly uses that container. Selecting an ordinary
-`.WAgame` from WA's replay browser now uses its same-name `.WF_WAgame` sibling
-when present; without a sibling it remains an ordinary stock replay. WormForge
-validates the container, extracts `[wa]`, redirects WA to that ordinary replay,
-and loads the archived packs from a private temporary directory. Installed
-packs are ignored. Recorded key/pointer samples replace OS input at their
-matching simulation frame; each checkpoint compares RNG, worms, and actors
-separately and records the first differing component as an error.
+## Recording
 
-The W3 acceptance replay completed all 1,057 frames and all 22 checkpoints with
-no mismatch. For normal playback, keep the `.WF_WAgame` beside the original
-`.WAgame` and select the ordinary replay in WA's replay browser.
+While a round runs, WormForge writes the input and checkpoint streams into
+`replay-pending/<pid>-<n>/` in the WormForge data directory, next to the pack
+table and a note naming the `.WAgame`. The streams are handed to the OS once a
+second. When the round ends and WA has closed its file, WormForge appends the
+trailer and atomically replaces the `.WAgame`, then removes the pending
+directory. Having a trailer therefore means the recording is complete; there
+is no half-written state for playback to guess about.
 
-Playback refuses incomplete containers, unsupported format or WA versions,
-unsafe archived paths, oversized pack tables, and malformed input/checkpoint
-streams before starting the custom simulation.
+Pack files whose exact bytes are in `WormForge.WFAssets` are stored as 32-byte
+references. Lua and `mod.toml` are always embedded. Without a collection
+installed, everything is embedded and the replay is simply larger.
 
-The final W3a build was then used for another live recording: 1,173 frames and
-24 checkpoints, with all nine packs archived. Its extracted 5,951-byte vanilla
-replay was byte-identical to WA's original.
+### When WA crashes mid-round
+
+A crash before the round ends leaves the `.WAgame` looking vanilla and the
+pending directory behind. The next WA start (or the next round boundary)
+finalises it and logs `replay recorder: recovered <path>`. Up to a second of
+input before the crash can be missing; playback then verifies up to that
+point and stops with `input stream ended`.
+
+A leftover that cannot be finalised -- its `.WAgame` was deleted, or a stream
+is torn -- is renamed `*.failed`, logged once, and that game **stays a plain
+vanilla replay**. Recovery cannot help if the pending directory itself is
+gone. Directories belonging to another running WA are left alone.
+
+## Playback
+
+Playback hooks WA's mode-1 `ReplayLoader` before it opens the file:
+
+1. No footer: a vanilla replay, left to WA untouched.
+2. A footer that does not check out (wrong format version, lengths that do
+   not add up, CRC mismatch) is **refused**, never played as vanilla: that
+   would be a different match.
+3. Collection references are resolved from the local `WormForge.WFAssets`,
+   each blob re-hashed on read. If any is missing or tampered, playback is
+   refused naming every hash and the collection release the replay was
+   recorded with -- the answer is a newer WormForge release.
+4. The archived packs are written to a private directory and loaded instead
+   of the installed ones.
+5. WA reads the file itself. Recorded key/pointer samples replace OS input at
+   their frame, and each checkpoint compares RNG, worms and actors separately,
+   logging the first differing component.
+
+Under the macOS Wine bundle WA can hand the loader a host path with a drive
+letter glued on (`C:/Users/<you>/Applications/...`), which does not exist
+inside Wine. Playback then looks for the same file name in `User/Games`.
+
+A successful run logs `replay player: accepted ... N assets from the
+collection` before the first frame and `completed ... with all N frames and M
+checkpoints verified` at the end.
+
+## Inspecting a replay
+
+```sh
+cargo run -p replay --bin wf-replay -- inspect "/path/to/round.WAgame"
+cargo run -p replay --bin wf-replay -- extract "/path/to/round.WAgame" /tmp/vanilla.WAgame
+```
+
+`inspect` validates the footer, CRC and directory, then prints the header,
+stream counts, frame range, and every pack file as `Raw(n bytes)` or
+`Asset(sha256)`. `extract` writes WA's own bytes -- the replay without the
+trailer.
+
+First live result, 2026-09-24: a 3,057-frame round with `gravler_strike` and
+`sentry_gun` produced a 293 KB `.WAgame` (111 KB WA, 144 KB packs with 11
+collection references, 37 KB input, 62 checkpoints), completed at match end,
+and played back from the collection with checkpoints matching.
+
+## Old `.WF_WAgame` files
+
+Format 1 wrote the WormForge data to a `.WF_WAgame` beside the `.WAgame`.
+There is no compatibility path: those files are ignored, and their `.WAgame`
+plays as a vanilla replay. To watch one as recorded, use the build it was
+recorded with.
 
 ## W0: the determinism probe
 
@@ -433,9 +483,9 @@ The first playback attempt selected WA's vanilla `.WAgame`, visible in the log
 because it said only `replay recorder: playback is active; not recording` and
 never `replay player: accepted`. The container itself is complete: the main
 matrix round has all 8,814 input frames, key mask `0xff`, 350 held-button
-frames, and 281 pointer moves while held. Automatic sibling selection fixes
-the replay-browser path; a real WormForge playback must log `replay player:
-accepted` before the first frame.
+frames, and 281 pointer moves while held. (Format 1 then gained automatic
+sibling selection; format 2 has no sibling at all.) A real WormForge playback
+must log `replay player: accepted` before the first frame.
 
 Compare the automatic state snapshots with
 `python3 tools/sync-state-diff.py first-wkLua.log second-wkLua.log`. It selects
@@ -509,7 +559,7 @@ hole, which the README already flags as "local until extra packets exist".
 actually used, versions them (`Invalid PX replay version :`), and reloads them
 from there on playback. **PX archives the scripts rather than fingerprinting
 them** — a replay stays playable after you edit or delete the pack. That is the
-model for `.WF_WAgame`. (The folder is empty on this install; no PX replay was
+model for WormForge's `[pack]` section. (The folder is empty on this install; no PX replay was
 ever recorded here.)
 
 **What does its desync machinery compare?** A `DesyncLogging` INI switch

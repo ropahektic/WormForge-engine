@@ -1,5 +1,9 @@
-//! SHA-256 (FIPS 180-4) for verifying downloaded pack archives against the
-//! index. Eighty lines beats another crate in `wkLua.dll`.
+//! SHA-256 (FIPS 180-4). Keys the `.WFAssets` collection and verifies
+//! downloaded pack archives against the mod index. Eighty lines beats another
+//! crate in `wkLua.dll`.
+//!
+//! Lives here rather than in `engine` so it is testable on the host: `engine`
+//! cannot compile on darwin (minhook rejects it).
 
 const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -51,8 +55,8 @@ fn compress(state: &mut [u32; 8], block: &[u8]) {
     }
 }
 
-/// Lower-case hex digest.
-pub fn hex(data: &[u8]) -> String {
+/// The 32-byte digest.
+pub fn digest(data: &[u8]) -> [u8; 32] {
     let mut state: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
         0x5be0cd19,
@@ -72,16 +76,49 @@ pub fn hex(data: &[u8]) -> String {
     for block in tail.chunks_exact(64) {
         compress(&mut state, block);
     }
-    let mut out = String::with_capacity(64);
-    for word in state {
-        out.push_str(&format!("{word:08x}"));
+    let mut out = [0u8; 32];
+    for (chunk, word) in out.chunks_exact_mut(4).zip(state) {
+        chunk.copy_from_slice(&word.to_be_bytes());
     }
     out
 }
 
+/// Lower-case hex digest.
+pub fn hex(data: &[u8]) -> String {
+    to_hex(&digest(data))
+}
+
+/// Lower-case hex of a digest.
+pub fn to_hex(digest: &[u8; 32]) -> String {
+    digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Parse 64 hex digits (either case) back into a digest.
+pub fn from_hex(text: &str) -> Option<[u8; 32]> {
+    let text = text.as_bytes();
+    if text.len() != 64 {
+        return None;
+    }
+    let nibble = |c: u8| (c as char).to_digit(16).map(|d| d as u8);
+    let mut out = [0u8; 32];
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = nibble(text[2 * i])? << 4 | nibble(text[2 * i + 1])?;
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::hex;
+    use super::{digest, from_hex, hex, to_hex};
+
+    #[test]
+    fn hex_round_trips() {
+        let d = digest(b"abc");
+        assert_eq!(from_hex(&to_hex(&d)), Some(d));
+        assert_eq!(from_hex(&to_hex(&d).to_uppercase()), Some(d));
+        assert_eq!(from_hex("abc"), None);
+        assert_eq!(from_hex(&"zz".repeat(32)), None);
+    }
 
     #[test]
     fn known_vectors() {

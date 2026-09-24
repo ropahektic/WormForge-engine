@@ -1,15 +1,24 @@
-//! Recorder and player for `.WF_WAgame`.
+//! Recorder and player for WormForge replays: WA's own `.WAgame` with a
+//! trailer appended (`crates/replay`, `docs/replay-wagame-plan.md`).
 //!
-//! WA keeps writing its ordinary `.WAgame`; this module records only the
-//! WormForge input/checkpoint streams alongside it. A phase-one container is
-//! created with `complete = false` as soon as WA supplies an output filename.
-//! At the next match boundary, after WA has closed its file, the vanilla bytes
-//! are embedded verbatim and an atomic replace publishes `complete = true`.
-//! A crash or write failure therefore leaves a file playback will refuse.
+//! WA keeps writing its ordinary `.WAgame`. While the match runs, this module
+//! records the WormForge input and checkpoint streams into a pending
+//! directory under `wormforge_dir()`, next to the pack table and a note naming
+//! the `.WAgame`. At the next match boundary, after WA has closed its file,
+//! the trailer is appended and the `.WAgame` atomically replaced -- so a file
+//! with a trailer is always a complete recording.
 //!
-//! On playback the `ReplayLoader` hook validates the container before WA sees
-//! it, materialises the archived packs in a private directory, extracts the
-//! byte-exact `[wa]` section, and redirects WA's input path to that file.
+//! A crash before that leaves the `.WAgame` vanilla-looking and the pending
+//! directory behind. `recover_pending` finalises such leftovers at DLL start
+//! and at match boundaries; one that cannot be finalised is set aside and
+//! logged, and its game stays a vanilla replay.
+//!
+//! Pack files whose bytes are in the `.WFAssets` collection are recorded as
+//! references. On playback the `ReplayLoader` hook finds the trailer,
+//! resolves references from the collection (refusing, with every missing
+//! hash named, if it cannot), materialises the packs in a private directory,
+//! and lets WA read the file itself: WA stops at its own end-of-stream and
+//! never sees the trailer.
 
 use crate::log::{wa_directory, wormforge_dir, BUILD_ID};
 use crate::{log_error, log_line};
@@ -18,18 +27,14 @@ use game::offsets::{
     GAME_WORLD_FRAME_COUNTER, GAME_WORLD_RECORDED_FRAME, G_REPLAY_PREFIX, REPLAY_ACTIVE,
     REPLAY_INPUT_PATH, REPLAY_OUTPUT_PATH, REPLAY_PATH_CAPACITY,
 };
-use replay::{Checkpoint, Header, InputSample, Pack, PackFile, MAX_WF_BYTES};
-use std::ffi::OsString;
+use assets::Collection;
+use replay::{Checkpoint, Content, Header, InputSample, Pack, PackFile, Trailer, MAX_WF_BYTES};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Read, Write};
-use std::os::windows::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use weapons::{modset_fingerprint, LoadedMod};
-use windows_sys::Win32::Storage::FileSystem::{
-    MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
-};
 
 const CHECKPOINT_EVERY: i64 = 50;
 
@@ -47,18 +52,16 @@ enum State {
 static STATE: Mutex<State> = Mutex::new(State::Idle);
 static PLAYBACK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
+/// A recording in progress. Its streams live in `dir` until `complete`
+/// appends them to the `.WAgame`.
 struct Recorder {
     wa_path: PathBuf,
-    output: PathBuf,
-    wf_path: PathBuf,
-    chk_path: PathBuf,
+    dir: PathBuf,
     wf: BufWriter<File>,
     chk: BufWriter<File>,
     wf_bytes: u64,
     chk_bytes: u64,
     last_frame: Option<i64>,
-    header: Header,
-    pack: Vec<u8>,
 }
 
 struct Player {
@@ -127,56 +130,49 @@ pub unsafe fn redirect_playback(prefix: *mut u8) -> Result<bool, String> {
         "replay player: mode-1 loader selected {}",
         selected.display()
     ));
-    let source = if has_extension(&selected, "WF_WAgame") {
+    // Under the macOS Wine bundle, WA can hand the loader a host path with a
+    // drive letter glued on ("C:/Users/<you>/Applications/...") that does not
+    // exist inside Wine. WA copes by looking in User/Games; so do we.
+    let source = if selected.is_file() {
         selected
-    } else if has_extension(&selected, "WAgame") {
-        let adjacent = container_path(&selected)?;
-        let games = wa_directory().join("User").join("Games").join(
-            adjacent
-                .file_name()
-                .ok_or_else(|| format!("replay path has no filename: {}", selected.display()))?,
-        );
-        let sibling = if adjacent.is_file() {
-            adjacent
-        } else if games.is_file() {
-            log_line(&format!(
-                "replay player: loader path was relocated; found container in User/Games at {}",
-                games.display()
-            ));
-            games
-        } else {
-            log_line(&format!(
-                "replay player: no WormForge sibling for {} (also checked {})",
-                selected.display(),
-                games.display()
-            ));
-            return Ok(false);
-        };
-        log_line(&format!(
-            "replay player: selected vanilla replay has WormForge sibling {}",
-            sibling.display()
-        ));
-        sibling
     } else {
-        log_line(&format!(
-            "replay player: unsupported loader filename {}; leaving it to WA",
-            selected.display()
-        ));
-        return Ok(false);
+        let games = selected
+            .file_name()
+            .map(|name| wa_directory().join("User").join("Games").join(name));
+        match games {
+            Some(games) if games.is_file() => {
+                log_line(&format!(
+                    "replay player: loader path does not exist; using {}",
+                    games.display()
+                ));
+                games
+            }
+            _ => {
+                log_line("replay player: loader path does not exist; leaving it to WA");
+                return Ok(false);
+            }
+        }
     };
     let bytes = read_all(&source)?;
-    let container = replay::Container::parse(&bytes).map_err(|e| e.to_string())?;
-    container
+    let trailer = match Trailer::find(&bytes).map_err(|e| e.to_string())? {
+        Some(trailer) => trailer,
+        None => {
+            log_line(&format!(
+                "replay player: {} has no WormForge trailer; vanilla playback",
+                source.display()
+            ));
+            return Ok(false);
+        }
+    };
+    trailer
         .require_wa_version("3.8.1")
         .map_err(|e| e.to_string())?;
-    let header = container.header().clone();
-    let wa = container.wa().map_err(|e| e.to_string())?.to_vec();
-    let packs = replay::decode_pack(container.pack().map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    let inputs = replay::decode_inputs(container.wf().map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    let checkpoints = replay::decode_checkpoints(container.chk().map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    let header = trailer.header().clone();
+    let packs = replay::decode_pack(trailer.pack()).map_err(|e| e.to_string())?;
+    let references = replay::asset_refs(&packs).len();
+    let packs = resolve_assets(packs, header.collection_version)?;
+    let inputs = replay::decode_inputs(trailer.wf()).map_err(|e| e.to_string())?;
+    let checkpoints = replay::decode_checkpoints(trailer.chk()).map_err(|e| e.to_string())?;
 
     {
         let mut state = STATE.lock().unwrap_or_else(|p| p.into_inner());
@@ -189,9 +185,8 @@ pub unsafe fn redirect_playback(prefix: *mut u8) -> Result<bool, String> {
     }
     let mods_root = temp_root.join("Mods");
     materialize_packs(&mods_root, &packs)?;
-    let extracted = temp_root.join("playback.WAgame");
-    write_synced(&extracted, &wa)?;
-    unsafe { write_prefix_path(prefix, REPLAY_INPUT_PATH, &extracted)? };
+    // WA reads the file itself and stops at its own end-of-stream; the input
+    // path stays exactly as WA chose it.
     unsafe { prefix.add(REPLAY_ACTIVE).write(1) };
 
     let player = Player {
@@ -206,7 +201,8 @@ pub unsafe fn redirect_playback(prefix: *mut u8) -> Result<bool, String> {
         failure: None,
     };
     log_line(&format!(
-        "replay player: accepted {} ({} frames, {} checkpoints, {} archived packs)",
+        "replay player: accepted {} ({} frames, {} checkpoints, {} archived packs, \
+         {references} assets from the collection)",
         source.display(),
         player.inputs.len(),
         player.checkpoints.len(),
@@ -394,14 +390,23 @@ unsafe fn record_frame(recorder: &mut Recorder, world: *mut u8) -> Result<(), St
         let bytes = replay::encode_checkpoints(&[checkpoint]).map_err(|e| e.to_string())?;
         append_capped(&mut recorder.chk, &mut recorder.chk_bytes, &bytes)
             .map_err(|e| format!("checkpoint stream: {e}"))?;
+        // Hand both streams to the OS once a second. A crash then loses at
+        // most a second of input rather than everything still buffered, so
+        // `recover_pending` has a stream that reaches almost to the end.
+        recorder.wf.flush().map_err(|e| format!("input stream: {e}"))?;
+        recorder.chk.flush().map_err(|e| format!("checkpoint stream: {e}"))?;
     }
     recorder.last_frame = Some(frame);
     Ok(())
 }
 
-/// Complete the previous recording at the next match boundary. If WA's file
-/// is absent or still unreadable, the phase-one container remains incomplete.
+/// Complete the previous recording at the next match boundary. Leftovers
+/// from earlier boundaries are retried first, so a completion that fails now
+/// (WA's file still unreadable) gets another chance at the next one rather
+/// than being set aside at once. A failed completion keeps its pending
+/// directory; the `.WAgame` stays vanilla until one succeeds.
 pub fn finish() {
+    recover_pending();
     let mut state = STATE.lock().unwrap_or_else(|p| p.into_inner());
     finish_state(&mut state);
 }
@@ -436,8 +441,9 @@ fn try_start(state: &mut State) {
     match Recorder::start(wa_path, &mods) {
         Ok(recorder) => {
             log_line(&format!(
-                "replay recorder: pending {}",
-                recorder.output.display()
+                "replay recorder: recording {} (streams in {})",
+                recorder.wa_path.display(),
+                recorder.dir.display()
             ));
             *state = State::Recording(recorder);
         }
@@ -447,35 +453,33 @@ fn try_start(state: &mut State) {
 
 impl Recorder {
     fn start(wa_path: PathBuf, mods: &[LoadedMod]) -> Result<Self, String> {
-        let output = container_path(&wa_path)?;
-        let wf_path = suffix(&output, ".wf.tmp");
-        let chk_path = suffix(&output, ".chk.tmp");
         let packs = archive_packs(mods)?;
-        let pack = replay::encode_pack(&packs).map_err(|e| e.to_string())?;
+        let collection = collection();
+        let pack = replay::encode_dedup(&packs, |sha| collection.is_some_and(|c| c.contains(sha)))
+            .map_err(|e| e.to_string())?;
         let header = Header {
             wa_version: "3.8.1".into(),
             build_hash: BUILD_ID.into(),
             modset: modset_fingerprint(mods),
-            flags: 0,
-            complete: false,
+            collection_version: collection.map_or(0, |c| c.version()),
         };
-        let phase_one =
-            replay::assemble(&header, &pack, b"", b"", b"").map_err(|e| e.to_string())?;
-        atomic_write(&output, &phase_one).map_err(|e| e.to_string())?;
-        let wf = create_stream(&wf_path).map_err(|e| e.to_string())?;
-        let chk = create_stream(&chk_path).map_err(|e| e.to_string())?;
+        let dir = pending_root().join(format!("{}-{}", std::process::id(), unique_suffix()));
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        game::overwrite::write(&dir.join(PENDING_PACK), &pack)
+            .map_err(|e| format!("{}: {e}", dir.display()))?;
+        let wf = create_stream(&dir.join(PENDING_WF)).map_err(|e| e.to_string())?;
+        let chk = create_stream(&dir.join(PENDING_CHK)).map_err(|e| e.to_string())?;
+        // The note last: a directory without one is not yet a recording.
+        game::overwrite::write(&dir.join(PENDING_NOTE), write_note(&wa_path, &header).as_bytes())
+            .map_err(|e| format!("{}: {e}", dir.display()))?;
         Ok(Self {
             wa_path,
-            output,
-            wf_path,
-            chk_path,
+            dir,
             wf,
             chk,
             wf_bytes: 0,
             chk_bytes: 0,
             last_frame: None,
-            header,
-            pack,
         })
     }
 
@@ -484,21 +488,218 @@ impl Recorder {
         self.chk.flush().map_err(|e| e.to_string())?;
         self.wf.get_ref().sync_all().map_err(|e| e.to_string())?;
         self.chk.get_ref().sync_all().map_err(|e| e.to_string())?;
-        let wa = read_all(&self.wa_path)?;
-        let wf = read_all(&self.wf_path)?;
-        let chk = read_all(&self.chk_path)?;
-        // Decode before publishing. This catches a torn temp stream even if
-        // each individual append succeeded.
-        replay::decode_inputs(&wf).map_err(|e| e.to_string())?;
-        replay::decode_checkpoints(&chk).map_err(|e| e.to_string())?;
-        self.header.complete = true;
-        let file = replay::assemble(&self.header, &self.pack, &wa, &wf, &chk)
-            .map_err(|e| e.to_string())?;
-        atomic_write(&self.output, &file).map_err(|e| e.to_string())?;
-        let _ = std::fs::remove_file(&self.wf_path);
-        let _ = std::fs::remove_file(&self.chk_path);
-        Ok(self.output)
+        drop(self.wf);
+        drop(self.chk);
+        finalise(&self.dir)?;
+        Ok(self.wa_path)
     }
+}
+
+const PENDING_NOTE: &str = "note.txt";
+const PENDING_PACK: &str = "pack.bin";
+const PENDING_WF: &str = "wf.bin";
+const PENDING_CHK: &str = "chk.bin";
+
+fn pending_root() -> PathBuf {
+    wormforge_dir().join("replay-pending")
+}
+
+fn unique_suffix() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+}
+
+/// `key=value` lines: the `.WAgame` the trailer belongs on, and its header.
+fn write_note(wa_path: &Path, header: &Header) -> String {
+    format!(
+        "target={}\nwa_version={}\nbuild_hash={}\nmodset={}\ncollection_version={}\n",
+        wa_path.display(),
+        header.wa_version,
+        header.build_hash,
+        header.modset,
+        header.collection_version
+    )
+}
+
+fn read_note(text: &str) -> Result<(PathBuf, Header), String> {
+    let mut target = None;
+    let mut header = Header::default();
+    for line in text.lines() {
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        match key {
+            "target" => target = Some(PathBuf::from(value)),
+            "wa_version" => header.wa_version = value.into(),
+            "build_hash" => header.build_hash = value.into(),
+            "modset" => header.modset = value.into(),
+            "collection_version" => {
+                header.collection_version = value
+                    .parse()
+                    .map_err(|_| format!("bad collection_version {value:?}"))?
+            }
+            _ => {}
+        }
+    }
+    Ok((target.ok_or("note names no target")?, header))
+}
+
+/// Append a pending recording's trailer to its `.WAgame` and remove the
+/// pending directory. The `.WAgame` is replaced atomically: a crash leaves
+/// either WA's file or the finished one.
+fn finalise(dir: &Path) -> Result<PathBuf, String> {
+    let note = std::fs::read_to_string(dir.join(PENDING_NOTE))
+        .map_err(|e| format!("{}: {e}", dir.display()))?;
+    let (target, header) = read_note(&note)?;
+    let pack = read_all(&dir.join(PENDING_PACK))?;
+    let wf = read_all(&dir.join(PENDING_WF))?;
+    let chk = read_all(&dir.join(PENDING_CHK))?;
+    // Decode before publishing: catches a torn stream even when every
+    // individual append succeeded.
+    replay::decode_inputs(&wf).map_err(|e| e.to_string())?;
+    replay::decode_checkpoints(&chk).map_err(|e| e.to_string())?;
+    let wa = read_all(&target)?;
+    if Trailer::find(&wa).map_err(|e| format!("{}: {e}", target.display()))?.is_some() {
+        // Finalised already; the crash came between the replace and the
+        // clean-up.
+        log_line(&format!(
+            "replay recorder: {} already carries its trailer",
+            target.display()
+        ));
+    } else {
+        let file = replay::append_trailer(&wa, &header, &pack, &wf, &chk)
+            .map_err(|e| e.to_string())?;
+        game::overwrite::write(&target, &file).map_err(|e| format!("{}: {e}", target.display()))?;
+    }
+    if let Err(e) = std::fs::remove_dir_all(dir) {
+        log_error(&format!("replay recorder: cannot remove {}: {e}", dir.display()));
+    }
+    Ok(target)
+}
+
+/// Finalise recordings a crash or a failed boundary left behind. Skips the
+/// active recording and any directory owned by another running WA. One that
+/// cannot be finalised is renamed `*.failed` so it is reported once, not on
+/// every boundary; its `.WAgame` stays a vanilla replay.
+pub fn recover_pending() {
+    let active = {
+        let state = STATE.lock().unwrap_or_else(|p| p.into_inner());
+        match &*state {
+            State::Recording(r) => Some(r.dir.clone()),
+            _ => None,
+        }
+    };
+    let Ok(entries) = std::fs::read_dir(pending_root()) else {
+        return;
+    };
+    let me = std::process::id();
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !dir.is_dir() || name.ends_with(".failed") || Some(&dir) == active.as_ref() {
+            continue;
+        }
+        let owner = name.split('-').next().and_then(|p| p.parse::<u32>().ok());
+        if owner.is_some_and(|pid| pid != me && process_alive(pid)) {
+            continue;
+        }
+        if !dir.join(PENDING_NOTE).is_file() {
+            // Crashed during start: no recording was made.
+            let _ = std::fs::remove_dir_all(&dir);
+            continue;
+        }
+        match finalise(&dir) {
+            Ok(path) => log_line(&format!("replay recorder: recovered {}", path.display())),
+            Err(e) => {
+                log_error(&format!(
+                    "replay recorder: cannot recover {}: {e}; that game stays a vanilla replay",
+                    dir.display()
+                ));
+                let _ = std::fs::rename(&dir, suffix(&dir, ".failed"));
+            }
+        }
+    }
+}
+
+fn process_alive(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return false;
+        }
+        let mut code = 0u32;
+        let alive = GetExitCodeProcess(handle, &mut code) != 0 && code == STILL_ACTIVE as u32;
+        CloseHandle(handle);
+        alive
+    }
+}
+
+/// The `.WFAssets` collection next to `wkLua.dll`, index only, loaded once.
+fn collection() -> Option<&'static Collection<File>> {
+    static COLLECTION: OnceLock<Option<Collection<File>>> = OnceLock::new();
+    COLLECTION
+        .get_or_init(|| {
+            let path = wa_directory().join(assets::FILE_NAME);
+            if !path.is_file() {
+                log_line(&format!(
+                    "replay: no {} next to wkLua.dll; replays embed every asset and \
+                     cannot play ones that reference the collection",
+                    assets::FILE_NAME
+                ));
+                return None;
+            }
+            match Collection::open(&path) {
+                Ok(c) => {
+                    log_line(&format!(
+                        "replay: {} release {} ({} assets)",
+                        assets::FILE_NAME,
+                        c.version(),
+                        c.entries().len()
+                    ));
+                    Some(c)
+                }
+                Err(e) => {
+                    log_error(&format!("replay: {} unusable: {e}", path.display()));
+                    None
+                }
+            }
+        })
+        .as_ref()
+}
+
+/// Fill in every collection reference, or refuse naming what is missing and
+/// which collection release the replay was recorded with.
+fn resolve_assets(packs: Vec<Pack>, recorded_with: u32) -> Result<Vec<Pack>, String> {
+    if replay::asset_refs(&packs).is_empty() {
+        return Ok(packs);
+    }
+    let collection = collection();
+    replay::resolve_packs(packs, |sha| {
+        let c = collection?;
+        match c.get(sha) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                // A tampered blob: loud, and treated as missing.
+                log_error(&format!("replay: {e}"));
+                None
+            }
+        }
+    })
+    .map_err(|e| {
+        let have = collection.map_or("no collection".to_string(), |c| {
+            format!("collection release {}", c.version())
+        });
+        format!(
+            "{e}. This replay was recorded with collection release {recorded_with}; \
+             this install has {have}. A newer WormForge release is needed."
+        )
+    })
 }
 
 fn finish_state(state: &mut State) {
@@ -551,9 +752,13 @@ fn finish_state(state: &mut State) {
 
 fn fail(state: &mut State, detail: String) {
     log_error(&format!(
-        "replay recorder stopped: {detail}; incomplete container retained"
+        "replay recorder stopped: {detail}; this game stays a vanilla replay"
     ));
-    *state = State::Failed;
+    if let State::Recording(recorder) = std::mem::replace(state, State::Failed) {
+        drop(recorder.wf);
+        drop(recorder.chk);
+        let _ = std::fs::rename(&recorder.dir, suffix(&recorder.dir, ".failed"));
+    }
 }
 
 fn fail_player(player: &mut Player, detail: String) {
@@ -607,42 +812,8 @@ fn absolute_wa_path(path: PathBuf) -> PathBuf {
     }
 }
 
-fn has_extension(path: &Path, expected: &str) -> bool {
-    path.extension()
-        .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case(expected))
-}
-
-unsafe fn write_prefix_path(prefix: *mut u8, offset: usize, path: &Path) -> Result<(), String> {
-    let text = path.to_string_lossy();
-    let bytes = text.as_bytes();
-    if bytes.contains(&0) {
-        return Err("extracted replay path contains a NUL byte".into());
-    }
-    if bytes.len() >= REPLAY_PATH_CAPACITY {
-        return Err(format!(
-            "extracted replay path is {} bytes; WA accepts at most {}",
-            bytes.len(),
-            REPLAY_PATH_CAPACITY - 1
-        ));
-    }
-    let target =
-        unsafe { std::slice::from_raw_parts_mut(prefix.add(offset), REPLAY_PATH_CAPACITY) };
-    target.fill(0);
-    target[..bytes.len()].copy_from_slice(bytes);
-    Ok(())
-}
-
-fn container_path(wa: &Path) -> Result<PathBuf, String> {
-    let stem = wa
-        .file_stem()
-        .ok_or_else(|| format!("output replay has no filename: {}", wa.display()))?;
-    let mut name = stem.to_os_string();
-    name.push(".WF_WAgame");
-    Ok(wa.with_file_name(name))
-}
-
 fn suffix(path: &Path, text: &str) -> PathBuf {
-    let mut name: OsString = path.as_os_str().to_owned();
+    let mut name = path.as_os_str().to_owned();
     name.push(text);
     PathBuf::from(name)
 }
@@ -653,18 +824,6 @@ fn create_stream(path: &Path) -> std::io::Result<BufWriter<File>> {
     }
     // Not truncate(true): see game::overwrite.
     game::overwrite::create(path).map(BufWriter::new)
-}
-
-fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-    }
-    let mut file =
-        game::overwrite::create(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    file.write_all(bytes)
-        .and_then(|_| file.flush())
-        .and_then(|_| file.sync_all())
-        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn materialize_packs(root: &Path, packs: &[Pack]) -> Result<(), String> {
@@ -695,8 +854,11 @@ fn materialize_packs(root: &Path, packs: &[Pack]) -> Result<(), String> {
                 .write(true)
                 .open(&output)
                 .map_err(|e| format!("{}: {e}", output.display()))?;
+            let Content::Raw(bytes) = &file.content else {
+                return Err(format!("pack {} file {} was never resolved", pack.id, file.path));
+            };
             handle
-                .write_all(&file.raw)
+                .write_all(bytes)
                 .map_err(|e| format!("{}: {e}", output.display()))?;
         }
     }
@@ -732,35 +894,6 @@ fn read_all(path: &Path) -> Result<Vec<u8>, String> {
         .and_then(|mut f| f.read_to_end(&mut bytes))
         .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(bytes)
-}
-
-fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let temp = suffix(path, ".tmp");
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    {
-        // A temp left by a crash must be replaced, not truncated: see
-        // game::overwrite.
-        let mut file = game::overwrite::create(&temp)?;
-        file.write_all(bytes)?;
-        file.flush()?;
-        file.sync_all()?;
-    }
-    let from: Vec<u16> = temp.as_os_str().encode_wide().chain(Some(0)).collect();
-    let to: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
-    let ok = unsafe {
-        MoveFileExW(
-            from.as_ptr(),
-            to.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
-    if ok == 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
 }
 
 fn archive_packs(mods: &[LoadedMod]) -> Result<Vec<Pack>, String> {
@@ -803,7 +936,9 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PackFile>) -> Result<(),
             }
             out.push(PackFile {
                 path: parts.join("/"),
-                raw: std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?,
+                content: Content::Raw(
+                    std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?,
+                ),
             });
         }
     }
