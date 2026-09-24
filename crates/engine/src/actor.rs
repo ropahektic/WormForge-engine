@@ -2219,8 +2219,10 @@ unsafe fn list_worms(from: *mut u8) -> Vec<u32> {
         return Vec::new();
     }
     let mut out = Vec::new();
-    for team in 0..MAX_TEAMS {
-        for idx in 0..MAX_WORMS_PER_TEAM {
+    // Teams and worms are numbered from 1 (see `game::team`). Walking from 0
+    // missed team 6 and every team's eighth worm.
+    for team in game::team::team_numbers() {
+        for idx in game::team::worm_numbers() {
             if !world.is_null() {
                 let hp_off = ARENA_WORM_HP
                     + (team as usize) * WORLD_TEAM_STRIDE
