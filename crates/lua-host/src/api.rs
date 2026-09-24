@@ -8,7 +8,8 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 use weapons::{
-    parse_panel_icon, parse_stock_weapon, HomingMode, OverlayClaim, OverlayParams, StockWeapon,
+    parse_panel_icon, parse_stock_weapon, HomingMode, OverlayClaim, OverlayParams, PanelIcon,
+    StockWeapon,
 };
 
 pub struct BindContext {
@@ -569,7 +570,10 @@ fn table_to_claim(
         None => None,
     };
     let panel_icon = match get_string(&spec, "panel_icon")?.or(get_string(&spec, "icon")?) {
-        Some(s) => Some(parse_panel_icon(&s).map_err(mlua::Error::external)?),
+        Some(s) if s.to_ascii_lowercase().ends_with(".png") => Some(load_panel_icon(root, &s)?),
+        Some(s) => Some(PanelIcon::Stock(
+            parse_panel_icon(&s).map_err(mlua::Error::external)?,
+        )),
         None => None,
     };
     let actor: Option<String> = spec.get("actor")?;
@@ -872,6 +876,25 @@ fn table_to_claim(
             on_place_id,
             place_spawn,
         },
+    })
+}
+
+/// `panel_icon = "sprites/icon.png"`: a pack PNG for the weapon panel. Its
+/// size is checked against the panel window at install, where the window is
+/// read from the live icons; only the path rule is enforced here.
+fn load_panel_icon(root: &std::path::Path, relative: &str) -> mlua::Result<PanelIcon> {
+    if relative.contains("..") {
+        return Err(mlua::Error::external("panel_icon path must stay inside the pack"));
+    }
+    let bytes = std::fs::read(root.join(relative))
+        .map_err(|e| mlua::Error::external(format!("panel_icon {relative}: {e}")))?;
+    let (width, height, rgba) = gfx::load_png_rgba(&bytes)
+        .map_err(|e| mlua::Error::external(format!("panel_icon {relative}: {e}")))?;
+    Ok(PanelIcon::File {
+        path: relative.replace('\\', "/"),
+        width,
+        height,
+        rgba,
     })
 }
 

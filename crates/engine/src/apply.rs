@@ -12,7 +12,7 @@ use lua_host::{mods_root_from, run_mods};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
-use weapons::{apply_params, discover_mods, filter_requirements, modset_fingerprint, ResolveResult};
+use weapons::{apply_params, PanelIcon, discover_mods, filter_requirements, modset_fingerprint, ResolveResult};
 
 static NAMES: Mutex<Vec<CString>> = Mutex::new(Vec::new());
 /// Panel slots `copy_panel_icon` overwrote: (world, slot, original hi, original
@@ -250,15 +250,23 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             }
         }
         apply_params(&mut entry, &claim.params);
-        if let Some(icon) = claim.params.panel_icon {
-            unsafe {
-                copy_panel_icon(world, icon.index(), idx);
+        match &claim.params.panel_icon {
+            Some(PanelIcon::Stock(icon)) => {
+                unsafe {
+                    copy_panel_icon(world, icon.index(), idx);
+                }
+                log_line(&format!("{} panel icon {}", claim.mod_id, icon.name()));
             }
-            log_line(&format!(
-                "{} panel icon {}",
-                claim.mod_id,
-                icon.name()
-            ));
+            Some(PanelIcon::File { path, width, height, rgba }) => {
+                match unsafe { crate::panel_icon::install(world, idx, rgba, *width, *height) } {
+                    Ok(colours) => log_line(&format!(
+                        "{} panel icon {path} (quantized, {colours} colours)",
+                        claim.mod_id
+                    )),
+                    Err(e) => log_error(&format!("{} panel icon {path}: {e}", claim.mod_id)),
+                }
+            }
+            None => {}
         }
         crate::worm_sprite::claim(
             idx,

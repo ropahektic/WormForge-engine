@@ -5,6 +5,7 @@
 
 mod actor;
 mod apply;
+mod panel_icon;
 #[cfg(target_os = "windows")]
 mod crt;
 mod hook;

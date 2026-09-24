@@ -117,6 +117,9 @@ unsafe extern "system" fn shutdown_hook(state_buf: *mut u8) {
     if std::panic::catch_unwind(crate::apply::restore_panel_icons).is_err() {
         log_error("panic while restoring panel icons");
     }
+    if std::panic::catch_unwind(crate::panel_icon::restore).is_err() {
+        log_error("panic while restoring custom panel icons");
+    }
     let orig = ORIGINAL_SHUTDOWN.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: unsafe extern "system" fn(*mut u8) = std::mem::transmute(orig);

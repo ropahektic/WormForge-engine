@@ -1,4 +1,19 @@
 use crate::stock::StockWeapon;
+
+/// What a weapon shows in the stock weapon panel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PanelIcon {
+    /// Borrow a stock weapon's icon (`panel_icon = "banana"`).
+    Stock(StockWeapon),
+    /// A pack PNG, quantized to the stock icons' colours at install
+    /// (`panel_icon = "sprites/icon.png"`).
+    File {
+        path: String,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    },
+}
 use actors::is_drop;
 use game::weapon::WeaponEntry;
 use gfx::{FeetPlatform, SpriteStrip};
@@ -333,8 +348,8 @@ pub struct OverlayParams {
     pub cluster_wind_pct: Option<i32>,
     /// Homing discriminator written onto the cluster sub-pellet slab.
     pub cluster_homing: Option<HomingMode>,
-    /// Copy this stock weapon's hi/lo panel .img pointers onto the overlay slot.
-    pub panel_icon: Option<StockWeapon>,
+    /// The overlay slot's weapon panel icon: a stock weapon's, or a pack PNG.
+    pub panel_icon: Option<PanelIcon>,
     /// MineEntity fire_params[0] — proximity radius in pixels.
     pub mine_proximity: Option<i32>,
     /// MineEntity fire_params[1] — arm delay. Negative keeps scheme MineFuse.
