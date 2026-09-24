@@ -184,6 +184,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         equip: crate::world::equip_weapon,
         hp: crate::world::worm_hp,
         ammo: crate::world::ammo,
+        cavern: crate::world::is_cavern,
         hurt: crate::physics::hit_worm,
     });
     log_line("LuaActor: FireWeapon dispatch + StrikeFire + CreateWeaponProjectile + TeamEntity msg wrap");

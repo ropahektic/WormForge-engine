@@ -35,6 +35,13 @@ pub const TEAM_ADD_AMMO: u32 = 0x0052_2640;
 pub const TEAM_ARENA_AMMO: usize = 0x1EB4;
 /// TeamArena delay dword table. Same index as ammo.
 pub const TEAM_ARENA_DELAY: usize = 0x1FD0;
+/// Per-team alliance (team colour) -- the ammo/delay ROW. Read at
+/// `arena + TEAM_ARENA_ALLIANCE + team * WORLD_TEAM_STRIDE`, team 1-based.
+/// This is what WA's own `TeamArena__GetAmmo` (0x5225E0) and
+/// `TeamArena__AddAmmo` (0x522640) read; `WORLD_TEAM_ALLIANCE` is the same
+/// field measured from GameWorld. Not OpenWA's logical-record `+0x508`:
+/// writing through that put every team's ammo into one row.
+pub const TEAM_ARENA_ALLIANCE: usize = 0x4;
 pub const TEAM_AMMO_STRIDE: usize = 142;
 /// WormEntity__SelectWeapon — usercall EDI=this, stdcall (weapon, ammo) RET 8.
 pub const WORM_SELECT_WEAPON: u32 = 0x0051_AE50;
@@ -440,6 +447,11 @@ pub const GAME_WORLD_RNG_STATE_2: usize = 0x72F0;
 pub const GAME_WORLD_RECORDED_FRAME: usize = 0x7EF0;
 pub const GAME_WORLD_WATER_LEVEL: usize = 0x5E0;
 pub const GAME_WORLD_WATER_KILL_Y: usize = 0x5E4;
+/// `GameWorld.is_cavern` — nonzero on a cavern level. Set by
+/// `GameRuntime__InitLandscapeBorders` (0x528480) alongside the indestructible
+/// borders, so it is the flag WA itself acts on (clouds, bounds, super-weapon
+/// rules). Offset and meaning from OpenWA's GameWorld catalog.
+pub const GAME_WORLD_IS_CAVERN: usize = 0x777C;
 /// Map pixel size (GameWorld). Blas / BitGrid fallback.
 pub const GAME_WORLD_MAP_W: usize = 0x77C0;
 /// GameWorld.viewport_pixel_width / height (GameRender).
@@ -604,6 +616,7 @@ mod tests {
         assert_eq!(LANDSCAPE_COLLISION, 0x914);
         assert_eq!(LANDSCAPE_SOIL, 0x91C);
         assert_eq!(GAME_WORLD_MAP_W, 0x77C0);
+        assert_eq!(GAME_WORLD_IS_CAVERN, 0x777C);
         assert_eq!(GAME_WORLD_VIEWPORT_W, 0x77AC);
         assert_eq!(GAME_WORLD_VIEW_CX, 0x8CEC);
         assert_eq!(GAME_WORLD_VIEW_CY, 0x8CF0);
@@ -624,6 +637,10 @@ mod tests {
         assert_eq!(WORM_POISON, 0x148);
         assert_eq!(TEAM_ARENA_AMMO, 0x1EB4);
         assert_eq!(TEAM_ARENA_DELAY, 0x1FD0);
+        // Two names for one field; they must never drift apart.
+        assert_eq!(GAME_WORLD_TEAM_ARENA + TEAM_ARENA_ALLIANCE, WORLD_TEAM_ALLIANCE);
+        // Delays sit right after the 71 ammo counts of each row.
+        assert_eq!(TEAM_ARENA_DELAY, TEAM_ARENA_AMMO + 71 * 4);
         assert_eq!(PLAY_SOUND_LOCAL, 0x004FDFE0);
         assert_eq!(DS_SOUND_LOAD_WAV, 0x00573FF0);
         assert_eq!(CUSTOM_SOUND_SLOT_MIN, 451);

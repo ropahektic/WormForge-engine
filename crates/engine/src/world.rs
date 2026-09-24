@@ -923,8 +923,9 @@ pub fn worm_hp(handle: u32) -> i32 {
     }
 }
 
-/// Team ammo for `slot`. `delta = None` is a read. Infinite stays `-1`.
-pub fn ammo(handle: u32, slot: u32, delta: Option<i32>) -> i32 {
+/// Team ammo for `slot`. `None` is a read. `Add` leaves infinite (`-1`)
+/// alone; `Set` overwrites it. See `lua_host::AmmoChange`.
+pub fn ammo(handle: u32, slot: u32, change: Option<lua_host::AmmoChange>) -> i32 {
     if handle == 0 || slot == 0 || slot >= STOCK_WEAPON_COUNT as u32 {
         return 0;
     }
@@ -937,14 +938,15 @@ pub fn ammo(handle: u32, slot: u32, delta: Option<i32>) -> i32 {
         let arena = world.add(GAME_WORLD_TEAM_ARENA);
         let team = read_i32(worm, ENT_WORM_TEAM) as u32;
         let cur = get_ammo(arena, team, slot);
-        let Some(d) = delta else {
-            return cur;
+        let next = match change {
+            None => return cur,
+            Some(lua_host::AmmoChange::Add(_)) if cur < 0 => return cur,
+            Some(lua_host::AmmoChange::Add(d)) => cur.saturating_add(d).max(0),
+            Some(lua_host::AmmoChange::Set(n)) => n.max(-1),
         };
-        if cur < 0 {
-            return cur;
-        }
-        let next = cur.saturating_add(d).max(0);
-        if next > 0 {
+        // Anything but zero is usable -- infinite included -- so the slot must
+        // be selectable and not held back by a scheme delay.
+        if next != 0 {
             enable_slot(world, slot);
             clear_delay(arena, team, slot);
         }
@@ -953,16 +955,23 @@ pub fn ammo(handle: u32, slot: u32, delta: Option<i32>) -> i32 {
     }
 }
 
-unsafe fn ammo_index(arena: *mut u8, team: u32, slot: u32) -> Option<usize> {
-    if arena.is_null() || team >= MAX_TEAMS {
+/// The ammo/delay row a team uses: its alliance, read exactly where WA's own
+/// `TeamArena__GetAmmo` / `AddAmmo` read it. Teams are 1-based (the first team
+/// is 1, as in the worm's `ENT_WORM_TEAM` and wkFOW's team records), and allied
+/// teams share a row.
+unsafe fn ammo_row(arena: *mut u8, team: u32) -> Option<usize> {
+    if arena.is_null() || team == 0 || team > MAX_TEAMS {
         return None;
     }
-    let rec = arena.add(8 + team as usize * 0x51C);
-    let alliance = read_i32(rec, 0x508);
+    let alliance = read_i32(arena, TEAM_ARENA_ALLIANCE + team as usize * WORLD_TEAM_STRIDE);
     if alliance < 0 || alliance >= MAX_TEAMS as i32 {
         return None;
     }
-    Some(alliance as usize * TEAM_AMMO_STRIDE + slot as usize)
+    Some(alliance as usize * TEAM_AMMO_STRIDE)
+}
+
+unsafe fn ammo_index(arena: *mut u8, team: u32, slot: u32) -> Option<usize> {
+    Some(ammo_row(arena, team)? + slot as usize)
 }
 
 unsafe fn write_ammo(arena: *mut u8, team: u32, slot: u32, ammo: i32) {
@@ -1013,20 +1022,18 @@ unsafe fn enable_slot(world: *mut u8, slot: u32) {
     write_i32(entry, WEAPON_DEFINED, 1);
     write_i32(entry, WEAPON_ENABLED, 1);
     write_i32(entry, WEAPON_AVAILABILITY, 1);
-    write_i32(entry, WEAPON_PANEL_STATE, 1);
+    // `panel_state` is the weapon's panel row. Stock slots already have one
+    // from `AssignWeaponPanelSlots` (0x537130), and writing 1 moved every
+    // granted weapon into the F1 row. Only a slot with no row yet gets one.
+    if read_i32(entry, WEAPON_PANEL_STATE) < 0 {
+        write_i32(entry, WEAPON_PANEL_STATE, 1);
+    }
 }
 
 unsafe fn clear_delay(arena: *mut u8, team: u32, slot: u32) {
-    if arena.is_null() || team >= MAX_TEAMS {
-        return;
+    if let Some(idx) = ammo_index(arena, team, slot) {
+        write_i32(arena, TEAM_ARENA_DELAY + idx * 4, 0);
     }
-    let rec = arena.add(8 + team as usize * 0x51C);
-    let alliance = read_i32(rec, 0x508);
-    if alliance < 0 || alliance >= MAX_TEAMS as i32 {
-        return;
-    }
-    let idx = alliance as usize * TEAM_AMMO_STRIDE + slot as usize;
-    write_i32(arena, TEAM_ARENA_DELAY + idx * 4, 0);
 }
 
 unsafe fn get_ammo(arena: *mut u8, team: u32, slot: u32) -> i32 {
@@ -1122,6 +1129,15 @@ fn client_mouse() -> Option<(i32, i32, i32, i32)> {
         }
         Some((pt.x, pt.y, cw, ch))
     }
+}
+
+/// WA's cavern flag for the current match. False when there is no world.
+pub fn is_cavern() -> bool {
+    let world = session_world();
+    if world.is_null() {
+        return false;
+    }
+    unsafe { read_i32(world, GAME_WORLD_IS_CAVERN) != 0 }
 }
 
 pub fn water_fixed() -> i32 {

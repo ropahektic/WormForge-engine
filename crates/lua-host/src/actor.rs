@@ -172,10 +172,27 @@ pub struct ActorNative {
     /// Stock SelectWeapon (F1 path). Returns ammo after equip, 0 if not this worm's turn.
     pub equip: fn(handle: u32, slot: u32) -> i32,
     pub hp: fn(handle: u32) -> i32,
-    /// Team ammo. `delta = None` reads. Infinite stays -1.
-    pub ammo: fn(handle: u32, slot: u32, delta: Option<i32>) -> i32,
+    /// Team ammo. `None` reads. `Add` leaves infinite (-1) alone; `Set`
+    /// overwrites it. Returns the ammo afterwards.
+    pub ammo: fn(handle: u32, slot: u32, change: Option<AmmoChange>) -> i32,
+    /// WA's own cavern flag for the current match.
+    pub cavern: fn() -> bool,
     /// Stock SpecialImpact (msg 0x4B). No explosion. Pose restored so the worm does not move.
     pub hurt: fn(target: u32, from: u32, amount: i32),
+}
+
+/// A write to team ammo.
+///
+/// `Add` is the original verb: relative, and it never touches an infinite
+/// (-1) stock, which is what a pack gifting a shot wants. `Set` is absolute,
+/// the equivalent of PX's `SetWeaponEx`. It is what a rules pack needs to own
+/// a slot outright -- Highlander gives the holder exactly one and everyone else
+/// none, whatever the scheme said, including a scheme's infinite bazooka.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AmmoChange {
+    Add(i32),
+    /// `-1` is infinite.
+    Set(i32),
 }
 
 impl Default for ActorNative {
@@ -215,6 +232,7 @@ impl Default for ActorNative {
             equip: |_, _| 0,
             hp: |_| 0,
             ammo: |_, _, _| 0,
+            cavern: || false,
             hurt: |_, _, _| {},
         }
     }
@@ -835,13 +853,14 @@ impl UserData for WormHandle {
                 .unwrap_or(0);
             Ok(ammo)
         });
-        methods.add_method("ammo", |_, this, (name, delta): (String, Option<i32>)| {
+        methods.add_method("ammo", |_, this, (name, change): (String, Value)| {
             if this.0 == 0 {
                 return Ok(0i32);
             }
             let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
+            let change = ammo_change(change)?;
             Ok(native_ammo()
-                .map(|f| f(this.0, slot as u32, delta))
+                .map(|f| f(this.0, slot as u32, change))
                 .unwrap_or(0))
         });
         methods.add_method("hurt", |_, this, arg: Value| {
@@ -1070,8 +1089,49 @@ pub fn native_hp() -> Option<fn(u32) -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hp)
 }
 
-pub fn native_ammo() -> Option<fn(u32, u32, Option<i32>) -> i32> {
+pub fn native_ammo() -> Option<fn(u32, u32, Option<AmmoChange>) -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.ammo)
+}
+
+pub fn native_cavern() -> Option<fn() -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.cavern)
+}
+
+/// `worm:ammo(name)` reads, `worm:ammo(name, n)` adds, and
+/// `worm:ammo(name, { set = n })` sets.
+///
+/// A table rather than a second method, so the one verb stays the one place a
+/// pack looks for ammo. A table with anything but `set` in it is refused
+/// rather than read as a read: `{ add = 1 }` silently doing nothing would be
+/// the worst way to find out it isn't a key.
+fn ammo_change(v: Value) -> mlua::Result<Option<AmmoChange>> {
+    match v {
+        Value::Nil => Ok(None),
+        Value::Integer(n) => Ok(Some(AmmoChange::Add(n as i32))),
+        Value::Number(n) => Ok(Some(AmmoChange::Add(n as i32))),
+        Value::Table(t) => {
+            for pair in t.clone().pairs::<Value, Value>() {
+                let (k, _) = pair?;
+                if !matches!(&k, Value::String(s) if s.to_str().map(|s| s == "set").unwrap_or(false)) {
+                    return Err(mlua::Error::external(format!(
+                        "ammo: the only table key is `set`, got {k:?}"
+                    )));
+                }
+            }
+            let n: i32 = t.get::<Option<i32>>("set")?.ok_or_else(|| {
+                mlua::Error::external("ammo: `{ set = n }` needs a number")
+            })?;
+            if n < -1 {
+                return Err(mlua::Error::external(format!(
+                    "ammo: set = {n} is out of range (-1 is infinite, 0 or more is a count)"
+                )));
+            }
+            Ok(Some(AmmoChange::Set(n)))
+        }
+        other => Err(mlua::Error::external(format!(
+            "ammo expects nothing, a number or {{ set = n }}, got {other:?}"
+        ))),
+    }
 }
 
 fn native_hurt() -> Option<fn(u32, u32, i32)> {
@@ -1200,6 +1260,39 @@ mod tests {
     fn args(src: &str) -> mlua::Result<(u32, f32, f32, u32, u32)> {
         let lua = Lua::new();
         gfx_args(&lua.load(src).eval::<Table>()?)
+    }
+
+    fn change(src: &str) -> mlua::Result<Option<AmmoChange>> {
+        let lua = Lua::new();
+        ammo_change(lua.load(src).eval::<Value>()?)
+    }
+
+    /// The original forms keep their meaning: nothing reads, a number adds.
+    #[test]
+    fn ammo_read_and_add_are_unchanged() {
+        assert_eq!(change("nil").unwrap(), None);
+        assert_eq!(change("1").unwrap(), Some(AmmoChange::Add(1)));
+        assert_eq!(change("-2").unwrap(), Some(AmmoChange::Add(-2)));
+    }
+
+    /// `-1` is how WA spells infinite, so it must be settable -- it is also the
+    /// value `Set` exists to be able to overwrite.
+    #[test]
+    fn ammo_set_accepts_counts_and_infinite() {
+        assert_eq!(change("{ set = 0 }").unwrap(), Some(AmmoChange::Set(0)));
+        assert_eq!(change("{ set = 1 }").unwrap(), Some(AmmoChange::Set(1)));
+        assert_eq!(change("{ set = -1 }").unwrap(), Some(AmmoChange::Set(-1)));
+    }
+
+    /// A misspelt key must fail loudly. Read as a plain read it would return
+    /// the ammo and change nothing, and the pack would look like it worked.
+    #[test]
+    fn ammo_table_typos_and_nonsense_are_refused() {
+        assert!(change("{ add = 1 }").is_err());
+        assert!(change("{ set = 1, extra = 2 }").is_err());
+        assert!(change("{}").is_err());
+        assert!(change("{ set = -2 }").is_err());
+        assert!(change("'one'").is_err());
     }
 
     /// The reason the mask exists: before it, `a:gfx{angle = 30}` also wrote
