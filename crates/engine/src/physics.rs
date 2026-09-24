@@ -19,6 +19,7 @@ use game::offsets::{
     MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
     MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT, MISSILE_VTABLE, MISSILE_WEAPON_ALT_SPRITE,
     MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE,
+    MSG_START_TURN,
     WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW, WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR, WORM_DRAW_HEALTH,
     WORM_DRAW_HUD, WORM_DRAW_NAME, WORM_DRAW_OFFMAP, WORM_DRAW_SPRITE, WORM_DRAW_TURN,
     WORM_SHOW_CURSOR, WORM_FACING, WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_STATE,
@@ -525,6 +526,11 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         eat = crate::hurt::before(this, a, msg, b, c);
     }
     eat = eat || worm_message_reporting_errors(this as u32, team, msg);
+    if msg == MSG_START_TURN {
+        if let Err(e) = lua_host::turn_start(this as u32) {
+            crate::log_error(&format!("turn_start: {e}"));
+        }
+    }
     if eat {
         return;
     }
@@ -537,6 +543,7 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         crate::hurt::after(this, a, msg, b, c, hp_before);
     }
     if msg == MSG_FRAME_FINISH {
+        crate::hurt::observe_death(this);
         crate::actor::on_weapon_slot(this);
         crate::world::pump_space_fire(this);
         apply_carry(this);
@@ -570,7 +577,9 @@ pub fn hit_worm(target: u32, from: u32, amount: i32) {
         data[2] = y;
         data[HIT_AMOUNT / 4] = amount;
         data[HIT_TEAM / 4] = by;
-        worm_hook(this, from, MSG_HIT, 0, data.as_mut_ptr() as *mut u8);
+        crate::hurt::synthetic(|| {
+            worm_hook(this, from, MSG_HIT, 0, data.as_mut_ptr() as *mut u8)
+        });
         write_i32(this, ENT_POS_X, x);
         write_i32(this, ENT_POS_Y, y);
         write_i32(this, ENT_SPEED_X, vx);

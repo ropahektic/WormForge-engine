@@ -41,6 +41,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     log_line("InitGraphic: installing custom sprites after LoadSprites");
     sprite::clear();
     world::clear_sounds();
+    crate::hurt::reset();
     actor::clear_claims();
     crate::mask_collide::clear();
     crate::worm_sprite::clear();

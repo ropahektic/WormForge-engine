@@ -9,6 +9,7 @@ use mlua::{Function, Lua, Table, Value};
 use std::cell::RefCell;
 
 use crate::PARKED_LUA;
+use weapons::StockWeapon;
 
 #[derive(Clone, Debug)]
 pub struct HudLine {
@@ -57,9 +58,11 @@ fn call_each(list: &Table, args: impl Clone + mlua::IntoLuaMulti) -> Result<(), 
 pub fn motion_to_table(lua: &Lua, m: &Motion) -> Result<Table, String> {
     let t = lua.create_table().map_err(|e| e.to_string())?;
     t.set("id", m.id).map_err(|e| e.to_string())?;
-    t.set("class_type", m.class_type).map_err(|e| e.to_string())?;
+    t.set("class_type", m.class_type)
+        .map_err(|e| e.to_string())?;
     t.set("damp", m.damp).map_err(|e| e.to_string())?;
-    t.set("wind_scale", m.wind_scale).map_err(|e| e.to_string())?;
+    t.set("wind_scale", m.wind_scale)
+        .map_err(|e| e.to_string())?;
     t.set("gravity_scale", m.gravity_scale)
         .map_err(|e| e.to_string())?;
     t.set("moved", m.moved).map_err(|e| e.to_string())?;
@@ -171,6 +174,8 @@ pub struct Hurt {
     pub worm: u32,
     pub from: u32,
     pub by: Option<i32>,
+    pub attacker: u32,
+    pub slot: Option<i32>,
     pub kind: &'static str,
     pub amount: i32,
     pub lost: i32,
@@ -195,6 +200,17 @@ pub fn hurt(hit: Hurt) -> Result<(bool, i32), String> {
         }
         if let Some(by) = hit.by {
             t.set("by", by).map_err(|e| e.to_string())?;
+            t.set("attacker_team", by).map_err(|e| e.to_string())?;
+        }
+        if hit.attacker != 0 {
+            t.set("attacker", crate::actor::worm_userdata(lua, hit.attacker)?)
+                .map_err(|e| e.to_string())?;
+        }
+        if let Some(slot) = hit.slot {
+            t.set("slot", slot).map_err(|e| e.to_string())?;
+            if let Some(weapon) = StockWeapon::from_index(slot as u32) {
+                t.set("weapon", weapon.name()).map_err(|e| e.to_string())?;
+            }
         }
         t.set("kind", hit.kind).map_err(|e| e.to_string())?;
         t.set("amount", hit.amount).map_err(|e| e.to_string())?;
@@ -215,5 +231,72 @@ pub fn hurt(hit: Hurt) -> Result<(bool, i32), String> {
         }
         let amount = t.get("amount").unwrap_or(hit.amount);
         Ok((eat, amount))
+    })
+}
+
+#[derive(Clone, Debug)]
+pub struct Death {
+    pub victim: u32,
+    pub active: u32,
+    pub attacker: u32,
+    pub attacker_team: Option<i32>,
+    pub slot: Option<i32>,
+    pub kind: Option<&'static str>,
+}
+
+pub fn turn_start(worm: u32) -> Result<(), String> {
+    with_lua(|lua| {
+        let list = hook_list(lua, "turn_start")?;
+        if list.len().map_err(|e| e.to_string())? == 0 {
+            return Ok(());
+        }
+        let event = lua.create_table().map_err(|e| e.to_string())?;
+        let worm = crate::actor::worm_userdata(lua, worm)?;
+        event.set("worm", worm.clone()).map_err(|e| e.to_string())?;
+        event.set("active", worm).map_err(|e| e.to_string())?;
+        call_each(&list, event)
+    })
+}
+
+pub fn death(death: Death) -> Result<(), String> {
+    with_lua(|lua| {
+        let list = hook_list(lua, "death")?;
+        if list.len().map_err(|e| e.to_string())? == 0 {
+            return Ok(());
+        }
+        let event = lua.create_table().map_err(|e| e.to_string())?;
+        event
+            .set("victim", crate::actor::worm_userdata(lua, death.victim)?)
+            .map_err(|e| e.to_string())?;
+        if death.active != 0 {
+            event
+                .set("active", crate::actor::worm_userdata(lua, death.active)?)
+                .map_err(|e| e.to_string())?;
+        }
+        if death.attacker != 0 {
+            event
+                .set(
+                    "attacker",
+                    crate::actor::worm_userdata(lua, death.attacker)?,
+                )
+                .map_err(|e| e.to_string())?;
+        }
+        if let Some(team) = death.attacker_team {
+            event
+                .set("attacker_team", team)
+                .map_err(|e| e.to_string())?;
+        }
+        if let Some(slot) = death.slot {
+            event.set("slot", slot).map_err(|e| e.to_string())?;
+            if let Some(weapon) = StockWeapon::from_index(slot as u32) {
+                event
+                    .set("weapon", weapon.name())
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        if let Some(kind) = death.kind {
+            event.set("kind", kind).map_err(|e| e.to_string())?;
+        }
+        call_each(&list, event)
     })
 }

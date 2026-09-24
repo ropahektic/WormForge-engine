@@ -55,6 +55,10 @@ A weapon is usually a **LuaActor**: `wa.weapons.replace` then `on_click` / `on_f
 
 `wa.on.hurt` runs on blast / hit / percent / nonlethal / poison (both peers). `percent` is axe-style: `amount` is 50 meaning half current HP. `pre` may write `amount` or return `"eat"`. `post` has `lost` (HP that actually left). `worm:hurt(10)` posts stock hit (0x4B) with no knockback; pending HP still waits until momentum ends. `worm:ammo("mine")` reads team ammo; `worm:ammo("mine", 1)` adds, and leaves infinite (`-1`) alone; `worm:ammo("mine", { set = 1 })` sets it outright, overwriting infinite too (`set = -1` makes it infinite). Ammo is shared per alliance (`worm.alliance`, so allied teams share it). Granting keeps the weapon in its own panel row.
 
+Per-worm loadouts are virtual because WA has no per-worm ammo row. `wa.inventory.create({ id = "classes", slots = {...} })` creates a store scoped to the registering pack. It supports `get`, `set`, `add`, `remove`, `clear`, `list`, deterministic `deal`, `transfer`, and `apply`. `apply(worm, { clear = true, each = 1 })` clears the store's slots on every live alliance row and materializes only that worm's inventory. `transfer(from, to, { weapons = "all", amount = n, mode = "move"|"copy" })` takes explicit worm targets; put conditions in normal Lua callbacks.
+
+`wa.on.turn_start(function(event) ...)` receives `event.worm` / `event.active`. `wa.on.death` fires once per worm with `victim`, current `active`, and optional `attacker`, `attacker_team`, `weapon`, `slot`, and `kind`. `wa.on.hurt` keeps its old fields and also carries those optional attribution fields. Missing attribution is `nil`: delayed stock projectiles expose their team but are never guessed to belong to the currently selected worm/weapon. Compare worms by stable `.id`, not userdata identity.
+
 `a:frame(i)` holds a LuaActor on one frame of its current sheet (zeroes the loop delta). `worm.facing` is read-only (−1 left, +1 right). `worm_sprites` on `replace` remaps that slot’s worm poses only (`weaponlnk` / `wthrow` and slope variants). `ev.damage` on an actor brain is stock blast falloff this tick. Overlaying a mine’s fire (`copy_from = "mine"` plus `on_fire`) keeps placement/retreat and routes the body through the existing projectile wrap.
 
 ## Verbs (engine)
@@ -69,9 +73,10 @@ Draw primitives belong in the DLL. Named FX (lightning, fire) belong in Lua. No 
 - Actor: `x y vx vy facing owner kind`, `a:gravity` `a:move` `a:advance` `a:look` `a:frame` `a:explode` `a:despawn` `a:spawn` `a:sound` `a:in_water` `a:on_feet`
 - Weapon steps (do not steal MineEntity): `on_place` / `on_proximity` / `on_explode` as a function or `{ spawn = { sprite = false, explode = { damage = 0, id = 40, now = true }, damage_worms = false } }`. Same `spawn` table as `on_fire` / `on_click`. `sprite = false` is invisible (blit id 1023). `explode.now` blasts at spawn. Nested `on_explode` on a spawned actor fires when that actor blasts. Stock `CreateClusters` is not this path yet.
 - Worm: `id team alliance slot weapon kind visible turn hp x y vx vy facing`, `worm:carry` `worm:drop` `worm:equip` `worm:ammo` `worm:hurt`
+- Inventory: `wa.inventory.create`, then `get` `set` `add` `remove` `clear` `list` `deal` `transfer` `apply`
 - `wa.worms.all` / `nearest`, `wa.crates` / `mines` / `missiles` / `oil` `.all()` (pos + `kind`)
 - `wa.land.solid` `trace`, `wa.world.sky` `water` `size` `view` `pointer` `keys` `cavern` (`wa.world.cavern()` is WA's own cavern flag for the match)
-- `wa.sound.play`, `wa.on.gravity_before` / `gravity_after` / `missile_frame` / `worm_message` / `hurt` / `hud`, `wa.hud.line`
+- `wa.sound.play`, `wa.on.gravity_before` / `gravity_after` / `missile_frame` / `worm_message` / `hurt` / `turn_start` / `death` / `hud`, `wa.hud.line`
 - `wa.msg.FRAME_FINISH` `EXPLOSION` `IMPACT` `HIT` `NONLETHAL` `POISON` `JUMP` `JUMP_UP` `FIRE_WEAPON` `RELEASE_WEAPON` `START_TURN`
 
 Sprites: pack PNG strip (`sprite_columns`), GIF, frame folder, or a Gfx.dir stem (`missile`, `grenade`, `uzihit`, …) plus aliases `bazooka`/`holy`/`mine`/`cursor`. Map palette applies. Sounds: pack WAV on the overlay, or a stock index.

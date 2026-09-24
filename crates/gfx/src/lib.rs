@@ -839,8 +839,8 @@ mod tests {
     #[test]
     fn example_ball_strip_is_eight_frames() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../mods/examples/circle_bazooka/sprites/ball.png");
-        let strip = load_strip_file(&path, 8).expect("example ball.png");
+            .join("tests/fixtures/ball-8.png");
+        let strip = load_strip_file(&path, 8).expect("eight-frame fixture");
         assert_eq!(strip.frames.len(), 8);
         assert!(strip.frames[0].width > 0);
         assert_eq!(strip.frames[0].height, strip.frames[7].height);

@@ -7,7 +7,9 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
-use weapons::{HomingMode, OverlayClaim, OverlayParams, StockWeapon, parse_panel_icon, parse_stock_weapon};
+use weapons::{
+    parse_panel_icon, parse_stock_weapon, HomingMode, OverlayClaim, OverlayParams, StockWeapon,
+};
 
 pub struct BindContext {
     pub mod_id: String,
@@ -20,7 +22,8 @@ pub struct BindContext {
 
 pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     let wa = ensure_wa(lua)?;
-    wa.set("_mod", ctx.mod_id.clone()).map_err(|e| e.to_string())?;
+    wa.set("_mod", ctx.mod_id.clone())
+        .map_err(|e| e.to_string())?;
 
     let logs = Rc::clone(&ctx.logs);
     let mod_id_log = ctx.mod_id.clone();
@@ -129,6 +132,8 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "missile_frame",
         "worm_message",
         "hurt",
+        "turn_start",
+        "death",
         "hud",
     ] {
         hooks
@@ -157,6 +162,8 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     bind_on(lua, &on, "missile_frame")?;
     bind_on(lua, &on, "worm_message")?;
     bind_on(lua, &on, "hurt")?;
+    bind_on(lua, &on, "turn_start")?;
+    bind_on(lua, &on, "death")?;
     bind_on(lua, &on, "hud")?;
     wa.set("on", on).map_err(|e| e.to_string())?;
 
@@ -203,7 +210,231 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     spawn::bind_world(lua, &wa.get("actors").map_err(|e| e.to_string())?, &wa)?;
 
     globals.set("wa", wa.clone()).map_err(|e| e.to_string())?;
+    install_inventory(lua, &wa)?;
     Ok(wa)
+}
+
+/// Pack-scoped virtual worm inventories.
+///
+/// WA's real ammo remains alliance-scoped. These stores are deliberately
+/// keyed by stable worm id and only touch the live TeamArena row when
+/// `apply()` is called. Keeping the state in this match's Lua interpreter
+/// also gives it the same lifetime as pack state and avoids process-global
+/// state leaking into the next round.
+fn install_inventory(lua: &Lua, wa: &Table) -> Result<(), String> {
+    wa.set("inventory", lua.create_table().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    wa.set(
+        "_inventory_stores",
+        lua.create_table().map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    lua.load(
+        r#"
+local inventory_api = wa.inventory
+local stores = wa._inventory_stores
+
+local function whole_nonnegative(n, what)
+  if type(n) ~= "number" or n < 0 or n % 1 ~= 0 then
+    error(what .. " must be a non-negative integer", 3)
+  end
+  return n
+end
+
+local function worm_id(worm)
+  if worm == nil or type(worm.id) ~= "number" then
+    error("inventory expects a worm", 3)
+  end
+  return worm.id
+end
+
+local function requested_weapons(value, slots, allowed)
+  if value == nil or value == "all" then
+    return slots
+  end
+  if type(value) == "string" then
+    if not allowed[value] then
+      error("weapon '" .. value .. "' is outside this inventory", 4)
+    end
+    return { value }
+  end
+  if type(value) ~= "table" then
+    error("weapons must be \"all\", a weapon name, or an array", 4)
+  end
+  local out = {}
+  for i, name in ipairs(value) do
+    if type(name) ~= "string" or not allowed[name] then
+      error("invalid inventory weapon at index " .. tostring(i), 4)
+    end
+    out[#out + 1] = name
+  end
+  return out
+end
+
+function inventory_api.create(spec)
+  if type(spec) ~= "table" then
+    error("wa.inventory.create expects a table", 2)
+  end
+  local id = spec.id
+  if type(id) ~= "string" or id == "" then
+    error("inventory id must be a non-empty string", 2)
+  end
+  if type(spec.slots) ~= "table" or #spec.slots == 0 then
+    error("inventory slots must be a non-empty array", 2)
+  end
+
+  local owner = wa._mod or ""
+  local key = owner .. "\0" .. id
+  if stores[key] ~= nil then
+    error("inventory '" .. id .. "' already exists for " .. owner, 2)
+  end
+
+  local slots, allowed = {}, {}
+  for i, name in ipairs(spec.slots) do
+    if type(name) ~= "string" or name == "" then
+      error("inventory slot " .. tostring(i) .. " must be a weapon name", 2)
+    end
+    if allowed[name] then
+      error("duplicate inventory slot '" .. name .. "'", 2)
+    end
+    slots[#slots + 1] = name
+    allowed[name] = true
+  end
+
+  local values = {}
+  local inv = { id = id, owner = owner }
+
+  local function row(worm, create)
+    local id = worm_id(worm)
+    local r = values[id]
+    if r == nil and create then
+      r = {}
+      values[id] = r
+    end
+    return r
+  end
+
+  local function require_weapon(name)
+    if type(name) ~= "string" or not allowed[name] then
+      error("weapon '" .. tostring(name) .. "' is outside inventory '" .. id .. "'", 3)
+    end
+  end
+
+  function inv:get(worm, name)
+    require_weapon(name)
+    local r = row(worm, false)
+    return r and (r[name] or 0) or 0
+  end
+
+  function inv:set(worm, name, amount)
+    require_weapon(name)
+    amount = whole_nonnegative(amount, "inventory amount")
+    local r = row(worm, true)
+    if amount == 0 then r[name] = nil else r[name] = amount end
+    return amount
+  end
+
+  function inv:add(worm, name, amount)
+    amount = amount == nil and 1 or whole_nonnegative(amount, "inventory amount")
+    return self:set(worm, name, self:get(worm, name) + amount)
+  end
+
+  function inv:remove(worm, name, amount)
+    amount = amount == nil and 1 or whole_nonnegative(amount, "inventory amount")
+    return self:set(worm, name, math.max(0, self:get(worm, name) - amount))
+  end
+
+  function inv:clear(worm, weapons)
+    local r = row(worm, false)
+    if r == nil then return end
+    for _, name in ipairs(requested_weapons(weapons, slots, allowed)) do
+      r[name] = nil
+    end
+  end
+
+  function inv:list(worm)
+    local out, r = {}, row(worm, false)
+    if r == nil then return out end
+    for _, name in ipairs(slots) do
+      for _ = 1, r[name] or 0 do out[#out + 1] = name end
+    end
+    return out
+  end
+
+  function inv:deal(worm, pool, count)
+    if type(pool) ~= "table" or #pool == 0 then
+      error("inventory deal pool must be a non-empty array", 2)
+    end
+    count = count == nil and 1 or whole_nonnegative(count, "deal count")
+    for i, name in ipairs(pool) do
+      if type(name) ~= "string" or not allowed[name] then
+        error("invalid deal weapon at index " .. tostring(i), 2)
+      end
+    end
+    local dealt = {}
+    for _ = 1, count do
+      local name = pool[wa.random(1, #pool)]
+      self:add(worm, name, 1)
+      dealt[#dealt + 1] = name
+    end
+    return dealt
+  end
+
+  function inv:transfer(from, to, opts)
+    opts = opts or {}
+    if type(opts) ~= "table" then error("transfer options must be a table", 2) end
+    local mode = opts.mode or "move"
+    if mode ~= "move" and mode ~= "copy" then
+      error("transfer mode must be \"move\" or \"copy\"", 2)
+    end
+    local limit = opts.amount
+    if limit ~= nil then limit = whole_nonnegative(limit, "transfer amount") end
+    local moved = {}
+    for _, name in ipairs(requested_weapons(opts.weapons, slots, allowed)) do
+      local have = self:get(from, name)
+      local n = limit == nil and have or math.min(have, limit)
+      if n > 0 then
+        self:add(to, name, n)
+        if mode == "move" then self:remove(from, name, n) end
+        moved[name] = n
+      end
+    end
+    return moved
+  end
+
+  function inv:apply(worm, opts)
+    opts = opts or {}
+    if type(opts) ~= "table" then error("apply options must be a table", 2) end
+    if opts.clear then
+      local seen = {}
+      for _, live in ipairs(wa.worms.all()) do
+        if not seen[live.alliance] then
+          seen[live.alliance] = true
+          for _, name in ipairs(slots) do live:ammo(name, { set = 0 }) end
+        end
+      end
+    end
+    local each = opts.each
+    if each ~= nil then each = whole_nonnegative(each, "apply each") end
+    local apply_slots = requested_weapons(opts.weapons, slots, allowed)
+    local r = row(worm, false)
+    if r ~= nil then
+      for _, name in ipairs(apply_slots) do
+        local owned = r[name] or 0
+        if owned > 0 then worm:ammo(name, { set = each or owned }) end
+      end
+    end
+  end
+
+  stores[key] = inv
+  return inv
+end
+"#,
+    )
+    .set_name("wa.inventory")
+    .exec()
+    .map_err(|e| e.to_string())
 }
 
 /// Register a `wa.on.<name>` hook, remembering which pack registered it.
@@ -456,7 +687,6 @@ fn table_to_claim(
         }
     }
 
-    
     let mut layer = None;
     let mut depth = None;
     let mut depth_prefix = None;
@@ -476,7 +706,7 @@ fn table_to_claim(
         worm_sprites_animate = get_bool(&p, "worm_sprites_animate")?.unwrap_or(false);
     }
 
-let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
+    let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
     if let Value::Table(fire) = spec.get::<Value>("on_fire")? {
         if let Ok(s) = fire.get::<Table>("spawn") {
             load_sprite_field(
@@ -495,21 +725,21 @@ let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
     let mut cluster_damage = None;
     let mut cluster_bounce_pct = None;
     let mut cluster_gravity_pct = None;
-        let mut cluster_wind_pct = None;
-        let mut cluster_homing = None;
-        if let Some(cluster) = spec.get::<Option<Table>>("cluster")? {
-            cluster_damage = get_i32(&cluster, "damage")?;
-            cluster_bounce_pct = get_i32(&cluster, "bounce_pct")?;
-            cluster_gravity_pct = get_i32(&cluster, "gravity_pct")?;
-            cluster_wind_pct = get_i32(&cluster, "wind_pct")?;
-            if let Some(h) = get_string(&cluster, "homing")? {
-                cluster_homing = HomingMode::parse(&h);
-                if cluster_homing.is_none() && h != "off" {
-                    return Err(mlua::Error::external(format!(
-                        "cluster.homing must be lock/avoid/dodge/off, got '{h}'"
-                    )));
-                }
+    let mut cluster_wind_pct = None;
+    let mut cluster_homing = None;
+    if let Some(cluster) = spec.get::<Option<Table>>("cluster")? {
+        cluster_damage = get_i32(&cluster, "damage")?;
+        cluster_bounce_pct = get_i32(&cluster, "bounce_pct")?;
+        cluster_gravity_pct = get_i32(&cluster, "gravity_pct")?;
+        cluster_wind_pct = get_i32(&cluster, "wind_pct")?;
+        if let Some(h) = get_string(&cluster, "homing")? {
+            cluster_homing = HomingMode::parse(&h);
+            if cluster_homing.is_none() && h != "off" {
+                return Err(mlua::Error::external(format!(
+                    "cluster.homing must be lock/avoid/dodge/off, got '{h}'"
+                )));
             }
+        }
         let mut cluster_sheet = None;
         let mut cluster_path = None;
         load_sprite_field(
@@ -553,18 +783,40 @@ let (on_fire_id, fire_spawn) = spawn::parse_fire(lua, &spec)?;
         mine_blast = get_i32(&mine, "blast")?;
     }
 
-    let (on_explode_id, explode_spawn) = spawn::parse_step(lua, &spec, "on_explode", crate::actor::register_explode)?;
+    let (on_explode_id, explode_spawn) =
+        spawn::parse_step(lua, &spec, "on_explode", crate::actor::register_explode)?;
     let (on_proximity_id, proximity_spawn) =
         spawn::parse_step(lua, &spec, "on_proximity", crate::actor::register_proximity)?;
-    let (on_place_id, place_spawn) = spawn::parse_step(lua, &spec, "on_place", crate::actor::register_place)?;
-    install_attached_sheet(root, sprite_columns as u32, &explode_spawn, &mut extra_sheets)?;
-    install_attached_sheet(root, sprite_columns as u32, &proximity_spawn, &mut extra_sheets)?;
+    let (on_place_id, place_spawn) =
+        spawn::parse_step(lua, &spec, "on_place", crate::actor::register_place)?;
+    install_attached_sheet(
+        root,
+        sprite_columns as u32,
+        &explode_spawn,
+        &mut extra_sheets,
+    )?;
+    install_attached_sheet(
+        root,
+        sprite_columns as u32,
+        &proximity_spawn,
+        &mut extra_sheets,
+    )?;
     install_attached_sheet(root, sprite_columns as u32, &place_spawn, &mut extra_sheets)?;
     if let Some(child) = fire_spawn.as_ref().and_then(|s| s.on_explode.as_ref()) {
-        install_attached_sheet(root, sprite_columns as u32, &Some((**child).clone()), &mut extra_sheets)?;
+        install_attached_sheet(
+            root,
+            sprite_columns as u32,
+            &Some((**child).clone()),
+            &mut extra_sheets,
+        )?;
     }
     if let Some(child) = spawn.as_ref().and_then(|s| s.on_explode.as_ref()) {
-        install_attached_sheet(root, sprite_columns as u32, &Some((**child).clone()), &mut extra_sheets)?;
+        install_attached_sheet(
+            root,
+            sprite_columns as u32,
+            &Some((**child).clone()),
+            &mut extra_sheets,
+        )?;
     }
 
     Ok(OverlayClaim {
@@ -629,7 +881,9 @@ fn load_pack_sheet(
     _columns: u32,
 ) -> mlua::Result<(String, SpriteStrip)> {
     if relative.contains("..") {
-        return Err(mlua::Error::external("sprite path must stay inside the pack"));
+        return Err(mlua::Error::external(
+            "sprite path must stay inside the pack",
+        ));
     }
     if !is_sheet_path(relative) && !root.join(relative).is_dir() {
         return Err(mlua::Error::external(format!(
@@ -646,7 +900,9 @@ fn load_pack_sound(
     relative: &str,
 ) -> mlua::Result<(String, std::path::PathBuf)> {
     if relative.contains("..") {
-        return Err(mlua::Error::external("sound path must stay inside the pack"));
+        return Err(mlua::Error::external(
+            "sound path must stay inside the pack",
+        ));
     }
     let rel = relative.replace('\\', "/");
     let lower = rel.to_ascii_lowercase();
@@ -715,7 +971,9 @@ fn load_sprite_field(
     };
     if is_sheet_path(&sprite) {
         if sprite.contains("..") {
-            return Err(mlua::Error::external("sprite path must stay inside the pack"));
+            return Err(mlua::Error::external(
+                "sprite path must stay inside the pack",
+            ));
         }
         let path = root.join(&sprite);
         *sprite_sheet = Some(load_sprite_path(&path, columns).map_err(mlua::Error::external)?);
@@ -891,5 +1149,65 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("wa.sorted"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn virtual_inventory_is_pack_scoped_and_composes_verbs() {
+        let lua = Lua::new();
+        install(&lua, &ctx("pack.a")).unwrap();
+        lua.load(
+            r#"
+            local draw = 0
+            wa.random = function(lo, hi)
+              draw = draw + 1
+              return lo + ((draw - 1) % (hi - lo + 1))
+            end
+            local live = {}
+            local function worm(id, alliance)
+              local w = { id = id, alliance = alliance, live = {} }
+              function w:ammo(name, change)
+                if change ~= nil then self.live[name] = change.set end
+                return self.live[name] or 0
+              end
+              return w
+            end
+            a, b, c = worm(16, 0), worm(32, 1), worm(33, 1)
+            wa.worms.all = function() return { a, b, c } end
+
+            inv_a = wa.inventory.create({
+              id = "loot", slots = { "bazooka", "grenade", "rope" }
+            })
+            local dealt = inv_a:deal(a, { "bazooka", "grenade" }, 2)
+            assert(dealt[1] == "bazooka" and dealt[2] == "grenade")
+            assert(inv_a:get(a, "bazooka") == 1 and inv_a:get(a, "grenade") == 1)
+            inv_a:transfer(a, b, {
+              weapons = { "bazooka" }, amount = 1, mode = "move"
+            })
+            assert(inv_a:get(a, "bazooka") == 0 and inv_a:get(b, "bazooka") == 1)
+            inv_a:transfer(a, b, { weapons = "grenade", mode = "copy" })
+            assert(inv_a:get(a, "grenade") == 1 and inv_a:get(b, "grenade") == 1)
+            inv_a:apply(b, { clear = true, each = 1 })
+            assert(a.live.bazooka == 0 and a.live.grenade == 0)
+            assert(b.live.bazooka == 1 and b.live.grenade == 1)
+            -- b/c share an alliance: clear visits that physical row once.
+            assert(c.live.bazooka == nil)
+        "#,
+        )
+        .exec()
+        .unwrap();
+
+        // The same public id in another pack is a distinct store.
+        install(&lua, &ctx("pack.b")).unwrap();
+        lua.load(
+            r#"
+            inv_b = wa.inventory.create({
+              id = "loot", slots = { "bazooka", "grenade", "rope" }
+            })
+            assert(inv_b:get(b, "bazooka") == 0)
+            assert(inv_a:get(b, "bazooka") == 1)
+        "#,
+        )
+        .exec()
+        .unwrap();
     }
 }

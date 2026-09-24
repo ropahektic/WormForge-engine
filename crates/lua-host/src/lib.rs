@@ -14,7 +14,10 @@ pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
     weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, SpawnArgs,
 };
-pub use dispatch::{gravity_after, gravity_before, hurt, missile_frame, run_hud, worm_message, Hurt};
+pub use dispatch::{
+    death, gravity_after, gravity_before, hurt, missile_frame, run_hud, turn_start, worm_message,
+    Death, Hurt,
+};
 
 use crate::api::BindContext;
 use mlua::Lua;
@@ -778,6 +781,8 @@ end)
             worm: 1,
             from: 0,
             by: Some(0),
+            attacker: 0,
+            slot: None,
             kind: "blast",
             amount: 50,
             lost: 0,
@@ -791,6 +796,8 @@ end)
             worm: 1,
             from: 0,
             by: Some(0),
+            attacker: 0,
+            slot: None,
             kind: "blast",
             amount: 50,
             lost: 12,
@@ -799,6 +806,139 @@ end)
         })
         .unwrap();
         assert!(!eat_post);
+    }
+
+    #[test]
+    fn rule_events_dispatch_composable_context() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-rule-events");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("rules"),
+            "rules.events",
+            r#"
+id = "rules.events"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = []
+"#,
+            r#"
+seen = {}
+wa.on.turn_start(function(event)
+  seen.turn = event.worm ~= nil and event.active ~= nil
+end)
+wa.on.death(function(event)
+  seen.death = event.victim ~= nil
+    and event.active ~= nil
+    and event.attacker ~= nil
+    and event.attacker_team == 2
+    and event.weapon == "bazooka"
+    and event.kind == "blast"
+end)
+wa.on.hurt(function(event)
+  seen.hurt = event.attacker ~= nil
+    and event.attacker_team == 2
+    and event.by == 2
+    and event.weapon == "bazooka"
+end)
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        park_lua(scripts.lua);
+
+        turn_start(1).unwrap();
+        hurt(Hurt {
+            worm: 1,
+            from: 2,
+            by: Some(2),
+            attacker: 2,
+            slot: Some(1),
+            kind: "blast",
+            amount: 20,
+            lost: 20,
+            hp: 80,
+            phase: "post",
+        })
+        .unwrap();
+        death(Death {
+            victim: 1,
+            active: 3,
+            attacker: 2,
+            attacker_team: Some(2),
+            slot: Some(1),
+            kind: Some("blast"),
+        })
+        .unwrap();
+
+        PARKED_LUA.with(|slot| {
+            let guard = slot.borrow();
+            let lua = guard.as_ref().unwrap();
+            let seen: mlua::Table = lua.globals().get("seen").unwrap();
+            assert!(seen.get::<bool>("turn").unwrap());
+            assert!(seen.get::<bool>("hurt").unwrap());
+            assert!(seen.get::<bool>("death").unwrap());
+        });
+    }
+
+    #[test]
+    fn highlander_uses_public_inventory_and_rule_events() {
+        let lua = Lua::new();
+        let rules = include_str!("../../../mods/examples/highlander/rules.lua");
+        let dofile = lua
+            .create_function(move |lua, _: String| {
+                lua.load(rules).set_name("highlander/rules.lua").exec()
+            })
+            .unwrap();
+        lua.globals().set("dofile", dofile).unwrap();
+        let os: mlua::Table = lua.globals().get("os").unwrap();
+        os.set(
+            "exit",
+            lua.create_function(|_, code: i32| {
+                Err::<(), _>(mlua::Error::external(format!(
+                    "Highlander mock suite failed with exit {code}"
+                )))
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        lua.load(include_str!(
+            "../../../mods/examples/highlander/test_rules.lua"
+        ))
+        .set_name("highlander/test_rules.lua")
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn highlander_pure_lua_reference_still_matches() {
+        let lua = Lua::new();
+        let rules = include_str!("../../../mods/examples/highlander_pure_lua/rules.lua");
+        let dofile = lua
+            .create_function(move |lua, _: String| {
+                lua.load(rules)
+                    .set_name("highlander_pure_lua/rules.lua")
+                    .exec()
+            })
+            .unwrap();
+        lua.globals().set("dofile", dofile).unwrap();
+        let os: mlua::Table = lua.globals().get("os").unwrap();
+        os.set(
+            "exit",
+            lua.create_function(|_, code: i32| {
+                Err::<(), _>(mlua::Error::external(format!(
+                    "Pure-Lua Highlander suite failed with exit {code}"
+                )))
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        lua.load(include_str!(
+            "../../../mods/examples/highlander_pure_lua/test_rules.lua"
+        ))
+        .set_name("highlander_pure_lua/test_rules.lua")
+        .exec()
+        .unwrap();
     }
 
     #[test]
@@ -828,7 +968,7 @@ wa.log(wa.actors.kind("mole"))
         let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-lua-host-pxgif");
         let _ = std::fs::remove_dir_all(&root);
-        let png = include_bytes!("../../../mods/examples/circle_bazooka/sprites/ball.png");
+        let png = include_bytes!("../../gfx/tests/fixtures/ball-8.png");
         let pack = pack(
             &root.join("p"),
             "user.my_weapon",
@@ -907,7 +1047,7 @@ wa.weapons.replace({
 })
 "#,
         );
-        let png = include_bytes!("../../../mods/examples/circle_bazooka/sprites/ball.png");
+        let png = include_bytes!("../../gfx/tests/fixtures/ball-8.png");
         std::fs::create_dir_all(pack.root.join("sprites")).unwrap();
         std::fs::write(pack.root.join("sprites/ball.png"), png).unwrap();
         let scripts = run_mods(&[pack]).unwrap();
