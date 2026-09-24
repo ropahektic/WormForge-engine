@@ -206,3 +206,20 @@ near the worm at `0x518770..0x518882`. The current example preserves that
 stock route, follows `worm.drilling`, and adds the PX cut. It was rebuilt and
 installed with SHA-256 verification. It still needs a follow-up game check
 for appearance and replay/network sync.
+
+### Gravler Strike follow-on (2026-09-24)
+
+PX's packaged `Libs/weapon_gravler.pxl` contains both `Gravler_wep` and
+`Gravler Strike_wep`. The strike's weapon record has the same type code as
+other PX strike records; its source pointer differs from generic airstrikes.
+The only packaged script is `gravler_script::InitGraphic`, which loads four
+17-frame sprite sheets and calls `SetSpriteOverride` for stock mole sprite
+IDs 245–248. There is no scripted terrain loop or extra strike timer in this
+library. This is consistent with Gravler Strike reusing WA's mole-strike
+behavior, with its appearance and weapon parameters set by PX data.
+
+`mods/examples/gravler_strike` therefore starts with a `mole_squadron` fire
+clone on the `donkey` panel slot. That retains WA's native mole digging path.
+This is a gameplay baseline, not yet a pixel-perfect PX port: compare its
+projectile count, spacing, depth, damage and timing against PX in game, and
+add the four sprite replacements once the visual path is understood.

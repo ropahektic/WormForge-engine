@@ -291,6 +291,25 @@ mod tests {
     }
 
     #[test]
+    fn gravler_strike_uses_stock_moles_from_the_donkey_slot() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/gravler_strike");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::Donkey);
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::MoleSquadron));
+        assert_eq!(claim.params.panel_icon, Some(StockWeapon::MoleSquadron));
+        assert_eq!(claim.params.on_click_id, 0);
+        assert!(claim.params.actor_spawn().is_none());
+    }
+
+    #[test]
     fn land_verbs_reach_native_only_during_simulation() {
         let _guard = lock_host();
         thread_local! {
