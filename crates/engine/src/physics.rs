@@ -17,7 +17,8 @@ use game::offsets::{
     APPLY_PROJECTILE_GRAVITY, CUSTOM_SPRITE_SENTINEL, CUSTOM_SPRITE_SLOT_MIN, ENT_MOVED, ENT_POS_X,
     ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y, ENT_WORM_TEAM, HIT_AMOUNT, HIT_TEAM, MISSILE_ALT_BANK_SPRITE,
     MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
-    MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT, MISSILE_VTABLE, MISSILE_WEAPON_ALT_SPRITE,
+    MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT, MISSILE_TYPE, MISSILE_TYPE_HOMING,
+    MISSILE_VTABLE, MISSILE_WEAPON_ALT_SPRITE,
     MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE,
     MSG_START_TURN,
     WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW, WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR, WORM_DRAW_HEALTH,
@@ -350,6 +351,16 @@ const BODY_GFX_OFFS: &[usize] = &[
 /// every body slot on it through the mode switch.
 unsafe fn remap_homing_body_sprites(entity: *mut u8) {
     if entity.is_null() {
+        return;
+    }
+    // Homing missiles only. This runs on every message of every missile, and
+    // for anything else it did damage: it took the flight sprite as the
+    // "body", wrote it into every empty body slot and over the homing pair.
+    // The super sheep switches to its caped sprite at take-off from a slot
+    // that was empty until then -- already filled with the walking sheep, so
+    // the cape never appeared, with no pack touching the sheep at all. Only a
+    // homing missile ever enters the lock mode this exists for.
+    if unsafe { read_i32(entity, MISSILE_TYPE) } != MISSILE_TYPE_HOMING {
         return;
     }
     let key = entity as usize;
