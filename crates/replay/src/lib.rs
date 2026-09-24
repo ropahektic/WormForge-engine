@@ -1,15 +1,20 @@
-//! The `.WF_WAgame` container: a byte-exact `.WAgame` plus everything needed
-//! to re-simulate it.
+//! WormForge replays: WA's own `.WAgame`, with a trailer appended that holds
+//! everything needed to re-simulate the match.
 //!
 //! ```text
-//! 2026-09-22 20.14.03 [Online] @eule.WF_WAgame
-//!   [hdr]  magic "WFRP", format version, WA version, wkLua build hash,
-//!          modset fingerprint, container flags, two-phase `complete`
-//!   [pack] every loaded pack: mod.toml + Lua + assets (deflate)
-//!   [wa]   WA's own .WAgame bytes, verbatim
-//!   [wf]   WormForge frame stream, keyed to world-root FRAME_FINISH
-//!   [chk]  sync checkpoints
+//! 2026-09-22 20.14.03 [Online] @eule.WAgame
+//!   WA's bytes, untouched
+//!   trailer
+//!     [hdr]  WA version, wkLua build hash, modset, .WFAssets version
+//!     [pack] every loaded pack: mod.toml + Lua embedded, assets embedded
+//!            or referenced into the .WFAssets collection (deflate)
+//!     [wf]   WormForge frame stream, keyed to world-root FRAME_FINISH
+//!     [chk]  sync checkpoints
+//!   footer   "WFTR", format, lengths, CRC
 //! ```
+//!
+//! WA plays the file as an ordinary replay; a build without WormForge sees a
+//! vanilla game. See `docs/replay-wagame-plan.md`.
 //!
 //! Two hard constraints, both inherited from the plan:
 //!
@@ -23,9 +28,9 @@
 //!   rather than degrading. Actual file I/O lives in `engine`, which decides
 //!   what to do on a full disk; this crate only defines what "full" means.
 //!
-//! The reader's refusals are distinct variants (see [`Error`]) because W3 has
-//! to "refuse cleanly" and name the reason: wrong format version, wrong WA
-//! version, missing `complete`.
+//! The reader's refusals are distinct variants (see [`Error`]) because
+//! playback has to refuse cleanly and name the reason: wrong format version,
+//! wrong WA version, a damaged trailer, missing assets.
 
 pub mod error;
 pub mod format;
@@ -33,13 +38,13 @@ pub mod pack;
 
 pub use error::{tag_str, Error, Offset};
 pub use format::{
-    assemble, decode_checkpoints, decode_inputs, encode_checkpoints, encode_inputs, Checkpoint,
-    Container, Header, InputSample, FORMAT_VERSION, HDR_SCHEMA, KNOWN_TAGS, MAGIC, MAX_WF_BYTES,
-    TAG_CHK, TAG_HDR, TAG_PACK, TAG_WA, TAG_WF,
+    append_trailer, decode_checkpoints, decode_inputs, encode_checkpoints, encode_inputs,
+    Checkpoint, Header, InputSample, Trailer, FOOTER_LEN, FORMAT_VERSION, HDR_SCHEMA, KNOWN_TAGS,
+    MAGIC, MAX_WF_BYTES, TAG_CHK, TAG_HDR, TAG_PACK, TAG_WF,
 };
 pub use pack::{
-    decode as decode_pack, encode as encode_pack, Pack, PackFile, MAX_PACKS, MAX_PACK_BYTES,
-    MAX_PACK_FILES,
+    always_embedded, asset_refs, decode as decode_pack, encode as encode_pack, encode_dedup,
+    resolve as resolve_packs, Content, Pack, PackFile, MAX_PACKS, MAX_PACK_BYTES, MAX_PACK_FILES,
 };
 
 #[cfg(test)]
@@ -78,71 +83,58 @@ mod tests {
             version: "0.1.0".into(),
             files: vec![PackFile {
                 path: "weapons.lua".into(),
-                raw: b"return {}\n".to_vec(),
+                content: Content::Raw(b"return {}\n".to_vec()),
             }],
         }];
-
-        // Phase one: the file as it exists while the round runs.
-        let open = Header {
+        let header = Header {
             wa_version: "3.8.1.0".into(),
             build_hash: "dev".into(),
             modset: "synctest@0.1.0".into(),
-            flags: 0,
-            complete: false,
+            collection_version: 1,
         };
         let wf = encode_inputs(&inputs).unwrap();
         let chk_bytes = encode_checkpoints(&chk).unwrap();
         let pack_bytes = encode_pack(&packs).unwrap();
-        let temp = assemble(&open, &pack_bytes, b"WAGAME BYTES", &wf, &chk_bytes).unwrap();
-        // Playback refuses it --
-        assert_eq!(
-            Container::parse(&temp).unwrap().wf().unwrap_err(),
-            Error::Incomplete
-        );
-
-        // Phase two: round ended cleanly, rewrite with complete = true.
-        let done = Header {
-            complete: true,
-            ..open
-        };
-        let file = assemble(&done, &pack_bytes, b"WAGAME BYTES", &wf, &chk_bytes).unwrap();
-        let c = Container::parse(&file).unwrap();
-        assert_eq!(c.header().modset, "synctest@0.1.0");
-        assert_eq!(c.wa().unwrap(), b"WAGAME BYTES", "[wa] verbatim");
-        assert_eq!(decode_inputs(c.wf().unwrap()).unwrap(), inputs);
-        assert_eq!(decode_checkpoints(c.chk().unwrap()).unwrap(), chk);
-        assert_eq!(decode_pack(c.pack().unwrap()).unwrap(), packs);
+        let file = append_trailer(b"WAGAME BYTES", &header, &pack_bytes, &wf, &chk_bytes).unwrap();
+        let t = Trailer::find(&file).unwrap().expect("a WormForge replay");
+        assert_eq!(t.header(), &header);
+        assert_eq!(t.wa_prefix(), b"WAGAME BYTES", "WA's bytes verbatim");
+        assert_eq!(decode_inputs(t.wf()).unwrap(), inputs);
+        assert_eq!(decode_checkpoints(t.chk()).unwrap(), chk);
+        assert_eq!(decode_pack(t.pack()).unwrap(), packs);
     }
 
-    /// The `[wa]` section is the container's whole justification: extracting
-    /// it must give back the exact vanilla bytes, or nothing is gained over a
-    /// sidecar.
+    /// WA's bytes are the file's prefix: they must come back exactly, or WA
+    /// would be handed a different game than it recorded.
     #[test]
-    fn extracting_wa_returns_byte_identical_vanilla_bytes() {
+    fn the_wa_prefix_is_byte_identical() {
         let mut fake_wagame = Vec::new();
         for i in 0..4096u32 {
             fake_wagame.extend_from_slice(&i.wrapping_mul(0x0100_0193).to_le_bytes());
         }
-        let header = Header {
-            complete: true,
-            ..Header::default()
-        };
-        let file = assemble(&header, &encode_pack(&[]).unwrap(), &fake_wagame, b"", b"").unwrap();
-        let c = Container::parse(&file).unwrap();
-        assert_eq!(c.wa().unwrap(), fake_wagame.as_slice());
+        let file = append_trailer(
+            &fake_wagame,
+            &Header::default(),
+            &encode_pack(&[]).unwrap(),
+            b"",
+            b"",
+        )
+        .unwrap();
+        assert_eq!(&file[..fake_wagame.len()], fake_wagame.as_slice());
+        let t = Trailer::find(&file).unwrap().unwrap();
+        assert_eq!(t.wa_prefix(), fake_wagame.as_slice());
     }
 
     #[test]
     fn wrong_wa_version_is_a_distinct_refusal() {
         let header = Header {
             wa_version: "3.9.0".into(),
-            complete: true,
             ..Header::default()
         };
-        let file = assemble(&header, &encode_pack(&[]).unwrap(), b"WA", b"", b"").unwrap();
-        let container = Container::parse(&file).unwrap();
+        let file = append_trailer(b"WA", &header, &encode_pack(&[]).unwrap(), b"", b"").unwrap();
+        let t = Trailer::find(&file).unwrap().unwrap();
         assert_eq!(
-            container.require_wa_version("3.8.1"),
+            t.require_wa_version("3.8.1"),
             Err(Error::WaVersion {
                 found: "3.9.0".into(),
                 supported: "3.8.1".into(),

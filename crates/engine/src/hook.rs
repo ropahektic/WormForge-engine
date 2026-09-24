@@ -108,9 +108,9 @@ unsafe extern "system" fn replay_loader_hook(prefix: *mut u8, mode: i32) -> u32 
     }
 }
 
-/// WA closes and destroys the replay writer inside GameEngine::Shutdown. Run
-/// phase two after the original returns so the `.WAgame` bytes are final and
-/// no longer held open when we embed them.
+/// WA closes and destroys the replay writer inside GameEngine::Shutdown.
+/// Finish the recording after the original returns, so the `.WAgame` is final
+/// and no longer held open when the trailer is appended to it.
 unsafe extern "system" fn shutdown_hook(state_buf: *mut u8) {
     // Before the original: its teardown deletes the panel images, and a
     // copied icon must not leave two slots owning the same one.

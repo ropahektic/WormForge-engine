@@ -1,7 +1,11 @@
 # Replays in `.WAgame` + the `.WFAssets` collection
 
-> **Status (2026-09-24): S0 passed, S1 done; S2 next** on branch
-> `wagame_replay`.
+> **Status (2026-09-24): S0–S3 done; S4 (docs, release) next** on branch
+> `wagame_replay`. S3 was verified in-game: a match recorded with
+> `gravler_strike` and `sentry_gun` stored 11 files as collection references,
+> completed at match end, and played back with checkpoints matching. That
+> test also found the match-end crash fixed in PR #13 (`panel_icon` double
+> free).
 > Supersedes the `.WF_WAgame` container described in `replay.md` and
 > `replay-plan.md`.
 
@@ -200,8 +204,10 @@ file,** stop and re-plan around WA's ignored in-stream events (`0x0C`, `0x6B`,
     ("recorded with a newer WormForge release").
   - materialise the packs as today
   - redirect WA to the file itself, or to the extracted prefix, per S0
-- **Delete:** the sibling lookup (`container_path`, the `User/Games` fallback)
-  and the `.WF_WAgame` extension handling.
+- **Delete:** the sibling lookup (`container_path`) and the `.WF_WAgame`
+  extension handling. **Keep a `User/Games` fallback:** under the macOS Wine
+  bundle WA hands the loader a host path with a drive letter glued on, which
+  does not exist inside Wine (found in testing).
 - **Load the collection once** at startup, index only. `hdr.collection_version`
   records which version the recorder had.
 

@@ -1,18 +1,29 @@
-//! The section directory, `[hdr]`, and the `[wf]` / `[chk]` streams.
+//! The WormForge trailer on a `.WAgame`, and the `[wf]` / `[chk]` streams.
 //!
 //! ```text
-//!  0  "WFRP"            magic
-//!  4  u16 format version
-//!  6  u16 section count
-//!  8  count x ( tag[4], u32 offset, u32 len )   the directory
-//! ..  section bodies at their offsets, absolute from byte 0
+//! <name>.WAgame
+//!   WA's own bytes, untouched            wa_len bytes
+//!   trailer:
+//!     u16 section count, u16 reserved (0)
+//!     count x ( tag[4], u32 offset, u32 len )   offsets from trailer start
+//!     section bodies: hdr, pack, wf, chk
+//!   footer, 32 bytes:
+//!     "WFTR", u16 format, u16 flags, u64 trailer_len, u32 crc32(trailer),
+//!     u32 wa_len, 8 reserved bytes (0)
 //! ```
 //!
-//! Offsets are absolute and 32-bit because a replay is a file, not a stream
-//! (`error::Offset`). The directory comes first so a reader knows every
-//! section before touching any body, and so `[hdr]` -- including the
-//! two-phase `complete` flag -- sits at a discoverable offset that phase two
-//! can rewrite once, when the round ends.
+//! WA reads a `.WAgame` up to its own end-of-stream and ignores what follows
+//! (the S0 spike in `docs/replay-wagame-plan.md`), so one file carries both
+//! the vanilla replay and everything WormForge needs to re-simulate it.
+//!
+//! Detection reads only the footer. No magic, or reserved bytes that are not
+//! zero, means a vanilla replay: returned as `None`, never an error. Once a
+//! footer is recognised, everything else must hold -- format version, lengths
+//! that add up to the file, the CRC -- or the file is **refused**: a damaged
+//! WormForge replay played as vanilla would be a different match.
+//!
+//! The trailer is written once, whole, when the round has ended, so having one
+//! means the recording is complete. There is no two-phase flag any more.
 //!
 //! Every reader here **refuses rather than degrades**: an unknown tag, an
 //! out-of-bounds or overlapping entry, a frame stream past its cap, frames
@@ -22,26 +33,28 @@
 
 use crate::error::{Error, Offset};
 
-/// File magic. First four bytes, checked before anything else.
-pub const MAGIC: [u8; 4] = *b"WFRP";
+/// Footer magic: the first four of the file's last 32 bytes.
+pub const MAGIC: [u8; 4] = *b"WFTR";
 /// Bump whenever any on-disk shape changes -- readers refuse other values
-/// with [`Error::FormatVersion`] rather than guessing (gap D6).
-pub const FORMAT_VERSION: u16 = 1;
+/// with [`Error::FormatVersion`] rather than guessing (gap D6). 1 was the
+/// separate `.WF_WAgame` container, which is no longer read.
+pub const FORMAT_VERSION: u16 = 2;
+/// The fixed footer at the very end of the file.
+pub const FOOTER_LEN: usize = 32;
 
 pub const TAG_HDR: [u8; 4] = *b"hdr ";
 pub const TAG_PACK: [u8; 4] = *b"pack";
-pub const TAG_WA: [u8; 4] = *b"wa  ";
 pub const TAG_WF: [u8; 4] = *b"wf  ";
 pub const TAG_CHK: [u8; 4] = *b"chk ";
 
 /// Tags this build understands. Anything else is refused (`UnknownSection`):
 /// an unknown tag means the writer knew something we do not.
-pub const KNOWN_TAGS: [[u8; 4]; 5] = [TAG_HDR, TAG_PACK, TAG_WA, TAG_WF, TAG_CHK];
+pub const KNOWN_TAGS: [[u8; 4]; 4] = [TAG_HDR, TAG_PACK, TAG_WF, TAG_CHK];
 
 /// The frozen field order of `[hdr]`. Changing this list changes the bytes,
 /// so it changes [`FORMAT_VERSION`] with it -- the schema is what a reader
 /// of a future build compares against to refuse cleanly.
-pub const HDR_SCHEMA: [&str; 5] = ["wa_version", "build_hash", "modset", "flags", "complete"];
+pub const HDR_SCHEMA: [&str; 4] = ["wa_version", "build_hash", "modset", "collection_version"];
 
 /// Hard ceiling on the encoded `[wf]` stream: 16 MiB is ~1.7M samples, over
 /// nine hours at 50 fps -- orders of magnitude past any real match (~1 MB
@@ -53,8 +66,7 @@ pub const MAX_WF_BYTES: u32 = 16 * 1024 * 1024;
 const WHAT_WF: &str = "[wf] stream";
 const WHAT_CHK: &str = "[chk] stream";
 
-/// `[hdr]` -- identity of the recording. `complete` is the two-phase flag:
-/// `false` while the round runs, rewritten to `true` when it ends cleanly.
+/// `[hdr]` -- identity of the recording.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Header {
     /// WA's own version string, e.g. `"3.8.1.0"`.
@@ -64,10 +76,10 @@ pub struct Header {
     pub build_hash: String,
     /// `modset_fingerprint()` at load: `id@version;...`.
     pub modset: String,
-    /// Container flags, reserved, currently 0.
-    pub flags: u16,
-    /// Phase two of the two-phase close. Playback refuses `false`.
-    pub complete: bool,
+    /// The `.WFAssets` release the recorder had loaded (0: none). A replay
+    /// whose assets a player's collection lacks names this version, so the
+    /// refusal can say which release is needed.
+    pub collection_version: u32,
 }
 
 /// One frame's local input, as latched by `game::latch::FrameLatch` -- the
@@ -256,7 +268,7 @@ pub fn decode_checkpoints(bytes: &[u8]) -> Result<Vec<Checkpoint>, Error> {
     Ok(out)
 }
 
-const DIRECTORY_HEADER: usize = 8;
+const DIRECTORY_HEADER: usize = 4;
 const DIRECTORY_ENTRY: usize = 12;
 
 #[derive(Clone, Copy, Debug)]
@@ -266,115 +278,68 @@ struct Section {
     len: u32,
 }
 
-/// A validated view of a replay container. Construction validates the whole
-/// directory before any section is exposed, so later accessors are only slice
-/// lookups and cannot discover a bounds error halfway through playback.
-pub struct Container<'a> {
-    bytes: &'a [u8],
+/// A validated WormForge trailer on a `.WAgame`. Construction validates the
+/// footer, the CRC and the whole directory before any section is exposed, so
+/// later accessors are only slice lookups.
+pub struct Trailer<'a> {
+    file: &'a [u8],
+    wa_len: usize,
+    trailer: &'a [u8],
     sections: Vec<Section>,
     header: Header,
 }
 
-impl<'a> Container<'a> {
-    pub fn parse(bytes: &'a [u8]) -> Result<Self, Error> {
-        if bytes.len() < MAGIC.len() || bytes[..4] != MAGIC {
-            return Err(Error::NotAContainer);
+impl<'a> Trailer<'a> {
+    /// `Ok(None)` for a vanilla `.WAgame`; `Err` for a WormForge replay that
+    /// is damaged or from another format version.
+    pub fn find(file: &'a [u8]) -> Result<Option<Self>, Error> {
+        let Some(footer) = file.len().checked_sub(FOOTER_LEN).map(|at| &file[at..]) else {
+            return Ok(None);
+        };
+        if footer[0..4] != MAGIC || footer[24..32] != [0; 8] {
+            return Ok(None);
         }
-        let mut root = Body::new(bytes, "container directory");
-        root.take(4)?;
-        let version = root.u16()?;
-        if version != FORMAT_VERSION {
+        let format = u16::from_le_bytes([footer[4], footer[5]]);
+        if format != FORMAT_VERSION {
             return Err(Error::FormatVersion {
-                found: version,
+                found: format,
                 supported: FORMAT_VERSION,
             });
         }
-        let count = root.u16()? as usize;
-        if count != KNOWN_TAGS.len() {
-            return Err(Error::Malformed {
-                what: "container directory",
-                detail: format!("has {count} sections, expected {}", KNOWN_TAGS.len()),
+        let trailer_len = u64::from_le_bytes(footer[8..16].try_into().unwrap());
+        let crc = u32::from_le_bytes(footer[16..20].try_into().unwrap());
+        let wa_len = u32::from_le_bytes(footer[20..24].try_into().unwrap()) as u64;
+        let body_len = (file.len() - FOOTER_LEN) as u64;
+        if wa_len.checked_add(trailer_len) != Some(body_len) {
+            return Err(Error::TrailerLength {
+                wa_len,
+                trailer_len,
+                file_len: file.len() as u64,
             });
         }
-        let directory_len =
-            DIRECTORY_HEADER
-                .checked_add(count.checked_mul(DIRECTORY_ENTRY).ok_or_else(|| {
-                    Error::Malformed {
-                        what: "container directory",
-                        detail: "section count overflows the directory size".into(),
-                    }
-                })?)
-                .ok_or_else(|| Error::Malformed {
-                    what: "container directory",
-                    detail: "directory size overflows".into(),
-                })?;
-        if bytes.len() < directory_len {
-            return Err(Error::Truncated {
-                at: root.pos as Offset,
-                wanted: directory_len - root.pos,
-                got: bytes.len().saturating_sub(root.pos),
+        let wa_len = wa_len as usize;
+        let trailer = &file[wa_len..file.len() - FOOTER_LEN];
+        let found = crc32(trailer);
+        if found != crc {
+            return Err(Error::TrailerCrc {
+                expected: crc,
+                found,
             });
         }
-
-        let file_len = u32::try_from(bytes.len()).map_err(|_| Error::ContainerTooLarge {
-            bytes: bytes.len() as u64,
-        })?;
-        let mut sections = Vec::with_capacity(count);
-        for _ in 0..count {
-            let tag: [u8; 4] = root.take(4)?.try_into().unwrap();
-            if !KNOWN_TAGS.contains(&tag) {
-                return Err(Error::UnknownSection { tag });
-            }
-            if sections.iter().any(|s: &Section| s.tag == tag) {
-                return Err(Error::Malformed {
-                    what: "container directory",
-                    detail: format!("section {} appears twice", crate::tag_str(&tag)),
-                });
-            }
-            let offset = root.u32()?;
-            let len = root.u32()?;
-            let end = offset as u64 + len as u64;
-            if offset < directory_len as u32 || end > file_len as u64 {
-                return Err(Error::SectionBounds {
-                    tag,
-                    offset,
-                    len,
-                    file_len,
-                });
-            }
-            sections.push(Section { tag, offset, len });
-        }
-
-        let mut ordered = sections.clone();
-        ordered.sort_by_key(|s| s.offset);
-        for pair in ordered.windows(2) {
-            let a_end = pair[0].offset as u64 + pair[0].len as u64;
-            if a_end > pair[1].offset as u64 {
-                return Err(Error::SectionsOverlap {
-                    a: pair[0].tag,
-                    b: pair[1].tag,
-                });
-            }
-        }
-        for (tag, name) in [
-            (TAG_HDR, "hdr "),
-            (TAG_PACK, "pack"),
-            (TAG_WA, "wa  "),
-            (TAG_WF, "wf  "),
-            (TAG_CHK, "chk "),
-        ] {
-            if !sections.iter().any(|s| s.tag == tag) {
-                return Err(Error::MissingSection { tag: name });
-            }
-        }
-
-        let hdr = section_bytes(bytes, &sections, TAG_HDR).unwrap();
-        let header = decode_header(hdr)?;
-        Ok(Self {
-            bytes,
+        let (sections, header) = parse_directory(trailer)?;
+        Ok(Some(Self {
+            file,
+            wa_len,
+            trailer,
             sections,
             header,
-        })
+        }))
+    }
+
+    /// WA's own bytes: the whole file up to the trailer, byte-identical to
+    /// what WA wrote.
+    pub fn wa_prefix(&self) -> &'a [u8] {
+        &self.file[..self.wa_len]
     }
 
     pub fn header(&self) -> &Header {
@@ -392,28 +357,77 @@ impl<'a> Container<'a> {
         }
     }
 
-    pub fn pack(&self) -> Result<&'a [u8], Error> {
-        self.complete_section(TAG_PACK)
+    pub fn pack(&self) -> &'a [u8] {
+        self.section(TAG_PACK)
     }
 
-    pub fn wa(&self) -> Result<&'a [u8], Error> {
-        self.complete_section(TAG_WA)
+    pub fn wf(&self) -> &'a [u8] {
+        self.section(TAG_WF)
     }
 
-    pub fn wf(&self) -> Result<&'a [u8], Error> {
-        self.complete_section(TAG_WF)
+    pub fn chk(&self) -> &'a [u8] {
+        self.section(TAG_CHK)
     }
 
-    pub fn chk(&self) -> Result<&'a [u8], Error> {
-        self.complete_section(TAG_CHK)
+    fn section(&self, tag: [u8; 4]) -> &'a [u8] {
+        // Every known tag was proven present and in bounds by `find`.
+        section_bytes(self.trailer, &self.sections, tag).unwrap()
     }
+}
 
-    fn complete_section(&self, tag: [u8; 4]) -> Result<&'a [u8], Error> {
-        if !self.header.complete {
-            return Err(Error::Incomplete);
+fn parse_directory(trailer: &[u8]) -> Result<(Vec<Section>, Header), Error> {
+    let mut root = Body::new(trailer, "trailer directory");
+    let count = root.u16()? as usize;
+    root.u16()?;
+    if count != KNOWN_TAGS.len() {
+        return Err(Error::Malformed {
+            what: "trailer directory",
+            detail: format!("has {count} sections, expected {}", KNOWN_TAGS.len()),
+        });
+    }
+    let directory_len = DIRECTORY_HEADER + count * DIRECTORY_ENTRY;
+    let trailer_len = u32::try_from(trailer.len()).map_err(|_| Error::ContainerTooLarge {
+        bytes: trailer.len() as u64,
+    })?;
+    let mut sections = Vec::with_capacity(count);
+    for _ in 0..count {
+        let tag: [u8; 4] = root.take(4)?.try_into().unwrap();
+        if !KNOWN_TAGS.contains(&tag) {
+            return Err(Error::UnknownSection { tag });
         }
-        Ok(section_bytes(self.bytes, &self.sections, tag).unwrap())
+        if sections.iter().any(|s: &Section| s.tag == tag) {
+            return Err(Error::Malformed {
+                what: "trailer directory",
+                detail: format!("section {} appears twice", crate::tag_str(&tag)),
+            });
+        }
+        let offset = root.u32()?;
+        let len = root.u32()?;
+        let end = offset as u64 + len as u64;
+        if offset < directory_len as u32 || end > trailer_len as u64 {
+            return Err(Error::SectionBounds {
+                tag,
+                offset,
+                len,
+                file_len: trailer_len,
+            });
+        }
+        sections.push(Section { tag, offset, len });
     }
+    let mut ordered = sections.clone();
+    ordered.sort_by_key(|s| s.offset);
+    for pair in ordered.windows(2) {
+        let a_end = pair[0].offset as u64 + pair[0].len as u64;
+        if a_end > pair[1].offset as u64 {
+            return Err(Error::SectionsOverlap {
+                a: pair[0].tag,
+                b: pair[1].tag,
+            });
+        }
+    }
+    // Four distinct known tags, so every one is present.
+    let header = decode_header(section_bytes(trailer, &sections, TAG_HDR).unwrap())?;
+    Ok((sections, header))
 }
 
 fn section_bytes<'a>(bytes: &'a [u8], sections: &[Section], tag: [u8; 4]) -> Option<&'a [u8]> {
@@ -422,23 +436,31 @@ fn section_bytes<'a>(bytes: &'a [u8], sections: &[Section], tag: [u8; 4]) -> Opt
     Some(&bytes[start..start + s.len as usize])
 }
 
-/// Assemble the five fixed sections. The order is frozen with the format
-/// version even though the reader uses tags: stable bytes make fixtures and
-/// extraction tools straightforward to compare.
-pub fn assemble(
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = flate2::Crc::new();
+    crc.update(bytes);
+    crc.sum()
+}
+
+/// WA's bytes followed by a trailer and footer: the finished file. The
+/// section order is frozen with the format version even though the reader
+/// uses tags, so identical inputs give identical bytes.
+pub fn append_trailer(
+    wa: &[u8],
     header: &Header,
     packs: &[u8],
-    wa: &[u8],
     wf: &[u8],
     checkpoints: &[u8],
 ) -> Result<Vec<u8>, Error> {
     check_cap(wf)?;
     check_cap(checkpoints)?;
+    let wa_len = u32::try_from(wa.len()).map_err(|_| Error::ContainerTooLarge {
+        bytes: wa.len() as u64,
+    })?;
     let header = encode_header(header);
-    let bodies: [([u8; 4], &[u8]); 5] = [
+    let bodies: [([u8; 4], &[u8]); 4] = [
         (TAG_HDR, &header),
         (TAG_PACK, packs),
-        (TAG_WA, wa),
         (TAG_WF, wf),
         (TAG_CHK, checkpoints),
     ];
@@ -453,24 +475,29 @@ pub fn assemble(
         return Err(Error::ContainerTooLarge { bytes: total });
     }
 
-    let mut out = Vec::with_capacity(total as usize);
-    out.extend_from_slice(&MAGIC);
-    out.extend_from_slice(&FORMAT_VERSION.to_le_bytes());
+    let mut out = Vec::with_capacity(wa.len() + total as usize + FOOTER_LEN);
+    out.extend_from_slice(wa);
     out.extend_from_slice(&(bodies.len() as u16).to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes());
     let mut offset = directory_len as u32;
     for (tag, body) in &bodies {
-        let len =
-            u32::try_from(body.len()).map_err(|_| Error::ContainerTooLarge { bytes: total })?;
+        let len = body.len() as u32;
         out.extend_from_slice(tag);
         out.extend_from_slice(&offset.to_le_bytes());
         out.extend_from_slice(&len.to_le_bytes());
-        offset = offset
-            .checked_add(len)
-            .ok_or(Error::ContainerTooLarge { bytes: total })?;
+        offset += len;
     }
     for (_, body) in bodies {
         out.extend_from_slice(body);
     }
+    let crc = crc32(&out[wa.len()..]);
+    out.extend_from_slice(&MAGIC);
+    out.extend_from_slice(&FORMAT_VERSION.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes()); // flags
+    out.extend_from_slice(&total.to_le_bytes());
+    out.extend_from_slice(&crc.to_le_bytes());
+    out.extend_from_slice(&wa_len.to_le_bytes());
+    out.extend_from_slice(&[0; 8]);
     Ok(out)
 }
 
@@ -479,8 +506,7 @@ fn encode_header(header: &Header) -> Vec<u8> {
     put_str(&mut out, &header.wa_version);
     put_str(&mut out, &header.build_hash);
     put_str(&mut out, &header.modset);
-    out.extend_from_slice(&header.flags.to_le_bytes());
-    out.push(header.complete as u8);
+    out.extend_from_slice(&header.collection_version.to_le_bytes());
     out
 }
 
@@ -489,24 +515,13 @@ fn decode_header(bytes: &[u8]) -> Result<Header, Error> {
     let wa_version = r.string()?;
     let build_hash = r.string()?;
     let modset = r.string()?;
-    let flags = r.u16()?;
-    let complete = match r.u8()? {
-        0 => false,
-        1 => true,
-        b => {
-            return Err(Error::Malformed {
-                what: "[hdr]",
-                detail: format!("complete flag is {b}, not 0 or 1"),
-            })
-        }
-    };
+    let collection_version = r.u32()?;
     r.done()?;
     Ok(Header {
         wa_version,
         build_hash,
         modset,
-        flags,
-        complete,
+        collection_version,
     })
 }
 
@@ -626,26 +641,31 @@ impl<'a> Body<'a> {
 mod tests {
     use super::*;
 
-    fn complete() -> Vec<u8> {
-        assemble(
-            &Header {
-                complete: true,
-                ..Header::default()
-            },
-            b"packs",
-            b"wa",
-            b"wf",
-            b"chk",
-        )
-        .unwrap()
+    const WA: &[u8] = b"WA\x00fake vanilla replay bytes";
+
+    fn file() -> Vec<u8> {
+        append_trailer(WA, &Header::default(), b"packs", b"wf", b"chk").unwrap()
+    }
+
+    #[test]
+    fn a_vanilla_file_is_not_detected() {
+        assert!(Trailer::find(WA).unwrap().is_none());
+        assert!(Trailer::find(b"").unwrap().is_none());
+        // A tail that happens to hold the magic where the footer would start,
+        // followed by anything but eight zero bytes, is still vanilla.
+        let mut tail = WA.to_vec();
+        tail.extend_from_slice(&MAGIC);
+        tail.extend_from_slice(&[0xA5; 28]);
+        assert!(Trailer::find(&tail).unwrap().is_none());
     }
 
     #[test]
     fn wrong_version_is_distinct() {
-        let mut bytes = complete();
-        bytes[4..6].copy_from_slice(&99u16.to_le_bytes());
+        let mut bytes = file();
+        let at = bytes.len() - FOOTER_LEN + 4;
+        bytes[at..at + 2].copy_from_slice(&99u16.to_le_bytes());
         assert!(matches!(
-            Container::parse(&bytes),
+            Trailer::find(&bytes),
             Err(Error::FormatVersion {
                 found: 99,
                 supported: FORMAT_VERSION
@@ -654,23 +674,42 @@ mod tests {
     }
 
     #[test]
-    fn truncated_directory_is_refused() {
-        let bytes = complete();
-        assert!(matches!(
-            Container::parse(&bytes[..20]),
-            Err(Error::Truncated { .. })
-        ));
+    fn a_truncated_trailer_is_refused() {
+        let bytes = file();
+        // Cut bytes out of the trailer but keep the footer.
+        let mut cut = bytes[..WA.len() + 3].to_vec();
+        cut.extend_from_slice(&bytes[bytes.len() - FOOTER_LEN..]);
+        assert!(matches!(Trailer::find(&cut), Err(Error::TrailerLength { .. })));
     }
 
     #[test]
-    fn section_outside_file_is_refused() {
-        let mut bytes = complete();
-        // First entry's offset.
-        bytes[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
-        assert!(matches!(
-            Container::parse(&bytes),
-            Err(Error::SectionBounds { .. })
-        ));
+    fn a_bad_crc_is_refused() {
+        let mut bytes = file();
+        bytes[WA.len() + 20] ^= 1;
+        assert!(matches!(Trailer::find(&bytes), Err(Error::TrailerCrc { .. })));
+    }
+
+    #[test]
+    fn the_wa_prefix_comes_back_byte_identical() {
+        let bytes = file();
+        let t = Trailer::find(&bytes).unwrap().unwrap();
+        assert_eq!(t.wa_prefix(), WA);
+        assert_eq!(t.pack(), b"packs");
+        assert_eq!(t.wf(), b"wf");
+        assert_eq!(t.chk(), b"chk");
+    }
+
+    #[test]
+    fn section_outside_trailer_is_refused() {
+        // Build a directory by hand with a bad offset and a valid CRC, so the
+        // bounds check is what trips.
+        let mut bytes = file();
+        let entry = WA.len() + DIRECTORY_HEADER + 4;
+        bytes[entry..entry + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        let end = bytes.len() - FOOTER_LEN;
+        let crc = crc32(&bytes[WA.len()..end]);
+        bytes[end + 16..end + 20].copy_from_slice(&crc.to_le_bytes());
+        assert!(matches!(Trailer::find(&bytes), Err(Error::SectionBounds { .. })));
     }
 
     #[test]
