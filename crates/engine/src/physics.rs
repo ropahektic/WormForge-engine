@@ -16,7 +16,7 @@ use game::entity::{is_missile, read_cm_forces, read_i32, read_motion, write_i32,
 use game::offsets::{
     APPLY_PROJECTILE_GRAVITY, CUSTOM_SPRITE_SENTINEL, CUSTOM_SPRITE_SLOT_MIN, ENT_MOVED, ENT_POS_X,
     ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y, ENT_WORM_TEAM, HIT_AMOUNT, HIT_TEAM, MISSILE_ALT_BANK_SPRITE,
-    MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
+    MISSILE_FREE, MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
     MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT, MISSILE_TYPE, MISSILE_TYPE_HOMING,
     MISSILE_VTABLE, MISSILE_WEAPON_ALT_SPRITE,
     MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE,
@@ -44,9 +44,49 @@ static ORIG_DRAW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_NAME: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_HUD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 /// Missile ptr → body sprite that should survive the lock-mode bank switch.
+///
+/// Keyed by address, so an entry must not outlive its missile: WA reuses a
+/// freed missile's memory for the next one, which would inherit the dead
+/// missile's body. `missile_free_hook` forgets each missile as WA frees it,
+/// and `clear_homing` empties both tables at every match start in case a
+/// teardown ever skips the per-entity free.
 static HM_CUSTOM: Mutex<Vec<(usize, i32)>> = Mutex::new(Vec::new());
 /// Logged (entity, mode) pairs so we see ballistic and lock once each.
 static HM_LOGGED: Mutex<Vec<(usize, i32)>> = Mutex::new(Vec::new());
+static ORIG_MISSILE_FREE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+type MissileFreeFn = unsafe extern "thiscall" fn(*mut u8, u32) -> *mut u8;
+
+/// Drop everything remembered about homing missiles. Called at match start.
+pub fn clear_homing() {
+    if let Ok(mut g) = HM_CUSTOM.lock() {
+        g.clear();
+    }
+    if let Ok(mut g) = HM_LOGGED.lock() {
+        g.clear();
+    }
+}
+
+fn forget_missile(key: usize) {
+    if let Ok(mut g) = HM_CUSTOM.lock() {
+        g.retain(|(e, _)| *e != key);
+    }
+    if let Ok(mut g) = HM_LOGGED.lock() {
+        g.retain(|(e, _)| *e != key);
+    }
+}
+
+/// `MissileEntity__Free`: forget the missile before WA releases its memory,
+/// so the next missile allocated there starts clean.
+unsafe extern "thiscall" fn missile_free_hook(this: *mut u8, flags: u32) -> *mut u8 {
+    forget_missile(this as usize);
+    let orig = ORIG_MISSILE_FREE.load(Ordering::SeqCst);
+    if orig.is_null() {
+        return this;
+    }
+    let f: MissileFreeFn = unsafe { std::mem::transmute(orig) };
+    unsafe { f(this, flags) }
+}
 static ORIG_HEALTH: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_CURSOR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_OFFMAP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -160,6 +200,9 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
     let m = catalog
         .function_va("MissileEntity__HandleMessage")
         .unwrap_or(MISSILE_HANDLE_MESSAGE);
+    let free = catalog
+        .function_va("MissileEntity__Free")
+        .unwrap_or(MISSILE_FREE);
     let w = catalog
         .function_va("WormEntity__HandleMessage")
         .unwrap_or(WORM_HANDLE_MESSAGE);
@@ -173,6 +216,11 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         ORIG_MISSILE.store(
             MinHook::create_hook(rb(m) as *mut c_void, missile_hook as *mut c_void)
                 .map_err(|e| format!("missile hook: {e:?}"))?,
+            Ordering::SeqCst,
+        );
+        ORIG_MISSILE_FREE.store(
+            MinHook::create_hook(rb(free) as *mut c_void, missile_free_hook as *mut c_void)
+                .map_err(|e| format!("missile free hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_WORM.store(

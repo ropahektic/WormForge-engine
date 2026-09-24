@@ -157,6 +157,9 @@ pub const MISSILE_ANIM_PHASE: usize = 0x3E8;
 
 pub const APPLY_PROJECTILE_GRAVITY: u32 = 0x004F_CB30;
 pub const MISSILE_HANDLE_MESSAGE: u32 = 0x0050_B400;
+/// `MissileEntity__Free`, vtable slot 1: thiscall (this, flags), RET 4. The
+/// destructor 0x5086F0 has no other caller, so every missile ends here.
+pub const MISSILE_FREE: u32 = 0x0050_8330;
 pub const WORM_HANDLE_MESSAGE: u32 = 0x0051_0B40;
 pub const WORLD_ROOT_HANDLE_MESSAGE: u32 = 0x0055_DC00;
 /// WormEntity__SetState — thiscall ECX=this, stack state. Slot 14 override.

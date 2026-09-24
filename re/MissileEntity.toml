@@ -1,4 +1,10 @@
 [[function]]
+va = 0x00508330
+name = "MissileEntity__Free"
+calling_convention = "__thiscall"
+plate_comment = "Vtable slot 1 (0x664438+4). (this, flags) RET 4, returns this. Calls the destructor 0x5086F0 -- its only caller -- then frees the allocation if flags bit 0 is set. So every missile's end passes through here."
+
+[[function]]
 va = 0x0050B400
 name = "MissileEntity__HandleMessage"
 calling_convention = "__thiscall"
