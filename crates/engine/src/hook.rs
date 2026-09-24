@@ -112,6 +112,11 @@ unsafe extern "system" fn replay_loader_hook(prefix: *mut u8, mode: i32) -> u32 
 /// phase two after the original returns so the `.WAgame` bytes are final and
 /// no longer held open when we embed them.
 unsafe extern "system" fn shutdown_hook(state_buf: *mut u8) {
+    // Before the original: its teardown deletes the panel images, and a
+    // copied icon must not leave two slots owning the same one.
+    if std::panic::catch_unwind(crate::apply::restore_panel_icons).is_err() {
+        log_error("panic while restoring panel icons");
+    }
     let orig = ORIGINAL_SHUTDOWN.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: unsafe extern "system" fn(*mut u8) = std::mem::transmute(orig);

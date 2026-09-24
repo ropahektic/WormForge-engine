@@ -4,7 +4,8 @@ use crate::log::{log_error, panic_text, wa_directory};
 use crate::sprite::{self, SpriteRef};
 use crate::world;
 use game::offsets::{
-    GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY, GAME_WORLD_PANEL_IMG, GAME_WORLD_WEAPON_TABLE,
+    GAME_RUNTIME_WORLD, GAME_SESSION_RUNTIME, GAME_WORLD_DISPLAY, GAME_WORLD_PANEL_IMG,
+    GAME_WORLD_WEAPON_TABLE, G_GAME_SESSION,
 };
 use game::weapon::{snapshot_table, write_entry, WeaponEntry};
 use lua_host::{mods_root_from, run_mods};
@@ -14,6 +15,9 @@ use std::sync::Mutex;
 use weapons::{apply_params, discover_mods, filter_requirements, modset_fingerprint, ResolveResult};
 
 static NAMES: Mutex<Vec<CString>> = Mutex::new(Vec::new());
+/// Panel slots `copy_panel_icon` overwrote: (world, slot, original hi, original
+/// lo, copied hi, copied lo). See `restore_panel_icons`.
+static PANEL_ORIGINALS: Mutex<Vec<(usize, usize, u32, u32, u32, u32)>> = Mutex::new(Vec::new());
 
 #[derive(Clone)]
 struct GfxPass {
@@ -427,6 +431,13 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
 
 /// Panel tiles read two frontend .img pointers per stock weapon from
 /// GameWorld+0x144. Copy the source slot's hi/lo pair onto the overlay slot.
+///
+/// The table OWNS those pointers: WA's teardown deletes every slot's images.
+/// After a copy two slots own the same objects, so they would be deleted
+/// twice -- the second virtual destructor call goes through a freed vtable
+/// and WA crashes (EIP 0) at the end of every match that used `panel_icon`.
+/// So the overwritten originals are remembered and put back by
+/// `restore_panel_icons` before WA tears the world down.
 unsafe fn copy_panel_icon(world: *mut u8, src: usize, dst: usize) {
     if world.is_null() || src == dst || src > 70 || dst > 70 {
         return;
@@ -437,8 +448,59 @@ unsafe fn copy_panel_icon(world: *mut u8, src: usize, dst: usize) {
     if src_hi == 0 && src_lo == 0 {
         return;
     }
+    let mut originals = PANEL_ORIGINALS.lock().unwrap_or_else(|p| p.into_inner());
+    // A different world is a new match; the old records describe freed memory.
+    originals.retain(|r| r.0 == world as usize);
+    let (orig_hi, orig_lo) = (*base.add(dst * 2), *base.add(dst * 2 + 1));
+    match originals.iter_mut().find(|r| r.1 == dst) {
+        // Copied onto twice: keep the first original, track the latest copy.
+        Some(r) => (r.4, r.5) = (src_hi, src_lo),
+        None => originals.push((world as usize, dst, orig_hi, orig_lo, src_hi, src_lo)),
+    }
     *base.add(dst * 2) = src_hi;
     *base.add(dst * 2 + 1) = src_lo;
+}
+
+/// The live GameWorld, read the way `after_init_weapon_table` got the one
+/// `copy_panel_icon` wrote into: `GameRuntime.world`.
+unsafe fn runtime_world() -> *mut u8 {
+    let slot = crate::rebase::rb(G_GAME_SESSION) as *const *mut u8;
+    if slot.is_null() || (*slot).is_null() {
+        return std::ptr::null_mut();
+    }
+    let runtime = *((*slot).add(GAME_SESSION_RUNTIME) as *const *mut u8);
+    if runtime.is_null() {
+        return std::ptr::null_mut();
+    }
+    *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8)
+}
+
+/// Put every slot `copy_panel_icon` overwrote back to its own images, so each
+/// image has exactly one owner when WA's teardown deletes them. Called by the
+/// `GameEngine::Shutdown` hook BEFORE the original runs.
+///
+/// Only writes into the live session world, and only where the slot still
+/// holds the pair we copied there -- anything else means the table changed
+/// under us, and writing would be a guess.
+pub fn restore_panel_icons() {
+    let mut originals = PANEL_ORIGINALS.lock().unwrap_or_else(|p| p.into_inner());
+    let live = unsafe { runtime_world() } as usize;
+    for (w, dst, orig_hi, orig_lo, hi, lo) in originals.drain(..) {
+        if w != live {
+            continue;
+        }
+        unsafe {
+            let base = (w as *mut u8).add(GAME_WORLD_PANEL_IMG) as *mut u32;
+            if *base.add(dst * 2) == hi && *base.add(dst * 2 + 1) == lo {
+                *base.add(dst * 2) = orig_hi;
+                *base.add(dst * 2 + 1) = orig_lo;
+            } else {
+                log_error(&format!(
+                    "panel icon slot {dst} changed after the copy; left as it is"
+                ));
+            }
+        }
+    }
 }
 
 
