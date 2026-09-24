@@ -653,32 +653,28 @@ fn table_to_claim(
         }
     }
 
-    let mut stock_sprite_overrides = Vec::new();
-    if let Some(overrides) = spec.get::<Option<Table>>("stock_sprite_overrides")? {
-        for pair in overrides.pairs::<Value, String>() {
-            let (key, path) = pair?;
-            let id = match key {
-                Value::Integer(id) => i32::try_from(id).map_err(mlua::Error::external)?,
-                Value::String(name) => gfx::stock_sprite_id(name.to_str()?.as_ref())
-                    .ok_or_else(|| mlua::Error::external("unknown stock sprite name"))?,
-                _ => {
-                    return Err(mlua::Error::external(
-                        "stock_sprite_overrides keys must be sprite names or integer IDs",
-                    ))
-                }
-            };
-            if !(1..800).contains(&id) {
-                return Err(mlua::Error::external(
-                    "stock_sprite_overrides IDs must be in 1..799",
-                ));
+    // The mole strike's digging frames: dive, then the three-frame dig
+    // cycle. Only these four stock sprites can be replaced here.
+    const MOLE_DIG_ROTATION: [&str; 4] = ["moledive", "moledig1", "moledig2", "moledig3"];
+    let mut mole_dig_rotation = Vec::new();
+    if let Some(frames) = spec.get::<Option<Table>>("mole_dig_rotation")? {
+        for pair in frames.pairs::<String, String>() {
+            let (name, path) = pair?;
+            let name = name.to_ascii_lowercase();
+            if !MOLE_DIG_ROTATION.contains(&name.as_str()) {
+                return Err(mlua::Error::external(format!(
+                    "mole_dig_rotation keys are {}; got {name:?}",
+                    MOLE_DIG_ROTATION.join(", ")
+                )));
             }
+            let id = gfx::stock_sprite_id(&name).expect("mole dig sprites are stock names");
             let (path, sheet) = load_pack_sheet(root, &path, 1)?;
             if !extra_sheets.iter().any(|(existing, _)| existing == &path) {
                 extra_sheets.push((path.clone(), sheet));
             }
-            stock_sprite_overrides.push((id, path));
+            mole_dig_rotation.push((id, path));
         }
-        stock_sprite_overrides.sort_by_key(|(id, _)| *id);
+        mole_dig_rotation.sort_by_key(|(id, _)| *id);
     }
 
     let mut worm_sprites = Vec::new();
@@ -871,7 +867,7 @@ fn table_to_claim(
             fire_spawn,
             sprite_path,
             extra_sheets,
-            stock_sprite_overrides,
+            mole_dig_rotation,
             worm_sprites,
             layer,
             depth,

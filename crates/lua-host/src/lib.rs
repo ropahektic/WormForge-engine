@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(
             claim
                 .params
-                .stock_sprite_overrides
+                .mole_dig_rotation
                 .iter()
                 .map(|(id, _)| *id)
                 .collect::<Vec<_>>(),
@@ -318,6 +318,33 @@ mod tests {
         );
         assert_eq!(claim.params.extra_sheets.len(), 4);
         assert!(claim.params.extra_sheets.iter().all(|(_, s)| s.frames.len() == 17));
+    }
+
+    #[test]
+    fn mole_dig_rotation_refuses_other_sprites() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-mole-dig-rotation");
+        let _ = std::fs::remove_dir_all(&root);
+        let bad = pack(
+            &root,
+            "t.mole",
+            r#"
+id = "t.mole"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["donkey"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "donkey",
+  copy_from = "mole_squadron",
+  mole_dig_rotation = { bazooka = "sprites/x.png" },
+})
+"#,
+        );
+        let err = run_mods(&[bad]).err().expect("a non-mole sprite is refused");
+        assert!(err.contains("mole_dig_rotation keys are moledive"), "{err}");
     }
 
     #[test]

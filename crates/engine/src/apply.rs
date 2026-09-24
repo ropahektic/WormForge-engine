@@ -132,12 +132,12 @@ pub fn on_gfx_ready(display: *mut u8) {
                 let worm_sheet = !as_weapon
                     && claim.params.gpu_worm_sprites
                     && claim.params.worm_sprites.iter().any(|(_, wp)| wp == p);
-                let stock_override_sheet = claim
+                let mole_dig_sheet = claim
                     .params
-                    .stock_sprite_overrides
+                    .mole_dig_rotation
                     .iter()
                     .any(|(_, wp)| wp == p);
-                if (by_prefix || worm_sheet) && !stock_override_sheet {
+                if (by_prefix || worm_sheet) && !mole_dig_sheet {
                     gpu_sheets.push((gfx::sprite_key(&claim.mod_id, p), sheet.clone()));
                     return;
                 }
@@ -182,7 +182,7 @@ pub fn on_gfx_ready(display: *mut u8) {
         for (path, sheet) in &claim.params.extra_sheets {
             install(Some(path.clone()), sheet, false);
         }
-        for (target, path) in &claim.params.stock_sprite_overrides {
+        for (target, path) in &claim.params.mole_dig_rotation {
             let key = gfx::sprite_key(&claim.mod_id, path);
             let sheet = claim.params.extra_sheets.iter().find(|(p, _)| p == path);
             match (sprite::lookup_key(&key), sheet) {
