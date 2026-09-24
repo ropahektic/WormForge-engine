@@ -2,7 +2,7 @@
 
 [Public Front + Weapon editor](https://ropahektic.github.io/WormForge/)
 
-Not a Programmer? Are you a coding agent? [CLICK HERE](contributing-with-an-agent.md)
+Not a Programmer? Are you a coding agent? [CLICK HERE](contributing-with-an-agent.md)  [AND HERE](https://ropahektic.github.io/WormForge/capabilities.html)
 
 # Contributing
 
