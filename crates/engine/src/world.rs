@@ -747,6 +747,7 @@ pub fn equip_weapon(handle: u32, slot: u32) -> i32 {
             }
             gifted = true;
         }
+        mark_panel_dirty(world);
         select_weapon(worm, slot, ammo);
         arm_stock_fire(worm, slot, ammo, gifted);
         ammo
@@ -897,6 +898,7 @@ unsafe fn take_team_ammo(worm: *mut u8, slot: u32) {
     let arena = world.add(GAME_WORLD_TEAM_ARENA);
     let team = read_i32(worm, ENT_WORM_TEAM) as u32;
     write_ammo(arena, team, slot, 0);
+    mark_panel_dirty(world);
     let left = get_ammo(arena, team, slot);
     log_line(&format!("ammo spent slot={slot} team={team} left={left}"));
 }
@@ -951,7 +953,24 @@ pub fn ammo(handle: u32, slot: u32, change: Option<lua_host::AmmoChange>) -> i32
             clear_delay(arena, team, slot);
         }
         write_ammo(arena, team, slot, next);
+        mark_panel_dirty(world);
         get_ammo(arena, team, slot)
+    }
+}
+
+/// Ask WA to rebuild the weapon panel on its next update.
+///
+/// Each panel row lists only the weapons with ammo, packed left to right, so
+/// every ammo, delay or availability change reflows it. WA only rebuilds on
+/// its dirty flag, and only its own message paths set that; our writes go
+/// straight into the ammo table, so without this the panel kept showing the
+/// old contents until some stock event happened to dirty it. PX needed the
+/// same nudge: its scripts re-set a weapon icon to itself after every ammo
+/// change to force a rebuild. Display state only, like the write it follows.
+unsafe fn mark_panel_dirty(world: *mut u8) {
+    let panel = read_i32(world, GAME_WORLD_WEAPON_PANEL) as *mut u8;
+    if !panel.is_null() {
+        write_i32(panel, WEAPON_PANEL_DIRTY, 1);
     }
 }
 
