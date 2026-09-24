@@ -61,7 +61,7 @@ Per-worm loadouts are virtual because WA has no per-worm ammo row. `wa.inventory
 
 `a:frame(i)` holds a LuaActor on one frame of its current sheet (zeroes the loop delta). `worm.facing` is read-only (−1 left, +1 right). `worm_sprites` on `replace` remaps that slot’s worm poses only (`weaponlnk` / `wthrow` and slope variants). `ev.damage` on an actor brain is stock blast falloff this tick. Overlaying a mine’s fire (`copy_from = "mine"` plus `on_fire`) keeps placement/retreat and routes the body through the existing projectile wrap.
 
-`stock_sprite_overrides = { [245] = "sprites/pose.png" }` replaces a stock Gfx.dir sprite ID globally for the match, as PX's `SetSpriteOverride` does. The PNG/GIF must live in the pack; first loaded claim for an ID wins. Use this only when the stock weapon hardcodes its sprite IDs, since the replacement also changes that sprite in other weapons using the same ID.
+`stock_sprite_overrides = { moledive = "sprites/pose.png" }` replaces a named stock Gfx.dir sprite globally for the match, as PX's `SetSpriteOverride` does. Numeric IDs also work, but names avoid mixing PX 3.6.31 IDs with WA 3.8.1 IDs. The PNG/GIF must live in the pack; first loaded claim for an ID wins. The replacement also changes that sprite in other weapons using the same ID.
 
 ## Verbs (engine)
 

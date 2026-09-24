@@ -314,7 +314,7 @@ mod tests {
                 .iter()
                 .map(|(id, _)| *id)
                 .collect::<Vec<_>>(),
-            vec![245, 246, 247, 248]
+            vec![158, 159, 160, 161]
         );
         assert_eq!(claim.params.extra_sheets.len(), 4);
         assert!(claim.params.extra_sheets.iter().all(|(_, s)| s.frames.len() == 17));

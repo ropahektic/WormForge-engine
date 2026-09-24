@@ -223,5 +223,9 @@ clone on the `donkey` panel slot. That retains WA's native mole digging path.
 The pack extracts PX's four PNG strips unchanged and applies the same global
 sprite overrides. A sprite alias records and restores the original WA sprite
 pointers and reasserts the aliases if WA rebuilds its table for a new round.
+PX's numeric IDs 245–248 are not valid aliases for these sprites in WA 3.8.1:
+the local Gfx.dir map names `moledive` and `moledig1`–`moledig3` at 158–161.
+The first installed build used the PX numbers and therefore kept drawing
+stock moles; the pack now uses the stock sprite names to select the WA 3.8.1 IDs.
 Compare projectile count, spacing, depth, damage, timing and appearance against
 PX in game before considering its weapon-data parameters matched.

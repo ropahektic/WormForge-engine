@@ -655,8 +655,18 @@ fn table_to_claim(
 
     let mut stock_sprite_overrides = Vec::new();
     if let Some(overrides) = spec.get::<Option<Table>>("stock_sprite_overrides")? {
-        for pair in overrides.pairs::<i32, String>() {
-            let (id, path) = pair?;
+        for pair in overrides.pairs::<Value, String>() {
+            let (key, path) = pair?;
+            let id = match key {
+                Value::Integer(id) => i32::try_from(id).map_err(mlua::Error::external)?,
+                Value::String(name) => gfx::stock_sprite_id(name.to_str()?.as_ref())
+                    .ok_or_else(|| mlua::Error::external("unknown stock sprite name"))?,
+                _ => {
+                    return Err(mlua::Error::external(
+                        "stock_sprite_overrides keys must be sprite names or integer IDs",
+                    ))
+                }
+            };
             if !(1..800).contains(&id) {
                 return Err(mlua::Error::external(
                     "stock_sprite_overrides IDs must be in 1..799",
