@@ -307,6 +307,8 @@ pub struct OverlayParams {
     pub sprite_path: Option<String>,
     /// Extra PNG/GIF/frame-folders installed at gfx init (`sprites = { ... }`).
     pub extra_sheets: Vec<(String, SpriteStrip)>,
+    /// Replace stock Gfx.dir sprite IDs globally for this match, as PX does.
+    pub stock_sprite_overrides: Vec<(i32, String)>,
     /// Stock worm sprite id -> pack sheet path, scoped to this weapon slot.
     pub worm_sprites: Vec<(i32, String)>,
     pub layer: Option<u32>,
@@ -378,6 +380,7 @@ impl Default for OverlayParams {
             fire_spawn: None,
             sprite_path: None,
             extra_sheets: Vec::new(),
+            stock_sprite_overrides: Vec::new(),
             worm_sprites: Vec::new(),
             layer: None,
             depth: None,

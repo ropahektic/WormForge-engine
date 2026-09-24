@@ -307,6 +307,17 @@ mod tests {
         assert_eq!(claim.params.panel_icon, Some(StockWeapon::MoleSquadron));
         assert_eq!(claim.params.on_click_id, 0);
         assert!(claim.params.actor_spawn().is_none());
+        assert_eq!(
+            claim
+                .params
+                .stock_sprite_overrides
+                .iter()
+                .map(|(id, _)| *id)
+                .collect::<Vec<_>>(),
+            vec![245, 246, 247, 248]
+        );
+        assert_eq!(claim.params.extra_sheets.len(), 4);
+        assert!(claim.params.extra_sheets.iter().all(|(_, s)| s.frames.len() == 17));
     }
 
     #[test]

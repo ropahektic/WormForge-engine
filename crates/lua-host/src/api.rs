@@ -653,6 +653,24 @@ fn table_to_claim(
         }
     }
 
+    let mut stock_sprite_overrides = Vec::new();
+    if let Some(overrides) = spec.get::<Option<Table>>("stock_sprite_overrides")? {
+        for pair in overrides.pairs::<i32, String>() {
+            let (id, path) = pair?;
+            if !(1..800).contains(&id) {
+                return Err(mlua::Error::external(
+                    "stock_sprite_overrides IDs must be in 1..799",
+                ));
+            }
+            let (path, sheet) = load_pack_sheet(root, &path, 1)?;
+            if !extra_sheets.iter().any(|(existing, _)| existing == &path) {
+                extra_sheets.push((path.clone(), sheet));
+            }
+            stock_sprite_overrides.push((id, path));
+        }
+        stock_sprite_overrides.sort_by_key(|(id, _)| *id);
+    }
+
     let mut worm_sprites = Vec::new();
     if let Some(poses) = spec.get::<Option<Table>>("worm_sprites")? {
         for pair in poses.pairs::<String, String>() {
@@ -843,6 +861,7 @@ fn table_to_claim(
             fire_spawn,
             sprite_path,
             extra_sheets,
+            stock_sprite_overrides,
             worm_sprites,
             layer,
             depth,
