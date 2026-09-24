@@ -3,11 +3,15 @@ return function(load_pack)
   local PX = 0x10000
   local spec, turn, bodies, rounds = nil, nil, {}, 0
   local guns, flares = {}, {}
-  local owner = { id = 1, team = 1, x = 100 * PX, y = 100 * PX,
+  -- A blue team in roster slot 1: team and colour disagree, as they do
+  -- online. The turret must follow the colour (alliance), not the slot.
+  local owner = { id = 1, team = 1, alliance = 1, x = 100 * PX, y = 100 * PX,
                   vx = 0, vy = 0, facing = 1 }
   -- Planted anchor sinks 8px; head is 25px above it.
-  local enemy = { id = 2, team = 2, x = 200 * PX, y = 83 * PX,
+  local enemy = { id = 2, team = 2, alliance = 0, x = 200 * PX, y = 83 * PX,
                   vx = 0, vy = 0, visible = true }
+  -- The enemy's teammate: same side, never in range. Only its turn matters.
+  local enemy_mate = { id = 3, team = 2, alliance = 0 }
   local blocked, terrain_hits = false, 0
   -- Stands in for wa.random, which draws from WA's shared RNG in the real
   -- engine. A fixed sequence here on purpose: this test asserts the sentry is
@@ -99,7 +103,9 @@ return function(load_pack)
   assert(flare, "and a separate additive muzzle flash")
   assert(a.sprite == nil or a.sprite:find("base"), "the turret actor is the tripod")
   assert(gun.angle == 0, "facing right is 0 degrees of rotation")
-  a.on(a) -- plants
+  a.on(a)
+  assert(gun.tint == 71 * 0x10000 + 100 * 0x100 + 255,
+         "a blue team's turret is blue, whatever roster slot the team has")
   for _ = 1, 100 do a.on(a) end
   assert(rounds == 0, "PX acquisition gate ignores stationary worms")
   enemy.vx = PX
@@ -140,4 +146,22 @@ return function(load_pack)
   damaged.on(damaged, { damage = 50 })
   assert(damaged.dead and damaged.destroyed_damage == 50,
          "50 health and PX destruction explosion")
+
+  -- A worm acquired during the owner's own turn (fire held) is not carried
+  -- into the next turn: it has to move again. Before, the turret opened fire
+  -- on it the moment its teammate's turn began, though it stood still.
+  spec.on_fire({ worm = owner })
+  local t = bodies[4]
+  turn(owner, wa.msg.START_TURN)
+  enemy.vx = PX
+  local before = rounds
+  for _ = 1, 100 do t.on(t) end
+  assert(rounds == before, "the owner's own turn holds fire")
+  enemy.vx = 0
+  turn(enemy_mate, wa.msg.START_TURN)
+  for _ = 1, 100 do t.on(t) end
+  assert(rounds == before, "a worm that stood still is no target on a new turn")
+  enemy.vx = PX
+  for _ = 1, 100 do t.on(t) end
+  assert(rounds > before, "once it moves this turn, it is")
 end
