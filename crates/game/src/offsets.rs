@@ -135,6 +135,12 @@ pub const MISSILE_WEAPON_SPRITE: usize = 0x180;
 /// Mirror of WeaponEntry+0xAC inside the copied fire-params blob
 /// (`weapon_data` base 0x15C + 0x70). Stock HM keeps hmissil1 here.
 pub const MISSILE_WEAPON_ALT_SPRITE: usize = 0x1CC;
+/// Mirror of the fire-params `missile_type` (WeaponEntry+0xA4, blob +0x68):
+/// 0 none, 1 homing, 2 standard, 3 sheep, 5 cluster. Same discriminator as
+/// `WEAPON_CLUSTER_MISSILE_TYPE`. (MissileEntity's own dispatch field,
+/// render_data[0x17], numbers these differently -- this is not that.)
+pub const MISSILE_TYPE: usize = 0x1C4;
+pub const MISSILE_TYPE_HOMING: i32 = 1;
 /// MissileEntity.fire_particle_trigger — sprite id missile render actually blits.
 pub const MISSILE_RENDER_SPRITE: usize = 0x2EC;
 /// Alternate sprite bank when entity+0x100 is set (render reads +0x338).
@@ -606,6 +612,10 @@ mod tests {
         assert_eq!(PALETTE_COMMIT, 0x0056CD20);
         assert_eq!(MISSILE_RENDER_SPRITE, 0x2EC);
         assert_eq!(MISSILE_WEAPON_ALT_SPRITE, 0x1CC);
+        // Both mirror the same fire-params blob, copied to weapon_data at 0x15C
+        // from WeaponEntry+0x3C.
+        assert_eq!(MISSILE_TYPE, 0x15C + (0xA4 - 0x3C));
+        assert_eq!(MISSILE_WEAPON_ALT_SPRITE, 0x15C + (0xAC - 0x3C));
         assert_eq!(MISSILE_ALT_BANK_SPRITE, 0x338);
         assert_eq!(MISSILE_RENDER_SPRITE_ALT, 0x368);
         assert_eq!(MISSILE_HOMING_SPRITE_A, 0x36C);
