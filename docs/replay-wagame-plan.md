@@ -1,7 +1,9 @@
 # Replays in `.WAgame` + the `.WFAssets` collection
 
-> **Status (2026-09-24): S0–S3 done; S4 (docs, release) next** on branch
-> `wagame_replay`. S3 was verified in-game: a match recorded with
+> **Status (2026-09-24): S0–S4 done** on branch `wagame_replay`. Docs:
+> [`replay.md`](replay.md), [`wfassets.md`](wfassets.md). Attaching the
+> collection to a GitHub release is the maintainer's release step
+> (`wfassets.md`, "Shipping it"). S3 was verified in-game: a match recorded with
 > `gravler_strike` and `sentry_gun` stored 11 files as collection references,
 > completed at match end, and played back with checkpoints matching. That
 > test also found the match-end crash fixed in PR #13 (`panel_icon` double
@@ -214,7 +216,7 @@ file,** stop and re-plan around WA's ignored in-stream events (`0x0C`, `0x6B`,
 ### S4: release and docs
 
 - `tools/install-local.py`: also install `WormForge.WFAssets` (skip it when
-  unchanged, since it's 150 MB).
+  unchanged, since it's 150 MB). Done locally; `tools/` is not tracked.
 - Release packaging: attach the collection file to the GitHub release; keep
   every shipped version.
 - Docs:

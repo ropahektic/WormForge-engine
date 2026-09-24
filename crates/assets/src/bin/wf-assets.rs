@@ -5,13 +5,16 @@
 //!                 [--previous <file>] [--add <dir>]... [--ext png,wav]
 //! wf-assets verify <file> [--lock <file>]
 //! wf-assets list <file>
+//! wf-assets check <file> <pack dir>
 //! ```
 //!
 //! `build` starts from the previously shipped collection (every entry carried
 //! forward), adds every file under each `--add` directory whose extension is
 //! listed, appends a lock line for each new blob, and refuses to write a
 //! collection missing any locked hash. `list` prints one line per entry on
-//! stdout, so `wf-assets list <file> | wc -l` is the entry count.
+//! stdout, so `wf-assets list <file> | wc -l` is the entry count. `check`
+//! tells a pack author which of their files a replay would store as a
+//! reference (`asset`) and which it would embed (`embed`).
 
 use assets::{sha256, Builder, Collection, Lock, LockEntry};
 use std::collections::HashSet;
@@ -27,7 +30,8 @@ fn main() {
 const USAGE: &str = "usage:
   wf-assets build --version N --lock <file> --out <file> [--previous <file>] [--add <dir>]... [--ext png,wav]
   wf-assets verify <file> [--lock <file>]
-  wf-assets list <file>";
+  wf-assets list <file>
+  wf-assets check <file> <pack dir>";
 
 #[derive(Default)]
 struct Args {
@@ -69,6 +73,7 @@ fn run() -> Result<(), String> {
         "build" => build(&args),
         "verify" => verify(&args),
         "list" => list(&args),
+        "check" => check(&args),
         _ => Err(USAGE.to_string()),
     }
 }
@@ -242,6 +247,38 @@ fn verify(args: &Args) -> Result<(), String> {
         eprintln!("lock: all {} locked hashes present", lock.entries.len());
     }
     eprintln!("collection {}: {} entries, every blob verified", c.version(), c.entries().len());
+    Ok(())
+}
+
+fn check(args: &Args) -> Result<(), String> {
+    let [file, dir] = args.positional.as_slice() else {
+        return Err(USAGE.to_string());
+    };
+    let c = open(file)?;
+    let mut files = Vec::new();
+    walk(dir, &mut files).map_err(|e| format!("{}: {e}", dir.display()))?;
+    files.sort();
+    let (mut referenced, mut embedded) = (0u64, 0u64);
+    for path in files {
+        let rel = path.strip_prefix(dir).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        // The same rule the recorder applies: Lua and mod.toml always embed.
+        let name = rel.rsplit('/').next().unwrap_or(&rel).to_ascii_lowercase();
+        let always = name == "mod.toml" || name.ends_with(".lua");
+        if !always && c.contains(&sha256::digest(&bytes)) {
+            println!("asset  {rel}");
+            referenced += bytes.len() as u64;
+        } else {
+            println!("embed  {rel}");
+            embedded += bytes.len() as u64;
+        }
+    }
+    eprintln!(
+        "a replay embeds {:.1} KB of this pack; {:.1} KB resolve from collection {}",
+        embedded as f64 / 1024.0,
+        referenced as f64 / 1024.0,
+        c.version()
+    );
     Ok(())
 }
 
