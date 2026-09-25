@@ -189,6 +189,12 @@ pub const WORM_DRAW_CROSSHAIR: u32 = 0x0051_97D0;
 /// Stock `wflylnk.spr` — jump hang, ping-pong in the .spr flags.
 pub const SPRITE_WFLY_LNK: u32 = 278;
 pub const WORM_FACING: usize = 0x3DC;
+/// WormEntity turn side (+0x1A8): -1 left, +1 right. The face-left/right
+/// messages write it at once, and WA's fire code reads it to place a shot
+/// (`facing * 26px`). `WORM_FACING` is a copy that can still hold the old
+/// side when a worm turns and fires in the same aim (OpenWA
+/// `facing_direction_2`; PX's `TurnSide`).
+pub const WORM_TURN_SIDE: usize = 0x1A8;
 /// WormEntity show-cursor latch (`+0x268`). Strike targeting.
 pub const WORM_SHOW_CURSOR: usize = 0x268;
 /// WormEntity rendered aim sweep (+0x270).
