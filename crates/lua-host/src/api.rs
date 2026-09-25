@@ -806,6 +806,7 @@ fn table_to_claim(
 
     let mut cluster_sprite_id = None;
     let mut cluster_sprite_path = None;
+    let mut cluster_homing_sprite_path = None;
     let mut cluster_damage = None;
     let mut cluster_bounce_pct = None;
     let mut cluster_gravity_pct = None;
@@ -838,6 +839,13 @@ fn table_to_claim(
         if let (Some(path), Some(sheet)) = (cluster_path.take(), cluster_sheet.take()) {
             cluster_sprite_path = Some(path.clone());
             extra_sheets.push((path, sheet));
+        }
+        if let Some(rel) = get_string(&cluster, "homing_sprite")? {
+            let (path, sheet) = load_pack_sheet(root, &rel, 1)?;
+            if !extra_sheets.iter().any(|(existing, _)| existing == &path) {
+                extra_sheets.push((path.clone(), sheet));
+            }
+            cluster_homing_sprite_path = Some(path);
         }
         if let Some(p) = cluster.get::<Option<Table>>("params")? {
             if cluster_damage.is_none() {
@@ -941,6 +949,7 @@ fn table_to_claim(
             extra_sounds,
             cluster_sprite_id,
             cluster_sprite_path,
+            cluster_homing_sprite_path,
             cluster_damage,
             cluster_bounce_pct,
             cluster_gravity_pct,

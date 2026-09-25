@@ -612,7 +612,7 @@ replace = ["cluster_bomb"]
             r#"
 wa.weapons.replace({
   weapon = "cluster_bomb",
-  cluster = { sprite = "bit.png" },
+  cluster = { sprite = "bit.png", homing_sprite = "homing.png" },
 })
 "#,
         );
@@ -622,11 +622,14 @@ wa.weapons.replace({
             root.join("bit.png"),
         )
         .unwrap();
+        std::fs::copy(root.join("bit.png"), root.join("homing.png")).unwrap();
         let scripts = run_mods(&[own]).unwrap();
         let params = &scripts.resolved.applied[0].params;
         assert_eq!(params.cluster_sprite_path.as_deref(), Some("bit.png"));
         assert_eq!(params.cluster_sprite_id, None, "the id comes when the sheet is installed");
         assert!(params.extra_sheets.iter().any(|(p, _)| p == "bit.png"));
+        assert_eq!(params.cluster_homing_sprite_path.as_deref(), Some("homing.png"));
+        assert!(params.extra_sheets.iter().any(|(p, _)| p == "homing.png"));
     }
 
     #[test]
