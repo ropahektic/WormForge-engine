@@ -18,7 +18,10 @@
 use crate::{log_line, rebase::rb, sprite};
 use game::{
     entity::read_i32,
-    offsets::{WORM_SELECTED_WEAPON, WORM_SLOPE_DIR, WORM_STATE},
+    offsets::{
+        ENT_WORLD, ENT_WORM_TEAM, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE, WORM_SELECTED_WEAPON,
+        WORM_SLOPE_DIR, WORM_STATE,
+    },
 };
 use minhook::MinHook;
 use re_catalog::Catalog;
@@ -36,6 +39,10 @@ static ORIGINAL_SPRITE_INFO: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_m
 type SpriteInfoFn = unsafe extern "thiscall" fn(*mut u8, u32, *mut u32, *mut u32, *mut u32) -> u32;
 
 static CLAIMS: Mutex<Vec<(usize, i32, i32)>> = Mutex::new(Vec::new());
+/// Per-team-colour sheets: (slot, alliance, pose, sheet). `CLAIMS` still
+/// holds each pose's default, so pose and phase logic never looks at team;
+/// only the final sheet id is swapped for the drawing worm's colour.
+static TEAM_CLAIMS: Mutex<Vec<(usize, u8, i32, i32)>> = Mutex::new(Vec::new());
 /// Slots whose `weaponlnk*` sheets are one-shot animations (equip, unfold),
 /// not aim-angle sheets: `params.worm_sprites_animate = true`.
 static ANIMATE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
@@ -176,6 +183,9 @@ pub fn clear() {
     if let Ok(mut claims) = CLAIMS.lock() {
         claims.clear();
     }
+    if let Ok(mut team) = TEAM_CLAIMS.lock() {
+        team.clear();
+    }
 }
 
 /// Fill missing slope variants from the first present link sheet, then eat
@@ -208,31 +218,81 @@ fn expand_aim_claims(poses: &[(i32, i32)]) -> Vec<(i32, i32)> {
     out
 }
 
-pub fn claim(slot: usize, mod_id: &str, poses: &[(i32, String)], animate: bool) {
+pub fn claim(slot: usize, mod_id: &str, poses: &[(i32, Option<u8>, String)], animate: bool) {
     if let Ok(mut g) = ANIMATE.lock() {
         g.retain(|s| *s != slot);
         if animate {
             g.push(slot);
         }
     }
-    if let Ok(mut claims) = CLAIMS.lock() {
-        claims.retain(|(s, _, _)| *s != slot);
-        let mut resolved = Vec::new();
-        for (stock, path) in poses {
-            if let Some(sheet) = sprite::lookup_key(&gfx::sprite_key(mod_id, path)) {
-                resolved.push((*stock, sheet.id));
-                log_line(&format!(
-                    "worm sprite claim slot={slot} stock={stock} custom={} path={path}",
-                    sheet.id
-                ));
-            }
-        }
-        for (stock, id) in expand_aim_claims(&resolved) {
-            if !claims.iter().any(|(s, p, _)| *s == slot && *p == stock) {
-                claims.push((slot, stock, id));
+    // Sheet ids per team colour, `None` for the sheet every worm uses.
+    let mut by_team: Vec<(Option<u8>, Vec<(i32, i32)>)> = Vec::new();
+    for (stock, team, path) in poses {
+        if let Some(sheet) = sprite::lookup_key(&gfx::sprite_key(mod_id, path)) {
+            log_line(&format!(
+                "worm sprite claim slot={slot} stock={stock} team={team:?} custom={} path={path}",
+                sheet.id
+            ));
+            match by_team.iter_mut().find(|(t, _)| t == team) {
+                Some((_, list)) => list.push((*stock, sheet.id)),
+                None => by_team.push((*team, vec![(*stock, sheet.id)])),
             }
         }
     }
+    by_team.sort_by_key(|(team, _)| *team);
+    // A pack that only lists team sheets still needs a default: the lowest
+    // team colour's sheet stands in for each pose nobody gave one.
+    let mut defaults: Vec<(i32, i32)> = Vec::new();
+    for (_, list) in &by_team {
+        for &(stock, id) in list {
+            if !defaults.iter().any(|(p, _)| *p == stock) {
+                defaults.push((stock, id));
+            }
+        }
+    }
+    if let Ok(mut claims) = CLAIMS.lock() {
+        claims.retain(|(s, _, _)| *s != slot);
+        for (stock, id) in expand_aim_claims(&defaults) {
+            claims.push((slot, stock, id));
+        }
+    }
+    if let Ok(mut team_claims) = TEAM_CLAIMS.lock() {
+        team_claims.retain(|(s, _, _, _)| *s != slot);
+        for (team, list) in &by_team {
+            let Some(team) = team else { continue };
+            for (stock, id) in expand_aim_claims(list) {
+                team_claims.push((slot, *team, stock, id));
+            }
+        }
+    }
+}
+
+/// The drawing worm's team colour (0 red .. 5 cyan), as `worm.alliance`.
+unsafe fn worm_alliance(worm: *mut u8) -> Option<u8> {
+    let world = read_i32(worm, ENT_WORLD) as *mut u8;
+    let team = read_i32(worm, ENT_WORM_TEAM);
+    if world.is_null() || team < 0 {
+        return None;
+    }
+    u8::try_from(read_i32(world, WORLD_TEAM_ALLIANCE + team as usize * WORLD_TEAM_STRIDE)).ok()
+}
+
+/// This worm's colour of `sheet`, when the pack gave one for `pose`.
+unsafe fn team_sheet(worm: *mut u8, slot: usize, pose: i32, sheet: i32) -> i32 {
+    let Ok(team_claims) = TEAM_CLAIMS.lock() else {
+        return sheet;
+    };
+    if !team_claims.iter().any(|(s, _, _, _)| *s == slot) {
+        return sheet;
+    }
+    let Some(team) = worm_alliance(worm) else {
+        return sheet;
+    };
+    team_claims
+        .iter()
+        .find(|(s, t, p, _)| *s == slot && *t == team && *p == pose)
+        .map(|(_, _, _, id)| *id)
+        .unwrap_or(sheet)
 }
 
 pub fn install(catalog: &Catalog) -> Result<(), String> {
@@ -314,7 +374,10 @@ unsafe extern "C" fn after_calc(
         .iter()
         .find(|(s, claimed, _)| *s == slot && *claimed == stock)
     {
-        *sprite_out = (original & !0xffff) | *id as u32;
+        // Pose and aim logic compare the default sheet; only the drawn one
+        // follows the worm's team colour.
+        let sheet = team_sheet(worm, slot, stock, *id);
+        *sprite_out = (original & !0xffff) | sheet as u32;
         // Two kinds of pack use these poses:
         //
         // - The web-editor aim wizard: `weaponlnk*` is an aim-angle sheet
@@ -337,7 +400,7 @@ unsafe extern "C" fn after_calc(
             }
             // Link: leave the stock phase, which is the aim angle.
         } else {
-            drive_phase(worm as usize, stock, *id, phase_out);
+            drive_phase(worm as usize, stock, sheet, phase_out);
         }
     } else if let Ok(mut anim) = ANIM.lock() {
         // On a claimed slot but not currently in a claimed pose -- walking

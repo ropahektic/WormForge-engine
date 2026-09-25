@@ -272,6 +272,62 @@ mod tests {
     }
 
     #[test]
+    fn sentry_gun_worm_sheets_come_per_team_colour() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/sentry_gun");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::Bazooka);
+        // Six worm poses, each baked once per team colour, in alliance order.
+        let sheets = &claim.params.worm_sprites;
+        assert_eq!(sheets.len(), 6 * 6);
+        let link = gfx::stock_worm_sprite_id("weaponlnk").unwrap();
+        let teams: Vec<_> = sheets
+            .iter()
+            .filter(|(id, _, _)| *id == link)
+            .map(|(_, team, path)| (team.unwrap(), path.as_str()))
+            .collect();
+        assert_eq!(teams[0], (0, "sprites/teams/red/equip"));
+        assert_eq!(teams[1], (1, "sprites/teams/blue/equip"));
+        assert_eq!(teams[5], (5, "sprites/teams/cyan/equip"));
+        assert!(sheets.iter().all(|(_, _, path)| claim
+            .params
+            .extra_sheets
+            .iter()
+            .any(|(p, s)| p == path && s.frames.len() == 10)));
+    }
+
+    #[test]
+    fn worm_sprites_team_list_holds_at_most_six() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-worm-sprites-teams");
+        let _ = std::fs::remove_dir_all(&root);
+        let bad = pack(
+            &root,
+            "t.teams",
+            r#"
+id = "t.teams"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["bazooka"]
+"#,
+            r#"
+local seven = {}
+for i = 1, 7 do seven[i] = "sprites/x.png" end
+wa.weapons.replace({ weapon = "bazooka", worm_sprites = { weaponlnk = seven } })
+"#,
+        );
+        let err = run_mods(&[bad]).err().expect("a seventh team is refused");
+        assert!(err.contains("1 to 6 paths"), "{err}");
+    }
+
+    #[test]
     fn turret_pack_overlays_dynamite_with_mine_placement() {
         let _guard = lock_host();
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/turret");

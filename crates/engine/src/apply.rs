@@ -131,7 +131,7 @@ pub fn on_gfx_ready(display: *mut u8) {
                 // (as_weapon) must stay a real WA slot for MissileEntity.
                 let worm_sheet = !as_weapon
                     && claim.params.gpu_worm_sprites
-                    && claim.params.worm_sprites.iter().any(|(_, wp)| wp == p);
+                    && claim.params.worm_sprites.iter().any(|(_, _, wp)| wp == p);
                 if by_prefix || worm_sheet {
                     gpu_sheets.push((gfx::sprite_key(&claim.mod_id, p), sheet.clone()));
                     return;

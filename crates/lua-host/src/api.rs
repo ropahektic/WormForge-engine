@@ -554,6 +554,9 @@ fn spec_slot(spec: &Table) -> mlua::Result<StockWeapon> {
     parse_stock_weapon(&name).map_err(mlua::Error::external)
 }
 
+/// WA's team colours: alliance 0 (red) to 5 (cyan).
+const WORM_SPRITE_TEAMS: usize = 6;
+
 fn table_to_claim(
     lua: &Lua,
     mod_id: &str,
@@ -653,17 +656,45 @@ fn table_to_claim(
         }
     }
 
+    // `weaponlnk = "sprites/equip"`, or one sheet per team colour:
+    // `weaponlnk = { red, blue, green, yellow, magenta, cyan }`, indexed by
+    // alliance + 1 like the rest of the Lua surface.
     let mut worm_sprites = Vec::new();
     if let Some(poses) = spec.get::<Option<Table>>("worm_sprites")? {
-        for pair in poses.pairs::<String, String>() {
-            let (name, path) = pair?;
+        for pair in poses.pairs::<String, Value>() {
+            let (name, value) = pair?;
             let id = gfx::stock_worm_sprite_id(&name).ok_or_else(|| {
                 mlua::Error::external(format!("unknown stock worm sprite '{name}'"))
             })?;
-            worm_sprites.push((id, path.replace('\\', "/")));
+            match value {
+                Value::String(path) => {
+                    worm_sprites.push((id, None, path.to_str()?.replace('\\', "/")));
+                }
+                Value::Table(teams) => {
+                    let n = teams.raw_len();
+                    if n == 0 || n > WORM_SPRITE_TEAMS {
+                        return Err(mlua::Error::external(format!(
+                            "worm_sprites.{name}: a team list holds 1 to {WORM_SPRITE_TEAMS} \
+                             paths, one per team colour; got {n}"
+                        )));
+                    }
+                    for i in 1..=n {
+                        let path: String = teams.get(i)?;
+                        worm_sprites.push((id, Some((i - 1) as u8), path.replace('\\', "/")));
+                    }
+                }
+                other => {
+                    return Err(mlua::Error::external(format!(
+                        "worm_sprites.{name} must be a path or a list of paths, got {other:?}"
+                    )))
+                }
+            }
         }
-        worm_sprites.sort_by_key(|(id, _)| *id);
-        for (_, path) in &worm_sprites {
+        worm_sprites.sort_by_key(|(id, team, _)| (*id, *team));
+        for (_, _, path) in &worm_sprites {
+            if extra_sheets.iter().any(|(existing, _)| existing == path) {
+                continue;
+            }
             let (path, mut sheet) = load_pack_sheet(root, path, 1)?;
             sheet.looping = false;
             extra_sheets.push((path, sheet));

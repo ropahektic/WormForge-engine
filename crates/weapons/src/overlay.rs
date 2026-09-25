@@ -308,7 +308,9 @@ pub struct OverlayParams {
     /// Extra PNG/GIF/frame-folders installed at gfx init (`sprites = { ... }`).
     pub extra_sheets: Vec<(String, SpriteStrip)>,
     /// Stock worm sprite id -> pack sheet path, scoped to this weapon slot.
-    pub worm_sprites: Vec<(i32, String)>,
+    /// With an alliance, the sheet is only for worms of that team colour
+    /// (0 red .. 5 cyan); without one, it is for every worm.
+    pub worm_sprites: Vec<(i32, Option<u8>, String)>,
     pub layer: Option<u32>,
     pub depth: Option<u32>,
     pub depth_prefix: Option<String>,
