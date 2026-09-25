@@ -70,8 +70,10 @@ const TAB_BUTTONS: [(usize, &str); 3] = [
 static FILTER: AtomicUsize = AtomicUsize::new(0);
 /// Full merged list; `ROWS` is the tab-filtered view shown in the list.
 
-/// Online catalogue produced by `tools/publish-packs.ps1`.
-pub const INDEX_URL: &str = "https://ropahektic.github.io/WormForge/downloads/packs/index.toml";
+/// Online catalogue produced by `tools/publish-packs.ps1` into this repo's
+/// `downloads/packs/` (private WormForge-engine).
+pub const INDEX_URL: &str =
+    "https://raw.githubusercontent.com/ropahektic/WormForge-engine/main/downloads/packs/index.toml";
 /// Staging folder inside `Mods\`; the `_` prefix keeps the scanner out of it.
 const DOWNLOAD_STAGING: &str = "_download_tmp";
 

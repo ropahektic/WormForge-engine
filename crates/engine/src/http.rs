@@ -172,8 +172,19 @@ mod tests {
 
     #[test]
     fn url_parts() {
-        let (h, p, s, path) = parse_url("https://ropahektic.github.io/WormForge/downloads/mods.zip").unwrap();
-        assert_eq!((h.as_str(), p, s, path.as_str()), ("ropahektic.github.io", 443, true, "/WormForge/downloads/mods.zip"));
+        let (h, p, s, path) = parse_url(
+            "https://raw.githubusercontent.com/ropahektic/WormForge-engine/main/downloads/packs/index.toml",
+        )
+        .unwrap();
+        assert_eq!(
+            (h.as_str(), p, s, path.as_str()),
+            (
+                "raw.githubusercontent.com",
+                443,
+                true,
+                "/ropahektic/WormForge-engine/main/downloads/packs/index.toml"
+            )
+        );
         let (h, p, s, path) = parse_url("http://localhost:8080").unwrap();
         assert_eq!((h.as_str(), p, s, path.as_str()), ("localhost", 8080, false, "/"));
         assert!(parse_url("ftp://x/y").is_err());

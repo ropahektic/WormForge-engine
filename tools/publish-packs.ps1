@@ -8,27 +8,35 @@
   and then
     <Site>\downloads\packs\index.toml        id / folder / version / author / slots / file / sha256 / size
   plus, for humans who want everything at once,
-    <Site>\downloads\mods.zip
+    <Site>\downloads\mods.zip                (gitignored; loader uses the per-pack zips)
+
+  Default -Site is the engine repo root. The loader fetches index.toml from
+  WormForge-engine `downloads/packs/` (see INDEX_URL in modloader.rs).
 
   Only packs whose content changed get a new zip (compared by sha256 of a
   deterministic re-zip), so unchanged packs keep their hash and installed
   copies stay "up to date".
 
 .EXAMPLE
-  .\tools\publish-packs.ps1 -Site ..\WormForge-editor
+  .\tools\publish-packs.ps1
+  .\tools\publish-packs.ps1 -Site .
 #>
 [CmdletBinding()]
 param(
     [string] $Source = "",
-    [Parameter(Mandatory = $true)] [string] $Site,
-    [string] $BaseUrl = "https://ropahektic.github.io/WormForge/downloads/packs/",
+    [string] $Site = "",
+    [string] $BaseUrl = "https://raw.githubusercontent.com/ropahektic/WormForge-engine/main/downloads/packs/",
     [string[]] $Exclude = @()
 )
 
 $ErrorActionPreference = "Stop"
+# $PSScriptRoot is empty inside param() on Windows PowerShell 5.
+$repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 if (-not $Source) {
-    # $PSScriptRoot is empty inside param() on Windows PowerShell 5.
-    $Source = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "..\mods\examples"
+    $Source = Join-Path $repoRoot "mods\examples"
+}
+if (-not $Site) {
+    $Site = $repoRoot
 }
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem

@@ -15,6 +15,9 @@
 # Built module copies
 /Releases/
 
+# Convenience all-packs bundle from publish-packs.ps1 (loader uses per-pack zips)
+/downloads/mods.zip
+
 # Editor / OS
 .idea/
 .vscode/
