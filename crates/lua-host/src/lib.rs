@@ -423,6 +423,49 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn hellish_grenade_brings_px_art_and_firing_to_the_holy_grenade() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/hellish_grenade");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::HolyGrenade);
+        assert_eq!(claim.params.name.as_deref(), Some("Hellish Hand-Grenade"));
+        assert_eq!(claim.params.copy_from, None);
+        let wep = claim.params.wep.as_ref().expect("PX's weapon file");
+        assert_eq!(wep.name, "Hellish Hand-Grenade");
+        assert_eq!(wep.path, "hellish.wep");
+        match &claim.params.panel_icon {
+            Some(weapons::PanelIcon::File { path, width, height, .. }) => {
+                assert_eq!(path, "sprites/hhh_ico.png");
+                assert_eq!((*width, *height), (32, 32));
+            }
+            other => panic!("expected a PNG icon, got {other:?}"),
+        }
+        let grenade = claim.params.sprite_sheet.as_ref().expect("the thrown grenade's sheet");
+        assert_eq!(grenade.frames.len(), 32, "PX's 32 spin frames");
+        assert_eq!((grenade.frames[0].width, grenade.frames[0].height), (45, 45));
+        // Aim and draw, each on flat ground and both slopes.
+        assert_eq!(claim.params.worm_sprites.len(), 6);
+        for (_, _, path) in &claim.params.worm_sprites {
+            let frames = claim
+                .params
+                .extra_sheets
+                .iter()
+                .find(|(p, _)| p == path)
+                .map(|(_, s)| s.frames.len())
+                .unwrap();
+            let want = if path.contains("aim") { 32 } else { 10 };
+            assert_eq!(frames, want, "{path}");
+        }
+    }
+
+    #[test]
     fn panel_icon_pack_loads_a_png_icon() {
         let _guard = lock_host();
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/panel_icon");
