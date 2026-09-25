@@ -9,6 +9,10 @@
 //! A pack's files are every regular file under its folder, as the replay pack
 //! table archives them; a symlink is refused rather than followed.
 
+pub mod download;
+pub mod proto;
+pub mod store;
+
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -74,6 +78,60 @@ impl Manifest {
         digest(self.to_text().as_bytes())
     }
 
+    /// Read a manifest another machine sent. Only the canonical form is
+    /// accepted -- sorted, no duplicates, every path a plain relative one --
+    /// so a manifest that parses names exactly the bytes its digest covers.
+    pub fn parse(text: &str) -> Result<Manifest, String> {
+        let mut lines = text.split_inclusive('\n');
+        if lines.next() != Some(&format!("{MANIFEST_HEADER}\n")) {
+            return Err("not a WormForge sync manifest, or a newer format".into());
+        }
+        let mut manifest = Manifest::default();
+        for line in lines {
+            let line = line
+                .strip_suffix('\n')
+                .ok_or("manifest does not end with a newline")?;
+            if let Some(rest) = line.strip_prefix("pack ") {
+                let (id, version) = rest.split_once(' ').ok_or("pack line without a version")?;
+                check_id(id)?;
+                check_field("version", version)?;
+                manifest.packs.push(FrozenPack { id: id.into(), version: version.into() });
+            } else if let Some(rest) = line.strip_prefix("file ") {
+                let mut parts = rest.splitn(4, ' ');
+                let (Some(pack), Some(size), Some(sha), Some(path)) =
+                    (parts.next(), parts.next(), parts.next(), parts.next())
+                else {
+                    return Err(format!("short file line: {line:?}"));
+                };
+                check_path(path)?;
+                manifest.files.push(FrozenFile {
+                    pack: pack.into(),
+                    path: path.into(),
+                    size: size.parse().map_err(|_| format!("bad size in {line:?}"))?,
+                    sha256: parse_hex(sha).ok_or_else(|| format!("bad hash in {line:?}"))?,
+                });
+            } else {
+                return Err(format!("unknown manifest line: {line:?}"));
+            }
+        }
+        for f in &manifest.files {
+            if !manifest.packs.iter().any(|p| p.id == f.pack) {
+                return Err(format!("file {} names undeclared pack {}", f.path, f.pack));
+            }
+        }
+        if manifest.to_text() != text {
+            return Err("manifest is not in canonical order".into());
+        }
+        let sorted_unique = |a: &[(&str, &str)]| a.windows(2).all(|w| w[0] < w[1]);
+        let packs: Vec<_> = manifest.packs.iter().map(|p| (p.id.as_str(), "")).collect();
+        let files: Vec<_> =
+            manifest.files.iter().map(|f| (f.pack.as_str(), f.path.as_str())).collect();
+        if !sorted_unique(&packs) || !sorted_unique(&files) {
+            return Err("manifest lists a pack or file out of order or twice".into());
+        }
+        Ok(manifest)
+    }
+
     pub fn total_bytes(&self) -> u64 {
         self.files.iter().map(|f| f.size).sum()
     }
@@ -84,6 +142,17 @@ impl Manifest {
 pub struct Session {
     pub dir: PathBuf,
     pub manifest: Manifest,
+}
+
+pub fn parse_hex(s: &str) -> Option<[u8; 32]> {
+    if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    Some(out)
 }
 
 pub fn hex(bytes: &[u8]) -> String {
@@ -111,6 +180,49 @@ pub fn freeze(mods: &[LoadedMod], dest: &Path) -> Result<Session, String> {
             .map_err(|e| format!("publish {}: {e}", dest.display()))?;
         Ok(Session { dir: dest.to_path_buf(), manifest })
     });
+    if result.is_err() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+/// Build a session directory at `dest` holding exactly `manifest`'s files,
+/// taking each file's bytes from `fetch`. Every file is checked against its
+/// size and hash before it is written; like [`freeze`], the directory is
+/// staged and appears only once whole.
+pub fn assemble(
+    manifest: &Manifest,
+    dest: &Path,
+    mut fetch: impl FnMut(&FrozenFile) -> Result<Vec<u8>, String>,
+) -> Result<Session, String> {
+    if dest.exists() {
+        return Err(format!("session directory already exists: {}", dest.display()));
+    }
+    let staging = staging_path(dest)?;
+    if staging.exists() {
+        fs::remove_dir_all(&staging).map_err(|e| format!("{}: {e}", staging.display()))?;
+    }
+    let result = (|| {
+        fs::create_dir_all(&staging).map_err(|e| format!("{}: {e}", staging.display()))?;
+        for f in &manifest.files {
+            check_id(&f.pack)?;
+            check_path(&f.path)?;
+            let bytes = fetch(f)?;
+            if bytes.len() as u64 != f.size || digest(&bytes) != f.sha256 {
+                return Err(format!("{}:{} does not match the manifest", f.pack, f.path));
+            }
+            let target = staging.join(PACKS_DIR).join(&f.pack).join(&f.path);
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+            }
+            fs::write(&target, &bytes).map_err(|e| format!("{}: {e}", target.display()))?;
+        }
+        let manifest_path = staging.join(MANIFEST_FILE);
+        fs::write(&manifest_path, manifest.to_text())
+            .map_err(|e| format!("{}: {e}", manifest_path.display()))?;
+        fs::rename(&staging, dest).map_err(|e| format!("publish {}: {e}", dest.display()))?;
+        Ok(Session { dir: dest.to_path_buf(), manifest: manifest.clone() })
+    })();
     if result.is_err() {
         let _ = fs::remove_dir_all(&staging);
     }
@@ -190,7 +302,7 @@ fn collect(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf)>) -> Result<
                 parts.push(part.to_string());
             }
             let joined = parts.join("/");
-            check_field("path", &joined)?;
+            check_path(&joined)?;
             out.push((joined, path));
         }
     }
@@ -206,6 +318,25 @@ fn check_id(id: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("pack id {id:?} cannot be synced: use letters, digits, '.', '_' or '-'"))
+    }
+}
+
+/// A path from another machine becomes a path on this one: plain relative
+/// components only, nothing Windows would read as a drive or a separator.
+pub fn check_path(path: &str) -> Result<(), String> {
+    check_field("path", path)?;
+    let ok = !path.is_empty()
+        && path.split('/').all(|part| {
+            !part.is_empty()
+                && part != "."
+                && part != ".."
+                && !part.contains(['\\', ':'])
+                && !part.ends_with([' ', '.'])
+        });
+    if ok {
+        Ok(())
+    } else {
+        Err(format!("unsafe pack path {path:?}"))
     }
 }
 
@@ -302,6 +433,47 @@ mod tests {
         let err = freeze(&[bad], &dest).unwrap_err();
         assert!(err.contains("cannot be synced"), "{err}");
         assert!(!dest.exists() && !root.join("session.partial").exists());
+    }
+
+    #[test]
+    fn a_manifest_parses_back_and_forgeries_do_not() {
+        let root = scratch("parse");
+        let a = pack(&root, "a", "t.a", &[("sprites/x y.png", b"png"), ("w.lua", b"w")]);
+        let manifest = freeze(&[a], &root.join("s")).unwrap().manifest;
+        let text = manifest.to_text();
+        assert_eq!(Manifest::parse(&text).unwrap(), manifest);
+
+        let sha = hex(&digest(b"x"));
+        let bad = |line: &str| {
+            let forged = format!("{MANIFEST_HEADER}\npack t.a 1\n{line}\n");
+            Manifest::parse(&forged).unwrap_err()
+        };
+        assert!(bad(&format!("file t.a 1 {sha} ../evil")).contains("unsafe"));
+        assert!(bad(&format!("file t.a 1 {sha} C:/evil")).contains("unsafe"));
+        assert!(bad(&format!("file t.a 1 {sha} a\\b")).contains("unsafe"));
+        assert!(bad(&format!("file t.a 1 {sha} /abs")).contains("unsafe"));
+        assert!(bad(&format!("file t.b 1 {sha} x")).contains("undeclared"));
+        assert!(bad(&format!("file t.a 1 {} x", &sha[1..])).contains("bad hash"));
+        let twice = format!("{text}{}", text.lines().last().unwrap().to_string() + "\n");
+        assert!(Manifest::parse(&twice).is_err(), "a repeated file is refused");
+        assert!(Manifest::parse("hello\n").is_err());
+    }
+
+    #[test]
+    fn assemble_checks_every_file_it_writes() {
+        let root = scratch("assemble");
+        let a = pack(&root, "a", "t.a", &[("w.lua", b"w")]);
+        let session = freeze(&[a], &root.join("s")).unwrap();
+        let err = assemble(&session.manifest, &root.join("c1"), |_| Ok(b"x".to_vec())).unwrap_err();
+        assert!(err.contains("does not match"), "{err}");
+        assert!(!root.join("c1").exists() && !root.join("c1.partial").exists());
+        let dir = session.dir.clone();
+        let ok = assemble(&session.manifest, &root.join("c2"), |f| {
+            fs::read(dir.join(PACKS_DIR).join(&f.pack).join(&f.path)).map_err(|e| e.to_string())
+        })
+        .unwrap();
+        assert_eq!(ok.manifest, session.manifest);
+        assert_eq!(fs::read_to_string(root.join("c2").join(MANIFEST_FILE)).unwrap(), session.manifest.to_text());
     }
 
     #[cfg(unix)]
