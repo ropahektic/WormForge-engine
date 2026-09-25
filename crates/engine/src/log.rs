@@ -3,7 +3,7 @@ use std::io::Write;
 use std::os::windows::ffi::OsStringExt;
 use std::panic;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicPtr, Ordering};
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::Console::{
@@ -14,6 +14,8 @@ use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHan
 static FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
 static ERR: Mutex<Vec<std::fs::File>> = Mutex::new(Vec::new());
 static CONSOLE: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
+/// Where `init` actually opened `wkLua.log`.
+static LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 pub(crate) const BUILD_ID: &str = "20260924-v0.7.2-wagame-replay";
 
@@ -23,11 +25,18 @@ pub(crate) fn diagnostic_file(text: &str) {
     write_file(&FILE, text);
 }
 
+/// Beside `wkLua.dll` (WormKit only loads it from WA's folder), so a player
+/// can find and send it without unhiding AppData. `init` falls back to
+/// `%LOCALAPPDATA%\WormForge` when WA's folder is not writable.
 pub fn log_path() -> PathBuf {
-    wormforge_dir().join("wkLua.log")
+    LOG_PATH
+        .get()
+        .cloned()
+        .unwrap_or_else(|| wa_directory().join("wkLua.log"))
 }
 
-/// Same folder as `wkLua.log` (`%LOCALAPPDATA%\WormForge\wkluaerror.txt`).
+/// `%LOCALAPPDATA%\WormForge\wkluaerror.txt`; `init` also keeps a copy
+/// beside `WA.exe`.
 pub fn error_log_path() -> PathBuf {
     wormforge_dir().join("wkluaerror.txt")
 }
@@ -80,14 +89,22 @@ pub fn attach_console() {
 
 pub fn init() {
     attach_console();
-    let path = log_path();
-    if let Some(dir) = path.parent() {
-        let _ = create_dir_all(dir);
+    let fallback = wormforge_dir().join("wkLua.log");
+    let mut path = log_path();
+    for candidate in [path.clone(), fallback] {
+        if let Some(dir) = candidate.parent() {
+            let _ = create_dir_all(dir);
+        }
+        match OpenOptions::new().create(true).append(true).open(&candidate) {
+            Ok(f) => {
+                *FILE.lock().unwrap() = Some(f);
+                path = candidate;
+                break;
+            }
+            Err(e) => console_write(&format!("could not open {}: {e}\r\n", candidate.display())),
+        }
     }
-    match OpenOptions::new().create(true).append(true).open(&path) {
-        Ok(f) => *FILE.lock().unwrap() = Some(f),
-        Err(e) => console_write(&format!("could not open {}: {e}\r\n", path.display())),
-    }
+    let _ = LOG_PATH.set(path.clone());
 
     let err_path = error_log_path();
     let wa_err = wa_directory().join("wkluaerror.txt");

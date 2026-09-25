@@ -24,7 +24,7 @@ v1 overlays a stock panel slot. It cannot add a 72nd icon. Several packs may ove
 
 The engine (`crates/`, `wkLua.dll`) is only for verbs Lua cannot call yet. Prefer a pack.
 
-Needs: WA **3.8.1** + WormKit, this repo, `wkLua.dll` next to `WA.exe`. Test in a match; logs are `%LOCALAPPDATA%\WormForge\wkLua.log` and `wkluaerror.txt`. Then open a PR.
+Needs: WA **3.8.1** + WormKit, this repo, `wkLua.dll` next to `WA.exe`. Test in a match; logs are `wkLua.log` and `wkluaerror.txt`, both beside `WA.exe`. Then open a PR.
 
 | You want… | Start from |
 |---|---|
