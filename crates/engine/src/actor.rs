@@ -329,6 +329,16 @@ pub fn claim_fire(
     }
 }
 
+/// Slots whose shot runs stock FireWeapon more than once (`fire_repeat`).
+static FIRE_REPEATS: Mutex<Vec<(usize, u32)>> = Mutex::new(Vec::new());
+
+pub fn claim_fire_repeat(slot: usize, times: u32) {
+    if let Ok(mut g) = FIRE_REPEATS.lock() {
+        g.retain(|(s, _)| *s != slot);
+        g.push((slot, times));
+    }
+}
+
 pub fn claim_select(slot: usize, select_id: u32, eat_fire: bool) {
     if select_id == 0 && !eat_fire {
         return;
@@ -383,6 +393,9 @@ pub fn on_weapon_slot(worm: *mut u8) {
 }
 
 pub fn clear_claims() {
+    if let Ok(mut g) = FIRE_REPEATS.lock() {
+        g.clear();
+    }
     if let Ok(mut g) = DROPS.lock() {
         g.clear();
     }
@@ -489,13 +502,56 @@ unsafe extern "C" fn fire_weapon_dispatch_hook() {
         "pop eax",
         "pop ecx",
         "jnz 2f",
+        // fire_repeat: the extra shots first, then the stock one as always.
+        "push ecx",
+        "push eax",
+        "push dword ptr [esp + 12]",
+        "push ecx",
+        "push eax",
+        "call {extra}",
+        "add esp, 12",
+        "pop eax",
+        "pop ecx",
         "jmp dword ptr [{orig}]",
         "2:",
         "xor eax, eax",
         "ret 4",
         check = sym fire_weapon_click_only_eat,
+        extra = sym fire_weapon_extra_shots,
         orig = sym ORIG_FIRE_DISPATCH,
     );
+}
+
+/// Stock FireWeapon once, as the dispatch hook's caller would: cdecl
+/// (entry, ctx, worm) onto EAX, ECX and the stack.
+#[unsafe(naked)]
+unsafe extern "C" fn call_stock_fire(entry: *mut u8, ctx: *mut u8, worm: *mut u8) {
+    core::arch::naked_asm!(
+        "mov eax, [esp + 4]",
+        "mov ecx, [esp + 8]",
+        "push dword ptr [esp + 12]",
+        "call dword ptr [{orig}]",
+        "ret",
+        orig = sym ORIG_FIRE_DISPATCH,
+    );
+}
+
+/// `fire_repeat - 1` more stock shots with the same weapon and context. PX's
+/// Real Shotgun calls FireFinal's `super` five times: five pellets in one
+/// frame, each drawn through WA's own RNG, so peers and replays agree.
+unsafe extern "C" fn fire_weapon_extra_shots(entry: *mut u8, ctx: *mut u8, worm: *mut u8) {
+    if worm.is_null() || entry.is_null() {
+        return;
+    }
+    let slot = unsafe { read_i32(worm, WORM_SELECTED_WEAPON) as usize };
+    let times = FIRE_REPEATS
+        .lock()
+        .ok()
+        .and_then(|g| g.iter().find(|(s, _)| *s == slot).map(|(_, n)| *n))
+        .unwrap_or(1);
+    for _ in 1..times {
+        unsafe { call_stock_fire(entry, ctx, worm) };
+    }
 }
 
 /// Args: worm, weapon, ctx (cdecl push order). Returns 1 when dispatch is eaten.
