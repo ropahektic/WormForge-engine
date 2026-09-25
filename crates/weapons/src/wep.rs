@@ -12,7 +12,8 @@
 //! exact numbers and still override single params or supply its own art.
 
 use game::offsets::{
-    WEAPON_CLUSTER_SPRITE, WEAPON_ENTRY_SIZE, WEAPON_FIRE_TYPE, WEAPON_SPRITE_ID,
+    WEAPON_CLUSTER_RENDER_TIMER, WEAPON_CLUSTER_SPRITE, WEAPON_ENTRY_SIZE, WEAPON_FIRE_TYPE,
+    WEAPON_SPRITE_ID,
 };
 use game::weapon::WeaponEntry;
 
@@ -23,8 +24,18 @@ const STRINGS_AT: usize = 0x1E4;
 /// PX numbers its own sprites from here; WA has no such sprite.
 const PX_SPRITE_BASE: i32 = 100_000;
 /// Fields that hold a sprite id: the flight sprite and its siblings, as
-/// `WeaponEntry::retarget_sprite_id` lists them, and the cluster's.
-const SPRITE_FIELDS: [usize; 7] = [WEAPON_SPRITE_ID, 0x64, 0x68, 0xDC, 0xE0, 0xE4, WEAPON_CLUSTER_SPRITE];
+/// `WeaponEntry::retarget_sprite_id` lists them, the cluster's, and what a
+/// homing cluster draws while it homes (its render timer).
+const SPRITE_FIELDS: [usize; 8] = [
+    WEAPON_SPRITE_ID,
+    0x64,
+    0x68,
+    0xDC,
+    0xE0,
+    0xE4,
+    WEAPON_CLUSTER_SPRITE,
+    WEAPON_CLUSTER_RENDER_TIMER,
+];
 /// `fire_params.missile_type`: nonzero for anything that flies.
 const MISSILE_TYPE: usize = 0xA4;
 
@@ -138,6 +149,17 @@ mod tests {
             0x38,
             "PX's own sprite (100000) is not a WA sprite; the slot keeps its own"
         );
+    }
+
+    #[test]
+    fn a_homing_clusters_px_sprite_keeps_the_slots_own() {
+        let mut w = hellish();
+        w.record[WEAPON_CLUSTER_RENDER_TIMER..WEAPON_CLUSTER_RENDER_TIMER + 4]
+            .copy_from_slice(&PX_SPRITE_BASE.to_le_bytes());
+        let mut slot = WeaponEntry { raw: [0; WEAPON_ENTRY_SIZE] };
+        slot.write_i32(WEAPON_CLUSTER_RENDER_TIMER, 53);
+        import(&mut slot, &w);
+        assert_eq!(slot.read_i32(WEAPON_CLUSTER_RENDER_TIMER), 53);
     }
 
     #[test]

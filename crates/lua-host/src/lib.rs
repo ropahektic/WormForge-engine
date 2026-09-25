@@ -524,7 +524,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 18);
+        assert_eq!(applied.len(), 22);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         // The scheme's record for the girder slot is the Baseball Bat:
         // a special weapon, subtype 2, as WA's own bat.
@@ -562,6 +562,21 @@ wa.weapons.replace({
         assert_eq!(
             claim(StockWeapon::ClusterBomb).params.cluster_sprite_path.as_deref(),
             Some("sprites/windy_cluster/cluster")
+        );
+        // The Burst Rifle's gun poses, fire included.
+        assert_eq!(claim(StockWeapon::Minigun).params.worm_sprites.len(), 9);
+        // Trails on the stock sprites PX repurposes, and the S.M.A.R.T
+        // Bomb's homing bits.
+        let smart = claim(StockWeapon::Mortar);
+        assert_eq!(smart.params.sprite_overrides, vec![(250, "sprites/smart_bomb/trail".to_string())]);
+        assert_eq!(
+            smart.params.cluster_homing_sprite_path.as_deref(),
+            Some("sprites/smart_bomb/cluster_homing")
+        );
+        let thumper = claim(StockWeapon::BattleAxe);
+        assert_eq!(
+            thumper.params.sprite_overrides.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            vec![251, 252]
         );
         assert!(matches!(
             claim(StockWeapon::MailStrike).params.panel_icon,
