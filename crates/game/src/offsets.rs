@@ -129,6 +129,15 @@ pub const WEAPON_CLUSTER_HOMING_KIND: usize = 0x188;
 /// GameWorld+0x144: two frontend .img pointers per stock weapon (hi then lo).
 /// WeaponPanelIcons draw: `[world + 4*(frame + 2*weapon_id) + 0x144]`.
 pub const GAME_WORLD_PANEL_IMG: usize = 0x144;
+/// GameWorld+0x548: the weapon panel object (`WeaponPanelIcons`). Its update
+/// (0x5697B0, called with `[world+0x548]` at 0x5540CD) rebuilds the panel
+/// surface via `redraw_panel` (0x568220) only while `WEAPON_PANEL_DIRTY` is
+/// set, then clears it.
+pub const GAME_WORLD_WEAPON_PANEL: usize = 0x548;
+/// Panel dirty flag. WA sets it from `GameMessageRouter` (0x556F56 ff.) and
+/// `GameRuntime__AdvanceWormFrame` (0x55DDC7) -- never from
+/// `TeamArena__AddAmmo`, which is a bare ammo-table write.
+pub const WEAPON_PANEL_DIRTY: usize = 0x1CC;
 /// Unused stock id: GetSpriteFrameForBlit rejects `id-1 >= 0x3FE`, so 1023
 /// draws nothing. Do not put custom sheets here — install into 800..=1022.
 pub const CUSTOM_SPRITE_SENTINEL: i32 = 1023;
