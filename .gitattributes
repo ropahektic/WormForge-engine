@@ -1,3 +1,5 @@
 ﻿# Shader source hashes are LF-stamped in build.rs / compile-shader.py.
 crates/render/shaders/*.hlsl text eol=lf
 crates/render/shaders/*.h text eol=lf
+crates/engine/shaders/*.hlsl text eol=lf
+crates/engine/shaders/*.h text eol=lf

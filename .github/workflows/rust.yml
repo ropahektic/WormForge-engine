@@ -18,7 +18,9 @@ jobs:
       - name: Test crates that do not need Windows
         # .cargo/config.toml defaults the build target to i686-pc-windows-msvc
         # for local WA DLL work; override so Linux host tests stay native.
-        run: cargo test --workspace --exclude wk-lua --exclude engine --target x86_64-unknown-linux-gnu --verbose
+        # lua-host stores game handles as u32 (WA is 32-bit); its tests segfault
+        # when pointers are truncated on x86_64, so they run on the Windows job.
+        run: cargo test --workspace --exclude wk-lua --exclude engine --exclude lua-host --target x86_64-unknown-linux-gnu --verbose
 
   dll:
     name: 32-bit Windows DLL
@@ -27,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Add the i686 MSVC target
         run: rustup target add i686-pc-windows-msvc
-      - name: Test the engine crate
-        run: cargo test -p engine --target i686-pc-windows-msvc --verbose
+      - name: Test engine and lua-host
+        run: cargo test -p engine -p lua-host --target i686-pc-windows-msvc --verbose
       - name: Build wkLua.dll
         run: cargo build --release -p wk-lua --target i686-pc-windows-msvc --verbose
