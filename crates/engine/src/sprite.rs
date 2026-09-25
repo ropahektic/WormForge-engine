@@ -914,6 +914,34 @@ pub fn is_virtual(id: i32) -> bool {
     id >= VIRTUAL_SPRITE_BASE
 }
 
+/// Stock sprite id -> the GPU sheet drawn in its place (`sprite_overrides`).
+/// WA keeps its own sprite at that id, so every size, frame-count and phase
+/// lookup still answers as before; only the draw is ours, in true colour.
+static GPU_ALIASES: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+
+/// Draw `sheet`, a GPU sheet, wherever WA draws stock sprite `target`.
+/// The first claim wins; false when `target` is already drawn as another.
+pub fn alias_gpu(target: i32, sheet: i32) -> bool {
+    let Ok(mut g) = GPU_ALIASES.lock() else {
+        return false;
+    };
+    if g.iter().any(|(t, _)| *t == target as u32) {
+        return false;
+    }
+    g.push((target as u32, sheet as u32));
+    log_line(&format!("stock sprite {target} drawn as GPU sheet {sheet:#x}"));
+    true
+}
+
+/// The GPU sheet drawn in place of `id`, or `id` itself.
+pub fn gpu_alias(id: u32) -> u32 {
+    GPU_ALIASES
+        .lock()
+        .ok()
+        .and_then(|g| g.iter().find(|(t, _)| *t == id).map(|(_, s)| *s))
+        .unwrap_or(id)
+}
+
 /// True when this id was installed for the GPU renderer.
 pub fn is_gpu_sheet(id: u32) -> bool {
     GPU_SHEETS
@@ -991,6 +1019,9 @@ pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) 
 /// Drop every GPU sheet. Called with the rest of the per-match sprite state.
 pub fn clear_gpu_sheets() {
     if let Ok(mut g) = GPU_SHEETS.lock() {
+        g.clear();
+    }
+    if let Ok(mut g) = GPU_ALIASES.lock() {
         g.clear();
     }
     if let Ok(mut next) = NEXT_VIRTUAL.lock() {

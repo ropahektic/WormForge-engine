@@ -118,6 +118,9 @@ pub fn on_gfx_ready(display: *mut u8) {
 
     let mut sprite_ids = HashMap::new();
     let mut gpu_sheets: Vec<(String, gfx::SpriteStrip)> = Vec::new();
+    // `sprite_overrides`, resolved once the GPU atlas has given their sheets
+    // an id: (mod id, stock sprite, pack path).
+    let mut overrides: Vec<(String, i32, String)> = Vec::new();
     for claim in &scripts.resolved.applied {
         sprite::set_force_layer(claim.params.layer);
         let mut install = |path: Option<String>, sheet: &gfx::SpriteStrip, as_weapon: bool| {
@@ -141,9 +144,13 @@ pub fn on_gfx_ready(display: *mut u8) {
                     .params
                     .mole_dig_rotation
                     .iter()
-                    .chain(&claim.params.sprite_overrides)
                     .any(|(_, wp)| wp == p);
-                if (by_prefix || worm_sheet) && !mole_dig_sheet {
+                // A stock sprite a pack overrides draws on the GPU, in true
+                // colour: a palette copy picks WA's nearest colours, which can
+                // be team-colour entries WA then tints with the team's colour.
+                let override_sheet = !as_weapon
+                    && claim.params.sprite_overrides.iter().any(|(_, wp)| wp == p);
+                if (by_prefix || worm_sheet || override_sheet) && !mole_dig_sheet {
                     gpu_sheets.push((gfx::sprite_key(&claim.mod_id, p), sheet.clone()));
                     return;
                 }
@@ -188,12 +195,10 @@ pub fn on_gfx_ready(display: *mut u8) {
         for (path, sheet) in &claim.params.extra_sheets {
             install(Some(path.clone()), sheet, false);
         }
-        for (target, path) in claim
-            .params
-            .mole_dig_rotation
-            .iter()
-            .chain(&claim.params.sprite_overrides)
-        {
+        for (target, path) in &claim.params.sprite_overrides {
+            overrides.push((claim.mod_id.clone(), *target, path.clone()));
+        }
+        for (target, path) in &claim.params.mole_dig_rotation {
             let key = gfx::sprite_key(&claim.mod_id, path);
             let sheet = claim.params.extra_sheets.iter().find(|(p, _)| p == path);
             match (sprite::lookup_key(&key), sheet) {
@@ -224,6 +229,26 @@ pub fn on_gfx_ready(display: *mut u8) {
     }
 
     install_gpu_atlas(gpu_sheets);
+    for (mod_id, target, path) in &overrides {
+        let claimed = match sprite::lookup_key(&gfx::sprite_key(mod_id, path)) {
+            Some(source) if sprite::is_virtual(source.id) => Ok(sprite::alias_gpu(*target, source.id)),
+            // Also the pack's weapon sprite, so a real WA sprite: swap it in.
+            Some(source) => scripts
+                .resolved
+                .applied
+                .iter()
+                .filter(|c| &c.mod_id == mod_id)
+                .find_map(|c| c.params.extra_sheets.iter().find(|(p, _)| p == path))
+                .ok_or_else(|| "sheet not loaded".to_string())
+                .and_then(|(_, sheet)| sprite::alias_stock(display, *target, source.id, sheet)),
+            None => Err(format!("sheet {path} not installed")),
+        };
+        match claimed {
+            Ok(true) => {}
+            Ok(false) => log_line(&format!("{mod_id} stock sprite {target} already claimed; skipped")),
+            Err(e) => log_error(&format!("{mod_id} stock sprite {target}: {e}")),
+        }
+    }
 
     lua_host::park_lua(scripts.lua);
     if let Ok(mut g) = GFX.lock() {
