@@ -10,8 +10,8 @@
   plus, for humans who want everything at once,
     <Site>\downloads\mods.zip                (gitignored; loader uses the per-pack zips)
 
-  Default -Site is the engine repo root. The loader fetches index.toml from
-  WormForge-engine `downloads/packs/` (see INDEX_URL in modloader.rs).
+  Default -Site is the engine repo root (`downloads/packs/`). The in-game
+  loader still fetches the published github.io index (INDEX_URL).
 
   Only packs whose content changed get a new zip (compared by sha256 of a
   deterministic re-zip), so unchanged packs keep their hash and installed
@@ -25,7 +25,7 @@
 param(
     [string] $Source = "",
     [string] $Site = "",
-    [string] $BaseUrl = "https://raw.githubusercontent.com/ropahektic/WormForge-engine/main/downloads/packs/",
+    [string] $BaseUrl = "https://ropahektic.github.io/WormForge/downloads/packs/",
     [string[]] $Exclude = @()
 )
 

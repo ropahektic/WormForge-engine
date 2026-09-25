@@ -17,7 +17,7 @@ static CONSOLE: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mu
 /// Where `init` actually opened `wkLua.log`.
 static LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
 
-pub(crate) const BUILD_ID: &str = "20260925-v0.7.4-engine-packs";
+pub(crate) const BUILD_ID: &str = "20260925-v0.7.4-index-url-revert";
 
 /// Bounded binary diagnostic dumps belong in the log without flooding the
 /// live console. The caller supplies complete lines including CRLF.
