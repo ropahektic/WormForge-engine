@@ -514,6 +514,45 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn highlander_puts_its_stock_weapons_on_the_schemes_slots() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/highlander");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        let applied = &scripts.resolved.applied;
+        assert_eq!(applied.len(), 12);
+        let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
+        // The scheme's record for the girder slot is the Baseball Bat:
+        // a special weapon, subtype 2, as WA's own bat.
+        let bat = claim(StockWeapon::Girder);
+        let wep = bat.params.wep.as_ref().unwrap();
+        assert_eq!(wep.name, "Baseball Bat");
+        assert_eq!(bat.params.name.as_deref(), Some("Baseball Bat"));
+        assert_eq!((wep.fire_type(), i32::from_le_bytes(wep.record[0x34..0x38].try_into().unwrap())), (4, 2));
+        assert_eq!(
+            bat.params.panel_icon,
+            Some(weapons::PanelIcon::Stock(StockWeapon::BaseballBat))
+        );
+        // One on its own slot keeps its own icon.
+        let torch = claim(StockWeapon::BlowTorch);
+        assert_eq!(torch.params.name.as_deref(), Some("BlowTorch"));
+        assert_eq!(torch.params.panel_icon, None);
+        for (slot, name) in [
+            (StockWeapon::MagicBullet, "Cluster Bomb"),
+            (StockWeapon::Invisibility, "Teleport"),
+            (StockWeapon::DamageX2, "Skunk"),
+            (StockWeapon::DoubleTurnTime, "Mole Bomb"),
+            (StockWeapon::GirderPack, "3 Girder Pack"),
+        ] {
+            assert_eq!(claim(slot).params.name.as_deref(), Some(name));
+        }
+    }
+
+    #[test]
     fn panel_icon_pack_loads_a_png_icon() {
         let _guard = lock_host();
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/panel_icon");
