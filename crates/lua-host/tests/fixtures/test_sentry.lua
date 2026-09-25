@@ -13,6 +13,8 @@ return function(load_pack)
   -- The enemy's teammate: same side, never in range. Only its turn matters.
   local enemy_mate = { id = 3, team = 2, alliance = 0 }
   local blocked, terrain_hits = false, 0
+  -- A wall in front of the worm, for placement: its x, or nil for none.
+  local wall
   -- Stands in for wa.random, which draws from WA's shared RNG in the real
   -- engine. A fixed sequence here on purpose: this test asserts the sentry is
   -- deterministic, so its randomness must be too. The mapping onto the
@@ -33,7 +35,10 @@ return function(load_pack)
     msg = { START_TURN = 1 },
     on = { worm_message = function(cb) turn = cb end },
     worms = { all = function() return { owner, enemy } end },
-    land = { trace = function(_, _, x1)
+    land = { trace = function(x0, _, x1)
+      if wall and (wall - x0) * (x1 - x0) > 0 and math.abs(wall - x0) <= math.abs(x1 - x0) then
+        return { x = wall, y = owner.y, hit = true }
+      end
       if blocked then return { x = 101 * PX, y = 75 * PX, hit = true } end
       -- Sight to the worm is clear, but a bullet ray reaches terrain behind it.
       if x1 > enemy.x then
@@ -96,7 +101,8 @@ return function(load_pack)
   -- Huge launch velocity and a distant launch position must not affect placement.
   spec.on_fire({ worm = owner, x = 999 * PX, y = 999 * PX, vx = 80 * PX, vy = -80 * PX })
   local a = bodies[1]
-  assert(a.x == owner.x and a.y == owner.y)
+  assert(a.x == owner.x + 5 * PX and a.y == owner.y,
+         "planted a little in front of the worm, not on it")
   assert(a.vx == 19661 and a.vy == -9830 and a.loop == false)
   local gun, flare = guns[1], flares[1]
   assert(gun, "the turret spawns its rotating gun")
@@ -128,7 +134,7 @@ return function(load_pack)
   for _ = 1, 300 do a.on(a) end
   assert(rounds == 20, "exactly 20 rounds per turn")
   assert(gun.selected_frame == 0, "empty turret stops firing animation")
-  assert(a.x == owner.x and a.y == owner.y + 8 * PX and a.vx == 0 and a.vy == 0)
+  assert(a.x == owner.x + 5 * PX and a.y == owner.y + 8 * PX and a.vx == 0 and a.vy == 0)
   turn(enemy, wa.msg.START_TURN)
   for _ = 1, 100 do a.on(a) end
   assert(rounds > 20, "reload next turn")
@@ -136,13 +142,25 @@ return function(load_pack)
   spec.on_fire({ worm = owner, vx = 80 * PX, vy = -80 * PX })
   local left = bodies[2]
   assert(left.vx == -19661, "left placement")
+  assert(left.x == owner.x - 5 * PX, "in front of a worm facing left is to its left")
   assert(guns[2].angle == 180, "facing left is a half turn")
   left.water = true
   left.on(left)
   assert(left.dead, "unplanted sentry drowns")
 
+  -- A wall within reach leaves the turret at the worm; one past it does not
+  -- matter.
+  owner.facing = 1
+  wall = owner.x + 15 * PX
   spec.on_fire({ worm = owner })
-  local damaged = bodies[3]
+  assert(bodies[3].x == owner.x + 5 * PX, "a wall past the spot is no obstacle")
+  wall = owner.x + 3 * PX
+  spec.on_fire({ worm = owner })
+  assert(bodies[4].x == owner.x, "a wall in the way leaves it at the worm")
+  wall = nil
+
+  spec.on_fire({ worm = owner })
+  local damaged = bodies[5]
   damaged.on(damaged, { damage = 50 })
   assert(damaged.dead and damaged.destroyed_damage == 50,
          "50 health and PX destruction explosion")

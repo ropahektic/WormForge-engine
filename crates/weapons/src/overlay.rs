@@ -327,7 +327,9 @@ pub struct OverlayParams {
     /// as PX's `SetSpriteOverride` is: every mole uses them.
     pub mole_dig_rotation: Vec<(i32, String)>,
     /// Stock worm sprite id -> pack sheet path, scoped to this weapon slot.
-    pub worm_sprites: Vec<(i32, String)>,
+    /// With an alliance, the sheet is only for worms of that team colour
+    /// (0 red .. 5 cyan); without one, it is for every worm.
+    pub worm_sprites: Vec<(i32, Option<u8>, String)>,
     pub layer: Option<u32>,
     pub depth: Option<u32>,
     pub depth_prefix: Option<String>,
