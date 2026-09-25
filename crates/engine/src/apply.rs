@@ -141,6 +141,7 @@ pub fn on_gfx_ready(display: *mut u8) {
                     .params
                     .mole_dig_rotation
                     .iter()
+                    .chain(&claim.params.sprite_overrides)
                     .any(|(_, wp)| wp == p);
                 if (by_prefix || worm_sheet) && !mole_dig_sheet {
                     gpu_sheets.push((gfx::sprite_key(&claim.mod_id, p), sheet.clone()));
@@ -187,7 +188,12 @@ pub fn on_gfx_ready(display: *mut u8) {
         for (path, sheet) in &claim.params.extra_sheets {
             install(Some(path.clone()), sheet, false);
         }
-        for (target, path) in &claim.params.mole_dig_rotation {
+        for (target, path) in claim
+            .params
+            .mole_dig_rotation
+            .iter()
+            .chain(&claim.params.sprite_overrides)
+        {
             let key = gfx::sprite_key(&claim.mod_id, path);
             let sheet = claim.params.extra_sheets.iter().find(|(p, _)| p == path);
             match (sprite::lookup_key(&key), sheet) {

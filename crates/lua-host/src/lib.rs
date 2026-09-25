@@ -372,6 +372,53 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn sprite_overrides_take_stock_names_and_ids() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-sprite-overrides");
+        let _ = std::fs::remove_dir_all(&root);
+        let manifest = r#"
+id = "t.over"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["mortar"]
+"#;
+        let own = pack(
+            &root,
+            "t.over",
+            manifest,
+            r#"
+wa.weapons.replace({
+  weapon = "mortar",
+  sprite_overrides = { wsvbd = "trail.png", [466] = "trail.png" },
+})
+"#,
+        );
+        std::fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../mods/examples/gravler_strike/sprites/gravlerdive.png"),
+            root.join("trail.png"),
+        )
+        .unwrap();
+        let scripts = run_mods(&[own]).unwrap();
+        let params = &scripts.resolved.applied[0].params;
+        assert_eq!(
+            params.sprite_overrides,
+            vec![(250, "trail.png".to_string()), (466, "trail.png".to_string())]
+        );
+        assert_eq!(params.extra_sheets.iter().filter(|(p, _)| p == "trail.png").count(), 1);
+
+        let bad = pack(
+            &root,
+            "t.over",
+            manifest,
+            r#"wa.weapons.replace({ weapon = "mortar", sprite_overrides = { [900] = "trail.png" } })"#,
+        );
+        let err = run_mods(&[bad]).err().expect("an id past the stock sprites is refused");
+        assert!(err.contains("sprite_overrides keys are stock sprite names or ids"), "{err}");
+    }
+
+    #[test]
     fn mole_dig_rotation_refuses_other_sprites() {
         let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-mole-dig-rotation");

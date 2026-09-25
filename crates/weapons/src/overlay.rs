@@ -332,6 +332,11 @@ pub struct OverlayParams {
     /// `moledig1..3`), as stock sprite id -> pack path. Global for the match,
     /// as PX's `SetSpriteOverride` is: every mole uses them.
     pub mole_dig_rotation: Vec<(i32, String)>,
+    /// Any stock sprite replaced by a pack sheet for the whole match
+    /// (`sprite_overrides = { wsvbd = "sprites/trail" }`), as stock sprite
+    /// id -> pack path. PX's `SetSpriteOverride`: every user of that sprite
+    /// draws the pack's sheet.
+    pub sprite_overrides: Vec<(i32, String)>,
     /// Stock worm sprite id -> pack sheet path, scoped to this weapon slot.
     /// With an alliance, the sheet is only for worms of that team colour
     /// (0 red .. 5 cyan); without one, it is for every worm.
@@ -420,6 +425,7 @@ impl Default for OverlayParams {
             sprite_path: None,
             extra_sheets: Vec::new(),
             mole_dig_rotation: Vec::new(),
+            sprite_overrides: Vec::new(),
             worm_sprites: Vec::new(),
             layer: None,
             depth: None,
