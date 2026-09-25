@@ -9,7 +9,7 @@ use game::offsets::{
     CLASS_MINE, WORM_INDEX,
     CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    WORM_FACING, WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE,
+    WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE, WORM_TURN_SIDE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -750,7 +750,7 @@ impl UserData for WormHandle {
             Ok(if this.0 == 0 {
                 1
             } else {
-                let direction = unsafe { read_i32(this.0 as *mut u8, WORM_FACING) };
+                let direction = unsafe { read_i32(this.0 as *mut u8, WORM_TURN_SIDE) };
                 if direction < 0 {
                     -1
                 } else {
