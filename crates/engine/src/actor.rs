@@ -164,6 +164,8 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         list_worms: native_list_worms,
         resolve_sprite: native_resolve_sprite,
         land_solid: crate::world::solid_fixed,
+        land_dig: crate::world::land_dig,
+        land_cut: crate::world::land_cut,
         land_trace: crate::world::trace_fixed,
         map_size: crate::world::map_size_px,
         view_cam: crate::world::view_cam,

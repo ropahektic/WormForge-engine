@@ -8,6 +8,7 @@ mod actor;
 mod api;
 mod dispatch;
 mod sandbox;
+mod sim_context;
 mod spawn;
 
 pub use actor::{
@@ -269,6 +270,153 @@ mod tests {
 
     fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    #[test]
+    fn super_drill_example_claims_only_the_drill_slot() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/super_drill");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::PneumaticDrill);
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::PneumaticDrill));
+        assert!(!claim.params.eat_fire);
+        assert_eq!(claim.params.on_fire_id, 0);
+    }
+
+    #[test]
+    fn gravler_strike_uses_stock_moles_from_the_donkey_slot() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/gravler_strike");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::Donkey);
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::MoleSquadron));
+        assert_eq!(claim.params.panel_icon, Some(StockWeapon::MoleSquadron));
+        assert_eq!(claim.params.on_click_id, 0);
+        assert!(claim.params.actor_spawn().is_none());
+        assert_eq!(
+            claim
+                .params
+                .mole_dig_rotation
+                .iter()
+                .map(|(id, _)| *id)
+                .collect::<Vec<_>>(),
+            vec![158, 159, 160, 161, 663],
+            "the four dig frames, plus the dive frame's underwater variant"
+        );
+        assert_eq!(claim.params.extra_sheets.len(), 5);
+        assert!(claim.params.extra_sheets.iter().all(|(_, s)| s.frames.len() == 17));
+        // PX's Gravler has no underwater art, so the dive sheet sinks under
+        // PX's sinking tint instead of turning back into WA's mole.
+        let sheet = |key: &str| {
+            &claim.params.extra_sheets.iter().find(|(p, _)| p == key).unwrap().1
+        };
+        let dive = sheet("sprites/gravlerdive.png");
+        assert_eq!(
+            sheet("sprites/gravlerdive.png#underwater"),
+            &dive.multiply([90, 90, 240])
+        );
+    }
+
+    #[test]
+    fn mole_dig_rotation_takes_the_packs_own_underwater_frame() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-mole-underwater");
+        let _ = std::fs::remove_dir_all(&root);
+        let gravler = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../mods/examples/gravler_strike/sprites");
+        let own = pack(
+            &root,
+            "t.mole",
+            r#"
+id = "t.mole"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["donkey"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "donkey",
+  copy_from = "mole_squadron",
+  mole_dig_rotation = { moledive = "dive.png", mole = "sink.png" },
+})
+"#,
+        );
+        std::fs::copy(gravler.join("gravlerdive.png"), root.join("dive.png")).unwrap();
+        std::fs::copy(gravler.join("gravlerdiga.png"), root.join("sink.png")).unwrap();
+        let scripts = run_mods(&[own]).unwrap();
+        let params = &scripts.resolved.applied[0].params;
+        assert_eq!(
+            params.mole_dig_rotation,
+            vec![(158, "dive.png".to_string()), (663, "sink.png".to_string())],
+            "a pack's own underwater frame is used as is"
+        );
+        assert!(!params.extra_sheets.iter().any(|(p, _)| p.ends_with("#underwater")));
+    }
+
+    #[test]
+    fn mole_dig_rotation_refuses_other_sprites() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-mole-dig-rotation");
+        let _ = std::fs::remove_dir_all(&root);
+        let bad = pack(
+            &root,
+            "t.mole",
+            r#"
+id = "t.mole"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["donkey"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "donkey",
+  copy_from = "mole_squadron",
+  mole_dig_rotation = { bazooka = "sprites/x.png" },
+})
+"#,
+        );
+        let err = run_mods(&[bad]).err().expect("a non-mole sprite is refused");
+        assert!(err.contains("mole_dig_rotation keys are moledive"), "{err}");
+    }
+
+    #[test]
+    fn land_verbs_reach_native_only_during_simulation() {
+        let _guard = lock_host();
+        thread_local! {
+            static CUT: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
+            static DIG: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            land_cut: |shape, x, y| { CUT.with(|c| c.set(Some((shape, x, y)))); Ok(()) },
+            land_dig: |x, y, radius| { DIG.with(|c| c.set(Some((x, y, radius)))); Ok(()) },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let cut = "wa.land.cut{ x = 0x12340000, y = 0x56780000, shape = 'torch', facing = 1, angle = 0 }";
+        assert!(lua.load(cut).exec().is_err());
+        sim_context::with_sim(|| {
+            lua.load(cut).exec().unwrap();
+            lua.load("wa.land.dig{ x = 0x10000, y = 0x20000, radius = 12 }").exec().unwrap();
+        });
+        CUT.with(|c| assert_eq!(c.get(), Some((10, 0x12340000, 0x56780000))));
+        DIG.with(|c| assert_eq!(c.get(), Some((0x10000, 0x20000, 12))));
     }
 
     #[test]

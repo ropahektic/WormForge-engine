@@ -1,9 +1,9 @@
 //! Parse spawn tables (GUI statuses + Lua `on`) and run `wa.actors.spawn`.
 
 use crate::actor::{
-    native_land_solid, native_land_trace, native_list_actors, native_list_kind, native_list_worms,
-    native_map_size, native_resolve_sprite, native_spawn, native_view_cam, native_water_y, ActorHandle, SpawnArgs,
-    WorldHandle, WormHandle,
+    native_land_cut, native_land_dig, native_land_solid, native_land_trace, native_list_actors,
+    native_list_kind, native_list_worms, native_map_size, native_resolve_sprite, native_spawn,
+    native_view_cam, native_water_y, ActorHandle, SpawnArgs, WorldHandle, WormHandle,
 };
 use game::offsets::{CLASS_CRATE, CLASS_MINE, CLASS_MISSILE, CLASS_OIL};
 use actors::is_cluster;
@@ -385,8 +385,115 @@ fn bind_land(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     land.set("trace", trace).map_err(|e| e.to_string())?;
+    let dig = lua
+        .create_function(|_, spec: Table| {
+            let x: i32 = spec.get("x")?;
+            let y: i32 = spec.get("y")?;
+            let radius: i32 = spec.get("radius")?;
+            dig_at(x, y, radius)
+        })
+        .map_err(|e| e.to_string())?;
+    land.set("dig", dig).map_err(|e| e.to_string())?;
+    let cut = lua
+        .create_function(|_, spec: Table| {
+            let x: i32 = spec.get("x")?;
+            let y: i32 = spec.get("y")?;
+            let shape: String = spec.get("shape")?;
+            let index = match shape.as_str() {
+                "drill" => 2,
+                "torch" => {
+                    let facing: i32 = spec.get("facing")?;
+                    let angle: i32 = spec.get("angle")?;
+                    torch_shape(facing, angle)?
+                }
+                _ => {
+                    return Err(mlua::Error::external(format!(
+                        "land.cut: unknown shape {shape:?}; valid shapes: drill, torch"
+                    )))
+                }
+            };
+            cut_at(index, x, y)
+        })
+        .map_err(|e| e.to_string())?;
+    land.set("cut", cut).map_err(|e| e.to_string())?;
     wa.set("land", land).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Stock torch selects three masks for each facing, with ±0.1 in 16.16 as
+/// the aim-angle thresholds. This is the branch at WA 3.8.1 0x51AB13.
+fn torch_shape(facing: i32, angle: i32) -> mlua::Result<i32> {
+    if facing != -1 && facing != 1 {
+        return Err(mlua::Error::external(
+            "land.cut: torch facing must be -1 or 1",
+        ));
+    }
+    if !(-0x10000..=0x10000).contains(&angle) {
+        return Err(mlua::Error::external(
+            "land.cut: torch angle must be -65536..65536",
+        ));
+    }
+    let group = if angle < -0x1999 {
+        0
+    } else if angle > 0x1999 {
+        2
+    } else {
+        1
+    };
+    Ok(if facing < 0 { 6 + group } else { 9 + group })
+}
+
+pub(crate) fn dig_at(x: i32, y: i32, radius: i32) -> mlua::Result<()> {
+    if !(1..=200).contains(&radius) {
+        return Err(mlua::Error::external(
+            "land.dig: radius must be 1..200 pixels",
+        ));
+    }
+    if !crate::sim_context::active() {
+        return Err(mlua::Error::external(
+            "land.dig: only valid in simulation callbacks",
+        ));
+    }
+    native_land_dig().ok_or_else(|| mlua::Error::external("land.dig: native cut not bound"))?(
+        x, y, radius,
+    )
+    .map_err(mlua::Error::external)
+}
+
+fn cut_at(shape: i32, x: i32, y: i32) -> mlua::Result<()> {
+    if !crate::sim_context::active() {
+        return Err(mlua::Error::external(
+            "land.cut: only valid in simulation callbacks",
+        ));
+    }
+    native_land_cut().ok_or_else(|| mlua::Error::external("land.cut: native cut not bound"))?(
+        shape, x, y,
+    )
+    .map_err(mlua::Error::external)
+}
+
+#[cfg(test)]
+mod terrain_tests {
+    use super::*;
+
+    #[test]
+    fn torch_uses_stock_six_masks() {
+        for (facing, angle, expected) in [
+            (-1, -0x2000, 6), (-1, 0, 7), (-1, 0x2000, 8),
+            (1, -0x2000, 9), (1, 0, 10), (1, 0x2000, 11),
+        ] {
+            assert_eq!(torch_shape(facing, angle).unwrap(), expected);
+        }
+        assert!(torch_shape(0, 0).is_err());
+        assert!(torch_shape(1, 0x10001).is_err());
+    }
+
+    #[test]
+    fn terrain_writes_reject_non_simulation_calls() {
+        assert!(dig_at(0, 0, 12).unwrap_err().to_string().contains("simulation"));
+        assert!(cut_at(2, 0, 0).unwrap_err().to_string().contains("simulation"));
+        assert!(dig_at(0, 0, 0).unwrap_err().to_string().contains("radius"));
+    }
 }
 
 /// `wa.random()` — the only randomness a pack may use.

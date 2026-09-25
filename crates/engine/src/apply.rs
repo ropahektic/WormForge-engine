@@ -132,7 +132,12 @@ pub fn on_gfx_ready(display: *mut u8) {
                 let worm_sheet = !as_weapon
                     && claim.params.gpu_worm_sprites
                     && claim.params.worm_sprites.iter().any(|(_, wp)| wp == p);
-                if by_prefix || worm_sheet {
+                let mole_dig_sheet = claim
+                    .params
+                    .mole_dig_rotation
+                    .iter()
+                    .any(|(_, wp)| wp == p);
+                if (by_prefix || worm_sheet) && !mole_dig_sheet {
                     gpu_sheets.push((gfx::sprite_key(&claim.mod_id, p), sheet.clone()));
                     return;
                 }
@@ -176,6 +181,28 @@ pub fn on_gfx_ready(display: *mut u8) {
         }
         for (path, sheet) in &claim.params.extra_sheets {
             install(Some(path.clone()), sheet, false);
+        }
+        for (target, path) in &claim.params.mole_dig_rotation {
+            let key = gfx::sprite_key(&claim.mod_id, path);
+            let sheet = claim.params.extra_sheets.iter().find(|(p, _)| p == path);
+            match (sprite::lookup_key(&key), sheet) {
+                (Some(source), Some((_, sheet))) => {
+                    match sprite::alias_stock(display, *target, source.id, sheet) {
+                        Ok(true) => {}
+                        Ok(false) => log_line(&format!(
+                            "{} stock sprite {target} already claimed; skipped",
+                            claim.mod_id
+                        )),
+                        Err(e) => log_error(&format!(
+                            "{} stock sprite {target}: {e}", claim.mod_id
+                        )),
+                    }
+                }
+                _ => log_error(&format!(
+                    "{} stock sprite {target}: sheet {path} not installed",
+                    claim.mod_id
+                )),
+            }
         }
         for (rel, path) in &claim.params.extra_sounds {
             let key = gfx::sprite_key(&claim.mod_id, rel);

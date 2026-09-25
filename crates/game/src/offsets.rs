@@ -59,6 +59,8 @@ pub const WORM_SELECTED_AMMO: usize = 0x174;
 pub const WORM_ACTIVE_WEAPON: usize = 0x36C;
 /// WorldEntity.state (+0x44).
 pub const WORM_STATE: usize = 0x44;
+/// WA 3.8.1 SetState dispatch case that enters WormEntity__setup_Drilling.
+pub const WORM_STATE_DRILLING: u32 = 0x6E;
 /// Ground slope selector used by `WormEntity__calc_sprite`: negative adds the
 /// uphill (+1) pose, positive adds the downhill (+2) pose.
 pub const WORM_SLOPE_DIR: usize = 0x1AC;
@@ -498,6 +500,13 @@ pub const LANDSCAPE_COLLISION: usize = 0x914;
 pub const LANDSCAPE_TERRAIN_IMAGE: usize = 0x910;
 /// Destruct / soil overlay paint. Walk in front of it.
 pub const LANDSCAPE_SOIL: usize = 0x91C;
+/// WA 3.8.1 Landscape vtable and its terrain-cutting entries.
+pub const LANDSCAPE_VTABLE: u32 = 0x0066_B208;
+pub const LANDSCAPE_APPLY_EXPLOSION: u32 = 0x0057_C820;
+pub const LANDSCAPE_MASK: u32 = 0x0057_CCF0;
+pub const LANDSCAPE_SHAPES: usize = 0x88;
+/// Set by Landscape::SetControlFlag for indestructible terrain.
+pub const LANDSCAPE_CONTROL_FLAG: usize = 0xB3C;
 pub const BITGRID_BITS: usize = 0x08;
 pub const BITGRID_BPP: usize = 0x0C;
 pub const BITGRID_STRIDE: usize = 0x10;
@@ -634,6 +643,12 @@ mod tests {
         assert_eq!(LANDSCAPE_PLOT_SCRATCH, 0x0D0);
         assert_eq!(LANDSCAPE_COLLISION, 0x914);
         assert_eq!(LANDSCAPE_SOIL, 0x91C);
+        assert_eq!(LANDSCAPE_VTABLE, 0x0066_B208);
+        assert_eq!(LANDSCAPE_APPLY_EXPLOSION, 0x0057_C820);
+        assert_eq!(LANDSCAPE_MASK, 0x0057_CCF0);
+        assert_eq!(LANDSCAPE_SHAPES, 0x88);
+        assert_eq!(LANDSCAPE_CONTROL_FLAG, 0xB3C);
+        assert_eq!(WORM_STATE_DRILLING, 0x6E);
         assert_eq!(GAME_WORLD_MAP_W, 0x77C0);
         assert_eq!(GAME_WORLD_IS_CAVERN, 0x777C);
         assert_eq!(GAME_WORLD_VIEWPORT_W, 0x77AC);

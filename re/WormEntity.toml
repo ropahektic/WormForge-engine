@@ -29,7 +29,7 @@ plate_comment = "Ghidra FUN_00510b40. Jump=0x24, JumpUp=0x25, StartTurn=0x34. Th
 
 [[struct]]
 name = "WormEntity"
-plate_comment = "Partial. HandleMessage Jump/JumpUp already replicate. Team at +0xFC."
+plate_comment = "Partial. HandleMessage Jump/JumpUp already replicate. SetState case 0x6E at 0x50F2D5 enters stock drilling."
 
   [[struct.field]]
   offset = 0xFC
@@ -41,6 +41,30 @@ plate_comment = "Partial. HandleMessage Jump/JumpUp already replicate. Team at +
   name = "slope_direction"
   type = "int"
   plate_comment = "WormEntity__calc_sprite adds +1 to supported base sprites when negative and +2 when positive; used to select uphill/downhill custom-weapon poses."
+
+  [[struct.field]]
+  offset = 0x27C
+  name = "drill_timer"
+  type = "int"
+  plate_comment = "WA 3.8.1 setup_Drilling derives this from active weapon entry +0x44. handle_Drilling subtracts 20 per update and exits to state 0x65 when <= 0."
+
+  [[struct.field]]
+  offset = 0x36C
+  name = "active_weapon_entry"
+  type = "void *"
+  plate_comment = "Read by setup_Drilling to initialize the timer from entry +0x44."
+
+[[function]]
+va = 0x005186A0
+name = "WormEntity__setup_Drilling"
+calling_convention = "__thiscall"
+plate_comment = "WA 3.8.1; initializes drill_timer (+0x27C) from active weapon entry (+0x36C), field +0x44."
+
+[[function]]
+va = 0x00518770
+name = "WormEntity__handle_Drilling"
+calling_convention = "__thiscall"
+plate_comment = "WA 3.8.1; decrements drill_timer by 20 at 0x518795, calls stock landscape mask(2) with random jitter at 0x518770..0x518882, and transitions to state 0x65 when timer <= 0 at 0x518A26..0x518A38."
 
 [[function]]
 va = 0x00512E80

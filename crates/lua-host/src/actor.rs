@@ -9,7 +9,7 @@ use game::offsets::{
     CLASS_MINE, WORM_INDEX,
     CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    WORM_SELECTED_WEAPON, WORM_TURN_ACTIVE, WORM_TURN_SIDE,
+    WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_DRILLING, WORM_TURN_ACTIVE, WORM_TURN_SIDE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -141,6 +141,10 @@ pub struct ActorNative {
     pub list_worms: fn(from: u32) -> Vec<u32>,
     pub resolve_sprite: fn(key: &str) -> Option<(i32, u32, i32, i32)>,
     pub land_solid: fn(x: i32, y: i32) -> bool,
+    /// WA landscape cut, with 16.16 coordinates and pixel-sized radius.
+    pub land_dig: fn(x: i32, y: i32, radius: i32) -> Result<(), String>,
+    /// WA landscape mask cut; shape is a validated stock mask index.
+    pub land_cut: fn(shape: i32, x: i32, y: i32) -> Result<(), String>,
     pub land_trace: fn(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)>,
     pub map_size: fn() -> (i32, i32),
     pub view_cam: fn() -> (i32, i32, i32, i32),
@@ -215,6 +219,8 @@ impl Default for ActorNative {
             list_worms: |_| Vec::new(),
             resolve_sprite: |_| None,
             land_solid: |_, _| false,
+            land_dig: |_, _, _| Err("land dig not bound".into()),
+            land_cut: |_, _, _| Err("land cut not bound".into()),
             land_trace: |_, _, _, _| None,
             map_size: || (0, 0),
             view_cam: || (0, 0, 0, 0),
@@ -540,7 +546,7 @@ fn with_lua<T>(f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
         let Some(lua) = guard.as_ref() else {
             return Err("no lua state".into());
         };
-        f(lua)
+        crate::sim_context::with_sim(|| f(lua))
     })
 }
 
@@ -584,6 +590,17 @@ impl UserData for ActorHandle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("dig", |_, this, spec: Table| {
+            if this.0 == 0 || actor_dead(this.0) {
+                return Ok(());
+            }
+            let radius: i32 = spec.get("radius")?;
+            crate::spawn::dig_at(
+                read_handle(this.0, ENT_POS_X),
+                read_handle(this.0, ENT_POS_Y),
+                radius,
+            )
+        });
         methods.add_method("explode", |_, this, opts: Option<Table>| {
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
@@ -776,6 +793,11 @@ impl UserData for WormHandle {
             }
             let slot = unsafe { read_i32(this.0 as *mut u8, WORM_SELECTED_WEAPON) };
             Ok(StockWeapon::from_index(slot as u32).map(|s| s.name().to_string()))
+        });
+        fields.add_field_method_get("drilling", |_, this| {
+            Ok(this.0 != 0
+                && unsafe { read_i32(this.0 as *mut u8, WORM_STATE) as u32 }
+                    == WORM_STATE_DRILLING)
         });
         fields.add_field_method_get("kind", |_, _| Ok("worm"));
         fields.add_field_method_get("visible", |_, this| {
@@ -999,6 +1021,14 @@ pub fn native_resolve_sprite() -> Option<fn(&str) -> Option<(i32, u32, i32, i32)
 
 pub fn native_land_solid() -> Option<fn(i32, i32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_solid)
+}
+
+pub fn native_land_dig() -> Option<fn(i32, i32, i32) -> Result<(), String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.land_dig)
+}
+
+pub fn native_land_cut() -> Option<fn(i32, i32, i32) -> Result<(), String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.land_cut)
 }
 
 pub fn native_log() -> Option<fn(&str)> {

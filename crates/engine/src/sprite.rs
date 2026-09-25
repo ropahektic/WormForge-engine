@@ -29,6 +29,16 @@ struct LoadedSpr {
 unsafe impl Send for LoadedSpr {}
 
 static LOADED: Mutex<Vec<LoadedSpr>> = Mutex::new(Vec::new());
+struct StockAlias {
+    display: usize,
+    target: usize,
+    custom_ptr: usize,
+    custom_layer: u32,
+    original_ptr: usize,
+    original_layer: u32,
+}
+
+static STOCK_ALIASES: Mutex<Vec<StockAlias>> = Mutex::new(Vec::new());
 /// Custom looping sheets: sprite id → animation_phase delta per FrameFinish.
 static LOOP_DELTA: Mutex<Vec<(i32, u32)>> = Mutex::new(Vec::new());
 static SPRITE_KEYS: Mutex<Vec<(String, SpriteRef)>> = Mutex::new(Vec::new());
@@ -73,6 +83,19 @@ const PAL_DIRTY: usize = 0x708;
 
 pub fn clear() {
     clear_gpu_sheets();
+    // Restore aliases before dropping the custom sprites they point to.
+    if let Ok(mut aliases) = STOCK_ALIASES.lock() {
+        for a in aliases.drain(..) {
+            unsafe {
+                let ptrs = (a.display + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
+                let layers = (a.display + DISPLAY_SPRITE_LAYERS) as *mut u32;
+                if *ptrs.add(a.target) as usize == a.custom_ptr {
+                    *ptrs.add(a.target) = a.original_ptr as *mut u8;
+                    *layers.add(a.target) = a.original_layer;
+                }
+            }
+        }
+    }
     if let Ok(mut g) = LOADED.lock() {
         for s in g.drain(..) {
             if s.display.is_null() {
@@ -112,6 +135,21 @@ pub fn clear() {
 /// match's `clear`, and forgetting the display keeps `clear` and `reassert`
 /// from ever writing into the freed one.
 pub fn release_before_teardown() {
+    // Stock aliases first: a mole slot pointing at our sprite would have WA
+    // delete our object -- twice, since the custom slot holds it as well --
+    // and leak its own. Put each original back so WA frees what it owns.
+    if let Ok(mut aliases) = STOCK_ALIASES.lock() {
+        for a in aliases.drain(..) {
+            unsafe {
+                let ptrs = (a.display + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
+                let layers = (a.display + DISPLAY_SPRITE_LAYERS) as *mut u32;
+                if *ptrs.add(a.target) as usize == a.custom_ptr {
+                    *ptrs.add(a.target) = a.original_ptr as *mut u8;
+                    *layers.add(a.target) = a.original_layer;
+                }
+            }
+        }
+    }
     if let Ok(mut g) = LOADED.lock() {
         for s in g.iter_mut() {
             if s.display.is_null() {
@@ -151,7 +189,78 @@ pub fn reassert() -> usize {
             }
         }
     }
+    if let Ok(mut aliases) = STOCK_ALIASES.lock() {
+        for a in aliases.iter_mut() {
+            unsafe {
+                let ptrs = (a.display + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
+                let layers = (a.display + DISPLAY_SPRITE_LAYERS) as *mut u32;
+                let slot = ptrs.add(a.target);
+                if *slot as usize != a.custom_ptr {
+                    if !(*slot).is_null() {
+                        a.original_ptr = *slot as usize;
+                        a.original_layer = *layers.add(a.target);
+                    }
+                    *slot = a.custom_ptr as *mut u8;
+                    *layers.add(a.target) = a.custom_layer;
+                    restored += 1;
+                }
+            }
+        }
+    }
     restored
+}
+
+/// PX-style SetSpriteOverride for stock Gfx.dir IDs. First loaded pack wins.
+/// The original pointer is restored on clear; reassert handles WA rebuilding
+/// the sprite table at the start of a round.
+pub fn alias_stock(
+    display: *mut u8,
+    target: i32,
+    source: i32,
+    strip: &SpriteStrip,
+) -> Result<bool, String> {
+    if display.is_null() || !(1..800).contains(&target) {
+        return Err("invalid stock sprite override target".into());
+    }
+    let (custom_ptr, custom_layer) = {
+        let loaded = LOADED.lock().map_err(|_| "sprite table lock poisoned")?;
+        let sprite = loaded
+            .iter()
+            .find(|s| s.display == display && s.id == source)
+            .ok_or("stock sprite override source was not installed")?;
+        (sprite._sprite.0.as_ptr() as usize, sprite.layer)
+    };
+    let mut aliases = STOCK_ALIASES.lock().map_err(|_| "sprite alias lock poisoned")?;
+    if aliases
+        .iter()
+        .any(|a| a.display == display as usize && a.target == target as usize)
+    {
+        return Ok(false);
+    }
+    unsafe {
+        let ptrs = (display as usize + DISPLAY_SPRITE_PTRS) as *mut *mut u8;
+        let layers = (display as usize + DISPLAY_SPRITE_LAYERS) as *mut u32;
+        let original_ptr = *ptrs.add(target as usize) as usize;
+        if original_ptr == 0 {
+            return Err(format!("stock sprite {target} is unavailable"));
+        }
+        let original_layer = *layers.add(target as usize);
+        *ptrs.add(target as usize) = custom_ptr as *mut u8;
+        *layers.add(target as usize) = custom_layer;
+        aliases.push(StockAlias {
+            display: display as usize,
+            target: target as usize,
+            custom_ptr,
+            custom_layer,
+            original_ptr,
+            original_layer,
+        });
+    }
+    remember_rgba(target, strip);
+    log_line(&format!(
+        "stock sprite {target} overridden by custom sprite {source}"
+    ));
+    Ok(true)
 }
 
 /// Stock missile render uses `animation_phase` as blit anim_value. Donkey's

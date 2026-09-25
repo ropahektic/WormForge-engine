@@ -61,6 +61,8 @@ Per-worm loadouts are virtual because WA has no per-worm ammo row. `wa.inventory
 
 `a:frame(i)` holds a LuaActor on one frame of its current sheet (zeroes the loop delta). `worm.facing` is read-only (−1 left, +1 right). `worm_sprites` on `replace` remaps that slot’s worm poses only (`weaponlnk` / `wthrow` and slope variants). `ev.damage` on an actor brain is stock blast falloff this tick. Overlaying a mine’s fire (`copy_from = "mine"` plus `on_fire`) keeps placement/retreat and routes the body through the existing projectile wrap.
 
+`mole_dig_rotation = { moledive = "sprites/dive.png", moledig1 = ..., moledig2 = ..., moledig3 = ... }` replaces the mole strike's digging frames globally for the match, as PX's `SetSpriteOverride` does; any subset of the keys works, and no other sprite is accepted. A fifth key, `mole`, is WA's underwater variant of the dive frame (a diving mole that enters water switches 158 → 663; the dig frames have none). If a pack overrides `moledive` but not `mole`, the dive sheet sinks under PX's sinking tint, `RGB(90, 90, 240)` multiplied in, instead of turning back into WA's mole. The PNG/GIF must live in the pack; the first loaded claim for a frame wins, and every mole in the match uses it.
+
 ## Verbs (engine)
 
 If the current `wa.*` surface cannot do it: wrap stock 3.8.1, bind a handle API, show it in one example. Target `i686-pc-windows-msvc`. Wrap, then original — never trap `FireWeapon` / `InitWeaponTable`, never stack VFTs, never grow the 71-slot table. Details: README.
@@ -70,12 +72,12 @@ Draw primitives belong in the DLL. Named FX (lightning, fire) belong in Lua. No 
 ## Lua surface
 
 - `wa.log`, `wa.weapons.replace` / `register`, `wa.actors.spawn` / `all` / `kind`
-- Actor: `x y vx vy facing owner kind`, `a:gravity` `a:move` `a:advance` `a:look` `a:frame` `a:explode` `a:despawn` `a:spawn` `a:sound` `a:in_water` `a:on_feet`
+- Actor: `x y vx vy facing owner kind`, `a:gravity` `a:move` `a:advance` `a:look` `a:frame` `a:explode` `a:dig{radius}` `a:despawn` `a:spawn` `a:sound` `a:in_water` `a:on_feet`
 - Weapon steps (do not steal MineEntity): `on_place` / `on_proximity` / `on_explode` as a function or `{ spawn = { sprite = false, explode = { damage = 0, id = 40, now = true }, damage_worms = false } }`. Same `spawn` table as `on_fire` / `on_click`. `sprite = false` is invisible (blit id 1023). `explode.now` blasts at spawn. Nested `on_explode` on a spawned actor fires when that actor blasts. Stock `CreateClusters` is not this path yet.
-- Worm: `id team alliance slot weapon kind visible turn hp x y vx vy facing`, `worm:carry` `worm:drop` `worm:equip` `worm:ammo` `worm:hurt`
+- Worm: `id team alliance slot weapon kind visible turn hp x y vx vy facing drilling`, `worm:carry` `worm:drop` `worm:equip` `worm:ammo` `worm:hurt`. `worm.drilling` reads WA's stock drill state and is read-only.
 - Inventory: `wa.inventory.create`, then `get` `set` `add` `remove` `clear` `list` `deal` `transfer` `apply`
 - `wa.worms.all` / `nearest`, `wa.crates` / `mines` / `missiles` / `oil` `.all()` (pos + `kind`)
-- `wa.land.solid` `trace`, `wa.world.sky` `water` `size` `view` `pointer` `keys` `cavern` (`wa.world.cavern()` is WA's own cavern flag for the match)
+- `wa.land.solid` `trace` `dig{ x, y, radius }` `cut{ x, y, shape = "drill" | "torch", facing, angle }`, `wa.world.sky` `water` `size` `view` `pointer` `keys` `cavern` (`wa.world.cavern()` is WA's own cavern flag for the match). Terrain cuts require a simulation callback; coordinates are 16.16, radius is 1..200 pixels. Torch requires facing ±1 and angle in 16.16 from −65536 to 65536.
 - `wa.sound.play`, `wa.on.gravity_before` / `gravity_after` / `missile_frame` / `worm_message` / `hurt` / `turn_start` / `death` / `hud`, `wa.hud.line`
 - `wa.msg.FRAME_FINISH` `EXPLOSION` `IMPACT` `HIT` `NONLETHAL` `POISON` `JUMP` `JUMP_UP` `FIRE_WEAPON` `RELEASE_WEAPON` `START_TURN`
 

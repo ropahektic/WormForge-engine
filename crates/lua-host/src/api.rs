@@ -653,6 +653,54 @@ fn table_to_claim(
         }
     }
 
+    // The mole strike's digging frames: dive, then the three-frame dig
+    // cycle, plus `mole` -- WA's name for the dive frame's underwater
+    // variant (`Sprite__GetUnderwaterVariant` maps 158 to 663; the dig
+    // frames have none). Only these stock sprites can be replaced here.
+    const MOLE_DIG_ROTATION: [&str; 5] = ["moledive", "moledig1", "moledig2", "moledig3", "mole"];
+    let mut mole_dig_rotation = Vec::new();
+    if let Some(frames) = spec.get::<Option<Table>>("mole_dig_rotation")? {
+        for pair in frames.pairs::<String, String>() {
+            let (name, path) = pair?;
+            let name = name.to_ascii_lowercase();
+            if !MOLE_DIG_ROTATION.contains(&name.as_str()) {
+                return Err(mlua::Error::external(format!(
+                    "mole_dig_rotation keys are {}; got {name:?}",
+                    MOLE_DIG_ROTATION.join(", ")
+                )));
+            }
+            let id = gfx::stock_sprite_id(&name).expect("mole dig sprites are stock names");
+            let (path, sheet) = load_pack_sheet(root, &path, 1)?;
+            if !extra_sheets.iter().any(|(existing, _)| existing == &path) {
+                extra_sheets.push((path.clone(), sheet));
+            }
+            mole_dig_rotation.push((id, path));
+        }
+        // A dive frame with no underwater art of its own sinks as that same
+        // frame under PX's sinking tint -- how PX draws every object it owns
+        // under water. Without this, WA swapped a sinking custom mole back
+        // to its stock underwater mole.
+        let dive = gfx::stock_sprite_id("moledive").expect("stock name");
+        let underwater = gfx::stock_sprite_id("mole").expect("stock name");
+        let dive_path = mole_dig_rotation
+            .iter()
+            .find(|(id, _)| *id == dive)
+            .map(|(_, p)| p.clone());
+        if let Some(dive_path) = dive_path {
+            if !mole_dig_rotation.iter().any(|(id, _)| *id == underwater) {
+                let sheet = extra_sheets
+                    .iter()
+                    .find(|(p, _)| *p == dive_path)
+                    .map(|(_, s)| s.multiply(PX_SINKING_TINT))
+                    .expect("the dive sheet was loaded above");
+                let key = format!("{dive_path}#underwater");
+                extra_sheets.push((key.clone(), sheet));
+                mole_dig_rotation.push((underwater, key));
+            }
+        }
+        mole_dig_rotation.sort_by_key(|(id, _)| *id);
+    }
+
     let mut worm_sprites = Vec::new();
     if let Some(poses) = spec.get::<Option<Table>>("worm_sprites")? {
         for pair in poses.pairs::<String, String>() {
@@ -843,6 +891,7 @@ fn table_to_claim(
             fire_spawn,
             sprite_path,
             extra_sheets,
+            mole_dig_rotation,
             worm_sprites,
             layer,
             depth,
@@ -874,6 +923,11 @@ fn table_to_claim(
         },
     })
 }
+
+/// PX's colour for anything it draws while it sinks: every PX-scripted
+/// object wraps its draw in `SetColorMod(RGB(90, 90, 240), 6)` while
+/// `Sinking` (sentry gun, magnet, rock, ...).
+const PX_SINKING_TINT: [u8; 3] = [90, 90, 240];
 
 fn load_pack_sheet(
     root: &std::path::Path,

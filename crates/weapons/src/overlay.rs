@@ -307,6 +307,10 @@ pub struct OverlayParams {
     pub sprite_path: Option<String>,
     /// Extra PNG/GIF/frame-folders installed at gfx init (`sprites = { ... }`).
     pub extra_sheets: Vec<(String, SpriteStrip)>,
+    /// Replacement sheets for the mole strike's digging frames (`moledive`,
+    /// `moledig1..3`), as stock sprite id -> pack path. Global for the match,
+    /// as PX's `SetSpriteOverride` is: every mole uses them.
+    pub mole_dig_rotation: Vec<(i32, String)>,
     /// Stock worm sprite id -> pack sheet path, scoped to this weapon slot.
     pub worm_sprites: Vec<(i32, String)>,
     pub layer: Option<u32>,
@@ -378,6 +382,7 @@ impl Default for OverlayParams {
             fire_spawn: None,
             sprite_path: None,
             extra_sheets: Vec::new(),
+            mole_dig_rotation: Vec::new(),
             worm_sprites: Vec::new(),
             layer: None,
             depth: None,

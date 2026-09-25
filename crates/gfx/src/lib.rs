@@ -108,6 +108,29 @@ pub struct SpriteStrip {
 }
 
 impl SpriteStrip {
+    /// The same strip multiplied by `tint`, channel by channel (alpha kept):
+    /// PX's `SetColorMod(rgb, 6)`. PX draws every object it owns this way
+    /// while it sinks, with `RGB(90, 90, 240)`.
+    pub fn multiply(&self, tint: [u8; 3]) -> SpriteStrip {
+        let frames = self
+            .frames
+            .iter()
+            .map(|f| RgbaFrame {
+                width: f.width,
+                height: f.height,
+                rgba: f
+                    .rgba
+                    .chunks_exact(4)
+                    .flat_map(|p| {
+                        let m = |c: u8, t: u8| ((c as u32 * t as u32 + 127) / 255) as u8;
+                        [m(p[0], tint[0]), m(p[1], tint[1]), m(p[2], tint[2]), p[3]]
+                    })
+                    .collect(),
+            })
+            .collect();
+        SpriteStrip { frames, ..self.clone() }
+    }
+
     /// `animation_phase` increment per FrameFinish tick so blit walks the
     /// strip at `fps`. Zero when the sheet is not a looping GIF.
     pub fn phase_delta(&self) -> u32 {
@@ -689,6 +712,22 @@ fn nearest_palette(palette: &[[u8; 3]], r: u8, g: u8, b: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn multiply_tints_colour_and_keeps_alpha() {
+        let strip = SpriteStrip {
+            frames: vec![RgbaFrame {
+                width: 2,
+                height: 1,
+                rgba: vec![255, 255, 255, 255, 200, 100, 0, 7],
+            }],
+            fps: 10,
+            looping: false,
+        };
+        let t = strip.multiply([90, 90, 240]);
+        assert_eq!(t.frames[0].rgba, vec![90, 90, 240, 255, 71, 35, 0, 7]);
+        assert_eq!((t.fps, t.looping), (10, false));
+    }
+
     use super::*;
 
     fn encode_rgba_png(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
