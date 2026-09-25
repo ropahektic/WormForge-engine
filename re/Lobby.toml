@@ -1,0 +1,51 @@
+# The network lobby's ready bulbs. Addresses match wkFOW's byte signatures
+# (src/Signatures.h) on stock WA 3.8.1; the CPlayers layout is OpenWA's
+# (engine/mp/registration.rs, common.rs) and wkFOW's ShowLobbyMachines check.
+
+[[function]]
+va = 0x00482700
+name = "LobbyList__UpdateReady"
+calling_convention = "__thiscall"
+signature = "void LobbyList::UpdateReady(LobbyList *this)"
+plate_comment = "Player list redraws its ready bulbs from CPlayers. Runs on host and client whenever a bulb changes."
+
+[[function]]
+va = 0x004C1E90
+name = "LobbyNetList__UpdateReady"
+calling_convention = "__thiscall"
+signature = "void LobbyNetList::UpdateReady(LobbyNetList *this)"
+plate_comment = "Network list's copy of the same refresh."
+
+[[function]]
+va = 0x0046AD10
+name = "CPlayers__IsOkToStartNetGame"
+calling_convention = "__usercall"
+signature = "bool __usercall CPlayers::IsOkToStartNetGame(CPlayers *this@<edi>)"
+plate_comment = "Host's Start gate: every active machine ready. No stack arguments; result in EAX. Transiently true with one machine."
+
+[[global]]
+va = 0x008779D8
+name = "G_CPLAYERS"
+type = "CPlayers"
+comment = "Lobby machine table singleton. The ready flag of machine n is at +n*0x78+0x82."
+
+[[struct]]
+name = "CPlayers"
+
+  [[struct.field]]
+  offset = 0x8
+  name = "local_slot"
+  type = "int"
+  comment = "This machine's record. 0 is the host: WA's BuildPeerConnectionsArray reads == 0 as 'I am the host'."
+
+  [[struct.field]]
+  offset = 0x80
+  name = "machine0_active"
+  type = "byte"
+  comment = "First record's active flag; records repeat every 0x78 bytes, 13 of them."
+
+  [[struct.field]]
+  offset = 0x82
+  name = "machine0_ready"
+  type = "byte"
+  comment = "First record's ready bulb."

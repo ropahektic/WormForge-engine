@@ -19,3 +19,7 @@ Test manifest and path validation, changed files with unchanged pack versions, i
 ## Assumptions
 
 “Assets” means all files in enabled packs. “RA” refers to `.WFAssets`: its contents are referenced in replays when available, while missing collection blobs are embedded locally. Unsupported clients cannot participate in a host-lit WormForge round.
+
+## Progress
+
+**Step 1, the host's ready bulb (done).** `crates/engine/src/lobby.rs` reads the bulb from WA's lobby table, `CPlayers` (0x8779D8): this machine's slot is at +8, and slot 0 is the host; each record's ready flag is at +0x82, active at +0x80, records 0x78 apart. It observes the table from both player lists' `UpdateReady` and the host's Start gate (`re/Lobby.toml`). In a solo hosted online lobby, the host's own click was reported by the player list (`LobbyList__UpdateReady`, 0x482700) on every toggle. Each lit edge freezes the enabled pack set on a worker thread (`crates/netsync`): 7 packs, 672 files, 9.4 MB in about 0.5 s. Two lit edges over unchanged packs gave the same manifest digest, and only the newest session directory was kept. Still to confirm: whether the bulb comes back out when a round returns to the lobby, which decides whether a second round gets a new generation.

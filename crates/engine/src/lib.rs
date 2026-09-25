@@ -13,6 +13,7 @@ mod http;
 mod hud;
 mod hurt;
 mod overlay;
+mod lobby;
 mod log;
 mod mask_collide;
 mod mine;
