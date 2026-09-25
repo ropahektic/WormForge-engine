@@ -117,6 +117,11 @@ unsafe extern "system" fn shutdown_hook(state_buf: *mut u8) {
     if std::panic::catch_unwind(crate::apply::restore_panel_icons).is_err() {
         log_error("panic while restoring panel icons");
     }
+    // Same reason for the sprite table: WA deletes every sprite it holds, and
+    // ours are not WA's to delete.
+    if std::panic::catch_unwind(crate::sprite::release_before_teardown).is_err() {
+        log_error("panic while releasing custom sprites");
+    }
     let orig = ORIGINAL_SHUTDOWN.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: unsafe extern "system" fn(*mut u8) = std::mem::transmute(orig);
@@ -125,6 +130,7 @@ unsafe extern "system" fn shutdown_hook(state_buf: *mut u8) {
     let result = std::panic::catch_unwind(|| {
         crate::replay::finish();
         crate::modloader::match_ended();
+        crate::apply::match_ended();
     });
     if let Err(p) = result {
         log_error(&format!(
