@@ -10,6 +10,7 @@
 //! table archives them; a symlink is refused rather than followed.
 
 pub mod download;
+pub mod gate;
 pub mod proto;
 pub mod store;
 
@@ -309,10 +310,11 @@ fn collect(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf)>) -> Result<
     Ok(())
 }
 
-/// Ids name folders in the session directory and fields in the manifest.
+/// Ids name folders in the session directory and fields in the manifest. A
+/// leading '.' or '_' would make the loader skip the folder (`is_ignored_folder`).
 fn check_id(id: &str) -> Result<(), String> {
     let ok = !id.is_empty()
-        && !id.starts_with('.')
+        && !id.starts_with(['.', '_'])
         && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
     if ok {
         Ok(())

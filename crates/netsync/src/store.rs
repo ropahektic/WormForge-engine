@@ -11,6 +11,8 @@ use std::collections::HashMap;
 pub struct Served {
     pub generation: u32,
     pub digest: [u8; 32],
+    /// Packs in the generation; none means there is nothing to sync.
+    pub packs: usize,
     manifest: Vec<u8>,
     blobs: HashMap<[u8; 32], Vec<u8>>,
 }
@@ -30,7 +32,13 @@ impl Served {
             }
             blobs.insert(f.sha256, bytes);
         }
-        Ok(Served { generation, digest: digest(&manifest), manifest, blobs })
+        Ok(Served {
+            generation,
+            digest: digest(&manifest),
+            packs: session.manifest.packs.len(),
+            manifest,
+            blobs,
+        })
     }
 
     pub fn offer(&self) -> Message {

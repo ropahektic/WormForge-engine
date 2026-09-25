@@ -55,6 +55,8 @@ pub enum Message {
     Missing { generation: u32, object: Object },
     /// Client: where it stands with `generation`.
     Status { generation: u32, digest: [u8; 32], state: State, have: u64, total: u64, text: String },
+    /// Host: your status for `generation` arrived.
+    Ack { generation: u32 },
 }
 
 const HELLO: u8 = 1;
@@ -64,6 +66,7 @@ const GET: u8 = 4;
 const DATA: u8 = 5;
 const MISSING: u8 = 6;
 const STATUS: u8 = 7;
+const ACK: u8 = 8;
 
 /// True when `packet` is ours, whatever its version.
 pub fn is_ours(packet: &[u8]) -> bool {
@@ -123,6 +126,10 @@ pub fn encode(message: &Message) -> Vec<u8> {
             out.extend_from_slice(&total.to_le_bytes());
             put_str(&mut out, text);
         }
+        Message::Ack { generation } => {
+            out.push(ACK);
+            put_u32(&mut out, *generation);
+        }
     }
     out
 }
@@ -171,6 +178,7 @@ pub fn decode(packet: &[u8]) -> Result<Message, String> {
             total: r.u64()?,
             text: r.str()?,
         },
+        ACK => Message::Ack { generation: r.u32()? },
         kind => return Err(format!("unknown message kind {kind}")),
     };
     if r.at != packet.len() {
@@ -273,6 +281,7 @@ mod tests {
                 total: 9,
                 text: "disk full".into(),
             },
+            Message::Ack { generation: 3 },
         ];
         for m in all {
             let wire = encode(&m);

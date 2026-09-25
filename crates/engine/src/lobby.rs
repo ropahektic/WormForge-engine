@@ -236,7 +236,9 @@ fn freeze_generation(n: u32) {
     ));
     prune(n);
     match netsync::store::Served::load(n, &session) {
-        Ok(served) if GENERATION.load(Ordering::SeqCst) == n => crate::transfer::serve(served),
+        Ok(served) if GENERATION.load(Ordering::SeqCst) == n => {
+            crate::transfer::serve(served, session.dir.clone())
+        }
         Ok(_) => {}
         Err(e) => log_error(&format!("sync generation {n}: cannot serve: {e}")),
     }
@@ -287,15 +289,23 @@ unsafe extern "thiscall" fn net_list_update_ready_hook(this: *mut u8) {
     let _ = std::panic::catch_unwind(|| observe("network list"));
 }
 
-unsafe extern "system" fn after_start_gate(_result: u32, players: u32) {
+/// Returns the answer WA gets: its own, held back while the lit generation
+/// has not reached every player (`transfer::start_allowed`).
+unsafe extern "system" fn after_start_gate(result: u32, players: u32) -> u32 {
     if players != PLAYERS.load(Ordering::Relaxed) {
-        return;
+        return result;
     }
     let _ = std::panic::catch_unwind(|| observe("start gate"));
+    let wa_allows = result & 0xFF != 0;
+    match std::panic::catch_unwind(|| crate::transfer::start_allowed(wa_allows)) {
+        Ok(allowed) if wa_allows && !allowed => 0,
+        _ => result,
+    }
 }
 
 /// `CPlayers::IsOkToStartNetGame`: EDI = CPlayers, no stack arguments, the
-/// result in EAX. Keep EAX, flags and every register across the observer.
+/// result in EAX. Every other register and the flags survive the observer;
+/// EAX becomes its answer, written into the slot `pushad` saved it in.
 #[unsafe(naked)]
 unsafe extern "C" fn start_gate_hook() {
     core::arch::naked_asm!(
@@ -305,6 +315,7 @@ unsafe extern "C" fn start_gate_hook() {
         "push edi",
         "push eax",
         "call {after}",
+        "mov dword ptr [esp + 28], eax",
         "popad",
         "popfd",
         "ret",

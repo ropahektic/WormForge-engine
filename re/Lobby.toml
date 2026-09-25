@@ -79,3 +79,24 @@ va = 0x00857A3C
 name = "G_CLIENT_LINK"
 type = "Connection"
 comment = "Client's connection to the host, from ClientEndscreenPacketHandler (0x4BD400) + 0x103. +0xB8 state (3 = connected); send is vtable+0x34 (this, data, size)."
+
+[[function]]
+va = 0x00493CB0
+name = "Lobby__DisplayMessage"
+calling_convention = "__stdcall"
+signature = "int Lobby::DisplayMessage(void *log, const char *text)"
+plate_comment = "Shows a line in a lobby screen's message log (screen + 0x10318); a SYS::ALL: prefix marks a system line. wkFOW's LobbyDisplayMessage signature."
+
+[[function]]
+va = 0x004AC0D0
+name = "HostEndscreen__HandlePacket"
+calling_convention = "__thiscall"
+signature = "void HostEndscreen::HandlePacket(HostEndscreen *this, int slot, uint8_t *packet, size_t size)"
+plate_comment = "Host's end screen between rounds: one packet from client `slot`; also gets the host lobby handler's unhandled types. After a bulb packet it refreshes through this->vtable+0x170. RET 0xC."
+
+[[function]]
+va = 0x004BD400
+name = "ClientEndscreen__HandlePacket"
+calling_convention = "__thiscall"
+signature = "int ClientEndscreen::HandlePacket(ClientEndscreen *this, uint8_t *packet, size_t size)"
+plate_comment = "Client's end screen between rounds: one packet from the host; types it does not know go to 0x4BB1F0. RET 8."
