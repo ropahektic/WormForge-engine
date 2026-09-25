@@ -203,6 +203,28 @@ impl WeaponEntry {
         }
     }
 
+    /// StrikeFire takes the bomb's sprite from the strike parameter slab,
+    /// 0x14 bytes after a projectile's sprite. The cluster bomb follows it
+    /// only when it used the same sprite before retargeting.
+    pub fn retarget_strike_sprite_id(&mut self, new: i32) {
+        let old = self.read_i32(0x74);
+        if old == new {
+            return;
+        }
+        self.write_i32(0x74, new);
+        if old != 0 && self.read_i32(0x138) == old {
+            self.write_i32(0x138, new);
+        }
+    }
+
+    pub fn is_strike(&self) -> bool {
+        self.fire_type() == 3 && self.special_subtype() == 0
+    }
+
+    pub fn set_strike_cluster_sprite_id(&mut self, value: i32) {
+        self.write_i32(0x138, value);
+    }
+
     pub fn wind_pct(&self) -> i32 {
         self.read_i32(WEAPON_WIND_PCT)
     }
@@ -378,6 +400,21 @@ mod tests {
             assert_eq!(e.read_i32(off), 0, "{off:#x} is not a sibling of no sprite");
         }
         assert_eq!(e.read_i32(0x114), 100);
+    }
+
+    #[test]
+    fn strike_retarget_moves_the_bomb_and_a_matching_cluster() {
+        let mut e = WeaponEntry { raw: [0; WEAPON_ENTRY_SIZE] };
+        e.write_i32(WEAPON_FIRE_TYPE, 3);
+        e.write_i32(0x60, 25); // strike parameters, not a sprite
+        e.write_i32(0x74, 52);
+        e.write_i32(0x138, 52);
+        assert!(e.is_strike());
+        e.retarget_strike_sprite_id(900);
+        assert_eq!((e.read_i32(0x74), e.read_i32(0x138), e.read_i32(0x60)), (900, 900, 25));
+        e.write_i32(0x138, 60);
+        e.retarget_strike_sprite_id(901);
+        assert_eq!((e.read_i32(0x74), e.read_i32(0x138)), (901, 60), "its own cluster art stays");
     }
 
     #[test]

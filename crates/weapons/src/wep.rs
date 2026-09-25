@@ -36,6 +36,10 @@ const SPRITE_FIELDS: [usize; 8] = [
     WEAPON_CLUSTER_SPRITE,
     WEAPON_CLUSTER_RENDER_TIMER,
 ];
+/// StrikeFire reads its bomb and cluster art from a slab 0x14 bytes after
+/// the ordinary projectile fields. These offsets are parameters on other
+/// fire types, so only inspect them for a strike record.
+const STRIKE_SPRITE_FIELDS: [usize; 4] = [0x74, 0x7C, 0x138, 0x140];
 /// `fire_params.missile_type`: nonzero for anything that flies.
 const MISSILE_TYPE: usize = 0xA4;
 
@@ -98,9 +102,10 @@ pub fn import(entry: &mut WeaponEntry, wep: &Wep) {
     source.raw.copy_from_slice(&wep.record);
     entry.copy_fire_from(&source);
     let flies = entry.read_i32(MISSILE_TYPE) != 0;
-    for off in SPRITE_FIELDS {
+    let strike = entry.is_strike();
+    for off in SPRITE_FIELDS.into_iter().chain(STRIKE_SPRITE_FIELDS.into_iter().filter(|_| strike)) {
         let v = entry.read_i32(off);
-        if v >= PX_SPRITE_BASE || (off == WEAPON_SPRITE_ID && v == 0 && flies) {
+        if v >= PX_SPRITE_BASE || (off == WEAPON_SPRITE_ID && v == 0 && flies && !strike) {
             entry.write_i32(off, before.read_i32(off));
         }
     }
@@ -160,6 +165,22 @@ mod tests {
         slot.write_i32(WEAPON_CLUSTER_RENDER_TIMER, 53);
         import(&mut slot, &w);
         assert_eq!(slot.read_i32(WEAPON_CLUSTER_RENDER_TIMER), 53);
+    }
+
+    #[test]
+    fn a_strikes_px_sprites_keep_the_slots_own() {
+        let mut w = hellish();
+        let set = |w: &mut Wep, off: usize, v: i32| w.record[off..off + 4].copy_from_slice(&v.to_le_bytes());
+        set(&mut w, WEAPON_FIRE_TYPE, 3);
+        set(&mut w, 0x34, 0);
+        set(&mut w, 0x74, PX_SPRITE_BASE);
+        set(&mut w, 0x7C, 251); // a stock id a pack overrides stays as is
+        set(&mut w, 0x138, PX_SPRITE_BASE);
+        let mut slot = WeaponEntry { raw: [0; WEAPON_ENTRY_SIZE] };
+        slot.write_i32(0x74, 52);
+        slot.write_i32(0x138, 53);
+        import(&mut slot, &w);
+        assert_eq!((slot.read_i32(0x74), slot.read_i32(0x7C), slot.read_i32(0x138)), (52, 251, 53));
     }
 
     #[test]
