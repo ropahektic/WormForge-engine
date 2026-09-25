@@ -1,0 +1,31 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  host:
+    name: Host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test crates that do not need Windows
+        run: cargo test --workspace --exclude wk-lua --exclude engine --verbose
+
+  dll:
+    name: 32-bit Windows DLL
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add the i686 MSVC target
+        run: rustup target add i686-pc-windows-msvc
+      - name: Test the engine crate
+        run: cargo test -p engine --target i686-pc-windows-msvc --verbose
+      - name: Build wkLua.dll
+        run: cargo build --release -p wk-lua --target i686-pc-windows-msvc --verbose
