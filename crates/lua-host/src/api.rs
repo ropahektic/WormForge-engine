@@ -805,6 +805,7 @@ fn table_to_claim(
     }
 
     let mut cluster_sprite_id = None;
+    let mut cluster_sprite_path = None;
     let mut cluster_damage = None;
     let mut cluster_bounce_pct = None;
     let mut cluster_gravity_pct = None;
@@ -835,6 +836,7 @@ fn table_to_claim(
             &mut cluster_path,
         )?;
         if let (Some(path), Some(sheet)) = (cluster_path.take(), cluster_sheet.take()) {
+            cluster_sprite_path = Some(path.clone());
             extra_sheets.push((path, sheet));
         }
         if let Some(p) = cluster.get::<Option<Table>>("params")? {
@@ -938,6 +940,7 @@ fn table_to_claim(
             worm_sprites_animate,
             extra_sounds,
             cluster_sprite_id,
+            cluster_sprite_path,
             cluster_damage,
             cluster_bounce_pct,
             cluster_gravity_pct,
