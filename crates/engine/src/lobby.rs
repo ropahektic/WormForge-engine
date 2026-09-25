@@ -85,7 +85,11 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
     Ok(())
 }
 
-fn target(catalog: &Catalog, name: &str, expected: &[Option<u8>]) -> Result<*mut c_void, String> {
+pub(crate) fn target(
+    catalog: &Catalog,
+    name: &str,
+    expected: &[Option<u8>],
+) -> Result<*mut c_void, String> {
     let va = catalog.function_va(name).ok_or_else(|| format!("missing {name} catalog entry"))?;
     let at = rb(va) as *const u8;
     let actual = unsafe { std::slice::from_raw_parts(at, expected.len()) };
@@ -114,10 +118,16 @@ unsafe fn local_bulb() -> Option<(bool, bool)> {
     Some((slot == 0, *record.add(RECORD_READY) != 0))
 }
 
+/// The generation being offered, or 0 when the host's bulb is out.
+pub(crate) fn current_generation() -> u32 {
+    GENERATION.load(Ordering::SeqCst)
+}
+
 fn observe(source: &str) {
     let Some(now) = (unsafe { local_bulb() }) else {
         return;
     };
+    crate::transfer::entered_lobby();
     let Ok(mut last) = LAST.lock() else {
         return;
     };
@@ -130,9 +140,10 @@ fn observe(source: &str) {
 
     let (host, lit) = now;
     log_line(&format!(
-        "lobby bulb: {} {} (seen by {source})",
+        "lobby bulb: {} {} (seen by {source}, thread {})",
         if host { "host" } else { "client" },
-        if lit { "lit" } else { "out" }
+        if lit { "lit" } else { "out" },
+        unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() }
     ));
     if host && lit {
         start_generation();
@@ -140,6 +151,7 @@ fn observe(source: &str) {
         let old = GENERATION.swap(0, Ordering::SeqCst);
         if old != 0 {
             log_line(&format!("sync generation {old} withdrawn: host bulb out"));
+            crate::transfer::withdraw(old);
         }
     }
 }
@@ -223,6 +235,11 @@ fn freeze_generation(n: u32) {
         session.dir.display()
     ));
     prune(n);
+    match netsync::store::Served::load(n, &session) {
+        Ok(served) if GENERATION.load(Ordering::SeqCst) == n => crate::transfer::serve(served),
+        Ok(_) => {}
+        Err(e) => log_error(&format!("sync generation {n}: cannot serve: {e}")),
+    }
 }
 
 /// Drop every host session but the current one, this run's earlier

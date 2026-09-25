@@ -43,6 +43,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     }
 
     log_line("InitGraphic: installing custom sprites after LoadSprites");
+    crate::transfer::match_started();
     sprite::clear();
     world::clear_sounds();
     crate::hurt::reset();

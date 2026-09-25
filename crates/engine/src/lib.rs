@@ -25,6 +25,7 @@ mod replay;
 mod sprite;
 mod queue_census;
 mod sync;
+mod transfer;
 mod truecolor;
 mod shader;
 pub mod render_queue;

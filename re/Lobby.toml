@@ -49,3 +49,33 @@ name = "CPlayers"
   name = "machine0_ready"
   type = "byte"
   comment = "First record's ready bulb."
+
+# Lobby packets. Addresses match wkTerrainSync's signatures (src/Packets.cpp);
+# the default branches were read in WA.exe: a type neither side knows returns
+# 0 without effect (host via 0x4AC0D0, client via 0x4BB1F0).
+
+[[function]]
+va = 0x004B6290
+name = "HostLobby__HandlePacket"
+calling_convention = "__thiscall"
+signature = "int HostLobby::HandlePacket(HostLobby *this, int slot, uint8_t *packet, size_t size)"
+plate_comment = "Host lobby: one packet from client `slot`. Types 0, 0x10, 0x1A here, the rest to 0x4AC0D0. RET 0xC."
+
+[[function]]
+va = 0x004C0790
+name = "ClientLobby__HandlePacket"
+calling_convention = "__thiscall"
+signature = "int ClientLobby::HandlePacket(ClientLobby *this, uint8_t *packet, size_t size)"
+plate_comment = "Client lobby: one packet from the host. Types up to 0x32 here, the rest to 0x4BB1F0. RET 8."
+
+[[global]]
+va = 0x007C0ED4
+name = "G_HOST_SESSION"
+type = "GameSyncHost"
+comment = "Host's connections (OpenWA GAMESYNC_HOST_SINGLETON). +0xC nonzero while hosting; per-slot records 0x19118 apart: +0x25C state (3 = connected), +0x1A4 the connection object. HostUnicast (0x58F9F0) sends through connection vtable+0x34."
+
+[[global]]
+va = 0x00857A3C
+name = "G_CLIENT_LINK"
+type = "Connection"
+comment = "Client's connection to the host, from ClientEndscreenPacketHandler (0x4BD400) + 0x103. +0xB8 state (3 = connected); send is vtable+0x34 (this, data, size)."

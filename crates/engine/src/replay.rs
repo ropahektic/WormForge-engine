@@ -641,7 +641,7 @@ fn process_alive(pid: u32) -> bool {
 }
 
 /// The `.WFAssets` collection next to `wkLua.dll`, index only, loaded once.
-fn collection() -> Option<&'static Collection<File>> {
+pub(crate) fn collection() -> Option<&'static Collection<File>> {
     static COLLECTION: OnceLock<Option<Collection<File>>> = OnceLock::new();
     COLLECTION
         .get_or_init(|| {
