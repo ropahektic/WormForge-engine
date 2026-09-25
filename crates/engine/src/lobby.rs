@@ -20,7 +20,7 @@ use minhook::MinHook;
 use re_catalog::Catalog;
 use std::ffi::c_void;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 static ORIGINAL_LIST: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -33,9 +33,11 @@ static PLAYERS: AtomicU32 = AtomicU32::new(0);
 static LAST: Mutex<Option<(bool, bool)>> = Mutex::new(None);
 /// The current sync generation. 0 means none: the host's bulb is out.
 static GENERATION: AtomicU32 = AtomicU32::new(0);
-/// Generations started by this process, so a new one is never confused with
-/// an older run's leftovers in the sync folder.
+/// Generations started by this process.
 static STARTED: AtomicU32 = AtomicU32::new(0);
+/// Names this run's session directories. The process id alone repeats:
+/// Wine hands WA the same small id on every launch.
+static RUN: OnceLock<String> = OnceLock::new();
 
 const RECORD_STRIDE: usize = 0x78;
 const RECORD_ACTIVE: usize = 0x80;
@@ -163,8 +165,18 @@ fn sync_root() -> PathBuf {
     wormforge_dir().join("sync")
 }
 
+fn run_id() -> &'static str {
+    RUN.get_or_init(|| {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        format!("{}-{nanos}", std::process::id())
+    })
+}
+
 fn session_name(generation: u32) -> String {
-    format!("host-{}-{generation}", std::process::id())
+    format!("host-{}-{generation}", run_id())
 }
 
 fn freeze_generation(n: u32) {
@@ -213,22 +225,30 @@ fn freeze_generation(n: u32) {
     prune(n);
 }
 
-/// Drop this process's earlier generations. Nothing reads them yet: loading
-/// rounds and recording replays from a session comes in later steps, and
-/// those must keep a session for as long as a recording uses it.
+/// Drop every host session but the current one, this run's earlier
+/// generations and earlier runs' leftovers alike. Nothing reads them yet:
+/// loading rounds and recording replays from a session come in later steps,
+/// and must then keep a session for as long as a recording uses it.
+///
+/// A later generation of this run, staged or published, is left alone: the
+/// bulb may have been lit again while this one was being pruned.
 fn prune(current: u32) {
-    let prefix = format!("host-{}-", std::process::id());
+    let ours = format!("host-{}-", run_id());
     let Ok(entries) = std::fs::read_dir(sync_root()) else {
         return;
     };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        let Some(rest) = name.strip_prefix(&prefix) else {
+        if !name.starts_with("host-") {
             continue;
-        };
-        if rest.parse::<u32>().is_ok_and(|g| g < current) {
-            let _ = std::fs::remove_dir_all(entry.path());
         }
+        let generation = name
+            .strip_prefix(&ours)
+            .and_then(|rest| rest.trim_end_matches(".partial").parse::<u32>().ok());
+        if generation.is_some_and(|g| g >= current) {
+            continue;
+        }
+        let _ = std::fs::remove_dir_all(entry.path());
     }
 }
 
