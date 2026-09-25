@@ -5,8 +5,12 @@
 use crate::log::{log_error, log_line};
 use crate::mine;
 use crate::rebase::rb;
-use game::entity::read_i32;
-use game::offsets::{MISSILE_HANDLE_MESSAGE, STOCK_WEAPON_COUNT};
+use game::entity::{read_i32, write_i32};
+use game::offsets::{
+    MISSILE_ALT_BANK_SPRITE, MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_SPRITE_A,
+    MISSILE_HOMING_SPRITE_B, MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT,
+    MISSILE_WEAPON_ALT_SPRITE, MISSILE_WEAPON_SPRITE, STOCK_WEAPON_COUNT,
+};
 use minhook::MinHook;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -15,6 +19,19 @@ use weapons::AttachedSpawn;
 
 const MISSILE_CTOR: u32 = 0x0050_7D10;
 const MISSILE_DETONATE: u32 = 0x0050_9AC0;
+
+/// Body graphic banks the missile ctor seeds from the weapon table. Rewriting
+/// these after ctor changes flight without touching WeaponEntry+0x60, which
+/// throw-aim poses still need (grenade/cluster/banana stay held correctly).
+const BODY_GFX_OFFS: &[usize] = &[
+    MISSILE_WEAPON_SPRITE,
+    MISSILE_WEAPON_ALT_SPRITE,
+    MISSILE_RENDER_SPRITE,
+    MISSILE_ALT_BANK_SPRITE,
+    MISSILE_RENDER_SPRITE_ALT,
+    MISSILE_HOMING_SPRITE_A,
+    MISSILE_HOMING_SPRITE_B,
+];
 
 #[derive(Clone, Debug, Default)]
 pub struct BoomTune {
@@ -32,6 +49,8 @@ struct Live {
 }
 
 static SLOTS: Mutex<Vec<Option<BoomTune>>> = Mutex::new(Vec::new());
+/// Per-slot in-flight body override (table +0x60 left stock for aim).
+static FLIGHT: Mutex<Vec<Option<i32>>> = Mutex::new(Vec::new());
 static LIVE: Mutex<Vec<Live>> = Mutex::new(Vec::new());
 static ORIG_CTOR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_BOOM: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -44,8 +63,18 @@ fn ensure_slots(g: &mut Vec<Option<BoomTune>>) {
     }
 }
 
+fn ensure_flight(g: &mut Vec<Option<i32>>) {
+    if g.len() < STOCK_WEAPON_COUNT {
+        g.resize(STOCK_WEAPON_COUNT, None);
+    }
+}
+
 pub fn clear() {
     if let Ok(mut g) = SLOTS.lock() {
+        g.clear();
+        g.resize(STOCK_WEAPON_COUNT, None);
+    }
+    if let Ok(mut g) = FLIGHT.lock() {
         g.clear();
         g.resize(STOCK_WEAPON_COUNT, None);
     }
@@ -67,9 +96,46 @@ pub fn claim(slot: usize, tune: BoomTune) {
     }
 }
 
+/// Flight-only body sprite for this slot. Does not rewrite WeaponEntry+0x60.
+pub fn set_flight_sprite(slot: usize, sprite: i32) {
+    if slot >= STOCK_WEAPON_COUNT || sprite == 0 {
+        return;
+    }
+    if let Ok(mut g) = FLIGHT.lock() {
+        ensure_flight(&mut g);
+        g[slot] = Some(sprite);
+    }
+}
+
 fn tune_for_slot(slot: usize) -> Option<BoomTune> {
     let g = SLOTS.lock().ok()?;
     g.get(slot)?.clone()
+}
+
+fn flight_for_slot(slot: usize) -> Option<i32> {
+    let g = FLIGHT.lock().ok()?;
+    g.get(slot).copied().flatten()
+}
+
+fn apply_flight_sprite(entity: *mut u8, sprite: i32) {
+    if entity.is_null() || sprite == 0 {
+        return;
+    }
+    unsafe {
+        // Only rewrite banks that already had a sprite. Sheep / super-sheep /
+        // HM leave some body slots 0 until a mode switch; filling those made
+        // a plain sheep take the cape/flight path and clip terrain.
+        write_i32(entity, MISSILE_WEAPON_SPRITE, sprite);
+        write_i32(entity, MISSILE_RENDER_SPRITE, sprite);
+        for &off in BODY_GFX_OFFS {
+            if off == MISSILE_WEAPON_SPRITE || off == MISSILE_RENDER_SPRITE {
+                continue;
+            }
+            if read_i32(entity, off) != 0 {
+                write_i32(entity, off, sprite);
+            }
+        }
+    }
 }
 
 pub fn install(_catalog: &re_catalog::Catalog) -> Result<(), String> {
@@ -89,7 +155,7 @@ pub fn install(_catalog: &re_catalog::Catalog) -> Result<(), String> {
         );
     }
     let _ = MISSILE_HANDLE_MESSAGE;
-    log_line("missile on_explode wrap installed");
+    log_line("missile on_explode + flight-sprite wrap installed");
     Ok(())
 }
 
@@ -112,6 +178,9 @@ unsafe extern "thiscall" fn ctor_hook(
     let Some(slot) = mine::slot_from_fire_params(p, fire_params) else {
         return p;
     };
+    if let Some(sprite) = flight_for_slot(slot) {
+        apply_flight_sprite(p, sprite);
+    }
     let Some(tune) = tune_for_slot(slot) else {
         return p;
     };

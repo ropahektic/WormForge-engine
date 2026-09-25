@@ -188,6 +188,13 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         ammo: crate::world::ammo,
         cavern: crate::world::is_cavern,
         hurt: crate::physics::hit_worm,
+        retarget_weapon_sprites: |slot, body, cluster| {
+            crate::apply::retarget_sprites(
+                slot as usize,
+                body,
+                if cluster == 0 { None } else { Some(cluster) },
+            )
+        },
     });
     log_line("LuaActor: FireWeapon dispatch + StrikeFire + CreateWeaponProjectile + TeamEntity msg wrap");
     Ok(())

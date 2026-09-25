@@ -183,6 +183,9 @@ pub struct ActorNative {
     pub cavern: fn() -> bool,
     /// Stock SpecialImpact (msg 0x4B). No explosion. Pose restored so the worm does not move.
     pub hurt: fn(target: u32, from: u32, amount: i32),
+    /// Rewrite a stock weapon slot's body sprite (and optional cluster bit) on
+    /// the live table. `cluster = 0` means leave the cluster sprite alone.
+    pub retarget_weapon_sprites: fn(slot: u32, body: i32, cluster: i32) -> Result<(), String>,
 }
 
 /// A write to team ammo.
@@ -240,6 +243,7 @@ impl Default for ActorNative {
             ammo: |_, _, _| 0,
             cavern: || false,
             hurt: |_, _, _| {},
+            retarget_weapon_sprites: |_, _, _| Err("retarget not bound".into()),
         }
     }
 }
@@ -1166,6 +1170,10 @@ fn ammo_change(v: Value) -> mlua::Result<Option<AmmoChange>> {
 
 fn native_hurt() -> Option<fn(u32, u32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hurt)
+}
+
+pub(crate) fn native_retarget_weapon_sprites() -> Option<fn(u32, i32, i32) -> Result<(), String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.retarget_weapon_sprites)
 }
 
 pub(crate) fn sound_slot(slot: Value) -> mlua::Result<i32> {

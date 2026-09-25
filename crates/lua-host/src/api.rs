@@ -62,6 +62,35 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     }
 
     {
+        let f = lua
+            .create_function(|_, spec: Table| {
+                let name: String = spec.get("weapon").map_err(|_| {
+                    mlua::Error::external("weapons.retarget needs weapon = \"bazooka\"")
+                })?;
+                let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
+                let body_name: String = spec.get("sprite").map_err(|_| {
+                    mlua::Error::external("weapons.retarget needs sprite = \"banana\"")
+                })?;
+                let body = stock_sprite_id(&body_name).ok_or_else(|| {
+                    mlua::Error::external(format!("unknown stock sprite '{body_name}'"))
+                })?;
+                let cluster = match spec.get::<Option<String>>("cluster")? {
+                    None => 0,
+                    Some(n) => stock_sprite_id(&n).ok_or_else(|| {
+                        mlua::Error::external(format!("unknown stock cluster sprite '{n}'"))
+                    })?,
+                };
+                let retarget = crate::actor::native_retarget_weapon_sprites().ok_or_else(|| {
+                    mlua::Error::external("weapons.retarget: native not bound")
+                })?;
+                retarget(slot.index() as u32, body, cluster).map_err(mlua::Error::external)?;
+                Ok(())
+            })
+            .map_err(|e| e.to_string())?;
+        weapons.set("retarget", f).map_err(|e| e.to_string())?;
+    }
+
+    {
         let push_claim = Rc::clone(&push_claim);
         let mod_id = ctx.mod_id.clone();
         let root = ctx.root.clone();

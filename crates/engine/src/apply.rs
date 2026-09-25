@@ -514,6 +514,49 @@ unsafe fn copy_panel_icon(world: *mut u8, src: usize, dst: usize) {
     *base.add(dst * 2 + 1) = src_lo;
 }
 
+/// Live retarget of a stock slot's body (and optional cluster bit) sprite.
+/// Used by packs that must draw `wa.random` during the match (Highlander-style),
+/// not at InitGraphic when the RNG stream is still a fixed default.
+pub fn retarget_sprites(slot: usize, body: i32, cluster: Option<i32>) -> Result<(), String> {
+    use game::offsets::STOCK_WEAPON_COUNT;
+    if slot >= STOCK_WEAPON_COUNT {
+        return Err(format!("retarget: slot {slot} out of range"));
+    }
+    if body == 0 {
+        return Err("retarget: body sprite id must be non-zero".into());
+    }
+    let world = unsafe { runtime_world() };
+    if world.is_null() {
+        return Err("retarget: no GameWorld".into());
+    }
+    let table = unsafe { *(world.add(GAME_WORLD_WEAPON_TABLE) as *const *mut WeaponEntry) };
+    if table.is_null() {
+        return Err("retarget: no weapon table".into());
+    }
+    unsafe {
+        let mut entry = *table.add(slot);
+        // Leave WeaponEntry+0x60 stock: throw-aim (wthrgrn / wthrcls / …) and
+        // bazooka hold still resolve from the stock body. Flight is rewritten
+        // on the MissileEntity after ctor (missile_boom::set_flight_sprite).
+        if let Some(bit) = cluster {
+            entry.set_cluster_sprite_id(bit);
+        }
+        write_entry(table, slot, &entry);
+        if entry.is_mine() {
+            crate::mine::set_sprite(slot, body);
+        } else {
+            crate::missile_boom::set_flight_sprite(slot, body);
+        }
+    }
+    log_line(&format!(
+        "retarget slot {slot} flight {body}{}",
+        cluster
+            .map(|c| format!(" cluster {c}"))
+            .unwrap_or_default()
+    ));
+    Ok(())
+}
+
 /// The live GameWorld, read the way `after_init_weapon_table` got the one
 /// `copy_panel_icon` wrote into: `GameRuntime.world`.
 unsafe fn runtime_world() -> *mut u8 {

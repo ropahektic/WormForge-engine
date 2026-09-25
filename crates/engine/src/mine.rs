@@ -83,6 +83,25 @@ pub fn claim(slot: usize, tune: MineTune) {
     }
 }
 
+/// Update only the pick_sprite override for a claimed (or newly claimed) mine slot.
+pub fn set_sprite(slot: usize, sprite: i32) {
+    if slot >= STOCK_WEAPON_COUNT {
+        return;
+    }
+    if let Ok(mut g) = SLOTS.lock() {
+        ensure_slots(&mut g);
+        match g[slot].as_mut() {
+            Some(t) => t.sprite = sprite,
+            None => {
+                g[slot] = Some(MineTune {
+                    sprite,
+                    ..MineTune::default()
+                })
+            }
+        }
+    }
+}
+
 pub fn install(catalog: &Catalog) -> Result<(), String> {
     let ctor = catalog
         .function_va("MineEntity__ctor")
