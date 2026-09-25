@@ -6,7 +6,7 @@ use crate::offsets::{
     WEAPON_CLUSTER_MISSILE_TYPE, WEAPON_CLUSTER_RENDER_TIMER, WEAPON_CLUSTER_SPRITE, WEAPON_CLUSTER_WIND,
     WEAPON_CREATES_PROJECTILE, WEAPON_DAMAGE, WEAPON_DEFINED, WEAPON_ENTRY_SIZE, WEAPON_FIRE_METHOD,
     WEAPON_FIRE_TYPE, WEAPON_GRAVITY_PCT, WEAPON_MINE_BLAST, WEAPON_MINE_FUSE, WEAPON_MINE_MASK,
-    WEAPON_MINE_PROXIMITY, WEAPON_MINE_TRIGGER, WEAPON_NAME1, WEAPON_REQUIRES_AIMING, WEAPON_SPECIAL_SUBTYPE,
+    WEAPON_MINE_PROXIMITY, WEAPON_MINE_TRIGGER, WEAPON_NAME1, WEAPON_NAME2, WEAPON_REQUIRES_AIMING, WEAPON_SPECIAL_SUBTYPE,
     WEAPON_SPRITE_ID, WEAPON_TABLE_BYTES, WEAPON_UNKNOWN_18, WEAPON_WIND_PCT,
 };
 
@@ -53,6 +53,12 @@ impl WeaponEntry {
     pub fn set_name1(&mut self, ptr: *const c_char) {
         let bits = ptr as u32;
         self.raw[WEAPON_NAME1..WEAPON_NAME1 + 4].copy_from_slice(&bits.to_le_bytes());
+    }
+
+    /// The panel's name for the weapon (see `WEAPON_NAME2`).
+    pub fn set_name2(&mut self, ptr: *const c_char) {
+        let bits = ptr as u32;
+        self.raw[WEAPON_NAME2..WEAPON_NAME2 + 4].copy_from_slice(&bits.to_le_bytes());
     }
 
     pub fn defined(&self) -> i32 {

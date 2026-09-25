@@ -10,6 +10,7 @@ mod stock;
 mod templates;
 
 pub use overlay::{
+    PanelIcon,
     ActorSpawn, AttachedSpawn, ClusterHoming, ClusterSpec, HomingMode, OverlayClaim, OverlayParams,
     ResolveResult, ScreenBlit, SkippedClaim, SpawnExplode, SpawnFrom, SpriteOrigin, apply_params,
     resolve_claims,

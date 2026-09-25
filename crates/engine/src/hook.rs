@@ -117,6 +117,9 @@ unsafe extern "system" fn shutdown_hook(state_buf: *mut u8) {
     if std::panic::catch_unwind(crate::apply::restore_panel_icons).is_err() {
         log_error("panic while restoring panel icons");
     }
+    if std::panic::catch_unwind(crate::panel_icon::restore).is_err() {
+        log_error("panic while restoring custom panel icons");
+    }
     // Same reason for the sprite table: WA deletes every sprite it holds, and
     // ours are not WA's to delete.
     if std::panic::catch_unwind(crate::sprite::release_before_teardown).is_err() {

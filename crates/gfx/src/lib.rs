@@ -5,6 +5,7 @@
 //! or a GIF (`sprites/foo.gif`, native frames, looped). Stock names
 //! (`grenade`, `missile`, `uzihit`, …) remain a fallback that borrows a WA sprite.
 
+pub mod icon;
 mod gif_decode;
 mod stock_ids;
 pub mod composite;

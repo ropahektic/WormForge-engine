@@ -304,7 +304,10 @@ mod tests {
         let claim = &scripts.resolved.applied[0];
         assert_eq!(claim.slot, StockWeapon::Donkey);
         assert_eq!(claim.params.copy_from, Some(StockWeapon::MoleSquadron));
-        assert_eq!(claim.params.panel_icon, Some(StockWeapon::MoleSquadron));
+        assert_eq!(
+            claim.params.panel_icon,
+            Some(weapons::PanelIcon::Stock(StockWeapon::MoleSquadron))
+        );
         assert_eq!(claim.params.on_click_id, 0);
         assert!(claim.params.actor_spawn().is_none());
         assert_eq!(
@@ -420,6 +423,50 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn panel_icon_pack_loads_a_png_icon() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/panel_icon");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap())
+                .unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert_eq!(scripts.resolved.applied.len(), 1);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!(claim.slot, StockWeapon::HolyGrenade);
+        match &claim.params.panel_icon {
+            Some(weapons::PanelIcon::File { path, width, height, rgba }) => {
+                assert_eq!(path, "sprites/hhh_ico.png");
+                assert_eq!((*width, *height), (32, 32), "a full PX icon image");
+                assert_eq!(rgba.len(), 32 * 32 * 4);
+            }
+            other => panic!("expected a PNG icon, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn panel_icon_path_must_stay_in_the_pack() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-panel-icon-escape");
+        let _ = std::fs::remove_dir_all(&root);
+        let bad = pack(
+            &root,
+            "t.icon",
+            r#"
+id = "t.icon"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["holy_grenade"]
+"#,
+            r#"wa.weapons.replace({ weapon = "holy_grenade", panel_icon = "../x.png" })"#,
+        );
+        let err = run_mods(&[bad]).err().expect("an escaping path is refused");
+        assert!(err.contains("inside the pack"), "{err}");
+    }
+
+    #[test]
     fn turret_pack_overlays_dynamite_with_mine_placement() {
         let _guard = lock_host();
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/turret");
@@ -487,7 +534,7 @@ wa.weapons.replace({
         assert_eq!(c.params.sprite_id, Some(2));
         assert_eq!(c.params.cluster_sprite_id, Some(94));
         assert_eq!(c.params.cluster_homing, Some(weapons::HomingMode::Lock));
-        assert_eq!(c.params.panel_icon, Some(StockWeapon::BananaBomb));
+        assert_eq!(c.params.panel_icon, Some(weapons::PanelIcon::Stock(StockWeapon::BananaBomb)));
     }
 
     #[test]
