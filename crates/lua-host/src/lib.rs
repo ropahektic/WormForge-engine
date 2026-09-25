@@ -514,7 +514,7 @@ wa.weapons.replace({
     }
 
     #[test]
-    fn highlander_puts_its_stock_weapons_on_the_schemes_slots() {
+    fn highlander_puts_its_ported_weapons_on_the_schemes_slots() {
         let _guard = lock_host();
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/highlander");
         let pack = LoadedMod {
@@ -524,7 +524,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 12);
+        assert_eq!(applied.len(), 18);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         // The scheme's record for the girder slot is the Baseball Bat:
         // a special weapon, subtype 2, as WA's own bat.
@@ -550,6 +550,23 @@ wa.weapons.replace({
         ] {
             assert_eq!(claim(slot).params.name.as_deref(), Some(name));
         }
+        // PX's own art: the Super Gravedigger's flight strip and worm sheets.
+        let digger = claim(StockWeapon::BananaBomb);
+        assert_eq!(digger.params.name.as_deref(), Some("Super Gravedigger"));
+        assert_eq!(digger.params.sprite_sheet.as_ref().unwrap().frames.len(), 32);
+        assert_eq!(digger.params.worm_sprites.len(), 6);
+        assert_eq!(
+            digger.params.cluster_sprite_path.as_deref(),
+            Some("sprites/super_gravedigger/cluster")
+        );
+        assert_eq!(
+            claim(StockWeapon::ClusterBomb).params.cluster_sprite_path.as_deref(),
+            Some("sprites/windy_cluster/cluster")
+        );
+        assert!(matches!(
+            claim(StockWeapon::MailStrike).params.panel_icon,
+            Some(weapons::PanelIcon::File { width: 32, height: 32, .. })
+        ));
     }
 
     #[test]
