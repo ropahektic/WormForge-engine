@@ -7,6 +7,10 @@
 //!   `copy_from` is bazooka / homing / fuse / cluster.
 //! We map all of those to the claimed link sheets and keep stock's aim phase.
 //!
+//! The uzi, minigun, shotgun and handgun aim sheets map to the link sheets
+//! too, their draw sheets to `wthrow`*, and their fire sheets to
+//! `weaponfire`*, which keeps stock's aim phase as the link sheets do.
+//!
 //! `wthrow`* and the donor draw/appear sheets (`wbazlnk*`, `wgrnlnk*`, …) are
 //! draw/undraw. Unset throw claims copy the aim sheet and freeze; real draw
 //! GIFs play via `drive_phase`.
@@ -80,6 +84,9 @@ const IDLE_RESTART: u32 = 2;
 const LINK: i32 = -1;
 const LINK_U: i32 = -2;
 const LINK_D: i32 = -3;
+const FIRE: i32 = -4;
+const FIRE_U: i32 = -5;
+const FIRE_D: i32 = -6;
 const THROW: i32 = 591;
 const THROW_U: i32 = 592;
 const THROW_D: i32 = 593;
@@ -98,6 +105,10 @@ const AIM_HOLD: &[(i32, i32, i32)] = &[
     (582, 583, 584), // wthrban
     (585, 586, 587), // wthrpbm
     (588, 589, 590), // wthrhgr
+    (564, 565, 566), // wuzi
+    (570, 571, 572), // wmini
+    (543, 544, 545), // wshotg
+    (558, 559, 560), // whandg
 ];
 
 /// Stock draw/appear triads remapped to `wthrow*`.
@@ -114,6 +125,19 @@ const AIM_DRAW: &[(i32, i32, i32)] = &[
     (319, 320, 321), // wbanlnk
     (322, 323, 324), // wpbmlnk
     (325, 326, 327), // whgrlnk
+    (488, 489, 490), // wuzilnk
+    (503, 504, 505), // wmgnlnk (minigun; wminlnk is the mine's)
+    (491, 492, 493), // wshglnk
+    (500, 501, 502), // whgnlnk
+];
+
+/// Stock gun fire triads remapped to `weaponfire*`. Like the aim holds,
+/// their phase is the aim angle.
+const AIM_FIRE: &[(i32, i32, i32)] = &[
+    (567, 568, 569), // wuzif
+    (573, 574, 575), // wminif
+    (549, 550, 551), // wshotf
+    (561, 562, 563), // whandf
 ];
 
 fn is_link(pose: i32) -> bool {
@@ -122,6 +146,10 @@ fn is_link(pose: i32) -> bool {
 
 fn is_throw(pose: i32) -> bool {
     matches!(pose, THROW | THROW_U | THROW_D)
+}
+
+fn is_fire(pose: i32) -> bool {
+    matches!(pose, FIRE | FIRE_U | FIRE_D)
 }
 
 /// The draw pose matching an undraw pose, and vice versa.
@@ -192,6 +220,11 @@ fn pose_key(original: u32, state: i32, slope: i32) -> i32 {
     }
     for &(flat, up, down) in AIM_DRAW {
         if let Some(pose) = triad_to(stock, flat, up, down, THROW, THROW_U, THROW_D) {
+            return pose;
+        }
+    }
+    for &(flat, up, down) in AIM_FIRE {
+        if let Some(pose) = triad_to(stock, flat, up, down, FIRE, FIRE_U, FIRE_D) {
             return pose;
         }
     }
@@ -281,7 +314,7 @@ fn expand_aim_claims(poses: &[(i32, i32)]) -> Vec<(i32, i32)> {
     let mut out: Vec<(i32, i32)> = poses
         .iter()
         .copied()
-        .filter(|(pose, _)| !is_link(*pose) && !is_throw(*pose))
+        .filter(|(pose, _)| !is_link(*pose) && !is_throw(*pose) && !is_fire(*pose))
         .collect();
     out.push((LINK, p));
     out.push((LINK_U, u));
@@ -292,6 +325,15 @@ fn expand_aim_claims(poses: &[(i32, i32)]) -> Vec<(i32, i32)> {
     out.push((THROW, throw.unwrap_or(p)));
     out.push((THROW_U, throw_u.unwrap_or(u)));
     out.push((THROW_D, throw_d.unwrap_or(d)));
+    // A gun firing: its own sheets, any one filling the others; without
+    // them, the aim sheet, so a custom gun never flashes back to stock.
+    let fire = poses.iter().find(|(pose, _)| *pose == FIRE).map(|(_, id)| *id);
+    let fire_u = poses.iter().find(|(pose, _)| *pose == FIRE_U).map(|(_, id)| *id);
+    let fire_d = poses.iter().find(|(pose, _)| *pose == FIRE_D).map(|(_, id)| *id);
+    let any_fire = fire.or(fire_u).or(fire_d);
+    out.push((FIRE, fire.or(any_fire).unwrap_or(p)));
+    out.push((FIRE_U, fire_u.or(any_fire).unwrap_or(u)));
+    out.push((FIRE_D, fire_d.or(any_fire).unwrap_or(d)));
     out
 }
 
@@ -475,7 +517,8 @@ unsafe extern "C" fn after_calc(
         //   link poses. A distinct draw sheet alone cannot be the signal --
         //   the wizard produces exactly that shape too.
         let animate = ANIMATE.lock().map(|g| g.contains(&slot)).unwrap_or(false);
-        let aim_sheet = !animate && (is_link(stock) || is_aim_sheet(&claims, slot, stock, *id));
+        let aim_sheet = !animate
+            && (is_link(stock) || is_fire(stock) || is_aim_sheet(&claims, slot, stock, *id));
         if aim_sheet {
             if is_throw(stock) {
                 // Eat draw/undraw: hold a mid frame, no play-through.
@@ -483,7 +526,7 @@ unsafe extern "C" fn after_calc(
                     *phase_out = 0x8000;
                 }
             }
-            // Link: leave the stock phase, which is the aim angle.
+            // Link and fire: leave the stock phase, which is the aim angle.
         } else {
             // WA puts a weapon away by playing its draw sheet with the
             // reverse flag: the same pose and sheet, but a new animation.
@@ -564,7 +607,29 @@ unsafe fn drive_phase(worm: usize, pose: i32, sprite: i32, reversed: bool, phase
 
 #[cfg(test)]
 mod tests {
-    use super::{expand_aim_claims, pose_key, LINK, LINK_D, LINK_U, THROW, THROW_D, THROW_U};
+    use super::{
+        expand_aim_claims, pose_key, FIRE, FIRE_D, FIRE_U, LINK, LINK_D, LINK_U, THROW, THROW_D,
+        THROW_U,
+    };
+
+    #[test]
+    fn gun_aim_draw_and_fire_map_to_link_throw_and_fire() {
+        assert_eq!(pose_key(570, 0x67, 0), LINK); // wmini
+        assert_eq!(pose_key(565, 0x67, 0), LINK_U); // wuziu
+        assert_eq!(pose_key(505, 0x6a, 0), THROW_D); // wmgnlnkd
+        assert_eq!(pose_key(388, 0x6a, 0), 388, "wminlnk is the mine's draw, not a gun's");
+        assert_eq!(pose_key(573, 0x67, 0), FIRE); // wminif
+        assert_eq!(pose_key(550, 0x67, 0), FIRE_U); // wshotfu
+        assert_eq!(pose_key(563, 0x67, 0), FIRE_D); // whandfd
+    }
+
+    #[test]
+    fn fire_falls_back_to_its_own_sheets_then_the_aim_sheet() {
+        let out = expand_aim_claims(&[(LINK, 1), (LINK_U, 2), (LINK_D, 3)]);
+        assert!(out.contains(&(FIRE, 1)) && out.contains(&(FIRE_U, 2)) && out.contains(&(FIRE_D, 3)));
+        let out = expand_aim_claims(&[(LINK, 1), (FIRE, 7)]);
+        assert!(out.contains(&(FIRE, 7)) && out.contains(&(FIRE_U, 7)) && out.contains(&(FIRE_D, 7)));
+    }
 
     #[test]
     fn a_placed_weapon_keeps_the_held_sheet_of_its_stock_sprite() {
