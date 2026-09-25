@@ -8,6 +8,7 @@
 mod overlay;
 mod stock;
 mod templates;
+pub mod wep;
 
 pub use overlay::{
     PanelIcon,

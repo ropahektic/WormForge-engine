@@ -294,6 +294,12 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 entry.copy_fire_from(&snapshot.entries[src.index()]);
             }
         }
+        if let Some(wep) = &claim.params.wep {
+            if spawn.is_none() && claim.params.on_click_id == 0 {
+                weapons::wep::import(&mut entry, wep);
+                log_line(&format!("{} fires as {} ({})", claim.mod_id, wep.name, wep.path));
+            }
+        }
         apply_params(&mut entry, &claim.params);
         match &claim.params.panel_icon {
             Some(PanelIcon::Stock(icon)) => {
