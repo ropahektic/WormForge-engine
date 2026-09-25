@@ -58,8 +58,10 @@ def main():
                             arg(source)], check=True)
             text = header.read_text().replace(
                 f'const BYTE {symbol}[]', f'alignas(4) const BYTE {symbol}[]')
+            # Stamp the LF source hash so Windows CRLF checkouts still match.
+            src = source.read_bytes().replace(b'\r\n', b'\n').replace(b'\r', b'\n')
             target.write_text(
-                f'// HLSL-FNV1A: {fnv1a(source.read_bytes()):016x}\n' + text)
+                f'// HLSL-FNV1A: {fnv1a(src):016x}\n' + text)
         print(f'compiled {source.name} -> {target.name}')
 
 

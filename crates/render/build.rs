@@ -20,6 +20,12 @@ fn check_fresh(name: &str) {
     println!("cargo:rerun-if-changed={source}");
     println!("cargo:rerun-if-changed={header}");
     let hlsl = std::fs::read(&source).unwrap_or_else(|_| panic!("{source}"));
+    // Hash LF bytes only — Windows checkouts may CRLF the .hlsl while the
+    // stamp (and bytecode) were produced from the LF blob in git.
+    let hlsl: Vec<u8> = hlsl
+        .into_iter()
+        .filter(|&b| b != b'\r')
+        .collect();
     let text = std::fs::read_to_string(&header).unwrap_or_else(|_| panic!("{header}"));
     let stamped = text
         .lines()

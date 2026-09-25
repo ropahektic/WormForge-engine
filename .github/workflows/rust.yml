@@ -16,7 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test crates that do not need Windows
-        run: cargo test --workspace --exclude wk-lua --exclude engine --verbose
+        # .cargo/config.toml defaults the build target to i686-pc-windows-msvc
+        # for local WA DLL work; override so Linux host tests stay native.
+        run: cargo test --workspace --exclude wk-lua --exclude engine --target x86_64-unknown-linux-gnu --verbose
 
   dll:
     name: 32-bit Windows DLL
