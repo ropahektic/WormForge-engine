@@ -35,6 +35,23 @@ use std::{
 
 static ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_SPRITE_INFO: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIGINAL_HOLD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+/// Placed weapons (fire type 2, method 2): WA picks what the worm holds from
+/// the flight sprite (+0x60), stock sprite -> held sheet (`Weapon__hold_sheet`,
+/// 0x51C060). A pack sheet there is an id WA does not know, and the worm held
+/// nothing. `HELD` remembers the stock sheet of the sprite a pack replaced.
+const PLACED_HELD: [(i32, i32); 8] = [
+    (74, 337),  // mingvase -> wvaslnk
+    (78, 334),  // dynamite -> wdynlnk
+    (153, 343), // sheepwlk -> wshplnk
+    (162, 346), // old woman -> wwmnlnk
+    (163, 355), // old woman -> wwmn2lk
+    (164, 340), // cow -> wcowlnk
+    (166, 352), // mole -> wmollnk
+    (173, 349), // skunk -> wsknlnk
+];
+static HELD: Mutex<Vec<(usize, i32)>> = Mutex::new(Vec::new());
 
 type SpriteInfoFn = unsafe extern "thiscall" fn(*mut u8, u32, *mut u32, *mut u32, *mut u32) -> u32;
 
@@ -173,7 +190,59 @@ fn pose_key(original: u32, state: i32, slope: i32) -> i32 {
     stock
 }
 
+/// The worm on `slot` keeps holding what WA gives `stock_sprite`, the placed
+/// weapon's flight sprite before a pack replaced it. False when WA has no
+/// held sheet for that sprite.
+pub fn hold_as(slot: usize, stock_sprite: i32) -> bool {
+    let Some(&(_, sheet)) = PLACED_HELD.iter().find(|(s, _)| *s == stock_sprite) else {
+        return false;
+    };
+    if let Ok(mut held) = HELD.lock() {
+        held.retain(|(s, _)| *s != slot);
+        held.push((slot, sheet));
+    }
+    true
+}
+
+unsafe extern "C" fn held_sheet(worm: *mut u8) -> i32 {
+    if worm.is_null() {
+        return 0;
+    }
+    let slot = read_i32(worm, WORM_SELECTED_WEAPON) as usize;
+    HELD.lock()
+        .ok()
+        .and_then(|held| held.iter().find(|(s, _)| *s == slot).map(|(_, id)| *id))
+        .unwrap_or(0)
+}
+
+/// `Weapon__hold_sheet`: EAX = entry, stack = worm, RET 4, sheet in EAX.
+/// Only when WA finds none is the remembered stock sheet asked for; ECX and
+/// EDX survive that call as they survive WA's own.
+#[unsafe(naked)]
+unsafe extern "C" fn hold_sheet_hook() {
+    core::arch::naked_asm!(
+        "push dword ptr [esp + 4]",
+        "call dword ptr [{original}]",
+        "test eax, eax",
+        "jnz 2f",
+        "push ecx",
+        "push edx",
+        "push dword ptr [esp + 12]",
+        "call {held}",
+        "add esp, 4",
+        "pop edx",
+        "pop ecx",
+        "2:",
+        "ret 4",
+        original = sym ORIGINAL_HOLD,
+        held = sym held_sheet,
+    );
+}
+
 pub fn clear() {
+    if let Ok(mut held) = HELD.lock() {
+        held.clear();
+    }
     if let Ok(mut anim) = ANIM.lock() {
         anim.clear();
     }
@@ -319,6 +388,14 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
             .map_err(|e| format!("sprite info hook: {e:?}"))?;
         ORIGINAL_SPRITE_INFO.store(trampoline, Ordering::SeqCst);
     }
+    let hold_va = catalog
+        .function_va("Weapon__hold_sheet")
+        .ok_or("missing Weapon__hold_sheet catalog entry")?;
+    let hold = unsafe {
+        MinHook::create_hook(rb(hold_va) as *mut c_void, hold_sheet_hook as *mut c_void)
+            .map_err(|e| format!("hold sheet hook: {e:?}"))?
+    };
+    ORIGINAL_HOLD.store(hold, Ordering::SeqCst);
     log_line("worm sprite wrap and deterministic empty-sprite metadata installed");
     Ok(())
 }
@@ -471,6 +548,13 @@ unsafe fn drive_phase(worm: usize, pose: i32, sprite: i32, phase_out: *mut u32) 
 #[cfg(test)]
 mod tests {
     use super::{expand_aim_claims, pose_key, LINK, LINK_D, LINK_U, THROW, THROW_D, THROW_U};
+
+    #[test]
+    fn a_placed_weapon_keeps_the_held_sheet_of_its_stock_sprite() {
+        assert!(super::hold_as(23, 153));
+        assert_eq!(super::HELD.lock().unwrap().iter().find(|(s, _)| *s == 23).map(|(_, id)| *id), Some(343));
+        assert!(!super::hold_as(23, 900), "no held sheet for an unknown sprite");
+    }
 
     #[test]
     fn custom_link_uses_state_and_slope_but_throw_keeps_stock_id() {
