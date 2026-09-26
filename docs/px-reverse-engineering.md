@@ -67,6 +67,21 @@ PX's `CGObject` members sit 8 bytes above WA's, while `CWorm`'s `Anim` and
 by what the scripts do with it. Every script uses it as the worm's -1 / +1
 facing, which is what `worm.facing` gives.
 
+## WA's aim fields
+
+Two worm fields hold the aim, and they differ while the aim moves:
+
+| Field | What | Written by |
+|---|---|---|
+| +0x24C | the aim, what the shot uses, quantised to 1/128 steps | `control_aim` (0x51D100) |
+| +0x270 | the crosshair WA draws, `worm.aim` | `update_crosshair` (0x51CFC0), each sim frame: 0.8 × itself + 0.2 × +0x24C; and `DrawAimCursor` (0x51D680), at render time, interpolated between sim frames |
+
+So +0x270 lags +0x24C by a few frames. Read at different moments, a sim
+callback and a render hook see different values. Anything drawn with a
+held weapon must use the aim the weapon was placed with: the Sniper
+Rifle's laser uses its hold's aim. PX's `FireAngle` (+0x25C in its symbol
+table) has not been mapped to either yet.
+
 ## WA's fire punch
 
 A fire punch goes through three worm states.
