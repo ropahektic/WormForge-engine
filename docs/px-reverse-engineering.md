@@ -59,13 +59,17 @@ Addresses are WA 3.8.1 (the GOG `WA.exe`). Function names follow OpenWA's
 | `RopeAttached` | +0xC4 | rope attached | +0xBC |
 | `Anim` (CWorm) | +0x368 | sprite animation | +0x368 |
 | `CurWeapon` (CWorm) | +0x36C | weapon table entry | +0x36C |
-| `TurnSide` (CWorm) | +0x1B8 | turn side, -1 / +1 | +0x1A8 (see below) |
+| `TurnSide` (CWorm) | +0x1B8 | turn side, -1 / +1 | +0x1A8 |
+| `PressedUp` / `Down` / `Left` / `Right` (CWorm) | +0x1E4 .. +0x1F0 | the worm's move requests | +0x1D4 .. +0x1E0 |
+| `JetFuel` (CWorm) | +0x230 | jet pack fuel, 16.16 | +0x220 |
+| `FirePower`, `FireAngle` (CWorm) | +0x258, +0x25C | power, the real aim | +0x248, +0x24C |
 
-PX's `CGObject` members sit 8 bytes above WA's, while `CWorm`'s `Anim` and
-`CurWeapon` match WA exactly. So no single rule maps PX offsets to WA, and
-`TurnSide`'s WA offset is not settled: +0x1B0 by the `CGObject` rule, +0x1A8
-by what the scripts do with it. Every script uses it as the worm's -1 / +1
-facing, which is what `worm.facing` gives.
+PX's `CGObject` members sit 8 bytes above WA's. Its `CWorm` members from
+`TurnSide` to `FireAngle` sit 0x10 above WA's. That is confirmed by WA's
+`control_jetpack` (0x513D90), which reads the move requests at +0x1D4,
++0x1DC and +0x1E0, and by `handle_JetPacking` (0x513C50), which drains the
+fuel at +0x220. `Anim` and `CurWeapon` match WA exactly. So no single rule
+maps PX offsets to WA: check each one against WA's code.
 
 ## WA's aim fields
 
@@ -80,7 +84,34 @@ So +0x270 lags +0x24C by a few frames. Read at different moments, a sim
 callback and a render hook see different values. Anything drawn with a
 held weapon must use the aim the weapon was placed with: the Sniper
 Rifle's laser uses its hold's aim. PX's `FireAngle` (+0x25C in its symbol
-table) has not been mapped to either yet.
+table) is +0x24C, the real aim, by the 0x10 shift of its worm members (see
+above).
+
+## WA's worm states
+
+`SetState` (0x50E850) dispatches through a jump table at 0x50F484 (base
+0x64), and each case calls the state's setup:
+
+| State | Setup | `worm.state` |
+|---|---|---|
+| 0x65 | `setup_Standing` | standing |
+| 0x69 | `setup_PreFiring` | prefiring (PX's `WS_FIRED`: the wind-up) |
+| 0x6C | `setup_Punching` | punching |
+| 0x6E | `setup_Drilling` | drilling |
+| 0x6F | `setup_Teleporting` | teleporting |
+| 0x78 | `setup_JetPacking` | jetpacking |
+| 0x7E | none | sliding (knockback, contact, walking off a ledge) |
+
+Some older names in our engine do not match this table: 0x7B's setup is
+`setup_Batroping`, and 0x71's is `setup_Axeing`.
+
+## WA's contacts
+
+WA tells a worm it touched another entity through the worm's vtable slot
+8, `WormEntity__OnWormPush` (0x50D9A0, thiscall `(other, flags)`). This is
+PX's `CWorm::Collide`. The landscape takes part too (ClassType 28, 0x1C).
+PX passes it as `NullObj`, which is why its Helicopter lands smoothly;
+`wa.on.contact` gives it as kind `"land"`.
 
 ## WA's fire punch
 
