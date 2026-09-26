@@ -65,6 +65,8 @@ static MASK_LOGGED: AtomicBool = AtomicBool::new(false);
 static DEPTHS_LOGGED: AtomicBool = AtomicBool::new(false);
 static HIDDEN_LOGGED: Mutex<Vec<(i32, i32)>> = Mutex::new(Vec::new());
 static WARNED: AtomicBool = AtomicBool::new(false);
+/// WA's renderer setting is logged once per match.
+static RENDERER_LOGGED: AtomicBool = AtomicBool::new(false);
 
 static FRAME: Mutex<Option<Frame>> = Mutex::new(None);
 /// Draws intercepted this frame.
@@ -154,6 +156,9 @@ pub fn set_active(active: bool) {
     if active && !ANNOUNCED.swap(true, Ordering::SeqCst) {
         log_line("gpu renderer active: sprites drawn as GPU quads");
     }
+    if active && !RENDERER_LOGGED.swap(true, Ordering::SeqCst) {
+        log_line(&crate::shader::renderer_report());
+    }
 }
 
 /// Drop everything owned per match.
@@ -165,6 +170,7 @@ pub fn clear() {
     }
     DREW.store(false, Ordering::SeqCst);
     WARNED.store(false, Ordering::SeqCst);
+    RENDERER_LOGGED.store(false, Ordering::SeqCst);
     if let Ok(mut seen) = RESOLVED_IDS.lock() {
         seen.clear();
     }
@@ -224,13 +230,22 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
     // another module already owns the three D3D9 hook sites.
     if !crate::shader::is_ready() {
         if !NO_SHADER_LOGGED.swap(true, Ordering::SeqCst) {
-            log_error(
+            let cause = match crate::shader::renderer_setting() {
+                Some(v) if v != crate::shader::RENDERER_D3D9_SHADER => format!(
+                    "WA is set to {} (Renderer {v}); GPU sprites need Direct3D 9 \
+                     (shader): choose it in WA's Options > Advanced and restart WA",
+                    crate::shader::renderer_name(v)
+                ),
+                _ => "WA is set to Direct3D 9 (shader) but never presented through \
+                      it: another module owns the D3D9 hook sites (e.g. wkFOW), or \
+                      the device fell back"
+                    .to_string(),
+            };
+            log_error(&format!(
                 "gpu renderer: WA's D3D9 shader renderer is unavailable, so GPU \
-                 sprites cannot be drawn at all and packs using gpu_prefix will \
-                 be invisible. This is a missing capability, not a pack fault: \
-                 either the software renderer is in use, or another module owns \
-                 the D3D9 hook sites.",
-            );
+                 sprites cannot be drawn and packs using gpu_prefix will be \
+                 invisible. Not a pack fault: {cause}."
+            ));
         }
         return false;
     }
