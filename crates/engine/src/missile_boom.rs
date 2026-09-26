@@ -9,8 +9,10 @@ use game::entity::{read_i32, write_i32};
 use game::offsets::{
     MISSILE_ALT_BANK_SPRITE, MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_SPRITE_A,
     MISSILE_HOMING_SPRITE_B, MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT,
-    MISSILE_WEAPON_ALT_SPRITE, MISSILE_WEAPON_SPRITE, STOCK_WEAPON_COUNT,
+    MISSILE_WEAPON_ALT_SPRITE, MISSILE_WEAPON_DATA, MISSILE_WEAPON_SPRITE, STOCK_WEAPON_COUNT,
+    WEAPON_ENTRY_SIZE,
 };
+use std::collections::HashMap;
 use minhook::MinHook;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -52,6 +54,8 @@ static SLOTS: Mutex<Vec<Option<BoomTune>>> = Mutex::new(Vec::new());
 /// Per-slot in-flight body override (table +0x60 left stock for aim).
 static FLIGHT: Mutex<Vec<Option<i32>>> = Mutex::new(Vec::new());
 static LIVE: Mutex<Vec<Live>> = Mutex::new(Vec::new());
+/// Every live missile's weapon slot, by entity address, for `wa.on.missile_frame`.
+static WEAPON_OF: Mutex<Option<HashMap<u32, usize>>> = Mutex::new(None);
 static ORIG_CTOR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_BOOM: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
@@ -175,6 +179,7 @@ unsafe extern "thiscall" fn ctor_hook(
     if p.is_null() {
         return p;
     }
+    remember_weapon(p, fire_params);
     let Some(slot) = mine::slot_from_fire_params(p, fire_params) else {
         return p;
     };
@@ -194,6 +199,68 @@ unsafe extern "thiscall" fn ctor_hook(
         });
     }
     p
+}
+
+/// The slot whose weapon table entry holds `ptr`. A projectile's fire params
+/// start at +0x3C of its entry; Armageddon's meteors pass +0x38.
+fn slot_in_table(table: usize, ptr: usize) -> Option<usize> {
+    let off = ptr.checked_sub(table)?;
+    let slot = off / WEAPON_ENTRY_SIZE;
+    (table != 0 && slot < STOCK_WEAPON_COUNT).then_some(slot)
+}
+
+/// Record which weapon a new missile belongs to. WA's missile constructor
+/// callers (3.8.1) pass as `fire_params`:
+/// - CreateWeaponProjectile: the weapon table entry + 0x3C;
+/// - update_armageddon: the Armageddon entry + 0x38;
+/// - CreateClusters: the parent missile's own copy (+0x15C), so the bits
+///   take their parent's slot;
+/// - AirStrikeEntity::release_missile: the strike's own copy, and
+///   CrateEntity::detonate: a world buffer. These get no slot.
+unsafe fn remember_weapon(missile: *mut u8, fire_params: *const i32) {
+    let world = unsafe { read_i32(missile, game::offsets::ENT_WORLD) } as usize;
+    let table = if world == 0 {
+        0
+    } else {
+        unsafe { *((world + game::offsets::GAME_WORLD_WEAPON_TABLE) as *const usize) }
+    };
+    let Ok(mut g) = WEAPON_OF.lock() else {
+        return;
+    };
+    let map = g.get_or_insert_with(HashMap::new);
+    let key = missile as u32;
+    map.remove(&key);
+    let fp = fire_params as usize;
+    let slot = slot_in_table(table, fp).or_else(|| {
+        let parent = fp.checked_sub(MISSILE_WEAPON_DATA)? as u32;
+        map.get(&parent).copied()
+    });
+    if let Some(slot) = slot {
+        map.insert(key, slot);
+    }
+}
+
+/// The weapon slot a live missile was fired from, if WA's constructor call
+/// named one (not strike bombs or crate bombs).
+pub fn weapon_of(missile: *mut u8) -> Option<usize> {
+    let g = WEAPON_OF.lock().ok()?;
+    g.as_ref()?.get(&(missile as u32)).copied()
+}
+
+/// Called from the missile free hook: the address may be reused.
+pub fn forget_weapon(missile: usize) {
+    if let Ok(mut g) = WEAPON_OF.lock() {
+        if let Some(map) = g.as_mut() {
+            map.remove(&(missile as u32));
+        }
+    }
+}
+
+/// Called at match start.
+pub fn clear_weapons() {
+    if let Ok(mut g) = WEAPON_OF.lock() {
+        *g = None;
+    }
 }
 
 fn live_of(this: *mut u8) -> Option<Live> {
@@ -263,5 +330,22 @@ fn fire_step(
     if let Some(spawn) = spawn {
         let body = crate::actor::stock_owner(this, owner);
         crate::actor::emit_attached(body, x, y, spawn, inherit_sprite);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::slot_in_table;
+    use game::offsets::{STOCK_WEAPON_COUNT, WEAPON_ENTRY_SIZE};
+
+    #[test]
+    fn a_pointer_inside_an_entry_is_that_entrys_slot() {
+        let table = 0x0100_0000;
+        let entry = |slot: usize| table + slot * WEAPON_ENTRY_SIZE;
+        assert_eq!(slot_in_table(table, entry(15) + 0x3C), Some(15), "a projectile's fire params");
+        assert_eq!(slot_in_table(table, entry(58) + 0x38), Some(58), "Armageddon's meteors");
+        assert_eq!(slot_in_table(table, entry(STOCK_WEAPON_COUNT)), None, "past the table");
+        assert_eq!(slot_in_table(table, table - 4), None, "before the table");
+        assert_eq!(slot_in_table(0, 0x3C), None, "no table");
     }
 }

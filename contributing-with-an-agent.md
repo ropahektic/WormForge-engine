@@ -81,6 +81,7 @@ Draw primitives belong in the DLL. Named FX (lightning, fire) belong in Lua. No 
 - `wa.worms.all` / `nearest`, `wa.crates` / `mines` / `missiles` / `oil` `.all()` (pos + `kind`)
 - `wa.land.solid` `trace` `dig{ x, y, radius }` `cut{ x, y, shape = "drill" | "torch", facing, angle }`, `wa.world.sky` `water` `size` `view` `pointer` `keys` `cavern` (`wa.world.cavern()` is WA's own cavern flag for the match). Terrain cuts require a simulation callback; coordinates are 16.16, radius is 1..200 pixels. Torch requires facing ±1 and angle in 16.16 from −65536 to 65536.
 - `wa.sound.play`, `wa.on.gravity_before` / `gravity_after` / `missile_frame` / `worm_message` / `hurt` / `turn_start` / `death` / `hud`, `wa.hud.line`
+- `wa.on.missile_frame(function(m) ... end)` runs for every WA missile each frame (`m.phase` "pre" / "post" around stock). `m.x y vx vy` are writable. `m.weapon` is the stock slot name the missile was fired from, as `worm.weapon` gives it (cluster bits take their parent's; strike bombs and crate bombs have none), and `m.id` identifies the missile.
 - `wa.msg.FRAME_FINISH` `EXPLOSION` `IMPACT` `HIT` `NONLETHAL` `POISON` `JUMP` `JUMP_UP` `FIRE_WEAPON` `RELEASE_WEAPON` `START_TURN`
 
 Sprites: pack PNG strip (`sprite_columns`), GIF, frame folder, or a Gfx.dir stem (`missile`, `grenade`, `uzihit`, …) plus aliases `bazooka`/`holy`/`mine`/`cursor`. Map palette applies. Sounds: pack WAV on the overlay, or a stock index.

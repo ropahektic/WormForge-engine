@@ -149,6 +149,10 @@ pub const MISSILE_WEAPON_SPRITE: usize = 0x180;
 /// Mirror of WeaponEntry+0xAC inside the copied fire-params blob
 /// (`weapon_data` base 0x15C + 0x70). Stock HM keeps hmissil1 here.
 pub const MISSILE_WEAPON_ALT_SPRITE: usize = 0x1CC;
+/// MissileEntity's copy of its weapon's fire params (94 dwords from the
+/// constructor's `fire_params`: WeaponEntry+0x3C onward for a projectile).
+/// Cluster bits are constructed from their parent's copy here.
+pub const MISSILE_WEAPON_DATA: usize = 0x15C;
 /// Mirror of the fire-params `missile_type` (WeaponEntry+0xA4, blob +0x68):
 /// 0 none, 1 homing, 2 standard, 3 sheep, 5 cluster. Same discriminator as
 /// `WEAPON_CLUSTER_MISSILE_TYPE`. (MissileEntity's own dispatch field,
