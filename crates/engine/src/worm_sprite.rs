@@ -64,15 +64,22 @@ static CLAIMS: Mutex<Vec<(usize, i32, i32)>> = Mutex::new(Vec::new());
 /// sheets that art replaced. When a weapon's use ends -- a gun's last shot
 /// -- WA selects the next weapon at once, yet goes on drawing the old one's
 /// sheets while it puts it away; the stock gun showed for those frames. So
-/// while WA still draws sheets that slot's art replaced, they are replaced
-/// with it, whatever is selected, until WA draws anything else.
+/// while WA still draws sheets that slot's art replaced, or puts a weapon
+/// away (its draw sheet reversed, in any slope variant), they are replaced
+/// with that slot's art, whatever is selected, until WA draws anything else.
 static LAST_SLOT: Mutex<Vec<(usize, usize, Vec<u32>)>> = Mutex::new(Vec::new());
 
-/// The slot whose art to draw `sheet` with: the one it was last replaced
-/// for while WA is still putting that weapon away, else the selected one.
-fn pose_slot(selected: usize, last: Option<(usize, &[u32])>, sheet: u32) -> usize {
+/// The slot whose art to draw WA's `sprite` with: the one it was last
+/// replaced for while WA is still putting that weapon away, else the
+/// selected one. A reversed sprite is the put-away itself.
+fn pose_slot(selected: usize, last: Option<(usize, &[u32])>, sprite: u32) -> usize {
+    let putting_away = sprite & game::offsets::SPRITE_REVERSE != 0;
     match last {
-        Some((slot, sheets)) if slot != selected && sheets.contains(&sheet) => slot,
+        Some((slot, sheets))
+            if slot != selected && (putting_away || sheets.contains(&(sprite & 0xffff))) =>
+        {
+            slot
+        }
         _ => selected,
     }
 }
@@ -546,7 +553,7 @@ unsafe fn after_calc_inner(worm: *mut u8, sprite_out: *mut u32, phase_out: *mut 
     let slot = pose_slot(
         selected,
         last.as_ref().map(|(s, sheets)| (*s, sheets.as_slice())),
-        original & 0xffff,
+        original,
     );
     // WA has moved on from the weapon it was putting away.
     if let Some((s, _)) = &last {
@@ -687,6 +694,17 @@ mod pose_slot_tests {
         assert_eq!(pose_slot(1, Some((12, handgun)), 438), 1, "the bazooka's own sheet");
         assert_eq!(pose_slot(12, Some((12, handgun)), 560), 12, "the selection's own art");
         assert_eq!(pose_slot(1, None, 560), 1, "nothing replaced before");
+    }
+
+    #[test]
+    fn a_weapon_put_away_on_another_slope_keeps_its_art() {
+        use game::offsets::SPRITE_REVERSE;
+        // As seen in WA: the rifle was drawn with 500 and put away with 502
+        // reversed (0x008001F6), which it had never replaced.
+        let rifle: &[u32] = &[500, 560, 563];
+        assert_eq!(pose_slot(1, Some((12, rifle)), SPRITE_REVERSE | 502), 12);
+        assert_eq!(pose_slot(1, Some((12, rifle)), 502), 1, "not reversed: not a put-away");
+        assert_eq!(pose_slot(1, None, SPRITE_REVERSE | 502), 1, "nothing to put away");
     }
 }
 
