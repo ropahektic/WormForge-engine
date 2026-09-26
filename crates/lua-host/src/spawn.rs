@@ -508,6 +508,13 @@ mod terrain_tests {
 /// silently got `nil` here would fail somewhere later and further away.
 fn random_fn(lua: &Lua) -> Result<Function, String> {
     lua.create_function(|_, (a, b): (Option<i64>, Option<i64>)| {
+        if crate::dispatch::drawing() {
+            return Err(mlua::Error::external(
+                "wa.random: not inside wa.on.draw. Drawing runs at render time, \
+                 differently on every peer, so a draw from WA's RNG there would \
+                 desync the match. Use wa.draw.random() for looks.",
+            ));
+        }
         let draw = crate::actor::native_random()
             .and_then(|f| f())
             .ok_or_else(|| {

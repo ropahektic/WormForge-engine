@@ -16,8 +16,8 @@ pub use actor::{
     weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, SpawnArgs,
 };
 pub use dispatch::{
-    death, gravity_after, gravity_before, hurt, missile_frame, run_hud, turn_start, worm_message,
-    Death, Hurt,
+    death, drawing, gravity_after, gravity_before, hurt, missile_frame, run_draw, run_hud, turn_start, worm_message,
+    Death, DrawQuad, Hurt,
 };
 
 use crate::api::BindContext;
@@ -1232,6 +1232,55 @@ end)
         };
         assert_eq!(missile_frame(m, 2, "pre", Some(15)).unwrap().vx, 1, "slot 15 is the longbow");
         assert_eq!(missile_frame(m, 2, "pre", None).unwrap().vx, 2, "no slot is nil");
+    }
+
+    #[test]
+    fn draw_hook_collects_quads_and_keeps_out_of_the_simulation() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-draw");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("d"),
+            "d.draw",
+            r#"
+id = "d.draw"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = []
+"#,
+            r#"
+outside = pcall(wa.draw.quad, {})
+wa.on.draw(function()
+  local P = 0x10000
+  wa.draw.quad({
+    points = { { 10 * P, 10 * P }, { 110 * P, 10 * P }, { 110 * P, 12 * P }, { 10 * P, 12 * P } },
+    colors = { 0xFFFF3030, 0xFFFF3030, 0x10FF3030, 0x10FF3030 },
+    sprite = "grenade", blend = "add",
+  })
+  sim_random = pcall(wa.random, 1, 6)
+  local r = wa.draw.random()
+  looks = r >= 0 and r < 1
+end)
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        park_lua(scripts.lua);
+        let quads = run_draw().unwrap();
+        assert_eq!(quads.len(), 1);
+        let q = quads[0];
+        assert_eq!(q.corners[1], (110.0, 10.0), "16.16 in, pixels out");
+        assert_eq!(q.colours, [0xFFFF3030, 0xFFFF3030, 0x10FF3030, 0x10FF3030]);
+        assert!(q.additive);
+        assert_eq!(q.depth, 0x1_0000, "in front of terrain by default");
+        assert!(!drawing(), "the draw context ends with the hook");
+        PARKED_LUA.with(|slot| {
+            let guard = slot.borrow();
+            let g = guard.as_ref().unwrap().globals();
+            assert!(!g.get::<bool>("outside").unwrap(), "wa.draw.quad outside wa.on.draw");
+            assert!(!g.get::<bool>("sim_random").unwrap(), "wa.random inside wa.on.draw");
+            assert!(g.get::<bool>("looks").unwrap(), "wa.draw.random in 0..1");
+        });
     }
 
     #[test]

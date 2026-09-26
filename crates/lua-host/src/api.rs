@@ -165,6 +165,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "turn_start",
         "death",
         "hud",
+        "draw",
     ] {
         hooks
             .set(name, lua.create_table().map_err(|e| e.to_string())?)
@@ -195,7 +196,13 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     bind_on(lua, &on, "turn_start")?;
     bind_on(lua, &on, "death")?;
     bind_on(lua, &on, "hud")?;
+    bind_on(lua, &on, "draw")?;
     wa.set("on", on).map_err(|e| e.to_string())?;
+
+    let draw = lua.create_table().map_err(|e| e.to_string())?;
+    draw.set("quad", draw_quad_fn(lua)?).map_err(|e| e.to_string())?;
+    draw.set("random", draw_random_fn(lua)?).map_err(|e| e.to_string())?;
+    wa.set("draw", draw).map_err(|e| e.to_string())?;
 
     let hud = lua.create_table().map_err(|e| e.to_string())?;
     let line = lua
@@ -1200,6 +1207,83 @@ fn load_sprite_field(
         })?);
     }
     Ok(())
+}
+
+/// `wa.draw.quad{ points, color | colors, sprite, frame, blend, depth }`,
+/// only inside `wa.on.draw`. `points` are four `{ x, y }` in 16.16 world
+/// coordinates, clockwise from the one that takes the sheet's top-left;
+/// colours are 0xAARRGGBB, one for all corners or four; `blend` is "alpha"
+/// (default) or "add"; `depth` defaults to 0x10000, in front of terrain.
+fn draw_quad_fn(lua: &Lua) -> Result<Function, String> {
+    lua.create_function(|lua, spec: Table| {
+        if !dispatch::drawing() {
+            return Err(mlua::Error::external(
+                "wa.draw.quad: only inside wa.on.draw",
+            ));
+        }
+        let points: Table = spec.get("points")?;
+        let mut corners = [(0f32, 0f32); 4];
+        for (i, c) in corners.iter_mut().enumerate() {
+            let p: Table = points.get(i + 1).map_err(|_| {
+                mlua::Error::external("wa.draw.quad: points needs four { x, y }")
+            })?;
+            let x: f64 = p.get(1).or_else(|_| p.get("x"))?;
+            let y: f64 = p.get(2).or_else(|_| p.get("y"))?;
+            *c = ((x / 65536.0) as f32, (y / 65536.0) as f32);
+        }
+        let colours = match spec.get::<Option<Table>>("colors")? {
+            Some(t) => {
+                let mut c = [0u32; 4];
+                for (i, v) in c.iter_mut().enumerate() {
+                    *v = t.get::<i64>(i + 1)? as u32;
+                }
+                c
+            }
+            None => [spec.get::<Option<i64>>("color")?.unwrap_or(0xFFFF_FFFF) as u32; 4],
+        };
+        let name: String = spec.get("sprite")?;
+        let (sprite, ..) = crate::spawn::resolve_sprite_name(lua, &name)?;
+        let additive = match spec.get::<Option<String>>("blend")?.as_deref() {
+            None | Some("alpha") => false,
+            Some("add") => true,
+            Some(other) => {
+                return Err(mlua::Error::external(format!(
+                    "wa.draw.quad: blend {other:?}; valid: alpha, add"
+                )))
+            }
+        };
+        dispatch::push_draw_quad(dispatch::DrawQuad {
+            corners,
+            colours,
+            sprite,
+            frame: spec.get::<Option<u32>>("frame")?.unwrap_or(0),
+            additive,
+            depth: spec.get::<Option<u32>>("depth")?.unwrap_or(0x1_0000),
+        });
+        Ok(())
+    })
+    .map_err(|e| e.to_string())
+}
+
+/// `wa.draw.random()`: 0 <= r < 1, for looks only (flicker, jitter). A
+/// local generator, never WA's: it differs between peers by design.
+fn draw_random_fn(lua: &Lua) -> Result<Function, String> {
+    lua.create_function(|_, ()| {
+        thread_local! {
+            static STATE: std::cell::Cell<u64> = const { std::cell::Cell::new(0x9E37_79B9_7F4A_7C15) };
+        }
+        let r = STATE.with(|s| {
+            // xorshift64*
+            let mut x = s.get();
+            x ^= x >> 12;
+            x ^= x << 25;
+            x ^= x >> 27;
+            s.set(x);
+            x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        });
+        Ok((r >> 11) as f64 / (1u64 << 53) as f64)
+    })
+    .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
