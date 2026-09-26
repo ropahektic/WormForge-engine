@@ -60,6 +60,52 @@ static HELD: Mutex<Vec<(usize, i32)>> = Mutex::new(Vec::new());
 type SpriteInfoFn = unsafe extern "thiscall" fn(*mut u8, u32, *mut u32, *mut u32, *mut u32) -> u32;
 
 static CLAIMS: Mutex<Vec<(usize, i32, i32)>> = Mutex::new(Vec::new());
+/// Per worm, the slot whose art it was last drawn with, and the stock
+/// sheets that art replaced. When a weapon's use ends -- a gun's last shot
+/// -- WA selects the next weapon at once, yet goes on drawing the old one's
+/// sheets while it puts it away; the stock gun showed for those frames. So
+/// while WA still draws sheets that slot's art replaced, they are replaced
+/// with it, whatever is selected, until WA draws anything else.
+static LAST_SLOT: Mutex<Vec<(usize, usize, Vec<u32>)>> = Mutex::new(Vec::new());
+
+/// The slot whose art to draw `sheet` with: the one it was last replaced
+/// for while WA is still putting that weapon away, else the selected one.
+fn pose_slot(selected: usize, last: Option<(usize, &[u32])>, sheet: u32) -> usize {
+    match last {
+        Some((slot, sheets)) if slot != selected && sheets.contains(&sheet) => slot,
+        _ => selected,
+    }
+}
+
+fn last_slot(worm: usize) -> Option<(usize, Vec<u32>)> {
+    LAST_SLOT
+        .lock()
+        .ok()?
+        .iter()
+        .find(|(w, _, _)| *w == worm)
+        .map(|(_, s, sheets)| (*s, sheets.clone()))
+}
+
+/// Note that `sheet` was replaced with `slot`'s art for this worm.
+fn remember_sheet(worm: usize, slot: usize, sheet: u32) {
+    if let Ok(mut g) = LAST_SLOT.lock() {
+        match g.iter_mut().find(|(w, _, _)| *w == worm) {
+            Some((_, s, sheets)) if *s == slot => {
+                if !sheets.contains(&sheet) {
+                    sheets.push(sheet);
+                }
+            }
+            Some(entry) => *entry = (worm, slot, vec![sheet]),
+            None => g.push((worm, slot, vec![sheet])),
+        }
+    }
+}
+
+fn forget_slot(worm: usize) {
+    if let Ok(mut g) = LAST_SLOT.lock() {
+        g.retain(|(w, _, _)| *w != worm);
+    }
+}
 /// Per-team-colour sheets: (slot, alliance, pose, sheet). `CLAIMS` still
 /// holds each pose's default, so pose and phase logic never looks at team;
 /// only the final sheet id is swapped for the drawing worm's colour.
@@ -296,6 +342,9 @@ pub fn clear() {
     if let Ok(mut team) = TEAM_CLAIMS.lock() {
         team.clear();
     }
+    if let Ok(mut last) = LAST_SLOT.lock() {
+        last.clear();
+    }
 }
 
 /// Fill missing slope variants from the first present link sheet, then eat
@@ -487,8 +536,24 @@ unsafe extern "C" fn after_calc(
     if worm.is_null() || sprite_out.is_null() {
         return;
     }
-    let slot = read_i32(worm, WORM_SELECTED_WEAPON) as usize;
+    after_calc_inner(worm, sprite_out, phase_out);
+}
+
+unsafe fn after_calc_inner(worm: *mut u8, sprite_out: *mut u32, phase_out: *mut u32) {
+    let selected = read_i32(worm, WORM_SELECTED_WEAPON) as usize;
     let original = *sprite_out;
+    let last = last_slot(worm as usize);
+    let slot = pose_slot(
+        selected,
+        last.as_ref().map(|(s, sheets)| (*s, sheets.as_slice())),
+        original & 0xffff,
+    );
+    // WA has moved on from the weapon it was putting away.
+    if let Some((s, _)) = &last {
+        if *s != slot {
+            forget_slot(worm as usize);
+        }
+    }
     let state = read_i32(worm, WORM_STATE);
     let Ok(claims) = CLAIMS.lock() else {
         return;
@@ -501,6 +566,7 @@ unsafe extern "C" fn after_calc(
         .iter()
         .find(|(s, claimed, _)| *s == slot && *claimed == stock)
     {
+        remember_sheet(worm as usize, slot, original & 0xffff);
         // Pose and aim logic compare the default sheet; only the drawn one
         // follows the worm's team colour.
         let sheet = team_sheet(worm, slot, stock, *id);
@@ -534,6 +600,7 @@ unsafe extern "C" fn after_calc(
             drive_phase(worm as usize, stock, sheet, reversed, phase_out);
         }
     } else if let Ok(mut anim) = ANIM.lock() {
+
         // On a claimed slot but not currently in a claimed pose -- walking
         // between equips, say. `drive_phase` only resets a worm's stored phase
         // when the pose or sheet differs from last time, so if the next equip
@@ -602,6 +669,24 @@ unsafe fn drive_phase(worm: usize, pose: i32, sprite: i32, reversed: bool, phase
     };
     unsafe {
         *phase_out = phase;
+    }
+}
+
+#[cfg(test)]
+mod pose_slot_tests {
+    use super::pose_slot;
+
+    #[test]
+    fn a_weapon_being_put_away_keeps_its_art() {
+        // As seen in WA: the Sniper Rifle (slot 12) replaced 560 and 502;
+        // after its last shot WA selects the bazooka (1) and still draws
+        // them, then the bazooka's own 438.
+        let handgun: &[u32] = &[560, 563, 502];
+        assert_eq!(pose_slot(1, Some((12, handgun)), 560), 12, "still putting the rifle away");
+        assert_eq!(pose_slot(1, Some((12, handgun)), 502), 12);
+        assert_eq!(pose_slot(1, Some((12, handgun)), 438), 1, "the bazooka's own sheet");
+        assert_eq!(pose_slot(12, Some((12, handgun)), 560), 12, "the selection's own art");
+        assert_eq!(pose_slot(1, None, 560), 1, "nothing replaced before");
     }
 }
 
