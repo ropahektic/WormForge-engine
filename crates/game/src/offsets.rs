@@ -407,6 +407,10 @@ pub const ACTOR_FLAG_MASK_ACTORS: i32 = 131072;
 pub const ACTOR_FLAG_CURSOR: i32 = 262144;
 /// `RQ_DrawSpriteLocal` sprite-id flag: flip X.
 pub const SPRITE_MIRROR_X: u32 = 0x0004_0000;
+/// Sprite-id flag: play the sheet backwards. `DisplayGfx__BlitSprite`
+/// (0x56B080) draws such a sprite at phase `0x10000 - phase`. A worm puts a
+/// weapon away by playing its draw sheet with this flag.
+pub const SPRITE_REVERSE: u32 = 0x0080_0000;
 pub const ACTOR_FEET_X0: usize = 0x12C;
 pub const ACTOR_FEET_X1: usize = 0x130;
 pub const ACTOR_FEET_Y: usize = 0x134;

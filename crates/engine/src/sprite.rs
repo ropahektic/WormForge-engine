@@ -892,6 +892,24 @@ pub struct GpuSheet {
 static GPU_SHEETS: Mutex<Vec<GpuSheet>> = Mutex::new(Vec::new());
 static NEXT_VIRTUAL: Mutex<i32> = Mutex::new(VIRTUAL_SPRITE_BASE);
 
+/// The sheet a drawn sprite value names. WA packs flags next to the id --
+/// the mirror bit, the reverse bit a weapon being put away gets, and others
+/// -- which a lookup of our sheets must ignore. Otherwise the pack art is
+/// not recognised and WA draws `id & 0xffff`, some unrelated stock sprite.
+pub fn sheet_id(sprite: u32) -> u32 {
+    sprite & (VIRTUAL_SPRITE_BASE as u32 | 0xffff)
+}
+
+/// The phase a sprite is drawn at. As `DisplayGfx__BlitSprite` (0x56B080)
+/// does, a sprite with WA's reverse flag plays backwards: `0x10000 - phase`.
+pub fn draw_phase(sprite: u32, phase: u32) -> u32 {
+    if sprite & game::offsets::SPRITE_REVERSE != 0 {
+        0x1_0000u32.wrapping_sub(phase)
+    } else {
+        phase
+    }
+}
+
 pub fn is_virtual(id: i32) -> bool {
     id >= VIRTUAL_SPRITE_BASE
 }
@@ -992,3 +1010,32 @@ pub fn slots_used() -> usize {
 pub fn set_force_layer(_layer: Option<u32>) {}
 
 pub fn set_reserve_colours(_on: bool) {}
+
+#[cfg(test)]
+mod sheet_id_tests {
+    use super::{draw_phase, sheet_id};
+    use game::offsets::{SPRITE_MIRROR_X, SPRITE_REVERSE};
+
+    #[test]
+    fn flags_next_to_the_id_do_not_change_the_sheet() {
+        let sheet = 0x0100_0063;
+        assert_eq!(sheet_id(sheet), sheet);
+        assert_eq!(sheet_id(sheet | SPRITE_MIRROR_X), sheet);
+        // A weapon being put away, as seen in WA: this drew stock 99, a crate.
+        assert_eq!(sheet_id(sheet | SPRITE_REVERSE | SPRITE_MIRROR_X), sheet);
+        // The body flags WA's worm draw can add (0x50FCD0).
+        assert_eq!(sheet_id(sheet | 0x0020_0000 | SPRITE_MIRROR_X), sheet);
+        assert_eq!(sheet_id(sheet | 0x0040_0000 | SPRITE_MIRROR_X), sheet);
+        assert_eq!(sheet_id(99 | 0x0040_0000), 99, "a stock sprite stays stock");
+    }
+
+    #[test]
+    fn a_reversed_sprite_plays_backwards() {
+        let sheet = 0x0100_0061;
+        assert_eq!(draw_phase(sheet, 0x4000), 0x4000);
+        assert_eq!(draw_phase(sheet | SPRITE_MIRROR_X, 0x4000), 0x4000);
+        assert_eq!(draw_phase(sheet | SPRITE_REVERSE, 0x4000), 0xC000);
+        assert_eq!(draw_phase(sheet | SPRITE_REVERSE, 0), 0x1_0000, "a one-shot sheet starts on its last frame");
+        assert_eq!(draw_phase(sheet | SPRITE_REVERSE, 0x1_0000), 0);
+    }
+}
