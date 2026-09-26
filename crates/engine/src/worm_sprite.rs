@@ -63,11 +63,12 @@ static TEAM_CLAIMS: Mutex<Vec<(usize, u8, i32, i32)>> = Mutex::new(Vec::new());
 /// Slots whose `weaponlnk*` sheets are one-shot animations (equip, unfold),
 /// not aim-angle sheets: `params.worm_sprites_animate = true`.
 static ANIMATE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
-/// Per worm: which claimed pose is playing, and how far through it.
+/// Per worm: which claimed pose is playing, and how far through it:
+/// (worm, pose, phase, sheet, reversed).
 ///
 /// Used for draw/undraw-style sheets where stock only hands 0x0 / 0x8000.
 /// Aiming (`weaponlnk`*) keeps stock's aim-angle phase instead.
-static ANIM: Mutex<Vec<(usize, i32, u32, i32)>> = Mutex::new(Vec::new());
+static ANIM: Mutex<Vec<(usize, i32, u32, i32, bool)>> = Mutex::new(Vec::new());
 
 const LINK: i32 = -1;
 const LINK_U: i32 = -2;
@@ -477,7 +478,10 @@ unsafe extern "C" fn after_calc(
             }
             // Link: leave the stock phase, which is the aim angle.
         } else {
-            drive_phase(worm as usize, stock, sheet, phase_out);
+            // WA puts a weapon away by playing its draw sheet with the
+            // reverse flag: the same pose and sheet, but a new animation.
+            let reversed = original & game::offsets::SPRITE_REVERSE != 0;
+            drive_phase(worm as usize, stock, sheet, reversed, phase_out);
         }
     } else if let Ok(mut anim) = ANIM.lock() {
         // On a claimed slot but not currently in a claimed pose -- walking
@@ -489,7 +493,7 @@ unsafe extern "C" fn after_calc(
         // jump straight to its last frame instead of playing. Dropping the
         // entry the moment the worm leaves a claimed pose guarantees the next
         // one starts fresh.
-        anim.retain(|(w, _, _, _)| *w != worm as usize);
+        anim.retain(|(w, _, _, _, _)| *w != worm as usize);
     }
 }
 
@@ -505,7 +509,7 @@ pub fn tick(worm: usize) {
     let Ok(mut anim) = ANIM.lock() else {
         return;
     };
-    let Some(entry) = anim.iter_mut().find(|(w, _, _, _)| *w == worm) else {
+    let Some(entry) = anim.iter_mut().find(|(w, _, _, _, _)| *w == worm) else {
         return;
     };
     let Some(frames) = sprite::frame_count(entry.3) else {
@@ -519,24 +523,28 @@ pub fn tick(worm: usize) {
     entry.2 = (entry.2 + step).min(last);
 }
 
-unsafe fn drive_phase(worm: usize, pose: i32, sprite: i32, phase_out: *mut u32) {
+/// The phase of a claimed pose, counted by `tick` from 0 up to its last
+/// frame. A reversed pose counts up too; the renderer plays it backwards
+/// (`sprite::draw_phase`).
+unsafe fn drive_phase(worm: usize, pose: i32, sprite: i32, reversed: bool, phase_out: *mut u32) {
     if phase_out.is_null() {
         return;
     }
     let Ok(mut anim) = ANIM.lock() else {
         return;
     };
-    let phase = match anim.iter_mut().find(|(w, _, _, _)| *w == worm) {
+    let phase = match anim.iter_mut().find(|(w, _, _, _, _)| *w == worm) {
         Some(entry) => {
-            if entry.1 != pose || entry.3 != sprite {
+            if entry.1 != pose || entry.3 != sprite || entry.4 != reversed {
                 entry.1 = pose;
                 entry.3 = sprite;
+                entry.4 = reversed;
                 entry.2 = 0;
             }
             entry.2
         }
         None => {
-            anim.push((worm, pose, 0, sprite));
+            anim.push((worm, pose, 0, sprite, reversed));
             0
         }
     };
@@ -554,6 +562,23 @@ mod tests {
         assert!(super::hold_as(23, 153));
         assert_eq!(super::HELD.lock().unwrap().iter().find(|(s, _)| *s == 23).map(|(_, id)| *id), Some(343));
         assert!(!super::hold_as(23, 900), "no held sheet for an unknown sprite");
+    fn putting_a_weapon_away_plays_the_draw_again() {
+        use super::{drive_phase, ANIM};
+        let (worm, sheet) = (0x5EED_0001usize, 0x0100_0061);
+        let phase = |reversed| {
+            let mut out = 0u32;
+            unsafe { drive_phase(worm, THROW, sheet, reversed, &mut out) };
+            out
+        };
+        assert_eq!(phase(false), 0);
+        // The draw has played through, as `tick` leaves it.
+        for entry in ANIM.lock().unwrap().iter_mut().filter(|e| e.0 == worm) {
+            entry.2 = 0xF334;
+        }
+        assert_eq!(phase(false), 0xF334, "the same draw holds its last frame");
+        // WA puts it away: the same pose and sheet, reversed.
+        assert_eq!(phase(true), 0, "the put-away starts over");
+        ANIM.lock().unwrap().retain(|e| e.0 != worm);
     }
 
     #[test]

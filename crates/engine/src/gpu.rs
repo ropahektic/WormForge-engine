@@ -605,6 +605,9 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mu
     if !is_active() {
         return false;
     }
+    // WA's reverse flag, read as BlitSprite reads it, before anything below
+    // rebuilds the sprite value without it.
+    let anim = crate::sprite::draw_phase(sprite, anim);
     // Virtual ids are 0x01000000 | n, so masking to 16 bits throws the tag
     // away and leaves a small number that looks like a stock sprite. WA packs
     // flags alongside the id (the mirror bit, and others); `sheet_id` drops
@@ -646,9 +649,7 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mu
         x,
         y,
         sprite,
-        // WA's reverse flag is read here, as BlitSprite reads it, before
-        // anything rebuilds the sprite value.
-        anim: crate::sprite::draw_phase(sprite, anim),
+        anim,
         angle,
         scale,
         tint,
