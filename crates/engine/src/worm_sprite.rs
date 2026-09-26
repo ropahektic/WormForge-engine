@@ -72,11 +72,19 @@ static LAST_SLOT: Mutex<Vec<(usize, usize, Vec<u32>)>> = Mutex::new(Vec::new());
 /// The slot whose art to draw WA's `sprite` with: the one it was last
 /// replaced for while WA is still putting that weapon away, else the
 /// selected one. A reversed sprite is the put-away itself.
-fn pose_slot(selected: usize, last: Option<(usize, &[u32])>, sprite: u32) -> usize {
+///
+/// The put-away happens with the worm standing. Once it aims (`aiming`:
+/// states 0x67..=0x69), the selected weapon is out, even where it draws
+/// the same stock sheet as the old one: the Igniter, on the homing
+/// missile's slot, is drawn out on the bazooka's `wbazlnk`, and a bazooka
+/// drawn out next took the Igniter's empty-handed posture.
+fn pose_slot(selected: usize, last: Option<(usize, &[u32])>, sprite: u32, aiming: bool) -> usize {
     let putting_away = sprite & game::offsets::SPRITE_REVERSE != 0;
     match last {
         Some((slot, sheets))
-            if slot != selected && (putting_away || sheets.contains(&(sprite & 0xffff))) =>
+            if slot != selected
+                && !aiming
+                && (putting_away || sheets.contains(&(sprite & 0xffff))) =>
         {
             slot
         }
@@ -549,11 +557,13 @@ unsafe extern "C" fn after_calc(
 unsafe fn after_calc_inner(worm: *mut u8, sprite_out: *mut u32, phase_out: *mut u32) {
     let selected = read_i32(worm, WORM_SELECTED_WEAPON) as usize;
     let original = *sprite_out;
+    let state = read_i32(worm, WORM_STATE);
     let last = last_slot(worm as usize);
     let slot = pose_slot(
         selected,
         last.as_ref().map(|(s, sheets)| (*s, sheets.as_slice())),
         original,
+        (0x67..=0x69).contains(&state),
     );
     // WA has moved on from the weapon it was putting away.
     if let Some((s, _)) = &last {
@@ -561,7 +571,6 @@ unsafe fn after_calc_inner(worm: *mut u8, sprite_out: *mut u32, phase_out: *mut 
             forget_slot(worm as usize);
         }
     }
-    let state = read_i32(worm, WORM_STATE);
     let Ok(claims) = CLAIMS.lock() else {
         return;
     };
@@ -689,11 +698,11 @@ mod pose_slot_tests {
         // after its last shot WA selects the bazooka (1) and still draws
         // them, then the bazooka's own 438.
         let handgun: &[u32] = &[560, 563, 502];
-        assert_eq!(pose_slot(1, Some((12, handgun)), 560), 12, "still putting the rifle away");
-        assert_eq!(pose_slot(1, Some((12, handgun)), 502), 12);
-        assert_eq!(pose_slot(1, Some((12, handgun)), 438), 1, "the bazooka's own sheet");
-        assert_eq!(pose_slot(12, Some((12, handgun)), 560), 12, "the selection's own art");
-        assert_eq!(pose_slot(1, None, 560), 1, "nothing replaced before");
+        assert_eq!(pose_slot(1, Some((12, handgun)), 560, false), 12, "still putting the rifle away");
+        assert_eq!(pose_slot(1, Some((12, handgun)), 502, false), 12);
+        assert_eq!(pose_slot(1, Some((12, handgun)), 438, false), 1, "the bazooka's own sheet");
+        assert_eq!(pose_slot(12, Some((12, handgun)), 560, false), 12, "the selection's own art");
+        assert_eq!(pose_slot(1, None, 560, false), 1, "nothing replaced before");
     }
 
     #[test]
@@ -702,9 +711,19 @@ mod pose_slot_tests {
         // As seen in WA: the rifle was drawn with 500 and put away with 502
         // reversed (0x008001F6), which it had never replaced.
         let rifle: &[u32] = &[500, 560, 563];
-        assert_eq!(pose_slot(1, Some((12, rifle)), SPRITE_REVERSE | 502), 12);
-        assert_eq!(pose_slot(1, Some((12, rifle)), 502), 1, "not reversed: not a put-away");
-        assert_eq!(pose_slot(1, None, SPRITE_REVERSE | 502), 1, "nothing to put away");
+        assert_eq!(pose_slot(1, Some((12, rifle)), SPRITE_REVERSE | 502, false), 12);
+        assert_eq!(pose_slot(1, Some((12, rifle)), 502, false), 1, "not reversed: not a put-away");
+        assert_eq!(pose_slot(1, None, SPRITE_REVERSE | 502, false), 1, "nothing to put away");
+    }
+
+    #[test]
+    fn the_next_weapon_aimed_is_its_own_even_on_shared_sheets() {
+        // The Igniter (homing missile, slot 2) is drawn out on wbazlnk (436)
+        // and aimed on wbaz2 (531). After its shot and put-away, WA draws
+        // the bazooka (1) out on wbazlnk too, aiming (state 0x67).
+        let igniter: &[u32] = &[436, 531];
+        assert_eq!(pose_slot(1, Some((2, igniter)), 436, false), 2, "still putting it away");
+        assert_eq!(pose_slot(1, Some((2, igniter)), 436, true), 1, "the bazooka, drawn out");
     }
 }
 
