@@ -639,7 +639,18 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mu
     true
 }
 
-/// Resolve pending draws to screen-space quads.
+/// Our sprites in painter's order: their render-queue depth, high (further
+/// back) first. They are collected in whatever order WA happens to draw their
+/// owners -- a worm's GPU sheet after the actors in front of it -- so without
+/// this, depth only ever decided terrain occlusion, never which of two GPU
+/// sprites is on top. The sort is stable: equal depths keep collection order.
+fn back_to_front(pending: &[Pending]) -> Vec<&Pending> {
+    let mut order: Vec<&Pending> = pending.iter().collect();
+    order.sort_by(|a, b| b.depth.cmp(&a.depth));
+    order
+}
+
+/// Resolve pending draws to screen-space quads, back to front.
 ///
 /// The transform mirrors what WA's own dispatcher does to a kind-5 command:
 /// drop the 16.16 fraction, subtract the clip origin, then add the camera.
@@ -657,7 +668,7 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
     let cam_x = *((display + 0x3560) as *const i32);
     let cam_y = *((display + 0x3564) as *const i32);
 
-    for p in pending.iter() {
+    for p in back_to_front(&pending) {
         let id = p.sprite & !game::offsets::SPRITE_MIRROR_X;
         let Some((rect, frames, looping)) = crate::sprite::gpu_frame(id) else {
             continue;
@@ -834,4 +845,23 @@ pub fn install_rq_draw() -> Result<(), String> {
     };
     ORIG_RQ_DRAW.store(trampoline, Ordering::SeqCst);
     Ok(())
+}
+
+#[cfg(test)]
+mod depth_order_tests {
+    use super::{back_to_front, Pending};
+
+    fn at(depth: u32, sprite: u32) -> Pending {
+        Pending { x: 0, y: 0, sprite, anim: 0, angle: 0.0, scale: 1.0, tint: 0, depth }
+    }
+
+    #[test]
+    fn gpu_sprites_draw_back_to_front_by_depth() {
+        // Collected as WA drew their owners: an actor held in front of the
+        // worm (0x10000) before the worm's own sheet (0xD0000), a default
+        // actor behind terrain (0x190000) last.
+        let pending = [at(0x10000, 1), at(0xD0000, 2), at(0x190000, 3), at(0xD0000, 4)];
+        let order: Vec<u32> = back_to_front(&pending).iter().map(|p| p.sprite).collect();
+        assert_eq!(order, vec![3, 2, 4, 1], "equal depths keep collection order");
+    }
 }
