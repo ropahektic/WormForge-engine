@@ -1230,6 +1230,21 @@ pub fn is_cavern() -> bool {
     unsafe { read_i32(world, GAME_WORLD_IS_CAVERN) != 0 }
 }
 
+/// WA's gravity and wind, 16.16: the collision manager's +0x22C / +0x230,
+/// the base WA's physics scale by each object's own factors. Project X's
+/// `Env->Gravity` / `Env->Wind` are these: its `CEnv` is the manager 0x108
+/// on (`Water`, `Gravity`, `Wind` at 0x330 / 0x334 / 0x338).
+pub fn forces() -> (i32, i32) {
+    let world = session_world();
+    if world.is_null() {
+        return (0, 0);
+    }
+    unsafe {
+        let cm = read_i32(world, GAME_WORLD_COLLISION_MANAGER) as *mut u8;
+        game::entity::read_cm_forces(cm)
+    }
+}
+
 pub fn water_fixed() -> i32 {
     let world = session_world();
     if world.is_null() {

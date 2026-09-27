@@ -2198,6 +2198,33 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn world_reads_gravity_and_wind() {
+        let _host = lock_host();
+        crate::bind_actor_native(crate::ActorNative {
+            forces: || (0x3AE, -0x120),
+            ..Default::default()
+        });
+        let root = std::env::temp_dir().join("wklua-lua-host-world-forces");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("f"),
+            "f.forces",
+            r#"
+id = "f.forces"
+api_version = 1
+entry = "weapons.lua"
+"#,
+            "GRAVITY, WIND = wa.world.gravity(), wa.world.wind()",
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        let g: i32 = scripts.lua.globals().get("GRAVITY").unwrap();
+        let w: i32 = scripts.lua.globals().get("WIND").unwrap();
+        park_lua(scripts.lua);
+        crate::bind_actor_native(crate::ActorNative::default());
+        assert_eq!((g, w), (0x3AE, -0x120));
+    }
+
+    #[test]
     fn actors_spawn_from_lua_calls_native() {
         let _host = lock_host();
         use std::cell::Cell;
