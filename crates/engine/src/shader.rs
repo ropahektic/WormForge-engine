@@ -38,6 +38,66 @@ static PROBE: AtomicU32 = AtomicU32::new(PROBE_WAITING);
 /// textures from this rather than resolving it again.
 static RENDERER: AtomicUsize = AtomicUsize::new(0);
 
+/// WA's `Renderer` option (Options section, registry or INI as WA itself is
+/// set up), read with WA's own reader, `COptions`'s int getter: a thiscall on
+/// its config object taking (section, name, default).
+const OPTIONS_READ_INT: u32 = 0x005C_C5D2;
+const OPTIONS_CONFIG: u32 = 0x007C_03D0;
+const STR_OPTIONS: u32 = 0x0065_0CB8;
+const STR_RENDERER: u32 = 0x0065_E4BC;
+/// The one renderer the GPU path draws with: its vtable (0x6767F8, built by
+/// the case-4 constructor 0x59D020 in the frontend's renderer switch at
+/// 0x4E829D) holds `Display__D3D9ShaderPresent`.
+pub const RENDERER_D3D9_SHADER: i32 = 4;
+
+/// The renderer WA is set to, or None when it is not stored (WA then picks 4
+/// on a capable machine, else 1) or this is not the WA build we know.
+pub fn renderer_setting() -> Option<i32> {
+    unsafe {
+        let text = |va: u32, s: &[u8]| {
+            std::slice::from_raw_parts(rb(va) as *const u8, s.len()) == s
+        };
+        if !text(STR_OPTIONS, b"Options\0") || !text(STR_RENDERER, b"Renderer\0") {
+            return None;
+        }
+        type ReadInt = unsafe extern "thiscall" fn(*mut u8, *const u8, *const u8, i32) -> i32;
+        let read: ReadInt = std::mem::transmute(rb(OPTIONS_READ_INT) as usize);
+        let v = read(
+            rb(OPTIONS_CONFIG) as *mut u8,
+            rb(STR_OPTIONS) as *const u8,
+            rb(STR_RENDERER) as *const u8,
+            -1,
+        );
+        (v >= 0).then_some(v)
+    }
+}
+
+/// WA's name for a `Renderer` value, in the order of its option strings
+/// (DIRECTDRAW8 .. OPENGL_SHADER). 4 is verified from the code; 0 and 1 are
+/// the two CompatRenderer (DirectDraw) vtables and 5 is OpenGLCPU.
+pub fn renderer_name(value: i32) -> &'static str {
+    match value {
+        0 => "DirectDraw 8-bit",
+        1 => "DirectDraw 32-bit",
+        2 => "Direct3D 7",
+        3 => "Direct3D 9 (software)",
+        4 => "Direct3D 9 (shader)",
+        5 => "OpenGL (CPU palette)",
+        6 => "OpenGL (shader)",
+        _ => "unknown",
+    }
+}
+
+/// One line for the log: which renderer WA is set to.
+pub fn renderer_report() -> String {
+    match renderer_setting() {
+        Some(v) => format!("WA renderer setting: {v}, {}", renderer_name(v)),
+        None => "WA renderer setting: not stored (WA's default: Direct3D 9 (shader) \
+                 where supported, else DirectDraw 32-bit)"
+            .to_string(),
+    }
+}
+
 /// True once the renderer has been found and read successfully.
 pub fn is_ready() -> bool {
     PROBE.load(Ordering::SeqCst) == PROBE_READY
@@ -226,7 +286,9 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
             let target = rb(va) as *mut c_void;
             if unsafe { std::slice::from_raw_parts(target as *const u8, bytes.len()) } != bytes {
                 return Err(format!(
-                    "{name} bytes differ or another module owns the hook"
+                    "{name} bytes differ or another module owns the hook \
+                     (a WormKit module such as wkFOW hooks the same D3D9 sites; \
+                     remove it to use GPU sprites)"
                 ));
             }
             let trampoline = unsafe { MinHook::create_hook(target, detour) }
@@ -257,4 +319,17 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
     }
     crate::log_line("shader renderer GPU present/cleanup hooks installed");
     Ok(())
+}
+
+#[cfg(test)]
+mod renderer_name_tests {
+    use super::{renderer_name, RENDERER_D3D9_SHADER};
+
+    #[test]
+    fn the_gpu_path_needs_the_d3d9_shader_renderer() {
+        assert_eq!(renderer_name(RENDERER_D3D9_SHADER), "Direct3D 9 (shader)");
+        assert_eq!(renderer_name(1), "DirectDraw 32-bit", "WA's fallback default");
+        assert_eq!(renderer_name(6), "OpenGL (shader)");
+        assert_eq!(renderer_name(7), "unknown");
+    }
 }

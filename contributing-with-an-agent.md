@@ -69,6 +69,8 @@ Per-worm loadouts are virtual because WA has no per-worm ammo row. `wa.inventory
 
 If the current `wa.*` surface cannot do it: wrap stock 3.8.1, bind a handle API, show it in one example. Target `i686-pc-windows-msvc`. Wrap, then original — never trap `FireWeapon` / `InitWeaponTable`, never stack VFTs, never grow the 71-slot table. Details: README.
 
+GPU drawing has one hard requirement: WA's **Direct3D 9 (shader)** renderer (`Renderer` = 4 in WA's Options; WA's default where supported). It is what draws GPU sheets (`gpu_prefix`, GPU worm sheets, `sprite_overrides`). On any other renderer, or with another WormKit module hooking the same D3D9 sites (wkFOW), they are not drawn at all: there is no palette fallback. `wkLua.log` names WA's renderer setting at each match and says which of the two it is.
+
 Draw primitives belong in the DLL. Named FX (lightning, fire) belong in Lua. No second renderer. Do not vendor `Resources/` or GPL game-replacement sources. Do not drive-by rename the whole API in the same PR as a pack.
 
 ## Lua surface
