@@ -840,6 +840,15 @@ fn table_to_claim(
         }
     }
 
+    let mut plane_sprite_path = None;
+    if let Some(rel) = get_string(&spec, "plane")? {
+        let (path, sheet) = load_pack_sheet(root, &rel, 1)?;
+        if !extra_sheets.iter().any(|(existing, _)| existing == &path) {
+            extra_sheets.push((path.clone(), sheet));
+        }
+        plane_sprite_path = Some(path);
+    }
+
     let mut cluster_sprite_id = None;
     let mut cluster_sprite_path = None;
     let mut cluster_homing_sprite_path = None;
@@ -985,8 +994,12 @@ fn table_to_claim(
             worm_sprites_animate,
             extra_sounds,
             cluster_sprite_id,
+<<<<<<< HEAD
             cluster_sprite_path,
             cluster_homing_sprite_path,
+=======
+            plane_sprite_path,
+>>>>>>> ad3f849 (plane: a strike's own plane sprite)
             cluster_damage,
             cluster_bounce_pct,
             cluster_gravity_pct,

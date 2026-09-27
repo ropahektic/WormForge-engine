@@ -211,6 +211,13 @@ impl WeaponEntry {
         self.write_i32(WEAPON_WIND_PCT, value);
     }
 
+    /// A strike's plane (fire type 3): StrikeFire reads its sprite from
+    /// `+0x38`, where other fire types keep their fire method. The stock
+    /// jets are 86 and 87; 0 is no plane.
+    pub fn set_strike_plane_sprite(&mut self, value: i32) {
+        self.write_i32(WEAPON_FIRE_METHOD, value);
+    }
+
     pub fn set_cluster_sprite_id(&mut self, value: i32) {
         self.write_i32(WEAPON_CLUSTER_SPRITE, value);
     }
