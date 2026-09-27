@@ -61,7 +61,7 @@ The cdylib is `target/i686-pc-windows-msvc/release/wkLua.dll`. Off Windows, trea
 
 ## Contributors
 
-- **[EdLud](https://github.com/EdLud)** — GPU sprite renderer (D3D9 atlas / truecolor path).
+- **[EdLud](https://github.com/EdLud)** — Too many things to list.
 
 ## License
 
