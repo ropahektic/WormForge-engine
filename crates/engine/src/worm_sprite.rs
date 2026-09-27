@@ -7,6 +7,10 @@
 //!   `copy_from` is bazooka / homing / fuse / cluster.
 //! We map all of those to the claimed link sheets and keep stock's aim phase.
 //!
+//! The uzi, minigun, shotgun and handgun aim sheets map to the link sheets
+//! too, their draw sheets to `wthrow`*, and their fire sheets to
+//! `weaponfire`*, which keeps stock's aim phase as the link sheets do.
+//!
 //! `wthrow`* and the donor draw/appear sheets (`wbazlnk*`, `wgrnlnk*`, …) are
 //! draw/undraw. Unset throw claims copy the aim sheet and freeze; real draw
 //! GIFs play via `drive_phase`.
@@ -56,6 +60,67 @@ static HELD: Mutex<Vec<(usize, i32)>> = Mutex::new(Vec::new());
 type SpriteInfoFn = unsafe extern "thiscall" fn(*mut u8, u32, *mut u32, *mut u32, *mut u32) -> u32;
 
 static CLAIMS: Mutex<Vec<(usize, i32, i32)>> = Mutex::new(Vec::new());
+/// Per worm, the slot whose art it was last drawn with, and the stock
+/// sheets that art replaced. When a weapon's use ends -- a gun's last shot
+/// -- WA selects the next weapon at once, yet goes on drawing the old one's
+/// sheets while it puts it away; the stock gun showed for those frames. So
+/// while WA still draws sheets that slot's art replaced, or puts a weapon
+/// away (its draw sheet reversed, in any slope variant), they are replaced
+/// with that slot's art, whatever is selected, until WA draws anything else.
+static LAST_SLOT: Mutex<Vec<(usize, usize, Vec<u32>)>> = Mutex::new(Vec::new());
+
+/// The slot whose art to draw WA's `sprite` with: the one it was last
+/// replaced for while WA is still putting that weapon away, else the
+/// selected one. A reversed sprite is the put-away itself.
+///
+/// The put-away happens with the worm standing. Once it aims (`aiming`:
+/// states 0x67..=0x69), the selected weapon is out, even where it draws
+/// the same stock sheet as the old one: the Igniter, on the homing
+/// missile's slot, is drawn out on the bazooka's `wbazlnk`, and a bazooka
+/// drawn out next took the Igniter's empty-handed posture.
+fn pose_slot(selected: usize, last: Option<(usize, &[u32])>, sprite: u32, aiming: bool) -> usize {
+    let putting_away = sprite & game::offsets::SPRITE_REVERSE != 0;
+    match last {
+        Some((slot, sheets))
+            if slot != selected
+                && !aiming
+                && (putting_away || sheets.contains(&(sprite & 0xffff))) =>
+        {
+            slot
+        }
+        _ => selected,
+    }
+}
+
+fn last_slot(worm: usize) -> Option<(usize, Vec<u32>)> {
+    LAST_SLOT
+        .lock()
+        .ok()?
+        .iter()
+        .find(|(w, _, _)| *w == worm)
+        .map(|(_, s, sheets)| (*s, sheets.clone()))
+}
+
+/// Note that `sheet` was replaced with `slot`'s art for this worm.
+fn remember_sheet(worm: usize, slot: usize, sheet: u32) {
+    if let Ok(mut g) = LAST_SLOT.lock() {
+        match g.iter_mut().find(|(w, _, _)| *w == worm) {
+            Some((_, s, sheets)) if *s == slot => {
+                if !sheets.contains(&sheet) {
+                    sheets.push(sheet);
+                }
+            }
+            Some(entry) => *entry = (worm, slot, vec![sheet]),
+            None => g.push((worm, slot, vec![sheet])),
+        }
+    }
+}
+
+fn forget_slot(worm: usize) {
+    if let Ok(mut g) = LAST_SLOT.lock() {
+        g.retain(|(w, _, _)| *w != worm);
+    }
+}
 /// Per-team-colour sheets: (slot, alliance, pose, sheet). `CLAIMS` still
 /// holds each pose's default, so pose and phase logic never looks at team;
 /// only the final sheet id is swapped for the drawing worm's colour.
@@ -80,6 +145,9 @@ const IDLE_RESTART: u32 = 2;
 const LINK: i32 = -1;
 const LINK_U: i32 = -2;
 const LINK_D: i32 = -3;
+const FIRE: i32 = -4;
+const FIRE_U: i32 = -5;
+const FIRE_D: i32 = -6;
 const THROW: i32 = 591;
 const THROW_U: i32 = 592;
 const THROW_D: i32 = 593;
@@ -98,6 +166,10 @@ const AIM_HOLD: &[(i32, i32, i32)] = &[
     (582, 583, 584), // wthrban
     (585, 586, 587), // wthrpbm
     (588, 589, 590), // wthrhgr
+    (564, 565, 566), // wuzi
+    (570, 571, 572), // wmini
+    (543, 544, 545), // wshotg
+    (558, 559, 560), // whandg
 ];
 
 /// Stock draw/appear triads remapped to `wthrow*`.
@@ -114,6 +186,19 @@ const AIM_DRAW: &[(i32, i32, i32)] = &[
     (319, 320, 321), // wbanlnk
     (322, 323, 324), // wpbmlnk
     (325, 326, 327), // whgrlnk
+    (488, 489, 490), // wuzilnk
+    (503, 504, 505), // wmgnlnk (minigun; wminlnk is the mine's)
+    (491, 492, 493), // wshglnk
+    (500, 501, 502), // whgnlnk
+];
+
+/// Stock gun fire triads remapped to `weaponfire*`. Like the aim holds,
+/// their phase is the aim angle.
+const AIM_FIRE: &[(i32, i32, i32)] = &[
+    (567, 568, 569), // wuzif
+    (573, 574, 575), // wminif
+    (549, 550, 551), // wshotf
+    (561, 562, 563), // whandf
 ];
 
 fn is_link(pose: i32) -> bool {
@@ -122,6 +207,22 @@ fn is_link(pose: i32) -> bool {
 
 fn is_throw(pose: i32) -> bool {
     matches!(pose, THROW | THROW_U | THROW_D)
+}
+
+/// WA's own throw: `wthrow` played forward once the worm is out of the
+/// aiming states (0x67..=0x69), in the firing states and just after. It is
+/// not a draw, so it stays WA's, as does the hand's way back (`wthrbak`)
+/// that follows. Claimed as the draw pose, a thrown weapon threw with the
+/// pack's draw posture: a worm reaching for a weapon it had just thrown.
+fn is_wa_throw(sprite: u32, state: i32) -> bool {
+    let sheet = (sprite & 0xffff) as i32;
+    is_throw(sheet)
+        && sprite & game::offsets::SPRITE_REVERSE == 0
+        && !(0x67..=0x69).contains(&state)
+}
+
+fn is_fire(pose: i32) -> bool {
+    matches!(pose, FIRE | FIRE_U | FIRE_D)
 }
 
 /// The draw pose matching an undraw pose, and vice versa.
@@ -195,6 +296,11 @@ fn pose_key(original: u32, state: i32, slope: i32) -> i32 {
             return pose;
         }
     }
+    for &(flat, up, down) in AIM_FIRE {
+        if let Some(pose) = triad_to(stock, flat, up, down, FIRE, FIRE_U, FIRE_D) {
+            return pose;
+        }
+    }
     stock
 }
 
@@ -263,6 +369,9 @@ pub fn clear() {
     if let Ok(mut team) = TEAM_CLAIMS.lock() {
         team.clear();
     }
+    if let Ok(mut last) = LAST_SLOT.lock() {
+        last.clear();
+    }
 }
 
 /// Fill missing slope variants from the first present link sheet, then eat
@@ -281,7 +390,7 @@ fn expand_aim_claims(poses: &[(i32, i32)]) -> Vec<(i32, i32)> {
     let mut out: Vec<(i32, i32)> = poses
         .iter()
         .copied()
-        .filter(|(pose, _)| !is_link(*pose) && !is_throw(*pose))
+        .filter(|(pose, _)| !is_link(*pose) && !is_throw(*pose) && !is_fire(*pose))
         .collect();
     out.push((LINK, p));
     out.push((LINK_U, u));
@@ -292,6 +401,15 @@ fn expand_aim_claims(poses: &[(i32, i32)]) -> Vec<(i32, i32)> {
     out.push((THROW, throw.unwrap_or(p)));
     out.push((THROW_U, throw_u.unwrap_or(u)));
     out.push((THROW_D, throw_d.unwrap_or(d)));
+    // A gun firing: its own sheets, any one filling the others; without
+    // them, the aim sheet, so a custom gun never flashes back to stock.
+    let fire = poses.iter().find(|(pose, _)| *pose == FIRE).map(|(_, id)| *id);
+    let fire_u = poses.iter().find(|(pose, _)| *pose == FIRE_U).map(|(_, id)| *id);
+    let fire_d = poses.iter().find(|(pose, _)| *pose == FIRE_D).map(|(_, id)| *id);
+    let any_fire = fire.or(fire_u).or(fire_d);
+    out.push((FIRE, fire.or(any_fire).unwrap_or(p)));
+    out.push((FIRE_U, fire_u.or(any_fire).unwrap_or(u)));
+    out.push((FIRE_D, fire_d.or(any_fire).unwrap_or(d)));
     out
 }
 
@@ -445,13 +563,30 @@ unsafe extern "C" fn after_calc(
     if worm.is_null() || sprite_out.is_null() {
         return;
     }
-    let slot = read_i32(worm, WORM_SELECTED_WEAPON) as usize;
+    after_calc_inner(worm, sprite_out, phase_out);
+}
+
+unsafe fn after_calc_inner(worm: *mut u8, sprite_out: *mut u32, phase_out: *mut u32) {
+    let selected = read_i32(worm, WORM_SELECTED_WEAPON) as usize;
     let original = *sprite_out;
     let state = read_i32(worm, WORM_STATE);
+    let last = last_slot(worm as usize);
+    let slot = pose_slot(
+        selected,
+        last.as_ref().map(|(s, sheets)| (*s, sheets.as_slice())),
+        original,
+        (0x67..=0x69).contains(&state),
+    );
+    // WA has moved on from the weapon it was putting away.
+    if let Some((s, _)) = &last {
+        if *s != slot {
+            forget_slot(worm as usize);
+        }
+    }
     let Ok(claims) = CLAIMS.lock() else {
         return;
     };
-    if !claims.iter().any(|(s, _, _)| *s == slot) {
+    if !claims.iter().any(|(s, _, _)| *s == slot) || is_wa_throw(original, state) {
         return;
     }
     let stock = pose_key(original, state, read_i32(worm, WORM_SLOPE_DIR));
@@ -459,6 +594,7 @@ unsafe extern "C" fn after_calc(
         .iter()
         .find(|(s, claimed, _)| *s == slot && *claimed == stock)
     {
+        remember_sheet(worm as usize, slot, original & 0xffff);
         // Pose and aim logic compare the default sheet; only the drawn one
         // follows the worm's team colour.
         let sheet = team_sheet(worm, slot, stock, *id);
@@ -475,7 +611,8 @@ unsafe extern "C" fn after_calc(
         //   link poses. A distinct draw sheet alone cannot be the signal --
         //   the wizard produces exactly that shape too.
         let animate = ANIMATE.lock().map(|g| g.contains(&slot)).unwrap_or(false);
-        let aim_sheet = !animate && (is_link(stock) || is_aim_sheet(&claims, slot, stock, *id));
+        let aim_sheet = !animate
+            && (is_link(stock) || is_fire(stock) || is_aim_sheet(&claims, slot, stock, *id));
         if aim_sheet {
             if is_throw(stock) {
                 // Eat draw/undraw: hold a mid frame, no play-through.
@@ -483,7 +620,7 @@ unsafe extern "C" fn after_calc(
                     *phase_out = 0x8000;
                 }
             }
-            // Link: leave the stock phase, which is the aim angle.
+            // Link and fire: leave the stock phase, which is the aim angle.
         } else {
             // WA puts a weapon away by playing its draw sheet with the
             // reverse flag: the same pose and sheet, but a new animation.
@@ -491,6 +628,7 @@ unsafe extern "C" fn after_calc(
             drive_phase(worm as usize, stock, sheet, reversed, phase_out);
         }
     } else if let Ok(mut anim) = ANIM.lock() {
+
         // On a claimed slot but not currently in a claimed pose -- walking
         // between equips, say. `drive_phase` only resets a worm's stored phase
         // when the pose or sheet differs from last time, so if the next equip
@@ -563,8 +701,69 @@ unsafe fn drive_phase(worm: usize, pose: i32, sprite: i32, reversed: bool, phase
 }
 
 #[cfg(test)]
+mod pose_slot_tests {
+    use super::pose_slot;
+
+    #[test]
+    fn a_weapon_being_put_away_keeps_its_art() {
+        // As seen in WA: the Sniper Rifle (slot 12) replaced 560 and 502;
+        // after its last shot WA selects the bazooka (1) and still draws
+        // them, then the bazooka's own 438.
+        let handgun: &[u32] = &[560, 563, 502];
+        assert_eq!(pose_slot(1, Some((12, handgun)), 560, false), 12, "still putting the rifle away");
+        assert_eq!(pose_slot(1, Some((12, handgun)), 502, false), 12);
+        assert_eq!(pose_slot(1, Some((12, handgun)), 438, false), 1, "the bazooka's own sheet");
+        assert_eq!(pose_slot(12, Some((12, handgun)), 560, false), 12, "the selection's own art");
+        assert_eq!(pose_slot(1, None, 560, false), 1, "nothing replaced before");
+    }
+
+    #[test]
+    fn a_weapon_put_away_on_another_slope_keeps_its_art() {
+        use game::offsets::SPRITE_REVERSE;
+        // As seen in WA: the rifle was drawn with 500 and put away with 502
+        // reversed (0x008001F6), which it had never replaced.
+        let rifle: &[u32] = &[500, 560, 563];
+        assert_eq!(pose_slot(1, Some((12, rifle)), SPRITE_REVERSE | 502, false), 12);
+        assert_eq!(pose_slot(1, Some((12, rifle)), 502, false), 1, "not reversed: not a put-away");
+        assert_eq!(pose_slot(1, None, SPRITE_REVERSE | 502, false), 1, "nothing to put away");
+    }
+
+    #[test]
+    fn the_next_weapon_aimed_is_its_own_even_on_shared_sheets() {
+        // The Igniter (homing missile, slot 2) is drawn out on wbazlnk (436)
+        // and aimed on wbaz2 (531). After its shot and put-away, WA draws
+        // the bazooka (1) out on wbazlnk too, aiming (state 0x67).
+        let igniter: &[u32] = &[436, 531];
+        assert_eq!(pose_slot(1, Some((2, igniter)), 436, false), 2, "still putting it away");
+        assert_eq!(pose_slot(1, Some((2, igniter)), 436, true), 1, "the bazooka, drawn out");
+    }
+}
+
+#[cfg(test)]
 mod tests {
-    use super::{expand_aim_claims, pose_key, LINK, LINK_D, LINK_U, THROW, THROW_D, THROW_U};
+    use super::{
+        expand_aim_claims, pose_key, FIRE, FIRE_D, FIRE_U, LINK, LINK_D, LINK_U, THROW, THROW_D,
+        THROW_U,
+    };
+
+    #[test]
+    fn gun_aim_draw_and_fire_map_to_link_throw_and_fire() {
+        assert_eq!(pose_key(570, 0x67, 0), LINK); // wmini
+        assert_eq!(pose_key(565, 0x67, 0), LINK_U); // wuziu
+        assert_eq!(pose_key(505, 0x6a, 0), THROW_D); // wmgnlnkd
+        assert_eq!(pose_key(388, 0x6a, 0), 388, "wminlnk is the mine's draw, not a gun's");
+        assert_eq!(pose_key(573, 0x67, 0), FIRE); // wminif
+        assert_eq!(pose_key(550, 0x67, 0), FIRE_U); // wshotfu
+        assert_eq!(pose_key(563, 0x67, 0), FIRE_D); // whandfd
+    }
+
+    #[test]
+    fn fire_falls_back_to_its_own_sheets_then_the_aim_sheet() {
+        let out = expand_aim_claims(&[(LINK, 1), (LINK_U, 2), (LINK_D, 3)]);
+        assert!(out.contains(&(FIRE, 1)) && out.contains(&(FIRE_U, 2)) && out.contains(&(FIRE_D, 3)));
+        let out = expand_aim_claims(&[(LINK, 1), (FIRE, 7)]);
+        assert!(out.contains(&(FIRE, 7)) && out.contains(&(FIRE_U, 7)) && out.contains(&(FIRE_D, 7)));
+    }
 
     #[test]
     fn a_placed_weapon_keeps_the_held_sheet_of_its_stock_sprite() {
@@ -621,6 +820,19 @@ mod tests {
         assert_eq!(pose_key(0x40000, 0x69, 1), LINK_D);
         assert_eq!(pose_key(0x4024f, 0x6a, 0), THROW);
         assert_eq!(pose_key(0x40000, 0x6a, 0), 0);
+    }
+
+    #[test]
+    fn a_throw_is_wa_s_own_not_a_draw() {
+        use super::is_wa_throw;
+        use game::offsets::SPRITE_REVERSE;
+        // As seen in WA: the Sticky Bomb thrown on wthrowd (593), firing
+        // (0x6A, 0x6B) and standing just after.
+        assert!(is_wa_throw(0x0004_0251, 0x6a));
+        assert!(is_wa_throw(0x0004_0251, 0x65));
+        assert!(!is_wa_throw(0x0004_0251, 0x67), "aiming: a draw on wthrow is still a draw");
+        assert!(!is_wa_throw(SPRITE_REVERSE | 0x0251, 0x65), "reversed: a put-away");
+        assert!(!is_wa_throw(0x013a, 0x6a), "wgrnlnk is no throw");
     }
 
     #[test]
