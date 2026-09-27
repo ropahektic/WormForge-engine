@@ -40,6 +40,11 @@ const SPRITE_FIELDS: [usize; 8] = [
 /// the ordinary projectile fields. These offsets are parameters on other
 /// fire types, so only inspect them for a strike record.
 const STRIKE_SPRITE_FIELDS: [usize; 4] = [0x74, 0x7C, 0x138, 0x140];
+/// A strike's plane sprite, where other fire types keep their fire method.
+const STRIKE_PLANE: usize = 0x38;
+/// WA 3.8.1's last stock sprite. PX numbers some sprites it adds itself just
+/// past it -- the Banana Express's plane is 704 -- which WA does not have.
+const LAST_STOCK_SPRITE: i32 = 696;
 /// `fire_params.missile_type`: nonzero for anything that flies.
 const MISSILE_TYPE: usize = 0xA4;
 
@@ -108,6 +113,9 @@ pub fn import(entry: &mut WeaponEntry, wep: &Wep) {
         if v >= PX_SPRITE_BASE || (off == WEAPON_SPRITE_ID && v == 0 && flies && !strike) {
             entry.write_i32(off, before.read_i32(off));
         }
+    }
+    if strike && entry.read_i32(STRIKE_PLANE) > LAST_STOCK_SPRITE {
+        entry.write_i32(STRIKE_PLANE, before.read_i32(STRIKE_PLANE));
     }
 }
 
@@ -181,6 +189,15 @@ mod tests {
         slot.write_i32(0x138, 53);
         import(&mut slot, &w);
         assert_eq!((slot.read_i32(0x74), slot.read_i32(0x7C), slot.read_i32(0x138)), (52, 251, 53));
+
+        // PX's own plane (the Banana Express's 704) is past WA's sprites.
+        set(&mut w, STRIKE_PLANE, 704);
+        slot.write_i32(STRIKE_PLANE, 86);
+        import(&mut slot, &w);
+        assert_eq!(slot.read_i32(STRIKE_PLANE), 86);
+        set(&mut w, STRIKE_PLANE, 87);
+        import(&mut slot, &w);
+        assert_eq!(slot.read_i32(STRIKE_PLANE), 87, "a stock jet is kept");
     }
 
     #[test]
