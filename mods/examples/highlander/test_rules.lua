@@ -237,6 +237,11 @@ local function new_match(opts)
     },
     actors = {
       spawn = function(spec)
+        -- As the engine: outside a fire, click or actor callback, a spawn
+        -- needs its owner named.
+        if spec.owner == nil then
+          error("spawn needs an owner worm or actor", 2)
+        end
         local a = { sprite = spec.sprite, x = spec.x, y = spec.y, dead = false, explode = spec.explode,
                     owner = spec.owner }
         function a:gfx(g) self.angle, self.scale, self.tint = g.angle, g.scale, g.tint end
@@ -786,19 +791,11 @@ do
   check("the rifle, grown in", rifle.sprite == "sprites/px_hold/sniper_rifle" and rifle.scale == 1)
   -- The last shot: WA's firing states have no name, and then the worm
   -- stands with the next weapon already selected, putting the rifle away.
+  ammo[w.alliance].handgun = 1
+  M.message(w, wa.msg.FIRE_WEAPON)
   w.aiming, w.state = false, nil
   M.message(w, wa.msg.FRAME_FINISH)
-  check("gone while it fires, as in PX", rifle.dead)
-  -- Not the last shot: back to aiming the rifle straight after firing.
-  w.aiming = true
-  M.message(w, wa.msg.FRAME_FINISH)
-  local again = M.spawned[#M.spawned]
-  check("aiming again after a shot: full size at once, no grow-in", again ~= rifle
-    and again.sprite == "sprites/px_hold/sniper_rifle" and again.scale == 1, tostring(again.scale))
-  -- The last shot.
-  w.aiming, w.state = false, nil
-  M.message(w, wa.msg.FRAME_FINISH)
-  check("gone again while it fires", again.dead)
+  check("up while it fires", not rifle.dead and rifle.scale == 1)
   w.weapon, w.state = "bazooka", "standing"
   M.message(w, wa.msg.FRAME_FINISH)
   local back = M.spawned[#M.spawned]
@@ -826,6 +823,143 @@ do
   M.message(w, wa.msg.FRAME_FINISH)
   M.message(w, wa.msg.FRAME_FINISH)
   check("the same weapon, standing: gone at once", #M.spawned == before and M.spawned[before].dead)
+end
+
+print("px holds: a weapon drawn out again grows in again")
+do
+  new_match()
+  frame()
+  local P = 0x10000
+  local w = worm(16)
+  w.weapon, w.facing, w.x, w.y, w.aiming, w.aim, w.turn, w.state =
+    "handgun", 1, 100 * P, 50 * P, true, 0.5, true, nil
+  for _ = 1, 25 do M.message(w, wa.msg.FRAME_FINISH) end
+  local first = M.spawned[#M.spawned]
+  check("the rifle, grown in", first.scale == 1)
+  -- Another weapon aimed (no named state), then the rifle again: no shot.
+  w.weapon = "bazooka"
+  for _ = 1, 5 do M.message(w, wa.msg.FRAME_FINISH) end
+  w.weapon = "handgun"
+  M.message(w, wa.msg.FRAME_FINISH)
+  local again = M.spawned[#M.spawned]
+  check("drawn out again: a new rifle, growing in from nothing", again ~= first and first.dead
+    and again.scale == 0, tostring(again.scale))
+  -- And no stray put-away later for the rifle aimed before.
+  w.aiming, w.weapon, w.state = false, "bazooka", "standing"
+  local before = #M.spawned
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("the put-away of the rifle just aimed, and only that", #M.spawned == before + 1)
+end
+
+print("px holds: a thrown Sticky Bomb is not put away")
+do
+  new_match()
+  frame()
+  local P = 0x10000
+  local w = worm(16)
+  w.weapon, w.facing, w.x, w.y, w.aiming, w.aim, w.turn, w.state =
+    "grenade", 1, 100 * P, 50 * P, true, 0.5, true, nil
+  for _ = 1, 25 do M.message(w, wa.msg.FRAME_FINISH) end
+  local bomb = M.spawned[#M.spawned - 1]
+  check("the Sticky Bomb in hand", bomb.sprite == "sprites/px_hold/sticky_bomb" and bomb.scale == 1)
+  -- Thrown, then the worm stands with the next weapon selected.
+  ammo[w.alliance].grenade = 1
+  M.message(w, wa.msg.FIRE_WEAPON)
+  w.state = "prefiring"
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.aiming, w.state = false, nil
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("gone as it is thrown", bomb.dead)
+  local before = #M.spawned
+  w.weapon, w.state = "bazooka", "standing"
+  for _ = 1, 3 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("nothing put away after the throw", #M.spawned == before)
+
+  -- Not thrown: switched away while aiming it, it is put away.
+  w.weapon, w.aiming, w.state = "grenade", true, nil
+  for _ = 1, 25 do M.message(w, wa.msg.FRAME_FINISH) end
+  w.aiming = false
+  M.message(w, wa.msg.FRAME_FINISH)
+  before = #M.spawned
+  w.weapon, w.state = "bazooka", "standing"
+  M.message(w, wa.msg.FRAME_FINISH)
+  local away = M.spawned[#M.spawned - 1]
+  check("put away when switched away unthrown", #M.spawned == before + 2
+    and away.sprite == "sprites/px_hold/sticky_bomb")
+end
+
+print("px holds: the Igniter stays up through its shot")
+do
+  new_match()
+  frame()
+  local P = 0x10000
+  local w = worm(16)
+  w.weapon, w.facing, w.x, w.y, w.aiming, w.aim, w.turn, w.state =
+    "homing_missile", 1, 100 * P, 50 * P, true, 0.5, true, "standing"
+  for _ = 1, 25 do M.message(w, wa.msg.FRAME_FINISH) end
+  local igniter = M.spawned[#M.spawned - 1]
+  check("the Igniter, grown in", igniter.sprite == "sprites/px_hold/igniter" and igniter.scale == 1)
+  local before = #M.spawned
+  ammo[w.alliance].homing_missile = 1
+  M.message(w, wa.msg.FIRE_WEAPON)
+  -- As WA does it: the wind-up still aims (0x68, unnamed; then prefiring),
+  -- then the firing states neither aim nor have a name.
+  w.state = nil
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.state = "prefiring"
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.aiming, w.state = false, nil
+  for _ = 1, 4 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("up through the wind-up and WA's firing states, at full size", not igniter.dead
+    and igniter.scale == 1 and #M.spawned == before)
+  -- Aiming again ends the shot; walking off after that is no shot: gone, as
+  -- in PX.
+  w.aiming = true
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.aiming = false
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("but not while walking off", igniter.dead)
+
+  -- The Shadow-Bolt's crossbow too.
+  w.weapon, w.aiming, w.state = "longbow", true, nil
+  for _ = 1, 25 do M.message(w, wa.msg.FRAME_FINISH) end
+  local crossbow = M.spawned[#M.spawned]
+  check("the Shadow-Bolt's crossbow", crossbow.sprite == "sprites/px_hold/shadow_bolt")
+  ammo[w.alliance].longbow = 1
+  M.message(w, wa.msg.FIRE_WEAPON)
+  w.state = "prefiring"
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.aiming, w.state = false, nil
+  for _ = 1, 4 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("up through its shot", not crossbow.dead and crossbow.scale == 1)
+  w.aiming = true
+  M.message(w, wa.msg.FRAME_FINISH)
+
+  -- The Sniper Rifle too, with its laser, through each of its three shots.
+  for _, o in ipairs(worms) do
+    if o ~= w then
+      o.x, o.y = -5000 * P, 0 -- out of the laser's way
+    end
+  end
+  w.weapon, w.aiming = "handgun", true
+  for _ = 1, 25 do M.message(w, wa.msg.FRAME_FINISH) end
+  local rifle = M.spawned[#M.spawned]
+  ammo[w.alliance].handgun = 3
+  for shot = 1, 2 do
+    M.message(w, wa.msg.FIRE_WEAPON)
+    w.state = "prefiring"
+    M.message(w, wa.msg.FRAME_FINISH)
+    w.aiming, w.state = false, nil
+    for _ = 1, 4 do M.message(w, wa.msg.FRAME_FINISH) end
+    M.quads = {}
+    M.draw()
+    check("the rifle and its laser stay up through shot " .. shot, not rifle.dead
+      and rifle.scale == 1 and #M.quads > 0, tostring(#M.quads))
+    w.aiming = true
+    M.message(w, wa.msg.FRAME_FINISH)
+  end
+  check("still the same rifle after two shots", not rifle.dead and M.spawned[#M.spawned] == rifle)
 end
 
 print("sniper rifle: PX's laser sight, drawn only")
@@ -1009,9 +1143,14 @@ do
   local PX = 0x10000
   local m = { id = 77, phase = "post", weapon = "longbow", x = 10 * PX, y = 20 * PX, vx = 3 * PX, vy = 0 }
   M.missile(m)
+  check("no current worm: nothing drawn (PX's WeapSprite needs one)", not M.spawned)
+  local shooter = worm(16)
+  shooter.turn = true
+  M.missile(m)
   local bolt = M.spawned and M.spawned[#M.spawned]
-  check("a bolt on the Shadow-Bolt's missile", bolt and bolt.sprite == "sprites/shadow_bolt/bolt"
-    and bolt.x == m.x and bolt.y == m.y)
+  check("a bolt on the Shadow-Bolt's missile, owned by the current worm", bolt
+    and bolt.sprite == "sprites/shadow_bolt/bolt" and bolt.x == m.x and bolt.y == m.y
+    and bolt.owner == shooter)
   check("flying right, turned to its flight", bolt.facing == 1 and math.abs(bolt.angle - 90) < 1e-6,
     tostring(bolt.angle))
   local before = #M.spawned
@@ -1029,6 +1168,21 @@ do
   m.phase, m.weapon, m.id = "post", "bazooka", 78
   M.missile(m)
   check("nothing for another weapon's missile", #M.spawned == before)
+
+  -- The Igniter's bullet, climbing up and to the left: turned, not upright.
+  m.weapon, m.id, m.vx, m.vy = "homing_missile", 79, -3 * PX, -3 * PX
+  M.missile(m)
+  local bullet = M.spawned[#M.spawned]
+  check("a bullet on the Igniter's missile", #M.spawned == before + 1
+    and bullet.sprite == "sprites/igniter/flight")
+  check("turned to its flight, mirrored flying left", bullet.facing == -1
+    and math.abs(bullet.angle - 315) < 1e-6, tostring(bullet.angle))
+  shown = {}
+  for _ = 1, 40 do
+    M.missile(m)
+    shown[bullet.shown] = true
+  end
+  check("steps through all sixteen frames", shown[0] and shown[15])
 end
 
 print("")

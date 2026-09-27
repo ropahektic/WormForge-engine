@@ -270,14 +270,16 @@ local PX_ART = {
       wthrowd = "sprites/remote_roller/drawd",
     },
   },
-  { -- Igniter: PX draws its bullet on the missile at run time; here it is the
-    -- flight sprite.
+  { -- Igniter: PX sets the missile's own sprite to 0 and draws its bullet at
+    -- run time, animated and turned to its flight (PX_WEAP_SPRITES below).
+    -- WA still draws its homing missile's rocket under it for now.
     weapon = "homing_missile",
     panel_icon = "sprites/igniter/igniter_ico.png",
-    sprite = "sprites/igniter/flight",
     worm_sprites = PX_POSTURE,
-    sprites = { "sprites/px_hold/igniter", PX_HANDS[1], PX_HANDS[2], PX_HANDS[3] },
-    params = { gpu_prefix = "sprites/px_hold/" },
+    sprites = {
+      "sprites/px_hold/igniter", PX_HANDS[1], PX_HANDS[2], PX_HANDS[3], "sprites/igniter/flight",
+    },
+    params = { gpu_prefix = "sprites/" },
   },
   { -- Sticky Bomb: PX's record leaves the bomb's sprite 0 and PX's script
     -- draws the bomb at run time. Here the bomb is the stock grenade sprite
@@ -328,8 +330,9 @@ local PX_ART = {
     params = { gpu_prefix = "sprites/helicopter/" },
   },
   { -- Sniper Rifle: the hold drawn at run time, PX's laser sight while aiming
-    -- and its own shot (below). Firing, the worm holds the rifle: the
-    -- snipefire poses the scheme's record names, not WA's handgun.
+    -- and its own shot (below). Firing, the worm takes the snipefire poses
+    -- the scheme's record names (lit by the muzzle), not WA's handgun, and
+    -- the hold and laser stay up over them (PX_HOLDS).
     weapon = "handgun",
     panel_icon = "sprites/sniper_rifle/srico.png",
     worm_sprites = {
@@ -496,21 +499,34 @@ end
 -- Slot -> the weapon's CWormAnimParams, as its PX script states them.
 local PX_HOLDS = {
   grenade = { -- Sticky Bomb (sb_script)
+    -- Thrown: once fired it has left the worm's hands, and WA puts nothing
+    -- away (as for its own grenades), so neither does the rule.
+    thrown = true,
     sheet = "sprites/px_hold/sticky_bomb", hand_type = 1, hand_radius = 24,
     hand_rotation = 1.0, hand_radial_rotation = 1.05, hand_scale = 0.8,
     weap_rotation = 0.5, weap_radial_rotation = 0.9, weap_radius = 10,
   },
   homing_missile = { -- Igniter (igniter_anim)
+    -- Up through the shot too: it has no firing poses of its own, so WA
+    -- fires it in the aim posture, empty-handed without the hold. Not PX's.
+    keep_while_firing = true,
     sheet = "sprites/px_hold/igniter", hand_type = 2, hand_radius = -6.0,
     hand_rotation = 1.0, hand_radial_rotation = 0.9, hand_scale = 0.8,
     weap_rotation = 1.0, weap_radial_rotation = 0.0, weap_radius = 0.0,
   },
   handgun = { -- Sniper Rifle (sniper_rifle_script): its hand at scale 0
+    -- Up through each shot, with its laser, over the snipefire poses (the
+    -- worm lit by the muzzle), so it does not flicker between the three.
+    -- Not PX's: PX hides it until the worm aims again.
+    keep_while_firing = true,
     sheet = "sprites/px_hold/sniper_rifle", draw_hand = false, hand_radius = -6.0,
     hand_rotation = 1.0, hand_radial_rotation = 0.9,
     weap_rotation = 1.0, weap_radial_rotation = 0.0, weap_radius = 0.1,
   },
   longbow = { -- Shadow-Bolt (shadow_bolt_script): no hand, the bolt animated
+    -- The crossbow stays up through the shot: it has no firing poses of
+    -- its own, so WA fires it in the aim posture. Not PX's.
+    keep_while_firing = true,
     sheet = "sprites/px_hold/shadow_bolt", draw_hand = false, hand_radius = 0.0,
     hand_rotation = 0.0, hand_radial_rotation = 0.0,
     weap_rotation = 1.0, weap_radial_rotation = 0.0, weap_radius = 3.5,
@@ -608,7 +624,7 @@ end
 -- already selected the next weapon. So a hold last aimed (`put_away`
 -- remembers it) comes back when the worm stands with another weapon, and
 -- shrinks out along the grow-in played backwards, a step a frame.
-local put_away = {} -- worm id -> { slot, aim, phase } of the hold last aimed
+local put_away = {} -- worm id -> { slot, aim } of the hold last aimed
 
 local function update_put_away(worm)
   local h = held[worm.id]
@@ -623,6 +639,11 @@ local function update_put_away(worm)
   end
   local last = put_away[worm.id]
   local state = worm.state
+  if last and worm.aiming then
+    -- Aiming another weapon: this one was never put away here.
+    put_away[worm.id] = nil
+    return
+  end
   if not last or state == nil then
     -- No name: WA's firing states between the last aim and the put-away.
     return
@@ -640,38 +661,47 @@ local function update_hold(worm)
   local aim = p and aim_of(worm)
   if not aim or not worm.aiming then
     local h = held[worm.id]
+    -- Fired, in WA's firing states (no state name) with the weapon still
+    -- selected. Walking is unnamed too, hence the fire key.
+    if h and h.firing and PX_HOLDS[h.slot].keep_while_firing and worm.state == nil
+        and worm.weapon == h.slot then
+      h.shot_out = true
+      place_hold(worm, h)
+      return
+    end
     if h and not h.putting_away then
-      put_away[worm.id] = { slot = h.slot, aim = h.aim, phase = h.phase }
+      if not (h.firing and PX_HOLDS[h.slot].thrown) then
+        put_away[worm.id] = { slot = h.slot, aim = h.aim }
+      end
       drop_hold(worm.id)
     end
     update_put_away(worm)
     return
   end
-  local last = put_away[worm.id]
   put_away[worm.id] = nil
   local h = held[worm.id]
   if h and (h.slot ~= worm.weapon or h.putting_away) then
     drop_hold(worm.id)
     h = nil
   end
-  if not h then
-    h = spawn_hold(worm, worm.weapon)
-    -- Aiming again straight after a shot (the Sniper Rifle's three): the
-    -- weapon never left the worm's hands, so it is back at full size. Not
-    -- PX's: PX grows it in again after every shot.
-    if last and last.slot == worm.weapon then
-      h.counter, h.phase = 20, last.phase
-    end
-  end
+  h = h or spawn_hold(worm, worm.weapon)
   -- Kept for anything drawn with the hold (the Sniper Rifle's laser), so it
   -- turns with the weapon: worm.aim is WA's smoothed crosshair (+0x270),
   -- which WA also rewrites at render time, between sim frames.
+  -- The wind-up after the fire key still counts as aiming; the shot is
+  -- over only once the worm aims again after WA's firing states.
+  if h.shot_out then
+    h.firing, h.shot_out = false, false
+  end
   h.aim = aim
   place_hold(worm, h)
   h.counter = math.min(h.counter + 1, 20)
 end
 
 wa.on.worm_message(function(worm, msg)
+  if msg == wa.msg.FIRE_WEAPON and held[worm.id] then
+    held[worm.id].firing = true
+  end
   if msg == wa.msg.FRAME_FINISH then
     update_hold(worm)
   end
@@ -768,8 +798,8 @@ end
 if wa.on.draw then
   wa.on.draw(function()
     for _, worm in ipairs(wa.worms.all()) do
-      -- The aim the rifle was drawn with, so the ray leaves along it; only
-      -- while the worm aims the rifle, not while it puts it away.
+      -- The aim the rifle was drawn with, so the ray leaves along it; while
+      -- the worm aims or fires the rifle, not while it puts it away.
       local h = worm.turn and held[worm.id]
       local aim = h and h.slot == "handgun" and not h.putting_away and h.aim
       if aim then
@@ -803,6 +833,9 @@ local PX_WEAP_SPRITES = {
   longbow = { -- Shadow-Bolt
     sheet = "sprites/shadow_bolt/bolt", animate = true, anim_speed = 1.30, frames = 6,
   },
+  homing_missile = { -- Igniter (igniter_anim: igniter_bullet, 16 frames)
+    sheet = "sprites/igniter/flight", animate = true, anim_speed = 1.0, frames = 16,
+  },
 }
 
 local flying = {} -- missile id -> { actor, phase, seen }
@@ -822,6 +855,16 @@ local function follow_missile(id)
   end
 end
 
+-- The worm whose turn it is: WeapSprite's owner (GetCurrentWorm()). A
+-- missile frame gives no spawn owner of its own.
+local function current_worm()
+  for _, w in ipairs(wa.worms.all()) do
+    if w.turn then
+      return w
+    end
+  end
+end
+
 wa.on.missile_frame(function(m)
   local p = m.phase == "post" and PX_WEAP_SPRITES[m.weapon]
   if not p then
@@ -829,10 +872,14 @@ wa.on.missile_frame(function(m)
   end
   local f = flying[m.id]
   if not f then
+    local owner = current_worm()
+    if not owner then
+      return
+    end
     f = { phase = 0 }
     f.actor = wa.actors.spawn({
       sprite = p.sheet, x = m.x, y = m.y, gravity = false, collide = false,
-      on = follow_missile(m.id),
+      owner = owner, on = follow_missile(m.id),
     })
     flying[m.id] = f
   end

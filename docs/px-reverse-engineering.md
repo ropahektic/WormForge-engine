@@ -166,6 +166,46 @@ the worm is `WS_AIMING` or `WS_SETPOWER` with it. On any other frame it sets
 shrinks it out along the grow-in played backwards instead, during WA's
 put-away.
 
+## PX drawing a missile itself
+
+PX draws some projectiles itself and has WA draw none.
+
+**`WeapSprite`** (`p_sprite_builder/weaps_anims_script.txt`) is an object
+attached to a missile. Each `M_FRAME` it sets its angle from the weapon's
+launch animation type:
+
+| Launch type | Angle each frame |
+|---|---|
+| `WAT_TrackMovement` | `-atan2(SpX, SpY) - π + π × rotation`: turned to the flight |
+| `WAT_Slow`, `WAT_Medium`, `WAT_Fast` | `+= speed × 0.5 × Sign(SpX)`, speed 0.5, 0.8, 1.35 |
+| `WAT_Rotation`, `WAT_HSpeed` | `+= speed × 0.5 × (SpX × 0.15 + abs(SpY × 0.01) × Sign(SpX))` |
+
+With `animate`, its phase grows by `anim_speed × 30 / 1000` a frame and
+wraps past 0.99. On `M_DRAWQUEUE` it draws with
+`AddSpriteEx(z, PosX, PosY, sprite, frame, angle, scale)`, adding 262144
+(0x40000, the mirror bit) when `SpX < 0`. It frees itself once the missile
+is no longer `IsMaterial`.
+
+**Hiding WA's sprite.** The script that attaches it sets the sprite in the
+launch data to 0, "no sprite". `igniter_anim` does it once on the weapon
+(`weap->launch.anim.spriteIndex = 0`). `red_spb.cpp`, a `CMissile`
+override shared with us by a PX scripter, does it on the missile's own copy
+(`launchdata.anim.spriteIndex = 0`) every `M_FRAME`, and draws the missile
+itself on `M_DRAWQUEUE` with the same angle rules.
+
+**The Highlander port** draws these sprites as a GPU actor per missile from
+`wa.on.missile_frame`, with WA's sprite left alone:
+
+- A missile frame gives a spawn no owner, so the actor takes the current
+  worm, `WeapSprite`'s own owner (`GetCurrentWorm()`).
+- WA's homing missile (the Igniter) still draws its rocket under the
+  bullet. It switches between several body sprites in flight (the burn
+  blink after it locks on), and without a pack sprite they stay WA's.
+  Zeroing them as PX does would need the engine (e.g. `sprite = false` on
+  `wa.weapons.replace`). Left as it is for now.
+- A fully transparent 1×1 sheet as the missile's sprite is not a way
+  round it: loaded as a palette sprite, it crashed WA.
+
 ## WA's contacts
 
 WA tells a worm it touched another entity through the worm's vtable slot

@@ -143,7 +143,7 @@ bazooka hold, as the Cow Launcher's.
 |---|---|---|---|
 | holy_grenade | Hellish Hand-Grenade | icon, flight sprite, worm | none: PX draws its hold and grenade at run time, and the pack uses sheets |
 | skunk | Remote Roller | icon, flight sprite, worm | none: the library's script is empty in the extract |
-| homing_missile | Igniter | icon, flight sprite (PX's bullet) | the hold, drawn at run time |
+| homing_missile | Igniter | icon, the hold, PX's bullet | the hold and the bullet drawn at run time |
 | grenade | Sticky Bomb | icon, the bomb and its bits | the hold, drawn at run time |
 | fire_punch | Fire Jump | icon | PX's jump timeline |
 | pneumatic_drill | Super Drill | icon | a second hole each frame |
@@ -217,14 +217,18 @@ The rifle fires with PX's own shot sound, `sounds/sniper_firing.wav`, and
 the worm fires it in the `snipefire` poses the scheme's record names; left
 out, WA drew its own handgun for the shot.
 
-Two things differ from PX on purpose, for every weapon drawn at run time:
+A few things differ from PX on purpose, for weapons drawn at run time:
 
 - **Putting it away.** PX drops the weapon the frame the worm stops
   aiming. WA puts it away by playing the worm's draw backwards (see
   `docs/px-reverse-engineering.md`), so the weapon shrinks out with it:
-  PX's grow-in played backwards, over WA's 20 frames.
-- **Between shots.** Aiming again straight after a shot, the weapon comes
-  back at full size instead of growing in again.
+  PX's grow-in played backwards, over WA's 20 frames. Not after a throw:
+  a thrown Sticky Bomb has left the worm's hands, and WA puts nothing away.
+- **While firing.** PX hides the weapon while the worm fires. The Igniter,
+  the Shadow-Bolt's crossbow and the Sniper Rifle (with its laser) stay up
+  instead, over whatever pose WA fires in: the Sniper Rifle's `snipefire`
+  poses are the worm lit by the muzzle, and the other two have none, so the
+  worm would be empty-handed.
 
 **Helicopter.** PX's `helicopter_user_script`, on WA's jet pack:
 
