@@ -169,7 +169,7 @@ return function(load_pack)
   -- into the next turn: it has to move again. Before, the turret opened fire
   -- on it the moment its teammate's turn began, though it stood still.
   spec.on_fire({ worm = owner })
-  local t = bodies[4]
+  local t = bodies[6]
   turn(owner, wa.msg.START_TURN)
   enemy.vx = PX
   local before = rounds
