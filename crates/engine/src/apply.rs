@@ -435,6 +435,7 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                     entry.retarget_strike_sprite_id(id);
                 } else {
                     entry.retarget_sprite_id(old, id);
+                    crate::missile_boom::set_pack_body(idx, id);
                 }
                 log_line(&format!(
                     "{} fire sprite {old} -> {id} (defined={})",

@@ -182,6 +182,11 @@ pub const MISSILE_WEAPON_DATA: usize = 0x15C;
 /// `WEAPON_CLUSTER_MISSILE_TYPE`. (MissileEntity's own dispatch field,
 /// render_data[0x17], numbers these differently -- this is not that.)
 pub const MISSILE_TYPE: usize = 0x1C4;
+/// MissileEntity's copy of its shoot description (the constructor copies it
+/// to +0x130), and the pellet index in it (+0x20): non-zero for a cluster
+/// bit.
+pub const MISSILE_SHOOT_DESC: usize = 0x130;
+pub const MISSILE_SHOOT_PELLET: usize = MISSILE_SHOOT_DESC + 0x20;
 pub const MISSILE_TYPE_HOMING: i32 = 1;
 /// MissileEntity.fire_particle_trigger — sprite id missile render actually blits.
 pub const MISSILE_RENDER_SPRITE: usize = 0x2EC;
@@ -678,6 +683,9 @@ mod tests {
         assert_eq!(DISPLAY_PALETTE_ENTRIES, 0x358D);
         assert_eq!(PALETTE_COMMIT, 0x0056CD20);
         assert_eq!(MISSILE_RENDER_SPRITE, 0x2EC);
+        // 0x507DFC: rep movsd of 0xB dwords to [ebp+0x130]; 0x507E51 tests
+        // the shoot description's +0x20 to pick the cluster half.
+        assert_eq!(MISSILE_SHOOT_PELLET, 0x150);
         assert_eq!(MISSILE_WEAPON_ALT_SPRITE, 0x1CC);
         // Both mirror the same fire-params blob, copied to weapon_data at 0x15C
         // from WeaponEntry+0x3C.
