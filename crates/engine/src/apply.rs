@@ -55,6 +55,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     crate::worm_sprite::clear();
     crate::mine::clear();
     crate::missile_boom::clear();
+    crate::particles::clear();
     crate::physics::clear_homing();
     // Flush the previous match's diagnostics before their counters are reused.
     crate::queue_census::finish();

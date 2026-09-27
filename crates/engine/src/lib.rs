@@ -14,6 +14,7 @@ mod http;
 mod hud;
 mod hurt;
 mod overlay;
+mod particles;
 mod lobby;
 mod log;
 mod mask_collide;

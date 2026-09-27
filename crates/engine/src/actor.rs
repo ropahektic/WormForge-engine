@@ -2119,6 +2119,25 @@ pub fn draw_puffs(entity: *mut u8) {
     }
 }
 
+/// Cluster debris drawn as particles (`particles`), after the scene's own
+/// sprites have been queued, on the layer the puffs use.
+pub fn draw_particles(entity: *mut u8) {
+    if entity.is_null() || crate::particles::count() == 0 {
+        return;
+    }
+    let world = unsafe {
+        let w = read_i32(entity, ENT_WORLD) as *mut u8;
+        if w.is_null() { entity } else { w }
+    };
+    let rq = unsafe { *(world.add(GAME_WORLD_RENDER_QUEUE) as *const *mut u8) };
+    if rq.is_null() {
+        return;
+    }
+    for (x, y, sprite, anim) in crate::particles::frames() {
+        unsafe { draw_sprite_local(rq, 0x0005_0001, x, y, sprite, anim, std::ptr::null_mut()) };
+    }
+}
+
 /// Hold one extra FRAME_FINISH so we never spawn inside the blast walk.
 pub fn emit_attached_later(
     owner: *mut u8,
