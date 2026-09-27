@@ -25,6 +25,12 @@ Addresses are WA 3.8.1 (the GOG `WA.exe`). Function names follow OpenWA's
 - **OpenWA** (`~/worms_work/clones/openwa`): names and field layouts. Its
   `crates/openwa-game/src/game/weapon_fire.rs` and `entity/worm.rs` are the
   most useful. Many handlers are named there but not decompiled.
+- **wkJellyWorm** (`~/worms_work/clones/wkJellyWorm`): its renderer knows
+  only the blit flags (0x1 transparent, 0x10000 flip). Nothing on sprite
+  animation flags.
+- **A trace build:** when the code does not settle a question, log the
+  values in game. The put-away and sprite flags below came from logging
+  every worm pose and every queued sprite around the event.
 
 ## PX's script language
 
@@ -104,6 +110,61 @@ above).
 
 Some older names in our engine do not match this table: 0x7B's setup is
 `setup_Batroping`, and 0x71's is `setup_Axeing`.
+
+## WA's worm sprites
+
+**Where a worm's sprite comes from.** `WormEntity__calc_sprite` (0x512E80)
+first asks the worm's animation (+0x368; vtable 0x6640CC) for its sprite
+and phase: slot 3 (0x4F5400) returns the sprite at animation +0x8 and the
+phase at +0xC. The sprite is whatever the worm code passed to `play`,
+flags included. `calc_sprite` then adjusts it (e.g. it flips the mirror
+bit for a jet-packing worm) and returns it. The worm draw (0x50FCD0) calls
+it and may OR in more flags (below).
+
+**A sprite value** is a sheet id in the low 16 bits plus flags:
+
+| Bit | Meaning | Evidence |
+|---|---|---|
+| 0x40000 | mirror (flip X) | `RQ_DrawSpriteLocal`; `calc_sprite` XORs it at 0x512EC7 |
+| 0x200000 | set by the worm draw when bit 8 of the worm's team record (world + 0x4628 + team × 0x51C) is set; meaning unknown | 0x50FD07 |
+| 0x400000 | set by the worm draw when worm +0x148 is non-zero; OpenWA names +0x148 "poison damage per turn", unverified | 0x50FD18 |
+| 0x800000 | **play backwards** | below |
+
+**0x800000 plays a sheet backwards.** `DisplayGfx__BlitSprite` (0x56B080)
+draws a sprite with this bit at phase `0x10000 - phase` (0x56B0AB; stock
+sheets 0x1D5..0x1D7 get an extra scale). The worm code plays sheets with
+it: e.g. `0x80012D` at 0x510D60, and `calc_sprite` compares against
+flagged ids (`0x80012D`, `0x800130`.., `0x8002B3`).
+
+Anything matching sprite ids against its own (our GPU sheets) must mask
+these flags off, or the id is not recognised and WA draws `id & 0xffff`,
+some unrelated stock sprite. A Sniper Rifle pose drew as a weapon crate
+(stock 99) that way. The 0x200000 and 0x400000 bits never appeared in that
+trace; the flag was 0x800000.
+
+## WA putting a weapon away
+
+Traced with the Sniper Rifle (the handgun slot) over three shots:
+
+1. **The last shot:** the worm fires (states 0x6A, 0x6B). By the time it
+   stands again, WA has selected the next weapon (the bazooka here).
+2. **One frame** standing (0x65) with the rifle's aim sheet still drawn.
+3. **The put-away:** standing, WA plays the gun's *draw* sheet with
+   0x800000, in the worm's slope variant (500, 501 or 502), e.g.
+   `0x008401F6`. Its phase runs from 0 to about 0x10000 in steps of 0xCCB:
+   20 frames.
+4. Then the new weapon's own draw, not reversed.
+
+So a put-away can use a slope variant the draw never used, and it comes
+after the selection has already changed.
+
+**PX does not animate its weapon out.** `WormSprite::Message`
+(`p_sprite_builder/worms_anims_script.txt`) draws the weapon only while
+the worm is `WS_AIMING` or `WS_SETPOWER` with it. On any other frame it sets
+`sprite = 0` and its grow-in `counter` back to 0 (grow-in: `counterMax`
+20). The rifle vanishes the frame after the last shot. The Highlander port
+shrinks it out along the grow-in played backwards instead, during WA's
+put-away.
 
 ## WA's contacts
 
