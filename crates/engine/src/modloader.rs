@@ -207,6 +207,11 @@ pub fn match_loaded(mods: &[weapons::LoadedMod]) {
 
 pub fn match_ended() {
     set_status("Back in the front end. Toggles apply to the next match.");
+    refresh_list();
+}
+
+/// Rescan `Mods\` if the loader window is open (e.g. after lobby sync installs).
+pub fn refresh_list() {
     let hwnd = WINDOW.load(Ordering::SeqCst);
     if !hwnd.is_null() {
         unsafe {

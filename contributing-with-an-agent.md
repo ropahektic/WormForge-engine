@@ -4,6 +4,8 @@
 
 Open this repo in the agent, point it at this file and [README.md](README.md), then describe the weapon or behaviour you want. You do not need to paste the rules into chat — the agent should read them here.
 
+Before opening a pull request, follow [docs/pull-request-code-of-conduct.md](docs/pull-request-code-of-conduct.md): keep `main` current, resolve conflicts on your branch, prefer one feature per PR, and treat [`.github/workflows/rust.yml`](.github/workflows/rust.yml) as the build gate (required for non-Windows contributors).
+
 New power is a **Lua pack** or one **verb**. Not a dump of `WA.exe` into scripts.
 
 Ghidra and Ghidra MCP might be required if user wants to attempt out-of-the-box implementations, this needs manual setup, inform user/author if it's needed and guide him through installation. But do not assume it is required, most of the RE is available.
@@ -24,7 +26,7 @@ v1 overlays a stock panel slot. It cannot add a 72nd icon. Several packs may ove
 
 The engine (`crates/`, `wkLua.dll`) is only for verbs Lua cannot call yet. Prefer a pack.
 
-Needs: WA **3.8.1** + WormKit, this repo, `wkLua.dll` next to `WA.exe`. Test in a match; logs are `wkLua.log` and `wkluaerror.txt`, both beside `WA.exe`. Then open a PR.
+Needs: WA **3.8.1** + WormKit, this repo, `wkLua.dll` next to `WA.exe`. Test in a match; logs are `wkLua.log` and `wkluaerror.txt`, both beside `WA.exe`. Then open a PR — only after [docs/pull-request-code-of-conduct.md](docs/pull-request-code-of-conduct.md).
 
 | You want… | Start from |
 |---|---|
