@@ -66,6 +66,35 @@ pub fn run_draw() -> Result<Vec<DrawQuad>, String> {
     ran.map(|_| quads)
 }
 
+/// One contact WA reported: `worm` touched `other`. `vx` / `vy` are the
+/// worm's speed before WA exchanged velocities; `flags` is WA's own argument.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Contact {
+    pub worm: u32,
+    pub other: u32,
+    pub flags: u32,
+    pub vx: i32,
+    pub vy: i32,
+}
+
+/// `wa.on.contact(function(worm, other, c) ... end)`: a simulation callback,
+/// once per contact, after WA's frame.
+pub fn contact(c: Contact) -> Result<(), String> {
+    with_lua(|lua| {
+        let list = hook_list(lua, "contact")?;
+        if list.len().map_err(|e| e.to_string())? == 0 {
+            return Ok(());
+        }
+        let worm = crate::actor::worm_userdata(lua, c.worm)?;
+        let other = crate::actor::entity_value(lua, c.other)?;
+        let t = lua.create_table().map_err(|e| e.to_string())?;
+        t.set("vx", c.vx).map_err(|e| e.to_string())?;
+        t.set("vy", c.vy).map_err(|e| e.to_string())?;
+        t.set("flags", c.flags).map_err(|e| e.to_string())?;
+        call_each(&list, (worm, other, t))
+    })
+}
+
 #[derive(Clone, Debug)]
 pub struct HudLine {
     pub text: String,

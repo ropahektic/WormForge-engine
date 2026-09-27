@@ -61,6 +61,30 @@ pub const WORM_ACTIVE_WEAPON: usize = 0x36C;
 pub const WORM_STATE: usize = 0x44;
 /// WA 3.8.1 SetState dispatch case that enters WormEntity__setup_Drilling.
 pub const WORM_STATE_DRILLING: u32 = 0x6E;
+/// Worm states by the setup each `SetState` case calls (jump table 0x50F484,
+/// base 0x64): 0x65 setup_Standing, 0x69 setup_PreFiring, 0x6C
+/// setup_Punching, 0x6F setup_Teleporting, 0x78 setup_JetPacking. 0x7E has
+/// no setup: it is the tumbling/sliding physics state WA sets on knockback,
+/// on contact and when a worm walks off a ledge (`WORM_STATE_AIRBORNE`).
+pub const WORM_STATE_STANDING: u32 = 0x65;
+pub const WORM_STATE_PREFIRING: u32 = 0x69;
+pub const WORM_STATE_PUNCHING: u32 = 0x6C;
+pub const WORM_STATE_TELEPORTING: u32 = 0x6F;
+pub const WORM_STATE_JETPACKING: u32 = 0x78;
+/// setup_Parachuting; also entered directly by WormEntity__fire_parachute
+/// (0x51A680), from TryFireWeaponSpecial and the aiming handler.
+pub const WORM_STATE_PARACHUTING: u32 = 0x7D;
+/// Jet pack fuel (16.16), drained by WormEntity__handle_JetPacking by the
+/// thrust / 10 each frame; 0 is unlimited, and running out sets 0x65.
+pub const WORM_JET_FUEL: usize = 0x220;
+/// The worm's move requests, set to 1 by WA's lockstep MoveUp / MoveDown /
+/// MoveLeft / MoveRight messages and read by its movement code (the jet
+/// pack's control_jetpack reads up, left and right). Project X's
+/// PressedUp / PressedDown / PressedLeft / PressedRight, 0x10 lower.
+pub const WORM_KEY_UP: usize = 0x1D4;
+pub const WORM_KEY_DOWN: usize = 0x1D8;
+pub const WORM_KEY_LEFT: usize = 0x1DC;
+pub const WORM_KEY_RIGHT: usize = 0x1E0;
 /// Ground slope selector used by `WormEntity__calc_sprite`: negative adds the
 /// uphill (+1) pose, positive adds the downhill (+2) pose.
 pub const WORM_SLOPE_DIR: usize = 0x1AC;
@@ -222,6 +246,8 @@ pub const WORLD_ROOT_WORM_ACTIVE: usize = 0x108;
 pub const WORLD_ROOT_TURN_TIMER_DISPLAY: usize = 0x188;
 pub const WORLD_ROOT_TURN_TIMER: usize = 0x18C;
 pub const WORLD_ROOT_TURN_ENDED: usize = 0x150;
+/// Retreat countdown in ms: set from the scheme when retreat starts, 0 before.
+pub const WORLD_ROOT_RETREAT_TIMER: usize = 0x178;
 /// GameWorld copy of WorldRoot `worm_active`.
 pub const GAME_WORLD_WORM_ACTIVE: usize = 0x7234;
 pub const SHARED_KEY_TEAM: u32 = 0x15;
@@ -547,6 +573,9 @@ pub const CLASS_MISSILE: i32 = 11;
 pub const CLASS_CRATE: i32 = 15;
 pub const CLASS_WORM: i32 = 18;
 pub const CLASS_OIL: i32 = 30;
+/// The landscape (ClassType 28, 0x1C). It takes part in WA's entity
+/// contacts, so a worm touching down reaches `wa.on.contact` with it.
+pub const CLASS_LAND: i32 = 28;
 pub const GAME_WORLD_TEXTBOX: usize = 0x544;
 pub const GAME_SESSION_RUNTIME: usize = 0xA0;
 

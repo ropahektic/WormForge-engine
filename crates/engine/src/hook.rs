@@ -59,6 +59,7 @@ pub fn install() -> Result<(), String> {
     crate::worm_sprite::install(&catalog)?;
     crate::mine::install(&catalog)?;
     crate::missile_boom::install(&catalog)?;
+    crate::contact::install()?;
     crate::shader::install(&catalog)?;
     crate::render_queue::install()?;
     crate::gpu::install_rq_draw()?;

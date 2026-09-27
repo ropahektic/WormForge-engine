@@ -166,6 +166,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "death",
         "hud",
         "draw",
+        "contact",
     ] {
         hooks
             .set(name, lua.create_table().map_err(|e| e.to_string())?)
@@ -197,6 +198,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     bind_on(lua, &on, "death")?;
     bind_on(lua, &on, "hud")?;
     bind_on(lua, &on, "draw")?;
+    bind_on(lua, &on, "contact")?;
     wa.set("on", on).map_err(|e| e.to_string())?;
 
     let draw = lua.create_table().map_err(|e| e.to_string())?;

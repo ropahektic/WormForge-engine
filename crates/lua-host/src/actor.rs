@@ -7,10 +7,9 @@ use game::offsets::{
     ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAG_MIRROR_X, ACTOR_FLAGS,
     ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SEQ, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE,
     CLASS_MINE, WORM_INDEX,
-    CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
+    CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    WORM_AIM_ANGLE, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_CHARGING, WORM_STATE_DRILLING,
-    WORM_TURN_ACTIVE, WORM_TURN_SIDE,
+    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -174,6 +173,9 @@ pub struct ActorNative {
     pub log: fn(&str),
     pub hide_worm: fn(handle: u32, hide: bool),
     pub worm_hidden: fn(handle: u32) -> bool,
+    /// Hide the body sprite only, leaving WA's labels (fuel, name, health).
+    pub hide_body: fn(handle: u32, hide: bool),
+    pub body_hidden: fn(handle: u32) -> bool,
     /// Stock SelectWeapon (F1 path). Returns ammo after equip, 0 if not this worm's turn.
     pub equip: fn(handle: u32, slot: u32) -> i32,
     pub hp: fn(handle: u32) -> i32,
@@ -187,6 +189,10 @@ pub struct ActorNative {
     /// Rewrite a stock weapon slot's body sprite (and optional cluster bit) on
     /// the live table. `cluster = 0` means leave the cluster sprite alone.
     pub retarget_weapon_sprites: fn(slot: u32, body: i32, cluster: i32) -> Result<(), String>,
+    /// WA's own WormEntity::SetState, so the state's setup runs.
+    pub set_worm_state: fn(handle: u32, state: u32),
+    /// The retreat countdown in ms, 0 when retreat has not started.
+    pub retreat_ms: fn() -> i32,
 }
 
 /// A write to team ammo.
@@ -209,6 +215,8 @@ impl Default for ActorNative {
             explode: |_, _, _, _| {},
             despawn: |_| {},
             networked: || false,
+            set_worm_state: |_, _| {},
+            retreat_ms: || 0,
             random: || None,
             log: |_| {},
             in_water: |_| false,
@@ -239,6 +247,8 @@ impl Default for ActorNative {
             keys: || 0,
             hide_worm: |_, _| {},
             worm_hidden: |_| false,
+            hide_body: |_, _| {},
+            body_hidden: |_| false,
             equip: |_, _| 0,
             hp: |_| 0,
             ammo: |_, _, _| 0,
@@ -780,6 +790,57 @@ impl UserData for WormHandle {
                 }
             })
         });
+        // Facing: WA's turn side (+0x1A8), and its copy (+0x3DC) so the
+        // worm's sprite follows at once rather than at the next aim update.
+        fields.add_field_method_set("facing", |_, this, v: i32| {
+            if this.0 != 0 {
+                let side = if v < 0 { -1 } else { 1 };
+                unsafe {
+                    write_i32(this.0 as *mut u8, WORM_TURN_SIDE, side);
+                    write_i32(this.0 as *mut u8, WORM_FACING, side);
+                }
+            }
+            Ok(())
+        });
+        // Jet pack fuel, 16.16 (Project X's JetFuel); 0 is unlimited.
+        fields.add_field_method_get("fuel", |_, this| {
+            Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, WORM_JET_FUEL) } })
+        });
+        fields.add_field_method_set("fuel", |_, this, v: i32| {
+            if this.0 != 0 {
+                unsafe { write_i32(this.0 as *mut u8, WORM_JET_FUEL, v) };
+            }
+            Ok(())
+        });
+        // How strongly gravity and wind act on the worm, 16.16 (1.0 = 65536;
+        // Project X's GravityFactor / WindFactor).
+        for (name, off) in [("gravity", ENT_GRAVITY_SCALE), ("wind", ENT_WIND_SCALE)] {
+            fields.add_field_method_get(name, move |_, this| {
+                Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, off) } })
+            });
+            fields.add_field_method_set(name, move |_, this, v: i32| {
+                if this.0 != 0 {
+                    unsafe { write_i32(this.0 as *mut u8, off, v) };
+                }
+                Ok(())
+            });
+        }
+        // The worm's own move requests (WA's, from lockstep input), unlike
+        // wa.world.keys() which is this machine's keyboard.
+        fields.add_field_method_get("keys", |lua, this| {
+            let t = lua.create_table()?;
+            for (name, off) in WORM_KEYS {
+                let down = this.0 != 0 && unsafe { read_i32(this.0 as *mut u8, off) } != 0;
+                t.set(name, down)?;
+            }
+            Ok(t)
+        });
+        fields.add_field_method_get("state", |_, this| {
+            if this.0 == 0 {
+                return Ok(None);
+            }
+            Ok(worm_state_name(unsafe { read_i32(this.0 as *mut u8, WORM_STATE) } as u32))
+        });
         fields.add_field_method_get("team", |_, this| {
             if this.0 == 0 {
                 return Ok(0i32);
@@ -834,6 +895,19 @@ impl UserData for WormHandle {
             }
             Ok(())
         });
+        // Only the body sprite (Project X's RenderWorm): WA still draws the
+        // worm's labels -- name, health, jet pack fuel -- and its cursor.
+        fields.add_field_method_get("body_visible", |_, this| {
+            Ok(!native_hide_body().map(|(_, hidden)| hidden(this.0)).unwrap_or(false))
+        });
+        fields.add_field_method_set("body_visible", |_, this, v: bool| {
+            if this.0 != 0 {
+                if let Some((hide, _)) = native_hide_body() {
+                    hide(this.0, !v);
+                }
+            }
+            Ok(())
+        });
         fields.add_field_method_get("turn", |_, this| {
             if this.0 == 0 {
                 return Ok(false);
@@ -867,6 +941,42 @@ impl UserData for WormHandle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        // `worm:set_state("sliding" | "standing")`, through WA's own SetState.
+        // A lockstep write: only from a simulation callback.
+        methods.add_method("set_state", |_, this, name: String| {
+            let state = settable_worm_state(&name).ok_or_else(|| {
+                mlua::Error::external(format!(
+                    "worm:set_state: {name:?} is not a state a script may enter; valid: sliding, standing"
+                ))
+            })?;
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external(
+                    "worm:set_state: only from a simulation callback (worm_message, a brain, ...)",
+                ));
+            }
+            if this.0 != 0 {
+                if let Some(set) = native_set_worm_state() {
+                    set(this.0, state);
+                }
+            }
+            Ok(())
+        });
+        // `worm:clear_keys()`: consume this frame's move requests before WA's
+        // handler sees them, as Project X's Helicopter does so WA's own jet
+        // pack neither thrusts nor burns fuel. A lockstep write.
+        methods.add_method("clear_keys", |_, this, ()| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external(
+                    "worm:clear_keys: only from a simulation callback",
+                ));
+            }
+            if this.0 != 0 {
+                for (_, off) in WORM_KEYS {
+                    unsafe { write_i32(this.0 as *mut u8, off, 0) };
+                }
+            }
+            Ok(())
+        });
         methods.add_method("carry", |_, this, (x, y): (i32, i32)| {
             if this.0 == 0 {
                 return Ok(());
@@ -942,6 +1052,19 @@ impl UserData for WorldHandle {
     }
 }
 
+/// Any entity as the handle Lua already knows it by: a worm, a LuaActor, or
+/// a world object with a `kind`.
+pub(crate) fn entity_value(lua: &Lua, handle: u32) -> Result<Value, String> {
+    let v = if handle != 0 && unsafe { read_i32(handle as *mut u8, ENT_CLASS_TYPE) } == CLASS_WORM {
+        Value::UserData(worm_userdata(lua, handle)?)
+    } else if handle != 0 && unsafe { read_i32(handle as *mut u8, ACTOR_MAGIC) } as u32 == LUA_ACTOR_MAGIC {
+        Value::UserData(lua.create_userdata(ActorHandle(handle)).map_err(|e| e.to_string())?)
+    } else {
+        Value::UserData(lua.create_userdata(WorldHandle(handle)).map_err(|e| e.to_string())?)
+    };
+    Ok(v)
+}
+
 fn kind_name(handle: u32) -> &'static str {
     if handle == 0 {
         return "none";
@@ -952,6 +1075,7 @@ fn kind_name(handle: u32) -> &'static str {
         CLASS_CRATE => "crate",
         CLASS_WORM => "worm",
         CLASS_OIL => "oil",
+        CLASS_LAND => "land",
         _ => "object",
     }
 }
@@ -1059,6 +1183,47 @@ pub fn native_random() -> Option<fn() -> Option<u32>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.random)
 }
 
+pub fn native_set_worm_state() -> Option<fn(u32, u32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.set_worm_state)
+}
+
+pub fn native_retreat_ms() -> Option<fn() -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.retreat_ms)
+}
+
+const WORM_KEYS: [(&str, usize); 4] = [
+    ("up", WORM_KEY_UP),
+    ("down", WORM_KEY_DOWN),
+    ("left", WORM_KEY_LEFT),
+    ("right", WORM_KEY_RIGHT),
+];
+
+/// `worm.state`: the WA states a pack can name, by the setup `SetState`
+/// runs for them. Anything else reads as nil rather than a guessed name.
+pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
+    Some(match state {
+        WORM_STATE_STANDING => "standing",
+        WORM_STATE_PREFIRING => "prefiring",
+        WORM_STATE_PUNCHING => "punching",
+        WORM_STATE_DRILLING => "drilling",
+        WORM_STATE_TELEPORTING => "teleporting",
+        WORM_STATE_JETPACKING => "jetpacking",
+        WORM_STATE_PARACHUTING => "parachuting",
+        WORM_STATE_AIRBORNE => "sliding",
+        _ => return None,
+    })
+}
+
+/// The states `worm:set_state` may enter: the ones a script ends a move
+/// with. Entering an action state from outside would skip WA's fire path.
+pub(crate) fn settable_worm_state(name: &str) -> Option<u32> {
+    match name {
+        "standing" => Some(WORM_STATE_STANDING),
+        "sliding" => Some(WORM_STATE_AIRBORNE),
+        _ => None,
+    }
+}
+
 pub fn native_networked() -> Option<fn() -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.networked)
 }
@@ -1121,6 +1286,10 @@ pub fn native_set_frame() -> Option<fn(u32, i32)> {
 
 pub fn native_keys() -> Option<fn() -> u32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.keys)
+}
+
+pub fn native_hide_body() -> Option<(fn(u32, bool), fn(u32) -> bool)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| (n.hide_body, n.body_hidden))
 }
 
 pub fn native_hide_worm() -> Option<fn(u32, bool)> {
@@ -1344,6 +1513,21 @@ mod tests {
         for state in [0x65, 0x66, 0x6E, 0x77, 0x80] {
             assert!(!super::holds_weapon(state), "{state:#x}");
         }
+    }
+
+    #[test]
+    fn worm_states_are_named_by_their_setup_and_few_are_enterable() {
+        assert_eq!(worm_state_name(0x78), Some("jetpacking"));
+        assert_eq!(worm_state_name(0x6C), Some("punching"));
+        assert_eq!(worm_state_name(0x7E), Some("sliding"));
+        assert_eq!(worm_state_name(0x65), Some("standing"));
+        assert_eq!(worm_state_name(0x69), Some("prefiring"));
+        assert_eq!(worm_state_name(0x7D), Some("parachuting"));
+        // Not guessed: 0x7B's setup is Batroping, whatever it was called.
+        assert_eq!(worm_state_name(0x7B), None);
+        assert_eq!(settable_worm_state("sliding"), Some(0x7E));
+        assert_eq!(settable_worm_state("standing"), Some(0x65));
+        assert_eq!(settable_worm_state("jetpacking"), None);
     }
 
     fn args(src: &str) -> mlua::Result<(u32, f32, f32, u32, u32)> {

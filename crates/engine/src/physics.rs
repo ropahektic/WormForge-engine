@@ -60,6 +60,10 @@ type MissileFreeFn = unsafe extern "thiscall" fn(*mut u8, u32) -> *mut u8;
 /// Drop everything remembered about homing missiles. Called at match start.
 pub fn clear_homing() {
     crate::missile_boom::clear_weapons();
+    if let Ok(mut g) = BODY_HIDDEN.lock() {
+        g.clear();
+    }
+    crate::contact::clear();
     if let Ok(mut g) = HM_CUSTOM.lock() {
         g.clear();
     }
@@ -106,6 +110,10 @@ struct Carry {
 
 static CARRY: Mutex<Vec<Carry>> = Mutex::new(Vec::new());
 static HIDDEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+/// Worms whose body alone is hidden (`worm.body_visible = false`): only the
+/// body sprite is skipped, and WA still draws their labels, fuel and cursor,
+/// as Project X's RenderWorm override does.
+static BODY_HIDDEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 fn holding() -> bool {
     CARRY
@@ -150,6 +158,17 @@ pub fn carry(handle: u32, x: i32, y: i32) {
     crate::world::hold_turn_timer();
 }
 
+/// WA's own SetState on a worm, so the state's setup runs.
+pub fn set_worm_state(handle: u32, state: u32) {
+    if handle == 0 {
+        return;
+    }
+    unsafe {
+        let f: SetStateFn = std::mem::transmute(rb(WORM_SET_STATE) as usize);
+        f(handle as *mut u8, state);
+    }
+}
+
 pub fn drop_carry(handle: u32) {
     hide_worm(handle, false);
     if handle != 0 {
@@ -185,6 +204,26 @@ pub fn hide_worm(handle: u32, hide: bool) {
             write_i32(handle as *mut u8, WORM_SHOW_CURSOR, 0);
         }
     }
+}
+
+pub fn hide_body(handle: u32, hide: bool) {
+    if handle == 0 {
+        return;
+    }
+    if let Ok(mut g) = BODY_HIDDEN.lock() {
+        g.retain(|h| *h != handle);
+        if hide {
+            g.push(handle);
+        }
+    }
+}
+
+pub fn body_hidden(handle: u32) -> bool {
+    BODY_HIDDEN
+        .lock()
+        .ok()
+        .map(|g| g.contains(&handle))
+        .unwrap_or(false)
 }
 
 pub fn worm_hidden(handle: u32) -> bool {
@@ -523,6 +562,7 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     }
     if msg == MSG_FRAME_FINISH {
         crate::actor::flush_deferred();
+        crate::contact::flush();
         crate::actor::tick_puffs();
         unsafe { crate::mask_collide::resolve_all(this) };
     }
@@ -692,6 +732,14 @@ unsafe extern "C" fn draw_hidden(this: *mut u8) -> u8 {
     worm_hidden(this as u32) as u8
 }
 
+/// The body sprite alone also skips for `worm.body_visible = false`.
+unsafe extern "C" fn body_draw_hidden(this: *mut u8) -> u8 {
+    if this.is_null() {
+        return 0;
+    }
+    (worm_hidden(this as u32) || body_hidden(this as u32)) as u8
+}
+
 #[unsafe(naked)]
 unsafe extern "C" fn draw_hook() {
     core::arch::naked_asm!(
@@ -713,7 +761,7 @@ unsafe extern "C" fn draw_hook() {
         "pop eax",
         "xor eax, eax",
         "ret",
-        check = sym draw_hidden,
+        check = sym body_draw_hidden,
         orig = sym ORIG_DRAW,
     );
 }
