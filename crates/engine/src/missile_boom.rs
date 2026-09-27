@@ -58,6 +58,10 @@ struct Live {
 static SLOTS: Mutex<Vec<Option<BoomTune>>> = Mutex::new(Vec::new());
 /// Per-slot in-flight body override (table +0x60 left stock for aim).
 static FLIGHT: Mutex<Vec<Option<i32>>> = Mutex::new(Vec::new());
+/// Per-slot flight sprite a pack wrote into the weapon's record when it was
+/// applied (`sprite = ...`). With FLIGHT, the body a homing missile of that
+/// slot keeps when it locks on (`physics::remap_homing_body_sprites`).
+static PACK_BODY: Mutex<Vec<Option<i32>>> = Mutex::new(Vec::new());
 static LIVE: Mutex<Vec<Live>> = Mutex::new(Vec::new());
 /// Every live missile's weapon slot, by entity address, for `wa.on.missile_frame`.
 static WEAPON_OF: Mutex<Option<HashMap<u32, usize>>> = Mutex::new(None);
@@ -84,6 +88,10 @@ pub fn clear() {
         g.resize(STOCK_WEAPON_COUNT, None);
     }
     if let Ok(mut g) = FLIGHT.lock() {
+        g.clear();
+        g.resize(STOCK_WEAPON_COUNT, None);
+    }
+    if let Ok(mut g) = PACK_BODY.lock() {
         g.clear();
         g.resize(STOCK_WEAPON_COUNT, None);
     }
@@ -114,6 +122,26 @@ pub fn set_flight_sprite(slot: usize, sprite: i32) {
         ensure_flight(&mut g);
         g[slot] = Some(sprite);
     }
+}
+
+/// The flight sprite a pack gave this slot's record when it was applied.
+pub fn set_pack_body(slot: usize, sprite: i32) {
+    if slot >= STOCK_WEAPON_COUNT || sprite == 0 {
+        return;
+    }
+    if let Ok(mut g) = PACK_BODY.lock() {
+        ensure_flight(&mut g);
+        g[slot] = Some(sprite);
+    }
+}
+
+/// The body a pack gave this slot's missiles, live (`set_flight_sprite`) or
+/// in its record; None for a slot flying WA's own sprites.
+pub fn pack_body(slot: usize) -> Option<i32> {
+    flight_for_slot(slot).or_else(|| {
+        let g = PACK_BODY.lock().ok()?;
+        g.get(slot).copied().flatten()
+    })
 }
 
 fn tune_for_slot(slot: usize) -> Option<BoomTune> {

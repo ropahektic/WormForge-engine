@@ -17,7 +17,7 @@ use game::offsets::{
     APPLY_PROJECTILE_GRAVITY, CUSTOM_SPRITE_SENTINEL, CUSTOM_SPRITE_SLOT_MIN, ENT_MOVED, ENT_POS_X,
     ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y, ENT_WORM_TEAM, HIT_AMOUNT, HIT_TEAM, MISSILE_ALT_BANK_SPRITE,
     MISSILE_FREE, MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
-    MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT, MISSILE_TYPE, MISSILE_TYPE_HOMING,
+    MISSILE_RENDER_SPRITE, MISSILE_SHOOT_PELLET, MISSILE_RENDER_SPRITE_ALT, MISSILE_TYPE, MISSILE_TYPE_HOMING,
     MISSILE_VTABLE, MISSILE_WEAPON_ALT_SPRITE,
     MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE,
     MSG_START_TURN,
@@ -29,6 +29,7 @@ use game::offsets::{
 use minhook::MinHook;
 use re_catalog::Catalog;
 use std::ffi::c_void;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
@@ -50,9 +51,9 @@ static ORIG_HUD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 /// missile's body. `missile_free_hook` forgets each missile as WA frees it,
 /// and `clear_homing` empties both tables at every match start in case a
 /// teardown ever skips the per-entity free.
-static HM_CUSTOM: Mutex<Vec<(usize, i32)>> = Mutex::new(Vec::new());
+static HM_CUSTOM: Mutex<Option<HashMap<usize, i32>>> = Mutex::new(None);
 /// Logged (entity, mode) pairs so we see ballistic and lock once each.
-static HM_LOGGED: Mutex<Vec<(usize, i32)>> = Mutex::new(Vec::new());
+static HM_LOGGED: Mutex<Option<HashSet<(usize, i32)>>> = Mutex::new(None);
 static ORIG_MISSILE_FREE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 type MissileFreeFn = unsafe extern "thiscall" fn(*mut u8, u32) -> *mut u8;
@@ -65,20 +66,25 @@ pub fn clear_homing() {
     }
     crate::contact::clear();
     if let Ok(mut g) = HM_CUSTOM.lock() {
-        g.clear();
+        *g = None;
     }
     if let Ok(mut g) = HM_LOGGED.lock() {
-        g.clear();
+        *g = None;
     }
 }
 
 fn forget_missile(key: usize) {
     crate::missile_boom::forget_weapon(key);
     if let Ok(mut g) = HM_CUSTOM.lock() {
-        g.retain(|(e, _)| *e != key);
+        if let Some(m) = g.as_mut() {
+            m.remove(&key);
+        }
     }
     if let Ok(mut g) = HM_LOGGED.lock() {
-        g.retain(|(e, _)| *e != key);
+        if let Some(s) = g.as_mut() {
+            s.remove(&(key, 0));
+            s.remove(&(key, 1));
+        }
     }
 }
 
@@ -397,8 +403,14 @@ unsafe extern "thiscall" fn missile_hook(
     c: *mut u8,
 ) {
     // Homing lock switches blit banks mid-flight (entity+0x394). Keep every
-    // body-graphic slot on our custom sheet *before* stock runs (incl. render).
-    unsafe { remap_homing_body_sprites(this) };
+    // body-graphic slot on our custom sheet *before* stock runs. Never on
+    // WA's draw (0x3): these fields are simulation state (CreateClusters and
+    // the impact path read the flight sprite), and how often a machine draws
+    // is its own frame rate, not the lockstep's.
+    let remap = msg != MSG_RENDER_SCENE;
+    if remap {
+        unsafe { remap_homing_body_sprites(this) };
+    }
     if msg == MSG_FRAME_FINISH {
         if let Some(m) = unsafe { read_motion(this) } {
             let weapon = crate::missile_boom::weapon_of(this);
@@ -413,7 +425,9 @@ unsafe extern "thiscall" fn missile_hook(
         unsafe { f(this, a, msg, b, c) };
     }
     // Stock may refresh burn banks when lock engages — push custom again.
-    unsafe { remap_homing_body_sprites(this) };
+    if remap {
+        unsafe { remap_homing_body_sprites(this) };
+    }
     if msg == MSG_FRAME_FINISH {
         if let Some(m) = unsafe { read_motion(this) } {
             let weapon = crate::missile_boom::weapon_of(this);
@@ -454,45 +468,38 @@ unsafe fn remap_homing_body_sprites(entity: *mut u8) {
     if unsafe { read_i32(entity, MISSILE_TYPE) } != MISSILE_TYPE_HOMING {
         return;
     }
+    // And only a missile of a slot a pack gave its own body. A stock homing
+    // missile keeps WA's sprites: guessing a "body" from its fields took
+    // Project X's Pigeon Strike's feather trail (134) for one and drew its
+    // pigeons as feathers. Strike bombs have no slot here and are left alone.
+    let pack = crate::missile_boom::weapon_of(entity).and_then(crate::missile_boom::pack_body);
+    if pack.is_none() {
+        return;
+    }
     let key = entity as usize;
     let mode = unsafe { read_i32(entity, MISSILE_HOMING_MODE) };
     let flight = unsafe { read_i32(entity, MISSILE_RENDER_SPRITE) };
     let weapon = unsafe { read_i32(entity, MISSILE_WEAPON_SPRITE) };
-
-    let mut body = None;
-    for &off in BODY_GFX_OFFS {
-        let id = unsafe { read_i32(entity, off) };
-        if is_replacement_body(id) {
-            body = Some(id);
-            break;
-        }
+    let pellet = unsafe { read_i32(entity, MISSILE_SHOOT_PELLET) } != 0;
+    let mut slots = [0i32; BODY_GFX_OFFS.len()];
+    for (id, &off) in slots.iter_mut().zip(BODY_GFX_OFFS) {
+        *id = unsafe { read_i32(entity, off) };
     }
-    if body.is_none() {
-        if let Ok(g) = HM_CUSTOM.lock() {
-            body = g.iter().find(|(e, _)| *e == key).map(|(_, id)| *id);
-        }
-    }
-    // Ballistic: remember whatever non-HM sheet is actually flying so lock
-    // cannot fall back to stock 58/59.
-    if body.is_none() && mode == 0 {
-        for id in [flight, weapon] {
-            if id > 0 && !is_stock_homing_body(id) {
-                body = Some(id);
-                break;
-            }
-        }
-    }
-    let Some(body) = body else {
+    let remembered = HM_CUSTOM
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().and_then(|m| m.get(&key).copied()));
+    let Some(body) = homing_body(pack, pellet, &slots, remembered, mode, flight, weapon) else {
         return;
     };
     if let Ok(mut g) = HM_CUSTOM.lock() {
-        if let Some(slot) = g.iter_mut().find(|(e, _)| *e == key) {
-            slot.1 = body;
-        } else {
-            g.push((key, body));
-        }
+        g.get_or_insert_with(HashMap::new).insert(key, body);
     }
 
+    // The body slots only. WA's homing sprites in the fire params copy are at
+    // +0x180 (the flight sprite) and +0x1CC (the lock sprite), both in
+    // BODY_GFX_OFFS; nothing else there is a sprite, so nothing else is
+    // written.
     let mut wrote = false;
     for &off in BODY_GFX_OFFS {
         let id = unsafe { read_i32(entity, off) };
@@ -507,18 +514,10 @@ unsafe fn remap_homing_body_sprites(entity: *mut u8) {
             wrote = true;
         }
     }
-    for off in (0x15Cusize..=0x210).step_by(4) {
-        let id = unsafe { read_i32(entity, off) };
-        if is_stock_homing_body(id) && id != body {
-            unsafe { write_i32(entity, off, body) };
-            wrote = true;
-        }
-    }
 
     if wrote || mode == 1 {
         if let Ok(mut logged) = HM_LOGGED.lock() {
-            if !logged.iter().any(|(e, m)| *e == key && *m == mode) {
-                logged.push((key, mode));
+            if logged.get_or_insert_with(HashSet::new).insert((key, mode)) {
                 log_line(&format!(
                     "hm body remap entity={key:#x} body={body} mode={mode} flight={flight} a={} b={}",
                     unsafe { read_i32(entity, MISSILE_HOMING_SPRITE_A) },
@@ -527,6 +526,38 @@ unsafe fn remap_homing_body_sprites(entity: *mut u8) {
             }
         }
     }
+}
+
+/// The body a homing missile keeps through its lock: the one its slot's pack
+/// gave it, or, for a cluster bit, the pack art in its own body slots; else
+/// the one remembered for it, or the sheet it flies with ballistically.
+/// None leaves the missile alone: without a pack body (`pack`), WA's.
+fn homing_body(
+    pack: Option<i32>,
+    pellet: bool,
+    slots: &[i32],
+    remembered: Option<i32>,
+    mode: i32,
+    flight: i32,
+    weapon: i32,
+) -> Option<i32> {
+    let pack = pack?;
+    if !pellet {
+        return Some(pack);
+    }
+    slots
+        .iter()
+        .copied()
+        .find(|&id| is_replacement_body(id))
+        .or(remembered)
+        .or_else(|| {
+            // Ballistic: remember whatever non-HM sheet is actually flying so
+            // lock cannot fall back to stock 58/59.
+            if mode != 0 {
+                return None;
+            }
+            [flight, weapon].into_iter().find(|&id| id > 0 && !is_stock_homing_body(id))
+        })
 }
 
 fn is_custom_sprite(id: i32) -> bool {
@@ -994,4 +1025,30 @@ unsafe extern "C" fn crosshair_hook() {
         check = sym draw_hidden,
         orig = sym ORIG_CROSSHAIR,
     );
+}
+
+#[cfg(test)]
+mod homing_body_tests {
+    use super::homing_body;
+
+    #[test]
+    fn a_stock_homing_missile_keeps_was_sprites() {
+        // Project X's Pigeon Strike: stock pigeons (175) with a feather
+        // trail (134) in a body slot, on a slot no pack retargeted.
+        assert_eq!(homing_body(None, false, &[175, 134, 175, 0, 0, 175, 175], None, 0, 175, 175), None);
+        assert_eq!(homing_body(None, true, &[175, 134], Some(134), 1, 134, 175), None);
+    }
+
+    #[test]
+    fn a_pack_missile_keeps_its_slots_body() {
+        // The Blaster Worm: its record's 175 retargeted to pack sprite 807.
+        assert_eq!(homing_body(Some(807), false, &[134, 807, 175], None, 1, 175, 175), Some(807));
+    }
+
+    #[test]
+    fn a_pack_cluster_bit_keeps_its_own_art() {
+        assert_eq!(homing_body(Some(807), true, &[807, 808, 175], None, 0, 808, 807), Some(807));
+        assert_eq!(homing_body(Some(807), true, &[0, 58, 59], Some(808), 1, 58, 59), Some(808));
+        assert_eq!(homing_body(Some(807), true, &[0, 58, 59], None, 0, 808, 58), Some(808));
+    }
 }
