@@ -215,11 +215,16 @@ pub fn gravity_after(motion: Motion) -> Result<Motion, String> {
 /// `slot`: the weapon the missile was fired from, when the engine knows it
 /// (projectiles, their cluster bits, Armageddon; not strike bombs). Lua sees
 /// it as `m.weapon`, the same stock slot name as `worm.weapon`.
+///
+/// `sprite`: the sprite WA draws the missile with (MissileEntity+0x2EC). Lua
+/// sees it as `m.sprite` and may write it; 0 draws nothing, as Project X's
+/// records and `red_spb` hide a missile it draws itself.
 pub fn missile_frame(
     motion: Motion,
     msg: u32,
     phase: &str,
     slot: Option<usize>,
+    sprite: &mut i32,
 ) -> Result<Motion, String> {
     with_lua(|lua| {
         let list = hook_list(lua, "missile_frame")?;
@@ -233,7 +238,9 @@ pub fn missile_frame(
             .and_then(|s| StockWeapon::from_index(s as u32))
             .map(|w| w.name());
         t.set("weapon", weapon).map_err(|e| e.to_string())?;
+        t.set("sprite", *sprite).map_err(|e| e.to_string())?;
         call_each(&list, t.clone())?;
+        *sprite = t.get("sprite").unwrap_or(*sprite);
         table_to_motion(&t, motion)
     })
 }

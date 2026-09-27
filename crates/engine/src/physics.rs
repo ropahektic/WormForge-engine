@@ -412,12 +412,7 @@ unsafe extern "thiscall" fn missile_hook(
         unsafe { remap_homing_body_sprites(this) };
     }
     if msg == MSG_FRAME_FINISH {
-        if let Some(m) = unsafe { read_motion(this) } {
-            let weapon = crate::missile_boom::weapon_of(this);
-            if let Ok(after) = lua_host::missile_frame(m, msg, "pre", weapon) {
-                unsafe { write_motion(this, &after) };
-            }
-        }
+        unsafe { missile_frame_hook(this, msg, "pre") };
     }
     let orig = ORIG_MISSILE.load(Ordering::SeqCst);
     if !orig.is_null() {
@@ -429,13 +424,24 @@ unsafe extern "thiscall" fn missile_hook(
         unsafe { remap_homing_body_sprites(this) };
     }
     if msg == MSG_FRAME_FINISH {
-        if let Some(m) = unsafe { read_motion(this) } {
-            let weapon = crate::missile_boom::weapon_of(this);
-            if let Ok(after) = lua_host::missile_frame(m, msg, "post", weapon) {
-                unsafe { write_motion(this, &after) };
+        unsafe { missile_frame_hook(this, msg, "post") };
+        crate::sprite::advance_loop(this);
+    }
+}
+
+/// `wa.on.missile_frame`: its motion, and the sprite WA draws it with
+/// (`m.sprite`, +0x2EC), written back when a pack changes them.
+unsafe fn missile_frame_hook(this: *mut u8, msg: u32, phase: &str) {
+    if let Some(m) = unsafe { read_motion(this) } {
+        let weapon = crate::missile_boom::weapon_of(this);
+        let before = unsafe { read_i32(this, MISSILE_RENDER_SPRITE) };
+        let mut sprite = before;
+        if let Ok(after) = lua_host::missile_frame(m, msg, phase, weapon, &mut sprite) {
+            unsafe { write_motion(this, &after) };
+            if sprite != before {
+                unsafe { write_i32(this, MISSILE_RENDER_SPRITE, sprite) };
             }
         }
-        crate::sprite::advance_loop(this);
     }
 }
 
