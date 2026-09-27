@@ -869,7 +869,7 @@ impl UserData for WormHandle {
             });
         }
         // The worm's own move requests (WA's, from lockstep input), unlike
-        // wa.world.keys() which is this machine's keyboard.
+        // wa.world.keys(), the keyboard of the player whose turn it is.
         fields.add_field_method_get("keys", |lua, this| {
             let t = lua.create_table()?;
             for (name, off) in WORM_KEYS {

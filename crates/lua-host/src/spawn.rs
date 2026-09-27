@@ -636,10 +636,10 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     world.set("wind", wind).map_err(|e| e.to_string())?;
 
-    // The guard that makes keys()/pointer() usable at all. They read THIS
-    // machine's input, which never goes on the wire, so acting on them in a
-    // networked game parts the two simulations. A pack that wants to stay
-    // lockstep-safe checks this first and does nothing when it is true.
+    // Whether this is a networked match. There keys() and pointer() are the
+    // input of the player whose turn it is, sent through WA's lockstep input
+    // queue and the same on every machine (engine `sync`); offline they are
+    // this machine's own.
     let networked = lua
         .create_function(|_, ()| {
             Ok(crate::actor::native_networked().map(|f| f()).unwrap_or(false))

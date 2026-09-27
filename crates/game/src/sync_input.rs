@@ -31,6 +31,29 @@ pub fn unpack(controls: u32, packed_pointer: u32) -> Option<InputSample> {
     })
 }
 
+/// Bits 16..23 of the controls word: the sending machine's index plus one
+/// (0: a record from a build that did not say).
+const SENDER_SHIFT: u32 = 16;
+const SENDER_MASK: u32 = 0xff << SENDER_SHIFT;
+
+/// `pack`, stamped with the sending machine's index (WA's
+/// `GameInfo.local_team_index`: 0 the host, 1.. the clients), so every peer
+/// can tell whose input a record is.
+pub fn pack_from(sample: InputSample, sender: u8) -> (u32, u32) {
+    let (controls, pointer) = pack(sample);
+    (controls | ((sender as u32 + 1) & 0xff) << SENDER_SHIFT, pointer)
+}
+
+/// `unpack` for a stamped record: the sample, and the sender if it said.
+pub fn unpack_from(controls: u32, packed_pointer: u32) -> Option<(InputSample, Option<u8>)> {
+    if controls & !(0x1ff | SENDER_MASK) != 0 {
+        return None;
+    }
+    let sender = (controls & SENDER_MASK) >> SENDER_SHIFT;
+    let sample = unpack(controls & 0x1ff, packed_pointer)?;
+    Some((sample, (sender != 0).then(|| (sender - 1) as u8)))
+}
+
 /// Whether the authoritative peer needs to publish a new state record.
 ///
 /// Controls are edge-sensitive and go out immediately. Pointer motion is
@@ -81,6 +104,21 @@ mod tests {
         let (controls, pointer) = pack(original);
         assert_eq!(unpack(controls, pointer), Some(original));
         assert!(unpack(controls | 0x200, pointer).is_none());
+    }
+
+    #[test]
+    fn records_say_which_machine_sent_them() {
+        let shift = sample(0x20, 10, 20, false);
+        for sender in [0u8, 1, 5] {
+            let (controls, pointer) = pack_from(shift, sender);
+            assert_eq!(unpack_from(controls, pointer), Some((shift, Some(sender))));
+        }
+        // An unstamped record: no sender.
+        let (controls, pointer) = pack(shift);
+        assert_eq!(unpack_from(controls, pointer), Some((shift, None)));
+        // Anything else set is still malformed.
+        assert!(unpack_from(controls | 0x200, pointer).is_none());
+        assert!(unpack_from(controls | 0x0100_0000, pointer).is_none());
     }
 
     #[test]

@@ -321,6 +321,14 @@ pub const TEAM_MSG_HANDLER: u32 = 0x0055_7310;
 pub const TEAM_MSG_CURSOR_CLICK: u32 = 0x32;
 /// TeamEntity index (`+0x38`); `data[0]` of every team message.
 pub const TEAM_INDEX: usize = 0x38;
+/// TeamEntity: the machine that controls the team, copied from its GameInfo
+/// team record's `owner_player_slot` (0 the host, 1.. the clients; negative
+/// for a computer team).
+pub const TEAM_OWNER_MACHINE: usize = 0x40;
+/// GameWorld's GameInfo, and in it this machine's index (`local_team_index`,
+/// set per machine by `InitTeamsFromLobby`: 0 the host, 1.. the clients).
+pub const GAME_WORLD_GAME_INFO: usize = 0x24;
+pub const GAME_INFO_LOCAL_MACHINE: usize = 0xD9DC;
 /// TeamEntity selected weapon slot (`+0x60`).
 pub const TEAM_SELECTED_WEAPON: usize = 0x60;
 /// TeamEntity colour index (`+0x50`). Stock land cursor sprite is
