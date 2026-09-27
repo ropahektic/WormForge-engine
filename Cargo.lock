@@ -93,6 +93,7 @@ dependencies = [
  "gfx",
  "lua-host",
  "minhook",
+ "netsync",
  "png",
  "re-catalog",
  "render",
@@ -306,6 +307,14 @@ dependencies = [
  "lua-src",
  "luajit-src",
  "pkg-config",
+]
+
+[[package]]
+name = "netsync"
+version = "0.1.0"
+dependencies = [
+ "assets",
+ "weapons",
 ]
 
 [[package]]

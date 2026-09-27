@@ -140,6 +140,7 @@ impl Catalog {
         c.merge_toml(include_str!("../../../re/hurt.toml"))?;
         c.merge_toml(include_str!("../../../re/Display.toml"))?;
         c.merge_toml(include_str!("../../../re/InputCodec.toml"))?;
+        c.merge_toml(include_str!("../../../re/Lobby.toml"))?;
         Ok(c)
     }
 
@@ -176,6 +177,19 @@ pub fn builtin_hooks() -> Result<Vec<HookDecl>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lobby_ready_bulb_entries() {
+        let c = Catalog::builtin().expect("catalog");
+        assert_eq!(c.function_va("LobbyList__UpdateReady"), Some(0x00482700));
+        assert_eq!(c.function_va("LobbyNetList__UpdateReady"), Some(0x004C1E90));
+        assert_eq!(c.function_va("CPlayers__IsOkToStartNetGame"), Some(0x0046AD10));
+        assert_eq!(c.global_va("G_CPLAYERS"), Some(0x008779D8));
+        assert_eq!(c.function_va("HostLobby__HandlePacket"), Some(0x004B6290));
+        assert_eq!(c.function_va("ClientLobby__HandlePacket"), Some(0x004C0790));
+        assert_eq!(c.global_va("G_HOST_SESSION"), Some(0x007C0ED4));
+        assert_eq!(c.global_va("G_CLIENT_LINK"), Some(0x00857A3C));
+    }
 
     #[test]
     fn init_weapon_table_va() {

@@ -43,6 +43,10 @@ pub fn on_gfx_ready(display: *mut u8) {
     }
 
     log_line("InitGraphic: installing custom sprites after LoadSprites");
+    // A network round loads the synced copy of the host's packs, decided
+    // before the lobby state is dropped; replay playback still comes first.
+    let synced = crate::transfer::round_packs();
+    crate::transfer::match_started();
     sprite::clear();
     world::clear_sounds();
     crate::hurt::reset();
@@ -61,8 +65,9 @@ pub fn on_gfx_ready(display: *mut u8) {
     crate::truecolor::clear();
     crate::render_queue::clear_depths();
 
-    let mods_dir =
-        crate::replay::playback_mods_root().unwrap_or_else(|| mods_root_from(&wa_directory()));
+    let mods_dir = crate::replay::playback_mods_root()
+        .or(synced)
+        .unwrap_or_else(|| mods_root_from(&wa_directory()));
     log_line(&format!("loading mods from {}", mods_dir.display()));
     let discovered = match discover_mods(&mods_dir) {
         Ok(d) => d,

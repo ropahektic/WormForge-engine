@@ -63,6 +63,12 @@ pub fn install() -> Result<(), String> {
     crate::render_queue::install()?;
     crate::gpu::install_rq_draw()?;
     crate::sync::install(&catalog)?;
+    // Optional: a lobby these hooks cannot read only loses asset sync.
+    if let Err(e) = crate::lobby::install(&catalog) {
+        log_error(&format!("lobby ready-bulb hooks unavailable: {e}"));
+    } else if let Err(e) = crate::transfer::install(&catalog) {
+        log_error(&format!("lobby transfer unavailable: {e}"));
+    }
     unsafe {
         MinHook::enable_all_hooks().map_err(|e| format!("MinHook enable: {e:?}"))?;
     }
