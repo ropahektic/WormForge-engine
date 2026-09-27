@@ -209,6 +209,18 @@ fn is_throw(pose: i32) -> bool {
     matches!(pose, THROW | THROW_U | THROW_D)
 }
 
+/// WA's own throw: `wthrow` played forward once the worm is out of the
+/// aiming states (0x67..=0x69), in the firing states and just after. It is
+/// not a draw, so it stays WA's, as does the hand's way back (`wthrbak`)
+/// that follows. Claimed as the draw pose, a thrown weapon threw with the
+/// pack's draw posture: a worm reaching for a weapon it had just thrown.
+fn is_wa_throw(sprite: u32, state: i32) -> bool {
+    let sheet = (sprite & 0xffff) as i32;
+    is_throw(sheet)
+        && sprite & game::offsets::SPRITE_REVERSE == 0
+        && !(0x67..=0x69).contains(&state)
+}
+
 fn is_fire(pose: i32) -> bool {
     matches!(pose, FIRE | FIRE_U | FIRE_D)
 }
@@ -574,7 +586,7 @@ unsafe fn after_calc_inner(worm: *mut u8, sprite_out: *mut u32, phase_out: *mut 
     let Ok(claims) = CLAIMS.lock() else {
         return;
     };
-    if !claims.iter().any(|(s, _, _)| *s == slot) {
+    if !claims.iter().any(|(s, _, _)| *s == slot) || is_wa_throw(original, state) {
         return;
     }
     let stock = pose_key(original, state, read_i32(worm, WORM_SLOPE_DIR));
@@ -808,6 +820,19 @@ mod tests {
         assert_eq!(pose_key(0x40000, 0x69, 1), LINK_D);
         assert_eq!(pose_key(0x4024f, 0x6a, 0), THROW);
         assert_eq!(pose_key(0x40000, 0x6a, 0), 0);
+    }
+
+    #[test]
+    fn a_throw_is_wa_s_own_not_a_draw() {
+        use super::is_wa_throw;
+        use game::offsets::SPRITE_REVERSE;
+        // As seen in WA: the Sticky Bomb thrown on wthrowd (593), firing
+        // (0x6A, 0x6B) and standing just after.
+        assert!(is_wa_throw(0x0004_0251, 0x6a));
+        assert!(is_wa_throw(0x0004_0251, 0x65));
+        assert!(!is_wa_throw(0x0004_0251, 0x67), "aiming: a draw on wthrow is still a draw");
+        assert!(!is_wa_throw(SPRITE_REVERSE | 0x0251, 0x65), "reversed: a put-away");
+        assert!(!is_wa_throw(0x013a, 0x6a), "wgrnlnk is no throw");
     }
 
     #[test]
