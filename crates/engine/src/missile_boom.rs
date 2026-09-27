@@ -10,8 +10,8 @@ use game::offsets::{
     MISSILE_ALT_BANK_SPRITE, MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_SPRITE_A,
     MISSILE_HOMING_SPRITE_B, MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT,
     MISSILE_WEAPON_ALT_SPRITE, MISSILE_WEAPON_DATA, MISSILE_WEAPON_SPRITE, STOCK_WEAPON_COUNT,
-    WEAPON_ENTRY_SIZE, ENT_WORLD, ENT_WORM_TEAM, FIRE_DAMAGE, FIRE_EXPLODE_INTO, FIRE_FUSE,
-    FIRE_PARAMS_SIZE, FIRE_SOUND,
+    WEAPON_ENTRY_SIZE, ENT_WORLD, ENT_WORM_TEAM, FIRE_COUNTDOWN, FIRE_DAMAGE, FIRE_EXPLODE_INTO,
+    FIRE_EXPLODE_ON_SPACE, FIRE_FUSE, FIRE_PARAMS_SIZE, FIRE_SOUND,
     FIRE_SPRITE, GAME_WORLD_OBJECT_POOL, GAME_WORLD_WEAPON_TABLE, MISSILE_ENTITY_SIZE,
     MISSILE_ENTITY_ZEROED, OBJECT_POOL_LIMIT, OBJECT_POOL_MISSILE, SHOOT_DESC_SIZE, SHOOT_FUSE,
     SHOOT_SETTLE, SHOOT_TARGET_X, SHOOT_TARGET_Y, SHOOT_TEAM, SHOOT_VX, SHOOT_VY, SHOOT_WORM,
@@ -318,6 +318,8 @@ fn tuned_fire_params(src: &[u8], args: &lua_host::LaunchArgs) -> Option<Box<[u8]
         && args.fuse.is_none()
         && args.sound.is_none()
         && args.explode_into.is_none()
+        && args.countdown.is_none()
+        && args.explode_on_space.is_none()
     {
         return None;
     }
@@ -332,6 +334,8 @@ fn tuned_fire_params(src: &[u8], args: &lua_host::LaunchArgs) -> Option<Box<[u8]
     put(FIRE_FUSE, args.fuse);
     put(FIRE_SOUND, args.sound);
     put(FIRE_EXPLODE_INTO, args.explode_into);
+    put(FIRE_COUNTDOWN, args.countdown);
+    put(FIRE_EXPLODE_ON_SPACE, args.explode_on_space.map(i32::from));
     Some(p)
 }
 
@@ -465,7 +469,8 @@ fn fire_step(
 mod launch_tests {
     use super::{shoot_desc, tuned_fire_params};
     use game::offsets::{
-        FIRE_DAMAGE, FIRE_EXPLODE_INTO, FIRE_FUSE, FIRE_PARAMS_SIZE, FIRE_SOUND, FIRE_SPRITE,
+        FIRE_COUNTDOWN, FIRE_DAMAGE, FIRE_EXPLODE_INTO, FIRE_EXPLODE_ON_SPACE, FIRE_FUSE,
+        FIRE_PARAMS_SIZE, FIRE_SOUND, FIRE_SPRITE,
     };
 
     fn at(b: &[u8], off: usize) -> i32 {
@@ -504,6 +509,13 @@ mod launch_tests {
         };
         let p = tuned_fire_params(&own, &nuke).unwrap();
         assert_eq!((at(&p, FIRE_SOUND), at(&p, FIRE_EXPLODE_INTO)), (0, 1));
+        // A Chilli Bomb's child: no countdown, and the fire key sets it off.
+        let chilli = lua_host::LaunchArgs {
+            countdown: Some(0), explode_on_space: Some(true), ..Default::default()
+        };
+        let c = tuned_fire_params(&own, &chilli).unwrap();
+        assert_eq!((at(&c, FIRE_COUNTDOWN), at(&c, FIRE_EXPLODE_ON_SPACE)), (0, 1));
+        assert_eq!(at(&c, FIRE_FUSE), 0x1111_1111);
         assert_eq!(p.len(), FIRE_PARAMS_SIZE);
         assert!(own.iter().all(|b| *b == 0x11), "the record is untouched");
         assert_eq!(p[0], 0x11);

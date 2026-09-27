@@ -199,6 +199,12 @@ pub const FIRE_PARAMS_SIZE: usize = WEAPON_ENTRY_SIZE - WEAPON_FIRE_PARAMS;
 pub const FIRE_DAMAGE: usize = 0x18;
 pub const FIRE_SPRITE: usize = 0x24;
 pub const FIRE_FUSE: usize = 0x50;
+/// `countdownFrom`, ms: the record's countdown (5000 on the scheme's Chilli
+/// Bomb, 3000 on WA's super banana); PX zeroes it for the Chilli's children.
+pub const FIRE_COUNTDOWN: usize = 0x4C;
+/// `explodeOnSpace`: the fire key sets it off in flight (1 on WA's super
+/// banana).
+pub const FIRE_EXPLODE_ON_SPACE: usize = 0x64;
 /// `sound.soundIndex`: the sound the missile plays in flight (0 none).
 pub const FIRE_SOUND: usize = 0x54;
 /// `explodeInto`: what it bursts into, WA's `impact_spawn_kind` (entry

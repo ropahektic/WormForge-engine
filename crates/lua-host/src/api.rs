@@ -614,7 +614,7 @@ fn spec_slot(spec: &Table) -> mlua::Result<StockWeapon> {
 const WORM_SPRITE_TEAMS: usize = 6;
 
 /// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse,
-/// sound, explode_into }`.
+/// sound, explode_into, countdown, explode_on_space }`.
 fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
     let name: String = spec
         .get("weapon")
@@ -670,6 +670,16 @@ fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
             other => {
                 return Err(mlua::Error::external(format!(
                     "weapons.launch: explode_into is \"nothing\", \"clustlets\" or \"fire\", got {other:?}"
+                )))
+            }
+        },
+        countdown: get_i32(spec, "countdown")?,
+        explode_on_space: match spec.get::<Value>("explode_on_space")? {
+            Value::Nil => None,
+            Value::Boolean(b) => Some(b),
+            other => {
+                return Err(mlua::Error::external(format!(
+                    "weapons.launch: explode_on_space is true or false, got {other:?}"
                 )))
             }
         },

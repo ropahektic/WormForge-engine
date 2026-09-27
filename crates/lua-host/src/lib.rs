@@ -480,6 +480,8 @@ wa.weapons.replace({
                     fuse: Some(5000),
                     sound: None,
                     explode_into: None,
+                    countdown: None,
+                    explode_on_space: None,
                 }]
             )
         });
@@ -495,11 +497,18 @@ wa.weapons.replace({
             lua.load("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0, y = 0, sound = 0, explode_into = 'clustlets' }")
                 .exec()
                 .unwrap();
+            assert!(err("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0, y = 0, explode_on_space = 'yes' }")
+                .contains("true or false"));
+            lua.load("wa.weapons.launch{ weapon = 'super_banana', owner = wa.worms.all()[1], x = 0, y = 0, countdown = 0, explode_on_space = true }")
+                .exec()
+                .unwrap();
         });
         LAUNCHED.with(|l| {
             let l = l.borrow();
-            let nuke = l.last().unwrap();
+            let nuke = &l[l.len() - 2];
             assert_eq!((nuke.slot, nuke.sound, nuke.explode_into), (StockWeapon::Mine.index() as u32, Some(0), Some(1)));
+            let chilli = l.last().unwrap();
+            assert_eq!((chilli.countdown, chilli.explode_on_space), (Some(0), Some(true)));
         });
     }
 

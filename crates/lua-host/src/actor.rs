@@ -51,6 +51,10 @@ pub struct LaunchArgs {
     pub sound: Option<i32>,
     /// What it bursts into: 0 nothing, 1 clustlets, 2 fire.
     pub explode_into: Option<i32>,
+    /// PX's `countdownFrom`, ms.
+    pub countdown: Option<i32>,
+    /// Whether the fire key sets it off in flight.
+    pub explode_on_space: Option<bool>,
 }
 
 pub struct SpawnArgs {
