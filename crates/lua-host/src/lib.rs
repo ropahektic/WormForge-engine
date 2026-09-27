@@ -569,7 +569,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 40);
+        assert_eq!(applied.len(), 41);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         // The scheme's record for the girder slot is the Baseball Bat:
         // a special weapon, subtype 2, as WA's own bat.

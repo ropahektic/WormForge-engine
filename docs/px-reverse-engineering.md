@@ -206,6 +206,63 @@ itself on `M_DRAWQUEUE` with the same angle rules.
 - A fully transparent 1×1 sheet as the missile's sprite is not a way
   round it: loaded as a palette sprite, it crashed WA.
 
+## WA creating a missile
+
+PX scripts create missiles directly: `new CMissile(parent, &weapon->launch,
+&shootDesc)` (the Double Bazooka's second shell; the Chilli Bomb's library
+does it 11 times). WA does the same when a projectile weapon fires.
+
+**`FireWeapon`** (0x51EE60) switches on the weapon entry's fire type (+0x30)
+and, for a projectile (type 1), on its fire method (+0x38): 3 is
+`FireWeapon__CreateWeaponProjectile` (0x51E0F0). That:
+
+1. checks GameWorld's object pool: `[world + 0x72A4] + 7 <= 700`, or shows
+   WA's overflow warning (0x51E10C);
+2. takes the parent from the worm's shared-data table with key 0x19
+   (25): PX's `Root->GetObject(25, 0)`;
+3. allocates 0x40C bytes and zeroes 0x3EC of them;
+4. calls the `MissileEntity` constructor (0x507D10) with
+   `(missile, parent, fire_params, shoot_desc)`, where `fire_params` is the
+   weapon entry + 0x3C. The constructor copies it into the missile.
+
+**The shoot description** is 0x2C bytes, laid out as PX's `CShootDesc`
+(pxdata.pxd) and OpenWA's `WeaponReleaseContext`:
+
+| Offset | PX | WA |
+|---|---|---|
+| +0x00, +0x04 | `Team`, `Worm` | the firer's team and worm number |
+| +0x08, +0x0C | `X`, `Y` | position, 16.16 |
+| +0x10, +0x14 | `SpX`, `SpY` | speed, 16.16 |
+| +0x18, +0x1C | `AddX`, `AddY` | the aim cursor: a homing weapon's target |
+| +0x20 | `vo32` | the pellet's index in a cluster |
+| +0x24 | `vo36` | bounce settle frames (30, 60 or 0) |
+| +0x28 | `Delay` | a fuse in ms, used only if the fire params' own is 0 |
+
+So PX's `SDesc.Delay = 5` in the Double Bazooka does nothing: the same
+script sets the launch data's fuse to 5000.
+
+**Fire params fields**, from their start (the entry's +0x3C), by PX's
+`CWeaponLaunch`, checked against the scheme's records:
+
+| Offset | PX | Evidence |
+|---|---|---|
+| +0x18 | `explosion.damage` | 50 for the homing missile, as WA's |
+| +0x24 | `anim.spriteIndex` | the entry's +0x60, WA's flight sprite |
+| +0x2C, +0x30, +0x34 | `anim.trailIndex`, `trailPower`, `trailSpeed` | 131, 20, 100 on the Double Bazooka |
+| +0x40 | `windFactor` | 100 on a bazooka, 0 on a homing missile or grenade |
+| +0x48 | `gravityFactor` | 100 |
+| +0x50 | `timeBeforeExplosion` | the fuse in ms: 9000 on a bazooka |
+
+PX's sprite numbers are WA 3.6.31's. The Double Bazooka's second shell
+takes 54, which in WA 3.8.1 is `clustlet`, a cluster bit; the Highlander
+port keeps the record's bazooka shell (48, `missile`).
+
+**What the worm holds.** `Weapon__hold_sheet` (0x51C060) picks a
+projectile's launcher from the weapon entry's +0x34: 1 `wuzi`, 2 by the
+flight sprite (+0x60; the thrown weapons), 3 `wbaz` (the bazooka), 4 `wmini`, 5 `wshotg`, 6 `whandg`, 7 `wbaz2` (the homing
+missile's recoloured bazooka), 8 `wbaz3`, 9 `wflm`, 10 `wbow`, 11 `wbaz4`,
+12 `wbaz5`. The scheme's Double Bazooka has 7; the port's record has 3.
+
 ## WA's contacts
 
 WA tells a worm it touched another entity through the worm's vtable slot
