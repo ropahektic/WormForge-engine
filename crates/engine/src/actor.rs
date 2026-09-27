@@ -183,11 +183,15 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         log: |m| crate::log_line(m),
         hide_worm: crate::physics::hide_worm,
         worm_hidden: crate::physics::worm_hidden,
+        hide_body: crate::physics::hide_body,
+        body_hidden: crate::physics::body_hidden,
         equip: crate::world::equip_weapon,
         hp: crate::world::worm_hp,
         ammo: crate::world::ammo,
         cavern: crate::world::is_cavern,
         hurt: crate::physics::hit_worm,
+        set_worm_state: crate::physics::set_worm_state,
+        retreat_ms: crate::world::retreat_ms,
         retarget_weapon_sprites: |slot, body, cluster| {
             crate::apply::retarget_sprites(
                 slot as usize,

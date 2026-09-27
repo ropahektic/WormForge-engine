@@ -16,6 +16,7 @@ pub use actor::{
     weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, SpawnArgs,
 };
 pub use dispatch::{
+    contact, Contact,
     death, drawing, gravity_after, gravity_before, hurt, missile_frame, run_draw, run_hud, turn_start, worm_message,
     Death, DrawQuad, Hurt,
 };
@@ -1280,6 +1281,41 @@ end)
             assert!(!g.get::<bool>("outside").unwrap(), "wa.draw.quad outside wa.on.draw");
             assert!(!g.get::<bool>("sim_random").unwrap(), "wa.random inside wa.on.draw");
             assert!(g.get::<bool>("looks").unwrap(), "wa.draw.random in 0..1");
+        });
+    }
+
+    #[test]
+    fn contact_reaches_lua_with_the_speed_before_impact() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-contact");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("c"),
+            "c.contact",
+            r#"
+id = "c.contact"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = []
+"#,
+            r#"
+wa.on.contact(function(worm, other, c)
+  seen = { vx = c.vx, vy = c.vy, flags = c.flags, kind = other.kind, worm = worm ~= nil }
+end)
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        park_lua(scripts.lua);
+        contact(Contact { worm: 1, other: 0, flags: 3, vx: 0x2_0000, vy: -0x1_0000 }).unwrap();
+        PARKED_LUA.with(|slot| {
+            let guard = slot.borrow();
+            let seen: mlua::Table = guard.as_ref().unwrap().globals().get("seen").unwrap();
+            assert_eq!(seen.get::<i32>("vx").unwrap(), 0x2_0000);
+            assert_eq!(seen.get::<i32>("vy").unwrap(), -0x1_0000);
+            assert_eq!(seen.get::<u32>("flags").unwrap(), 3);
+            assert_eq!(seen.get::<String>("kind").unwrap(), "none");
+            assert!(seen.get::<bool>("worm").unwrap());
         });
     }
 

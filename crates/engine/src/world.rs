@@ -1461,6 +1461,17 @@ unsafe fn climb_root(from: *mut u8) -> *mut u8 {
     session_root_ptr()
 }
 
+/// The retreat countdown in ms, 0 before retreat starts (or with no match).
+pub fn retreat_ms() -> i32 {
+    unsafe {
+        let root = session_root_ptr();
+        if root.is_null() {
+            return 0;
+        }
+        read_i32(root, game::offsets::WORLD_ROOT_RETREAT_TIMER).max(0)
+    }
+}
+
 unsafe fn session_root_ptr() -> *mut u8 {
     let slot = rb(G_GAME_SESSION) as *const *mut u8;
     if slot.is_null() {

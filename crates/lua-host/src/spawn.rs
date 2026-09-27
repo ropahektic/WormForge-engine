@@ -612,6 +612,14 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     world.set("keys", keys).map_err(|e| e.to_string())?;
+    // The retreat countdown in ms (Project X's Root->RetreatTimer): 0 until
+    // the shot is fired and retreat starts.
+    let retreat = lua
+        .create_function(|_, ()| {
+            Ok(crate::actor::native_retreat_ms().map(|f| f()).unwrap_or(0))
+        })
+        .map_err(|e| e.to_string())?;
+    world.set("retreat", retreat).map_err(|e| e.to_string())?;
 
     // The guard that makes keys()/pointer() usable at all. They read THIS
     // machine's input, which never goes on the wire, so acting on them in a

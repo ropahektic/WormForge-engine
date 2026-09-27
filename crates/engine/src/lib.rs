@@ -7,6 +7,7 @@ mod actor;
 mod apply;
 mod panel_icon;
 #[cfg(target_os = "windows")]
+mod contact;
 mod crt;
 mod hook;
 mod http;
