@@ -864,6 +864,11 @@ fn optional_handle(v: &Option<Value>) -> mlua::Result<u32> {
     }
 }
 
+/// A worm or actor handle, 0 for nil.
+pub(crate) fn parse_owner(v: &Value) -> mlua::Result<u32> {
+    parse_handle(v)
+}
+
 fn parse_handle(v: &Value) -> mlua::Result<u32> {
     match v {
         Value::Nil => Ok(0),

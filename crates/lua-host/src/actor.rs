@@ -29,6 +29,26 @@ pub struct ActorEvent {
     pub damage: i32,
 }
 
+/// `wa.weapons.launch`: a real WA missile, fired from a weapon slot's fire
+/// params, as `FireWeapon__CreateWeaponProjectile` fires one.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LaunchArgs {
+    /// The stock slot whose fire params the missile flies with.
+    pub slot: u32,
+    /// The worm it is fired for: its team and worm number.
+    pub owner: u32,
+    /// Position and speed, 16.16.
+    pub x: i32,
+    pub y: i32,
+    pub vx: i32,
+    pub vy: i32,
+    /// Changes to this missile only; the weapon's record is untouched.
+    pub damage: Option<i32>,
+    pub sprite: Option<i32>,
+    /// Fuse in ms.
+    pub fuse: Option<i32>,
+}
+
 pub struct SpawnArgs {
     pub owner: u32,
     pub x: i32,
@@ -189,6 +209,9 @@ pub struct ActorNative {
     /// Rewrite a stock weapon slot's body sprite (and optional cluster bit) on
     /// the live table. `cluster = 0` means leave the cluster sprite alone.
     pub retarget_weapon_sprites: fn(slot: u32, body: i32, cluster: i32) -> Result<(), String>,
+    /// Fire a real WA missile from a weapon slot's fire params. Returns the
+    /// missile's handle, the id `wa.on.missile_frame` gives it.
+    pub launch: fn(&LaunchArgs) -> Result<u32, String>,
     /// WA's own WormEntity::SetState, so the state's setup runs.
     pub set_worm_state: fn(handle: u32, state: u32),
     /// The retreat countdown in ms, 0 when retreat has not started.
@@ -255,6 +278,7 @@ impl Default for ActorNative {
             cavern: || false,
             hurt: |_, _, _| {},
             retarget_weapon_sprites: |_, _, _| Err("retarget not bound".into()),
+            launch: |_| Err("launch not bound".into()),
         }
     }
 }
@@ -462,6 +486,9 @@ pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String>
     })
 }
 
+/// `missile`: the missile the step is for, its `wa.on.missile_frame` id (0
+/// for a mine).
+#[allow(clippy::too_many_arguments)]
 pub fn weapon_emit(
     table: &'static str,
     emit_id: u32,
@@ -470,6 +497,7 @@ pub fn weapon_emit(
     slot: i32,
     x: i32,
     y: i32,
+    missile: u32,
 ) -> Result<(), String> {
     if emit_id == 0 {
         return Ok(());
@@ -492,6 +520,9 @@ pub fn weapon_emit(
         ev.set("x", x).map_err(|e| e.to_string())?;
         ev.set("y", y).map_err(|e| e.to_string())?;
         ev.set("slot", slot).map_err(|e| e.to_string())?;
+        if missile != 0 {
+            ev.set("missile", missile).map_err(|e| e.to_string())?;
+        }
         ev.set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;
         with_spawn_owner(worm, || cb.call::<()>(ev).map_err(|e| e.to_string()))?;
@@ -1355,6 +1386,10 @@ fn ammo_change(v: Value) -> mlua::Result<Option<AmmoChange>> {
 
 fn native_hurt() -> Option<fn(u32, u32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hurt)
+}
+
+pub(crate) fn native_launch() -> Option<fn(&LaunchArgs) -> Result<u32, String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.launch)
 }
 
 pub(crate) fn native_retarget_weapon_sprites() -> Option<fn(u32, i32, i32) -> Result<(), String>> {

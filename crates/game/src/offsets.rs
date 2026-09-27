@@ -177,6 +177,44 @@ pub const MISSILE_WEAPON_ALT_SPRITE: usize = 0x1CC;
 /// constructor's `fire_params`: WeaponEntry+0x3C onward for a projectile).
 /// Cluster bits are constructed from their parent's copy here.
 pub const MISSILE_WEAPON_DATA: usize = 0x15C;
+
+// Launching a missile as `FireWeapon__CreateWeaponProjectile` (0x51E0F0)
+// does: check the world's object pool, allocate the entity, zero it and call
+// the constructor (0x507D10) with (entity, parent, fire_params, shoot_desc).
+
+/// `MissileEntity` size, and how much of it the launch zeroes before the
+/// constructor runs (0x51E165, 0x51E171).
+pub const MISSILE_ENTITY_SIZE: usize = 0x40C;
+pub const MISSILE_ENTITY_ZEROED: usize = 0x3EC;
+/// GameWorld's object pool counter: a missile costs 7, and none is created
+/// past 700 (0x51E10C..0x51E115).
+pub const GAME_WORLD_OBJECT_POOL: usize = 0x72A4;
+pub const OBJECT_POOL_MISSILE: i32 = 7;
+pub const OBJECT_POOL_LIMIT: i32 = 700;
+/// A weapon entry's fire params: WeaponEntry+0x3C to its end.
+pub const FIRE_PARAMS_SIZE: usize = WEAPON_ENTRY_SIZE - WEAPON_FIRE_PARAMS;
+/// Fire params fields, from their start, by Project X's `CWeaponLaunch`
+/// (pxdata.pxd): `explosion.damage`, `anim.spriteIndex`,
+/// `timeBeforeExplosion` (ms).
+pub const FIRE_DAMAGE: usize = 0x18;
+pub const FIRE_SPRITE: usize = 0x24;
+pub const FIRE_FUSE: usize = 0x50;
+/// The shoot description the constructor takes (0x2C bytes; OpenWA's
+/// `WeaponReleaseContext`, Project X's `CShootDesc`).
+pub const SHOOT_DESC_SIZE: usize = 0x2C;
+pub const SHOOT_TEAM: usize = 0x00;
+pub const SHOOT_WORM: usize = 0x04;
+pub const SHOOT_X: usize = 0x08;
+pub const SHOOT_Y: usize = 0x0C;
+pub const SHOOT_VX: usize = 0x10;
+pub const SHOOT_VY: usize = 0x14;
+/// The aim cursor at release: a homing weapon's target.
+pub const SHOOT_TARGET_X: usize = 0x18;
+pub const SHOOT_TARGET_Y: usize = 0x1C;
+/// Bounce-settle frames: WA writes 30, 60 or 0 from the worm's bounce choice.
+pub const SHOOT_SETTLE: usize = 0x24;
+/// Fuse in ms, used only where the fire params' own fuse is 0.
+pub const SHOOT_FUSE: usize = 0x28;
 /// Mirror of the fire-params `missile_type` (WeaponEntry+0xA4, blob +0x68):
 /// 0 none, 1 homing, 2 standard, 3 sheep, 5 cluster. Same discriminator as
 /// `WEAPON_CLUSTER_MISSILE_TYPE`. (MissileEntity's own dispatch field,

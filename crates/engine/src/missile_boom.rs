@@ -10,12 +10,16 @@ use game::offsets::{
     MISSILE_ALT_BANK_SPRITE, MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_SPRITE_A,
     MISSILE_HOMING_SPRITE_B, MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT,
     MISSILE_WEAPON_ALT_SPRITE, MISSILE_WEAPON_DATA, MISSILE_WEAPON_SPRITE, STOCK_WEAPON_COUNT,
-    WEAPON_ENTRY_SIZE,
+    WEAPON_ENTRY_SIZE, ENT_WORLD, ENT_WORM_TEAM, FIRE_DAMAGE, FIRE_FUSE, FIRE_PARAMS_SIZE,
+    FIRE_SPRITE, GAME_WORLD_OBJECT_POOL, GAME_WORLD_WEAPON_TABLE, MISSILE_ENTITY_SIZE,
+    MISSILE_ENTITY_ZEROED, OBJECT_POOL_LIMIT, OBJECT_POOL_MISSILE, SHOOT_DESC_SIZE, SHOOT_FUSE,
+    SHOOT_SETTLE, SHOOT_TARGET_X, SHOOT_TARGET_Y, SHOOT_TEAM, SHOOT_VX, SHOOT_VY, SHOOT_WORM,
+    SHOOT_X, SHOOT_Y, WA_MALLOC, WEAPON_FIRE_PARAMS, WORM_INDEX,
 };
 use std::collections::HashMap;
 use minhook::MinHook;
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
 use std::sync::Mutex;
 use weapons::AttachedSpawn;
 
@@ -180,7 +184,7 @@ unsafe extern "thiscall" fn ctor_hook(
         return p;
     }
     remember_weapon(p, fire_params);
-    let Some(slot) = mine::slot_from_fire_params(p, fire_params) else {
+    let Some(slot) = mine::slot_from_fire_params(p, fire_params).or_else(launching) else {
         return p;
     };
     if let Some(sprite) = flight_for_slot(slot) {
@@ -231,10 +235,12 @@ unsafe fn remember_weapon(missile: *mut u8, fire_params: *const i32) {
     let key = missile as u32;
     map.remove(&key);
     let fp = fire_params as usize;
-    let slot = slot_in_table(table, fp).or_else(|| {
-        let parent = fp.checked_sub(MISSILE_WEAPON_DATA)? as u32;
-        map.get(&parent).copied()
-    });
+    let slot = slot_in_table(table, fp)
+        .or_else(|| {
+            let parent = fp.checked_sub(MISSILE_WEAPON_DATA)? as u32;
+            map.get(&parent).copied()
+        })
+        .or_else(launching);
     if let Some(slot) = slot {
         map.insert(key, slot);
     }
@@ -254,12 +260,126 @@ pub fn forget_weapon(missile: usize) {
             map.remove(&(missile as u32));
         }
     }
+    if let Ok(mut g) = LAUNCHED.lock() {
+        g.retain(|(m, _)| *m != missile as u32);
+    }
 }
 
 /// Called at match start.
 pub fn clear_weapons() {
     if let Ok(mut g) = WEAPON_OF.lock() {
         *g = None;
+    }
+    if let Ok(mut g) = LAUNCHED.lock() {
+        g.clear();
+    }
+}
+
+// ------------------------------------------------------ wa.weapons.launch
+
+/// The slot a missile being launched belongs to, while its constructor runs
+/// (-1 otherwise). With per-shot changes it flies with a copy of the slot's
+/// fire params, whose address no longer names the slot.
+static LAUNCH_SLOT: AtomicI32 = AtomicI32::new(-1);
+/// The fire params copies launched missiles fly with, kept until WA frees
+/// the missile.
+static LAUNCHED: Mutex<Vec<(u32, Box<[u8]>)>> = Mutex::new(Vec::new());
+
+fn launching() -> Option<usize> {
+    usize::try_from(LAUNCH_SLOT.load(Ordering::SeqCst)).ok()
+}
+
+/// A shoot description for the missile constructor, as WA's release writes
+/// one: the owner's team and worm number, position and speed, the target at
+/// the launch point, WA's default bounce settle (30 frames) and an optional
+/// fallback fuse.
+fn shoot_desc(team: i32, worm: i32, args: &lua_host::LaunchArgs) -> [u8; SHOOT_DESC_SIZE] {
+    let mut d = [0u8; SHOOT_DESC_SIZE];
+    let mut put = |off: usize, v: i32| d[off..off + 4].copy_from_slice(&v.to_le_bytes());
+    put(SHOOT_TEAM, team);
+    put(SHOOT_WORM, worm);
+    put(SHOOT_X, args.x);
+    put(SHOOT_Y, args.y);
+    put(SHOOT_VX, args.vx);
+    put(SHOOT_VY, args.vy);
+    put(SHOOT_TARGET_X, args.x);
+    put(SHOOT_TARGET_Y, args.y);
+    put(SHOOT_SETTLE, 30);
+    put(SHOOT_FUSE, args.fuse.unwrap_or(0));
+    d
+}
+
+/// A copy of a slot's fire params with this missile's changes, or None when
+/// it has none and can fly with the slot's own, as WA's missiles do.
+fn tuned_fire_params(src: &[u8], args: &lua_host::LaunchArgs) -> Option<Box<[u8]>> {
+    if args.damage.is_none() && args.sprite.is_none() && args.fuse.is_none() {
+        return None;
+    }
+    let mut p: Box<[u8]> = src.into();
+    let mut put = |off: usize, v: Option<i32>| {
+        if let Some(v) = v {
+            p[off..off + 4].copy_from_slice(&v.to_le_bytes());
+        }
+    };
+    put(FIRE_DAMAGE, args.damage);
+    put(FIRE_SPRITE, args.sprite);
+    put(FIRE_FUSE, args.fuse);
+    Some(p)
+}
+
+/// `wa.weapons.launch`: a real WA missile from a slot's fire params, made
+/// as `FireWeapon__CreateWeaponProjectile` (0x51E0F0) makes one, so WA
+/// flies, draws, trails and explodes it as its own. The constructor runs
+/// through our hook, so the missile gets its slot's pack changes too.
+pub fn launch(args: &lua_host::LaunchArgs) -> Result<u32, String> {
+    let slot = args.slot as usize;
+    if slot >= STOCK_WEAPON_COUNT {
+        return Err(format!("weapons.launch: slot {slot} out of range"));
+    }
+    let owner = args.owner as *mut u8;
+    unsafe {
+        let world = read_i32(owner, ENT_WORLD) as *mut u8;
+        if world.is_null() {
+            return Err("weapons.launch: the owner has no world".into());
+        }
+        let pool = world.add(GAME_WORLD_OBJECT_POOL) as *const i32;
+        if *pool + OBJECT_POOL_MISSILE > OBJECT_POOL_LIMIT {
+            return Err("weapons.launch: WA's object pool is full".into());
+        }
+        let table = *(world.add(GAME_WORLD_WEAPON_TABLE) as *const usize);
+        if table == 0 {
+            return Err("weapons.launch: no weapon table".into());
+        }
+        let own = (table + slot * WEAPON_ENTRY_SIZE + WEAPON_FIRE_PARAMS) as *const u8;
+        let tuned = tuned_fire_params(std::slice::from_raw_parts(own, FIRE_PARAMS_SIZE), args);
+        let fire_params = tuned.as_ref().map_or(own, |p| p.as_ptr()) as *const i32;
+        let desc = shoot_desc(read_i32(owner, ENT_WORM_TEAM), read_i32(owner, WORM_INDEX), args);
+        let parent = crate::actor::physics_parent(owner).ok_or("weapons.launch: no physics parent")?;
+
+        let malloc: unsafe extern "C" fn(usize) -> *mut u8 =
+            std::mem::transmute(rb(WA_MALLOC) as usize);
+        let missile = malloc(MISSILE_ENTITY_SIZE);
+        if missile.is_null() {
+            return Err("weapons.launch: malloc failed".into());
+        }
+        std::ptr::write_bytes(missile, 0, MISSILE_ENTITY_ZEROED);
+        let ctor: CtorFn = std::mem::transmute(rb(MISSILE_CTOR) as usize);
+        LAUNCH_SLOT.store(slot as i32, Ordering::SeqCst);
+        let p = ctor(missile, parent as u32, fire_params, desc.as_ptr() as *mut u8);
+        LAUNCH_SLOT.store(-1, Ordering::SeqCst);
+        if p.is_null() {
+            return Err("weapons.launch: the missile constructor failed".into());
+        }
+        if let Some(tuned) = tuned {
+            if let Ok(mut g) = LAUNCHED.lock() {
+                g.push((p as u32, tuned));
+            }
+        }
+        log_line(&format!(
+            "weapons.launch: slot {slot} missile {:#x} at ({:#x},{:#x}) speed ({:#x},{:#x})",
+            p as u32, args.x, args.y, args.vx, args.vy
+        ));
+        Ok(p as u32)
     }
 }
 
@@ -323,13 +443,53 @@ fn fire_step(
     }
     let worm = if owner != 0 { owner } else { this as u32 };
     if cb != 0 {
-        if let Err(e) = lua_host::weapon_emit("_explodes", cb, "on_explode", worm, slot, x, y) {
+        if let Err(e) = lua_host::weapon_emit("_explodes", cb, "on_explode", worm, slot, x, y, this as u32) {
             log_error(&format!("missile on_explode: {e}"));
         }
     }
     if let Some(spawn) = spawn {
         let body = crate::actor::stock_owner(this, owner);
         crate::actor::emit_attached(body, x, y, spawn, inherit_sprite);
+    }
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::{shoot_desc, tuned_fire_params};
+    use game::offsets::{FIRE_DAMAGE, FIRE_FUSE, FIRE_PARAMS_SIZE, FIRE_SPRITE};
+
+    fn at(b: &[u8], off: usize) -> i32 {
+        i32::from_le_bytes(b[off..off + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn the_shoot_description_is_pxs_cshootdesc() {
+        let args = lua_host::LaunchArgs {
+            slot: 1, owner: 1, x: 0x0010_0000, y: 0x0020_0000, vx: 0x3_0000, vy: -0x2_0000,
+            fuse: Some(5000), ..Default::default()
+        };
+        let d = shoot_desc(2, 3, &args);
+        // Team, Worm, X, Y, SpX, SpY, AddX, AddY, vo32, vo36, Delay.
+        let want = [2, 3, 0x0010_0000, 0x0020_0000, 0x3_0000, -0x2_0000, 0x0010_0000, 0x0020_0000, 0, 30, 5000];
+        for (i, v) in want.iter().enumerate() {
+            assert_eq!(at(&d, i * 4), *v, "dword {i}");
+        }
+    }
+
+    #[test]
+    fn per_shot_changes_go_to_a_copy() {
+        let own = vec![0x11u8; FIRE_PARAMS_SIZE];
+        let none = lua_host::LaunchArgs::default();
+        assert!(tuned_fire_params(&own, &none).is_none(), "no changes: the slot's own");
+        // The Double Bazooka's second shell, as PX's script launches it.
+        let args = lua_host::LaunchArgs {
+            damage: Some(40), sprite: Some(54), fuse: Some(5000), ..Default::default()
+        };
+        let p = tuned_fire_params(&own, &args).unwrap();
+        assert_eq!((at(&p, FIRE_DAMAGE), at(&p, FIRE_SPRITE), at(&p, FIRE_FUSE)), (40, 54, 5000));
+        assert_eq!(p.len(), FIRE_PARAMS_SIZE);
+        assert!(own.iter().all(|b| *b == 0x11), "the record is untouched");
+        assert_eq!(p[0], 0x11);
     }
 }
 

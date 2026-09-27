@@ -13,7 +13,7 @@ mod spawn;
 
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
-    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, SpawnArgs,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
 };
 pub use dispatch::{
     contact, Contact,
@@ -447,6 +447,51 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn launch_reaches_native_only_during_simulation() {
+        let _guard = lock_host();
+        thread_local! {
+            static LAUNCHED: std::cell::RefCell<Vec<actor::LaunchArgs>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            launch: |a| { LAUNCHED.with(|l| l.borrow_mut().push(a.clone())); Ok(0x5000) },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let shot = "return wa.weapons.launch{ weapon = 'bazooka', owner = wa.worms.all()[1], \
+                    x = 0x100000, y = 0x200000, vx = 0x30000, vy = -0x20000, \
+                    damage = 40, sprite = 54, fuse = 5000 }";
+        assert!(lua.load(shot).exec().is_err(), "outside a simulation callback");
+        let id: u32 = sim_context::with_sim(|| lua.load(shot).eval().unwrap());
+        assert_eq!(id, 0x5000, "the missile's id");
+        LAUNCHED.with(|l| {
+            assert_eq!(
+                l.borrow().as_slice(),
+                &[actor::LaunchArgs {
+                    slot: StockWeapon::Bazooka.index() as u32,
+                    owner: 0x1234,
+                    x: 0x100000,
+                    y: 0x200000,
+                    vx: 0x30000,
+                    vy: -0x20000,
+                    damage: Some(40),
+                    sprite: Some(54),
+                    fuse: Some(5000),
+                }]
+            )
+        });
+        sim_context::with_sim(|| {
+            let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
+            assert!(err("wa.weapons.launch{ weapon = 'bazooka', x = 0, y = 0 }").contains("needs owner"));
+            assert!(err("wa.weapons.launch{ weapon = 'bazooka', owner = wa.worms.all()[1], y = 0 }")
+                .contains("needs x"));
+            assert!(err("wa.weapons.launch{ weapon = 'nope', owner = wa.worms.all()[1], x = 0, y = 0 }")
+                .contains("nope"));
+        });
+    }
+
+    #[test]
     fn land_verbs_reach_native_only_during_simulation() {
         let _guard = lock_host();
         thread_local! {
@@ -524,7 +569,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 40);
+        assert_eq!(applied.len(), 41);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         // The scheme's record for the girder slot is the Baseball Bat:
         // a special weapon, subtype 2, as WA's own bat.
