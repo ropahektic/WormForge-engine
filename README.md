@@ -2,67 +2,50 @@
 
 [Public Front + Weapon editor](https://ropahektic.github.io/WormForge/)
 
-Not a Programmer? Are you a coding agent? [CLICK HERE](contributing-with-an-agent.md) ,  [AND HERE](https://ropahektic.github.io/WormForge/capabilities.html)
+**What the engine can do** (dated, filterable): [Capabilities matrix](https://ropahektic.github.io/WormForge/capabilities.html)
+
+Coding agent? Start with [contributing-with-an-agent.md](contributing-with-an-agent.md) and the matrix — do not treat this README as a feature list.
 
 # Contributing
 
-WormForge is meant to stay compact. New power is either a **Lua pack** or one **verb**. It is not a dump of `WA.exe` into scripts.
+WormForge stays compact. New power is a **Lua pack** or one **verb** — not a dump of `WA.exe` into scripts.
 
-**Pull requests:** read [docs/pull-request-code-of-conduct.md](docs/pull-request-code-of-conduct.md) before you open one (update from `main`, resolve conflicts first, one feature when practical, CI via [`.github/workflows/rust.yml`](.github/workflows/rust.yml)).
+**Pull requests:** [docs/pull-request-code-of-conduct.md](docs/pull-request-code-of-conduct.md) (keep `main` current, resolve conflicts first, one feature when practical, CI via [`.github/workflows/rust.yml`](.github/workflows/rust.yml)).
 
-The Lua names are a first cut. Help curating them is welcome. Changing a name is a breaking change: bump `api_version` in `mod.toml` and say so in the PR.
+Lua names are a first cut. Changing a name is a breaking change: bump `api_version` in `mod.toml` and say so in the PR.
 
 ## Two lanes
 
 ### Pack (no compiler)
 
-Folder in `mods/examples/` or a player’s `Mods/`. `mod.toml` + Lua + PNG/GIF/WAV. Copy the closest example. First loaded `id` wins a stock slot
+Folder in `mods/examples/` or a player’s `Mods/`. `mod.toml` + Lua + optional PNG/GIF/WAV. Copy the closest example. Prefer a pack whenever the [matrix](https://ropahektic.github.io/WormForge/capabilities.html) already covers the behaviour.
 
 ### Engine (Rust, `i686-pc-windows-msvc`)
 
-Wrap a stock function, bind it, document it, show it in one example. Addresses live in `re/`.
+Wrap a stock **3.8.1** function, bind a handle API, document it, show it in one example. Addresses live in `re/`. Only for verbs Lua cannot call yet.
 
-If Lua can already do it with actors + `wa.land` + sprites, do not add a native “library.”
-
-## Adding a verb
-
-1. Confirm the site in Ghidra on stock **3.8.1**. Write `re/*.toml`.
+1. Confirm the site in Ghidra. Write `re/*.toml`.
 2. **Wrap, then call original.** Never trap `FireWeapon` / `InitWeaponTable`. Never stack a vtable on a stock class.
-3. Bind a **handle + table** API in `crates/lua-host`. No raw pointers, no `unknownC`, no `CWorm*` fields in Lua.
-4. Lockstep: if it moves or damages, it runs on messages both peers already see.
-   - HUD must not write physics.
-   - No `math.random`, no clock, no `GetAsyncKeyState` as sim.
-   - `pairs()` order over **string-keyed** tables varies per process (Lua randomises its string-hash seed). Integer keys — actor/worm `id`s — iterate reproducibly; for anything else use `wa.sorted(t)` before iterating.
-   - `wa.world.keys()` / `pointer()` use WormForge's synchronized input channel in networked games; every peer must run the same WormForge build.
+3. Bind under `wa` / handles in `crates/lua-host`. No raw pointers, no `unknownC`, no `CWorm*` fields in Lua.
+4. Lockstep: if it moves or damages, it runs on messages both peers already see. No `math.random`, wall clock, or local-only input as simulation. Details: matrix (Lockstep & Sync) and the agent guide.
 5. `cargo test --workspace` and a 3.8.1 launch that logs `wkLua build …`.
 
-Draw primitives (line, blit-without-actor) belong in the DLL. Named effects (lightning, fire) belong in Lua that call those primitives.
+## Hard limits
 
-## Lua names (until someone curates better)
-
-- Everything user-facing is under `wa` or a handle (`a`, `worm`).
-- Methods are short English verbs: `a:move`, `a:look`, `worm:equip`. Not `HandleMessage`, not `TryMove`.
-- Reads that can fail return `nil` or a table (`wa.land.trace`), not thrown C++.
-- Positions and speeds are WA **16.16** integers. Do not silently switch to floats.
-- Stock messages are `wa.msg.JUMP`, not magic numbers in packs.
-- `wa.weapons.register` does **not** add a 72nd panel slot in v1. It still occupies `based_on`. Do not “fix” that by growing the table in a drive-by PR.
-
-PRs that only rename for consistency are useful. PRs that expose a new C++ layout “for completeness” are not.
-
-## Please
-
-- DO NOT vendor wa-engine.js , collisionmanager.rs, wkaim.dll or the "re" folder (if you have access to `REsources/` please gitignore).
-- Do not add OpenGL or a second full renderer for FX. The EdLud GPU atlas path (gpu_prefix) is the supported truecolor escape hatch; wrap stock blit for everything else.
-
+- **71 stock panel slots.** Overlays / `register` occupy a stock `based_on` slot. Do not grow the weapon table in a drive-by PR.
+- **One truecolor path.** Do not add OpenGL or a second full renderer. Use the existing D3D9 atlas (see matrix: Truecolor & GPU).
+- **No vendoring** wa-engine.js, collisionmanager.rs, wkaim.dll, external `re` dumps, or GPL game-replacement sources (`REsources/` → gitignore).
+- Positions / speeds stay WA **16.16** integers. Stock messages use `wa.msg.*`, not magic numbers.
+- Methods are short English verbs on handles (`a:move`, `worm:equip`). PRs that only rename for consistency are useful; PRs that expose a new C++ layout “for completeness” are not.
 
 ## Layout
 
 - `crates/wk-lua` — DllMain
-- `crates/engine` — ASLR rebase, 3.8.1 check, wraps 
+- `crates/engine` — ASLR rebase, 3.8.1 check, wraps
 - `crates/lua-host` — Lua 5.4 sandbox, `wa.*` dispatcher
 - `crates/weapons` — stock slots, first-loaded overlay ownership
-- `crates/actors` — namespaced LuaActor kinds (`mod_id.kind`); spawn steps come from Lua
-- `crates/gfx` — namespaced sprite keys (`mod_id:path`); no global sprite ids
+- `crates/actors` — namespaced LuaActor kinds (`mod_id.kind`)
+- `crates/gfx` — namespaced sprite keys (`mod_id:path`)
 - `crates/game` — 32-bit layouts
 - `crates/re-catalog` — `re/*.toml` + `hooks/*.toml`
 
@@ -74,15 +57,12 @@ cargo test --workspace
 cargo build --release -p wk-lua --target i686-pc-windows-msvc
 ```
 
-The cdylib is `target/i686-pc-windows-msvc/release/wkLua.dll`.
-
-
-
+The cdylib is `target/i686-pc-windows-msvc/release/wkLua.dll`. Off Windows, treat CI’s Windows job in `rust.yml` as the DLL gate.
 
 ## Contributors
 
-- **[EdLud](https://github.com/EdLud)** — GPU sprite renderer (D3D9 atlas / gpu_prefix truecolor path). 
+- **[EdLud](https://github.com/EdLud)** — GPU sprite renderer (D3D9 atlas / truecolor path).
 
 ## License
 
-MIT. Do not vendor GPL game-replacement sources into this tree.
+MIT.
