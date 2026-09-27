@@ -602,6 +602,44 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn cluster_takes_a_pack_sheet() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-cluster-sheet");
+        let _ = std::fs::remove_dir_all(&root);
+        let own = pack(
+            &root,
+            "t.cluster",
+            r#"
+id = "t.cluster"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["cluster_bomb"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "cluster_bomb",
+  cluster = { sprite = "bit.png", homing_sprite = "homing.png" },
+})
+"#,
+        );
+        std::fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../mods/examples/gravler_strike/sprites/gravlerdive.png"),
+            root.join("bit.png"),
+        )
+        .unwrap();
+        std::fs::copy(root.join("bit.png"), root.join("homing.png")).unwrap();
+        let scripts = run_mods(&[own]).unwrap();
+        let params = &scripts.resolved.applied[0].params;
+        assert_eq!(params.cluster_sprite_path.as_deref(), Some("bit.png"));
+        assert_eq!(params.cluster_sprite_id, None, "the id comes when the sheet is installed");
+        assert!(params.extra_sheets.iter().any(|(p, _)| p == "bit.png"));
+        assert_eq!(params.cluster_homing_sprite_path.as_deref(), Some("homing.png"));
+        assert!(params.extra_sheets.iter().any(|(p, _)| p == "homing.png"));
+    }
+
+    #[test]
     fn mine_brain_and_sprite() {
         let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-mine-brain");

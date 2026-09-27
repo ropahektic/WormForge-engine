@@ -391,6 +391,36 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 claim.mod_id
             ));
         }
+        if let Some(path) = &claim.params.cluster_sprite_path {
+            match sprite::lookup_key(&gfx::sprite_key(&claim.mod_id, path)) {
+                Some(s) => {
+                    entry.set_cluster_sprite_id(s.id);
+                    // A homing cluster draws its render timer, which
+                    // apply_params set from the cluster sprite before this
+                    // sheet had an id.
+                    if claim.params.cluster_homing.is_some() {
+                        entry.set_cluster_render_timer(s.id);
+                    }
+                    log_line(&format!("{} cluster sprite {path} -> {}", claim.mod_id, s.id));
+                }
+                None => log_error(&format!(
+                    "{} cluster sprite {path} was not installed",
+                    claim.mod_id
+                )),
+            }
+        }
+        if let Some(path) = &claim.params.cluster_homing_sprite_path {
+            match sprite::lookup_key(&gfx::sprite_key(&claim.mod_id, path)) {
+                Some(s) => {
+                    entry.set_cluster_render_timer(s.id);
+                    log_line(&format!("{} homing cluster sprite {path} -> {}", claim.mod_id, s.id));
+                }
+                None => log_error(&format!(
+                    "{} homing cluster sprite {path} was not installed",
+                    claim.mod_id
+                )),
+            }
+        }
         if let Some(name) = &claim.params.name {
             match CString::new(name.as_str()) {
                 Ok(c) => {

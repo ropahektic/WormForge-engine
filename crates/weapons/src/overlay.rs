@@ -348,6 +348,14 @@ pub struct OverlayParams {
     /// Pack-relative WAV paths (`sounds = { ... }`) loaded into DSSound slot 451+.
     pub extra_sounds: Vec<(String, std::path::PathBuf)>,
     pub cluster_sprite_id: Option<i32>,
+    /// A pack sheet for the cluster (`cluster = { sprite = "x.png" }`). It is
+    /// installed with the pack's other sheets, and the cluster is pointed at
+    /// the id it gets.
+    pub cluster_sprite_path: Option<String>,
+    /// A pack sheet a homing cluster draws while it homes
+    /// (`cluster = { homing_sprite = "x.png" }`), written to the cluster's
+    /// render timer. Without it, a homing cluster draws its cluster sprite.
+    pub cluster_homing_sprite_path: Option<String>,
     pub cluster_damage: Option<i32>,
     pub cluster_bounce_pct: Option<i32>,
     pub cluster_gravity_pct: Option<i32>,
@@ -411,6 +419,8 @@ impl Default for OverlayParams {
             worm_sprites_animate: false,
             extra_sounds: Vec::new(),
             cluster_sprite_id: None,
+            cluster_sprite_path: None,
+            cluster_homing_sprite_path: None,
             cluster_damage: None,
             cluster_bounce_pct: None,
             cluster_gravity_pct: None,
