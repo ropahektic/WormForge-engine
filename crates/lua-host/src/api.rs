@@ -611,6 +611,13 @@ fn table_to_claim(
     let actor: Option<String> = spec.get("actor")?;
     let is_weapon = get_bool(&spec, "is_weapon")?.unwrap_or(true);
     let eat_fire = get_bool(&spec, "eat_fire")?.unwrap_or(false);
+    let fire_repeat = match get_i32(&spec, "fire_repeat")? {
+        None => 1,
+        Some(n) if (1..=20).contains(&n) => n as u32,
+        Some(n) => {
+            return Err(mlua::Error::external(format!("fire_repeat is 1 to 20 shots at once; got {n}")))
+        }
+    };
     let (cursor_on_select, on_select_id) = spawn::parse_select(lua, &spec)?;
 
     let mut damage = None;
@@ -958,6 +965,7 @@ fn table_to_claim(
             is_weapon,
             cursor_on_select,
             eat_fire,
+            fire_repeat,
             on_select_id,
             spawn,
             on_click_id,

@@ -308,6 +308,9 @@ pub struct OverlayParams {
     pub cursor_on_select: bool,
     /// Swallow stock FireWeapon for this slot (pointer-driven weapons).
     pub eat_fire: bool,
+    /// Run stock FireWeapon this many times per shot (`fire_repeat = 5`):
+    /// Project X's Real Shotgun fires five pellets at once. 1 = stock.
+    pub fire_repeat: u32,
     /// Lua `on_select` callback id (`0` = none). Runs when the slot is chosen.
     pub on_select_id: u32,
     /// On cursor click, spawn a LuaActor with these options (GUI statuses).
@@ -400,6 +403,7 @@ impl Default for OverlayParams {
             is_weapon: true,
             cursor_on_select: false,
             eat_fire: false,
+            fire_repeat: 1,
             on_select_id: 0,
             spawn: None,
             on_click_id: 0,

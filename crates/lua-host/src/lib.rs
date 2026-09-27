@@ -637,6 +637,25 @@ wa.weapons.replace({
         assert!(params.extra_sheets.iter().any(|(p, _)| p == "bit.png"));
         assert_eq!(params.cluster_homing_sprite_path.as_deref(), Some("homing.png"));
         assert!(params.extra_sheets.iter().any(|(p, _)| p == "homing.png"));
+    fn fire_repeat_is_one_to_twenty_shots() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-fire-repeat");
+        let _ = std::fs::remove_dir_all(&root);
+        let manifest = r#"
+id = "t.repeat"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["shotgun"]
+"#;
+        let five = pack(&root, "t.repeat", manifest, r#"wa.weapons.replace({ weapon = "shotgun", fire_repeat = 5 })"#);
+        let scripts = run_mods(&[five]).unwrap();
+        assert_eq!(scripts.resolved.applied[0].params.fire_repeat, 5);
+        let stock = pack(&root, "t.repeat", manifest, r#"wa.weapons.replace({ weapon = "shotgun" })"#);
+        assert_eq!(run_mods(&[stock]).unwrap().resolved.applied[0].params.fire_repeat, 1);
+        let bad = pack(&root, "t.repeat", manifest, r#"wa.weapons.replace({ weapon = "shotgun", fire_repeat = 0 })"#);
+        let err = run_mods(&[bad]).err().expect("no shot at all is refused");
+        assert!(err.contains("fire_repeat is 1 to 20"), "{err}");
     }
 
     #[test]

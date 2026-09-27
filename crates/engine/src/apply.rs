@@ -349,6 +349,13 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 claim.mod_id, claim.params.on_click_id
             ));
         }
+        if claim.params.fire_repeat > 1 {
+            actor::claim_fire_repeat(idx, claim.params.fire_repeat);
+            log_line(&format!(
+                "{} fires {} times per shot on slot {idx}",
+                claim.mod_id, claim.params.fire_repeat
+            ));
+        }
         if claim.params.on_select_id != 0 || claim.params.eat_fire {
             actor::claim_select(idx, claim.params.on_select_id, claim.params.eat_fire);
             log_line(&format!(
