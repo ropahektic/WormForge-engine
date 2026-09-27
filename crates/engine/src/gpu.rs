@@ -605,10 +605,14 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mu
     if !is_active() {
         return false;
     }
+    // WA's reverse flag, read as BlitSprite reads it, before anything below
+    // rebuilds the sprite value without it.
+    let anim = crate::sprite::draw_phase(sprite, anim);
     // Virtual ids are 0x01000000 | n, so masking to 16 bits throws the tag
-    // away and leaves a small number that looks like a stock sprite. The only
-    // flag WA packs alongside the id here is the mirror bit.
-    let id = sprite & !game::offsets::SPRITE_MIRROR_X;
+    // away and leaves a small number that looks like a stock sprite. WA packs
+    // flags alongside the id (the mirror bit, and others); `sheet_id` drops
+    // them.
+    let id = crate::sprite::sheet_id(sprite);
     if !crate::sprite::is_gpu_sheet(id) {
         // A virtual id that reached here without a sheet must NOT be passed
         // on: WA would index its own sprite table with it and draw whatever
@@ -684,7 +688,7 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
     let cam_y = *((display + 0x3564) as *const i32);
 
     for p in back_to_front(&pending) {
-        let id = p.sprite & !game::offsets::SPRITE_MIRROR_X;
+        let id = crate::sprite::sheet_id(p.sprite);
         let Some((rect, frames, looping)) = crate::sprite::gpu_frame(id) else {
             continue;
         };
@@ -817,7 +821,7 @@ unsafe extern "C" fn rq_should_intercept(layer: u32, x: i32, y: i32, sprite: u32
     // Virtual ids are 0x01000000|n — never mask to 16 bits here. Worm aim
     // sheets (worm_sprites) arrive with the mirror bit OR'd in and must match
     // on the full id.
-    let gpu_id = sprite & !game::offsets::SPRITE_MIRROR_X;
+    let gpu_id = crate::sprite::sheet_id(sprite);
     if !crate::sprite::is_gpu_sheet(gpu_id) {
         return 0;
     }
