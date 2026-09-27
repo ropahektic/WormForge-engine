@@ -618,6 +618,23 @@ fn table_to_claim(
             return Err(mlua::Error::external(format!("fire_repeat is 1 to 20 shots at once; got {n}")))
         }
     };
+    // `wep = "hellish.wep"`: a Project X weapon file whose firing the slot
+    // takes (weapons::wep). Its name is the default name.
+    if copy_from.is_some() && spec.contains_key("wep")? {
+        return Err(mlua::Error::external("use copy_from or wep, not both: each sets how the weapon fires"));
+    }
+    let wep = match get_string(&spec, "wep")? {
+        Some(rel) => {
+            if rel.contains("..") {
+                return Err(mlua::Error::external("wep path must stay inside the pack"));
+            }
+            let bytes = std::fs::read(root.join(&rel))
+                .map_err(|e| mlua::Error::external(format!("wep {rel}: {e}")))?;
+            Some(weapons::wep::parse_wep(&rel.replace('\\', "/"), &bytes).map_err(mlua::Error::external)?)
+        }
+        None => None,
+    };
+
     let (cursor_on_select, on_select_id) = spawn::parse_select(lua, &spec)?;
 
     let mut damage = None;
@@ -962,7 +979,7 @@ fn table_to_claim(
         logical_id,
         slot,
         params: OverlayParams {
-            name,
+            name: name.or_else(|| wep.as_ref().map(|w| w.name.clone())),
             damage,
             bounce_pct,
             gravity_pct,
@@ -970,6 +987,7 @@ fn table_to_claim(
             sprite_id,
             sprite_sheet,
             copy_from,
+            wep,
             actor,
             is_weapon,
             cursor_on_select,

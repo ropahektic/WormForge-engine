@@ -300,6 +300,9 @@ pub struct OverlayParams {
     pub sprite_sheet: Option<SpriteStrip>,
     /// Clone this stock weapon's fire onto `slot`. Panel identity stays.
     pub copy_from: Option<StockWeapon>,
+    /// A Project X `.wep` whose firing replaces the slot's (`wep = "..."`),
+    /// applied where `copy_from` is; the two are exclusive.
+    pub wep: Option<crate::wep::Wep>,
     /// Legacy `actor = "drop"` string. Prefer `on_click.spawn`.
     pub actor: Option<String>,
     /// Panel weapon (selectable). `replace()` is already a weapon; Lua still names it.
@@ -403,6 +406,7 @@ impl Default for OverlayParams {
             sprite_id: None,
             sprite_sheet: None,
             copy_from: None,
+            wep: None,
             actor: None,
             is_weapon: true,
             cursor_on_select: false,
