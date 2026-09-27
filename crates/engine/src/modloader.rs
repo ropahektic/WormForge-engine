@@ -11,7 +11,7 @@
 //! pack with its sha256. The loader records the hash it installed, so "update
 //! available" works even when a pack author forgets to bump `version`.
 
-use crate::log::{log_error, log_line, panic_text, wa_directory};
+use crate::log::{log_error, log_line, panic_text, wa_directory, BUILD_ID};
 use lua_host::mods_root_from;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
@@ -21,29 +21,35 @@ use weapons::{
     conflict_text, list_mods, parse_index, slot_conflicts, LoaderSettings, ModEntry, PackIndex,
     PackKind, RemotePack, SlotConflict,
 };
-use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows_sys::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
-    CreateBitmap, GetStockObject, GetSysColor, COLOR_BTNFACE, DEFAULT_GUI_FONT,
+    CreateBitmap, CreateFontW, GetSysColor, GetSysColorBrush, InvalidateRect, SetBkMode,
+    SetTextColor, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, COLOR_BTNFACE, DEFAULT_CHARSET,
+    DEFAULT_PITCH, FF_DONTCARE, FW_NORMAL, FW_SEMIBOLD, HDC, OUT_DEFAULT_PRECIS, TRANSPARENT,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::System::SystemServices::SS_BITMAP;
+use windows_sys::Win32::System::SystemServices::{SS_BITMAP, SS_ENDELLIPSIS};
 use windows_sys::Win32::UI::Controls::{
-    InitCommonControlsEx, INITCOMMONCONTROLSEX, ICC_LISTVIEW_CLASSES, LVCF_TEXT, LVCF_WIDTH,
-    LVCOLUMNW, LVIF_STATE, LVIF_TEXT, LVIS_STATEIMAGEMASK, LVITEMW, LVM_DELETEALLITEMS,
-    LVM_GETNEXTITEM, LVM_INSERTCOLUMNW, LVM_INSERTITEMW, LVM_SETEXTENDEDLISTVIEWSTYLE,
-    LVM_SETITEMSTATE, LVM_SETITEMTEXTW, LVNI_SELECTED, LVN_ITEMCHANGED, LVS_EX_CHECKBOXES,
-    LVS_EX_FULLROWSELECT, LVS_REPORT, LVS_SHOWSELALWAYS, LVS_SINGLESEL, NMHDR, NMLISTVIEW,
-    WC_LISTVIEWW,
+    InitCommonControlsEx, CDDS_ITEMPREPAINT, CDDS_PREPAINT, CDRF_DODEFAULT, CDRF_NOTIFYITEMDRAW,
+    EM_SETCUEBANNER, ICC_LISTVIEW_CLASSES, INITCOMMONCONTROLSEX, LVCF_TEXT, LVCF_WIDTH, LVCOLUMNW,
+    LVIF_STATE, LVIF_TEXT, LVIS_SELECTED, LVIS_STATEIMAGEMASK, LVITEMW, LVM_DELETEALLITEMS,
+    LVM_GETITEMSTATE, LVM_GETNEXTITEM, LVM_INSERTCOLUMNW, LVM_INSERTITEMW,
+    LVM_SETCOLUMNWIDTH, LVM_SETEXTENDEDLISTVIEWSTYLE, LVM_SETITEMSTATE, LVM_SETITEMTEXTW,
+    LVNI_SELECTED, LVN_ITEMCHANGED, LVSCW_AUTOSIZE_USEHEADER, LVS_EX_CHECKBOXES,
+    LVS_EX_DOUBLEBUFFER, LVS_EX_FULLROWSELECT, LVS_EX_LABELTIP, LVS_REPORT, LVS_SHOWSELALWAYS,
+    NMHDR, NMITEMACTIVATE, NMLISTVIEW, NMLVCUSTOMDRAW, NM_CUSTOMDRAW, NM_DBLCLK, WC_LISTVIEWW,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
 use windows_sys::Win32::UI::Shell::ShellExecuteW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetDlgItem,
-    GetMessageW, IsWindow, LoadCursorW, MoveWindow, PostMessageW, PostQuitMessage,
-    RegisterClassExW, SendMessageW, SetWindowTextW, ShowWindow, TranslateMessage, CW_USEDEFAULT,
-    IDC_ARROW, IMAGE_BITMAP, MSG, STM_SETIMAGE, SW_SHOWNORMAL, WM_APP, WM_CLOSE, WM_COMMAND,
-    WM_CREATE, WM_DESTROY, WM_NOTIFY, WM_SETFONT, WM_SIZE, WNDCLASSEXW, WS_BORDER, WS_CHILD,
-    WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE,
+    GetMessageW, GetWindowTextW, IsWindow, LoadCursorW, MoveWindow, PostMessageW, PostQuitMessage,
+    RegisterClassExW, SendMessageW, SetWindowTextW, ShowWindow, TranslateMessage, BM_SETCHECK,
+    BM_SETSTYLE, BS_AUTORADIOBUTTON, BS_DEFPUSHBUTTON, BS_GROUPBOX, BS_PUSHBUTTON, BS_PUSHLIKE,
+    CW_USEDEFAULT, EN_CHANGE, ES_AUTOHSCROLL, IDC_ARROW, IMAGE_BITMAP, MINMAXINFO, MSG,
+    STM_SETIMAGE, SW_SHOWNORMAL, WM_APP, WM_CLOSE, WM_COMMAND, WM_CREATE, WM_CTLCOLORSTATIC,
+    WM_DESTROY, WM_GETMINMAXINFO, WM_NOTIFY, WM_SETFONT, WM_SIZE, WNDCLASSEXW, WS_CHILD,
+    WS_EX_CLIENTEDGE, WS_GROUP, WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE,
 };
 
 const CLASS_NAME: &str = "WormForgeModLoader";
@@ -59,16 +65,33 @@ const ID_BANNER: usize = 109;
 const ID_TAB_ALL: usize = 110;
 const ID_TAB_WEAPONS: usize = 111;
 const ID_TAB_GAMEPLAY: usize = 112;
+const ID_SEARCH: usize = 113;
+const ID_ENABLE_ALL: usize = 114;
+const ID_DISABLE_ALL: usize = 115;
+const ID_GROUP_PACKS: usize = 116;
+const ID_GROUP_ONLINE: usize = 117;
+/// Legend swatches, one per `Tone`, in `Tone::ALL` order.
+const ID_LEGEND: usize = 120;
 const NETWORK_BUTTONS: [usize; 3] = [ID_CHECK, ID_INSTALL, ID_UPDATE_ALL];
 const TAB_BUTTONS: [(usize, &str); 3] = [
     (ID_TAB_ALL, "All"),
     (ID_TAB_WEAPONS, "Weapons"),
     (ID_TAB_GAMEPLAY, "Gameplay"),
 ];
+const PACK_BUTTONS: [(usize, &str); 4] = [
+    (ID_ENABLE_ALL, "Enable all"),
+    (ID_DISABLE_ALL, "Disable all"),
+    (ID_REFRESH, "Refresh"),
+    (ID_OPEN, "Open Mods folder"),
+];
+const ONLINE_BUTTONS: [(usize, &str); 3] = [
+    (ID_CHECK, "Check online"),
+    (ID_INSTALL, "Install selected"),
+    (ID_UPDATE_ALL, "Update all"),
+];
 
 /// 0 = all, 1 = weapons, 2 = gameplay.
 static FILTER: AtomicUsize = AtomicUsize::new(0);
-/// Full merged list; `ROWS` is the tab-filtered view shown in the list.
 
 /// Online catalogue produced by `tools/publish-packs.ps1`.
 pub const INDEX_URL: &str = "https://ropahektic.github.io/WormForge/downloads/packs/index.toml";
@@ -96,7 +119,11 @@ static BANNER_H: AtomicI32 = AtomicI32::new(0);
 static POPULATING: AtomicBool = AtomicBool::new(false);
 static STATUS: Mutex<String> = Mutex::new(String::new());
 static PEER: Mutex<String> = Mutex::new(String::new());
+/// The rows the list shows (tab + search), index for index.
 static ROWS: Mutex<Vec<Row>> = Mutex::new(Vec::new());
+/// Colour of each shown row, index for index with `ROWS`.
+static TONES: Mutex<Vec<Tone>> = Mutex::new(Vec::new());
+/// Full merged list; `ROWS` is the filtered view.
 static ALL_ROWS: Mutex<Vec<Row>> = Mutex::new(Vec::new());
 /// Last index fetched by "Check online"; merged into the list until restart.
 static REMOTE: Mutex<Option<PackIndex>> = Mutex::new(None);
@@ -114,6 +141,54 @@ enum Online {
     NotInstalled,
     UpToDate,
     UpdateAvailable,
+}
+
+/// What a row's colour says, most urgent first.
+#[derive(Clone, Copy, PartialEq)]
+enum Tone {
+    On,
+    Off,
+    Update,
+    OnlineOnly,
+    Problem,
+}
+
+const fn rgb(r: u8, g: u8, b: u8) -> COLORREF {
+    r as u32 | (g as u32) << 8 | (b as u32) << 16
+}
+
+impl Tone {
+    const ALL: [Tone; 5] = [Tone::On, Tone::Off, Tone::Update, Tone::OnlineOnly, Tone::Problem];
+
+    fn legend(self) -> &'static str {
+        match self {
+            Tone::On => "\u{25A0} Enabled",
+            Tone::Off => "\u{25A0} Off",
+            Tone::Update => "\u{25A0} Update available",
+            Tone::OnlineOnly => "\u{25A0} Online only",
+            Tone::Problem => "\u{25A0} Problem",
+        }
+    }
+
+    fn text(self) -> COLORREF {
+        match self {
+            Tone::On => rgb(0x1B, 0x6B, 0x2A),
+            Tone::Off => rgb(0x80, 0x80, 0x80),
+            Tone::Update => rgb(0x8A, 0x5A, 0x00),
+            Tone::OnlineOnly => rgb(0x1E, 0x5A, 0xA8),
+            Tone::Problem => rgb(0xB0, 0x1E, 0x1E),
+        }
+    }
+
+    fn back(self) -> COLORREF {
+        match self {
+            Tone::On => rgb(0xFF, 0xFF, 0xFF),
+            Tone::Off => rgb(0xF6, 0xF6, 0xF6),
+            Tone::Update => rgb(0xFF, 0xF4, 0xD1),
+            Tone::OnlineOnly => rgb(0xE8, 0xF1, 0xFC),
+            Tone::Problem => rgb(0xFD, 0xE7, 0xE7),
+        }
+    }
 }
 
 impl Row {
@@ -134,6 +209,10 @@ impl Row {
 
     fn enabled(&self) -> bool {
         self.local.as_ref().is_some_and(|l| l.enabled)
+    }
+
+    fn toggleable(&self) -> bool {
+        self.local.as_ref().is_some_and(|l| l.manifest.is_ok())
     }
 
     fn kind(&self) -> PackKind {
@@ -159,6 +238,10 @@ impl Row {
             Some(sha) if sha.eq_ignore_ascii_case(&r.sha256) => Online::UpToDate,
             _ => Online::UpdateAvailable,
         }
+    }
+
+    fn needs_install(&self, settings: &LoaderSettings) -> bool {
+        matches!(self.online(settings), Online::NotInstalled | Online::UpdateAvailable)
     }
 }
 
@@ -234,12 +317,103 @@ pub fn start() {
         .unwrap_or_else(|e| log_error(&format!("mod loader thread: {e}")));
 }
 
+// ---------------------------------------------------------------- visual styles
+
+/// `ACTCTXW` (winbase.h); kept local so no extra windows-sys feature is needed.
+#[repr(C)]
+struct ActCtxW {
+    cb_size: u32,
+    dw_flags: u32,
+    lp_source: *const u16,
+    w_processor_architecture: u16,
+    w_lang_id: u16,
+    lp_assembly_directory: *const u16,
+    lp_resource_name: *const u16,
+    lp_application_name: *const u16,
+    h_module: *mut c_void,
+}
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn CreateActCtxW(ctx: *const ActCtxW) -> *mut c_void;
+    fn ActivateActCtx(ctx: *mut c_void, cookie: *mut usize) -> i32;
+}
+
+const COMCTL6_MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0"
+        processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/>
+    </dependentAssembly>
+  </dependency>
+</assembly>
+"#;
+
+/// WA.exe has no common-controls v6 manifest, so its windows draw in the
+/// Windows 95 style. Activating one on this thread only gives the loader
+/// themed controls without touching WA's own windows.
+unsafe fn enable_visual_styles() {
+    let path = std::env::temp_dir().join("wormforge-modloader.manifest");
+    if let Err(e) = std::fs::write(&path, COMCTL6_MANIFEST) {
+        log_error(&format!("mod loader: visual styles manifest: {e}"));
+        return;
+    }
+    let source = wide(&path.to_string_lossy());
+    let ctx = ActCtxW {
+        cb_size: std::mem::size_of::<ActCtxW>() as u32,
+        dw_flags: 0,
+        lp_source: source.as_ptr(),
+        w_processor_architecture: 0,
+        w_lang_id: 0,
+        lp_assembly_directory: std::ptr::null(),
+        lp_resource_name: std::ptr::null(),
+        lp_application_name: std::ptr::null(),
+        h_module: std::ptr::null_mut(),
+    };
+    let handle = CreateActCtxW(&ctx);
+    if handle as isize == -1 {
+        log_error("mod loader: CreateActCtxW failed; classic controls");
+        return;
+    }
+    let mut cookie = 0usize;
+    if ActivateActCtx(handle, &mut cookie) == 0 {
+        log_error("mod loader: ActivateActCtx failed; classic controls");
+    }
+}
+
+unsafe fn ui_font(weight: u32) -> *mut c_void {
+    let face = wide("Segoe UI");
+    CreateFontW(
+        -12,
+        0,
+        0,
+        0,
+        weight as i32,
+        0,
+        0,
+        0,
+        DEFAULT_CHARSET as u32,
+        OUT_DEFAULT_PRECIS as u32,
+        CLIP_DEFAULT_PRECIS as u32,
+        CLEARTYPE_QUALITY as u32,
+        (DEFAULT_PITCH | FF_DONTCARE) as u32,
+        face.as_ptr(),
+    )
+}
+
+static FONT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static FONT_BOLD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
 unsafe fn ui_thread() {
+    enable_visual_styles();
     let icc = INITCOMMONCONTROLSEX {
         dwSize: std::mem::size_of::<INITCOMMONCONTROLSEX>() as u32,
         dwICC: ICC_LISTVIEW_CLASSES,
     };
     InitCommonControlsEx(&icc);
+    FONT.store(ui_font(FW_NORMAL), Ordering::SeqCst);
+    FONT_BOLD.store(ui_font(FW_SEMIBOLD), Ordering::SeqCst);
 
     let hinst = GetModuleHandleW(std::ptr::null());
     let class = wide(CLASS_NAME);
@@ -262,7 +436,7 @@ unsafe fn ui_thread() {
         log_error("mod loader: RegisterClassExW failed");
         return;
     }
-    let title = wide("WormForge Mods");
+    let title = wide(&format!("WormForge Mods  \u{00B7}  {BUILD_ID}"));
     let hwnd = CreateWindowExW(
         0,
         class.as_ptr(),
@@ -270,8 +444,8 @@ unsafe fn ui_thread() {
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        880,
-        640,
+        960,
+        680,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         hinst,
@@ -320,16 +494,32 @@ unsafe fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option
             layout(hwnd);
             Some(0)
         }
+        WM_GETMINMAXINFO => {
+            let mm = lparam as *mut MINMAXINFO;
+            if !mm.is_null() {
+                (*mm).ptMinTrackSize.x = 780;
+                (*mm).ptMinTrackSize.y = 520;
+            }
+            Some(0)
+        }
         WM_COMMAND => {
-            match wparam & 0xFFFF {
+            let id = wparam & 0xFFFF;
+            let code = ((wparam >> 16) & 0xFFFF) as u32;
+            match id {
+                ID_SEARCH if code == EN_CHANGE => {
+                    fill_list_from_all();
+                }
+                ID_SEARCH => return None,
                 ID_REFRESH => populate(),
                 ID_OPEN => open_folder(hwnd),
+                ID_ENABLE_ALL => set_all_shown(true),
+                ID_DISABLE_ALL => set_all_shown(false),
                 ID_CHECK => check_online(hwnd),
                 ID_INSTALL => install_selected(hwnd),
                 ID_UPDATE_ALL => install_all(hwnd),
-                ID_TAB_ALL => set_filter(hwnd, 0),
-                ID_TAB_WEAPONS => set_filter(hwnd, 1),
-                ID_TAB_GAMEPLAY => set_filter(hwnd, 2),
+                ID_TAB_ALL => set_filter(0),
+                ID_TAB_WEAPONS => set_filter(1),
+                ID_TAB_GAMEPLAY => set_filter(2),
                 _ => return None,
             }
             Some(0)
@@ -341,15 +531,23 @@ unsafe fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option
         }
         WM_NOTIFY => {
             let hdr = lparam as *const NMHDR;
-            if hdr.is_null() {
+            if hdr.is_null() || (*hdr).idFrom != ID_LIST {
                 return None;
             }
-            if (*hdr).idFrom == ID_LIST && (*hdr).code == LVN_ITEMCHANGED {
-                let nm = lparam as *const NMLISTVIEW;
-                on_item_changed(&*nm);
+            match (*hdr).code {
+                LVN_ITEMCHANGED => {
+                    on_item_changed(&*(lparam as *const NMLISTVIEW));
+                    Some(0)
+                }
+                NM_CUSTOMDRAW => Some(custom_draw(&mut *(lparam as *mut NMLVCUSTOMDRAW))),
+                NM_DBLCLK => {
+                    on_double_click(hwnd, (*(lparam as *const NMITEMACTIVATE)).iItem);
+                    Some(0)
+                }
+                _ => None,
             }
-            Some(0)
         }
+        WM_CTLCOLORSTATIC => colour_static(wparam as HDC, lparam as HWND),
         WM_APP_TEXT => {
             let status = STATUS.lock().map(|g| g.clone()).unwrap_or_default();
             let peer = PEER.lock().map(|g| g.clone()).unwrap_or_default();
@@ -373,13 +571,65 @@ unsafe fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option
     }
 }
 
+/// Status line colour from what it says: red for trouble, amber for updates.
+fn status_tone(text: &str) -> Option<Tone> {
+    let t = text.to_ascii_lowercase();
+    if ["conflict", "error", "failed", "cannot", "could not", "online:", "mismatch"]
+        .iter()
+        .any(|k| t.contains(k))
+    {
+        Some(Tone::Problem)
+    } else if t.contains("new or updated") || t.contains("with updates") {
+        Some(Tone::Update)
+    } else if t.starts_with("installed") || t.starts_with("saved") || t.contains("up to date") {
+        Some(Tone::On)
+    } else {
+        None
+    }
+}
+
+unsafe fn colour_static(hdc: HDC, ctl: HWND) -> Option<LRESULT> {
+    let hwnd = WINDOW.load(Ordering::SeqCst);
+    let id = (0..Tone::ALL.len())
+        .find(|i| GetDlgItem(hwnd, (ID_LEGEND + i) as i32) == ctl)
+        .map(|i| Tone::ALL[i]);
+    let tone = if let Some(t) = id {
+        Some(t)
+    } else if ctl == STATUS_LABEL.load(Ordering::SeqCst) {
+        status_tone(&STATUS.lock().map(|g| g.clone()).unwrap_or_default())
+    } else if ctl == PEER_LABEL.load(Ordering::SeqCst) {
+        status_tone(&PEER.lock().map(|g| g.clone()).unwrap_or_default())
+    } else {
+        return None;
+    };
+    if let Some(t) = tone {
+        SetTextColor(hdc, t.text());
+    }
+    SetBkMode(hdc, TRANSPARENT as i32);
+    Some(GetSysColorBrush(COLOR_BTNFACE) as LRESULT)
+}
+
+unsafe fn custom_draw(cd: &mut NMLVCUSTOMDRAW) -> LRESULT {
+    match cd.nmcd.dwDrawStage {
+        CDDS_PREPAINT => CDRF_NOTIFYITEMDRAW as LRESULT,
+        CDDS_ITEMPREPAINT => {
+            if let Some(tone) = TONES.lock().ok().and_then(|t| t.get(cd.nmcd.dwItemSpec).copied()) {
+                cd.clrText = tone.text();
+                cd.clrTextBk = tone.back();
+            }
+            CDRF_DODEFAULT as LRESULT
+        }
+        _ => CDRF_DODEFAULT as LRESULT,
+    }
+}
+
 unsafe fn create_children(parent: HWND) {
     let hinst = GetModuleHandleW(std::ptr::null());
-    let font = GetStockObject(DEFAULT_GUI_FONT);
-    let child = |class: *const u16, text: &str, style: u32, id: usize| -> HWND {
+    let font = FONT.load(Ordering::SeqCst);
+    let child_ex = |ex: u32, class: *const u16, text: &str, style: u32, id: usize| -> HWND {
         let t = wide(text);
         let h = CreateWindowExW(
-            0,
+            ex,
             class,
             t.as_ptr(),
             WS_CHILD | WS_VISIBLE | style,
@@ -395,27 +645,57 @@ unsafe fn create_children(parent: HWND) {
         SendMessageW(h, WM_SETFONT, font as usize, 1);
         h
     };
+    let child = |class: *const u16, text: &str, style: u32, id: usize| child_ex(0, class, text, style, id);
     let button = wide("BUTTON");
     let static_class = wide("STATIC");
+    let edit = wide("EDIT");
 
-    let list = child(
+    let banner = child(static_class.as_ptr(), "", SS_BITMAP, ID_BANNER);
+    match banner_bitmap() {
+        Ok((bmp, w, h)) => {
+            SendMessageW(banner, STM_SETIMAGE, IMAGE_BITMAP as usize, bmp as isize);
+            // Two atomics: usize is 32 bits in WA's process, so packing both
+            // into one word silently dropped the width.
+            BANNER_W.store(w, Ordering::SeqCst);
+            BANNER_H.store(h, Ordering::SeqCst);
+        }
+        Err(e) => log_error(&format!("mod loader banner: {e}")),
+    }
+
+    // Tabs: push-like radio buttons, so the active one stays pressed.
+    for (i, (id, label)) in TAB_BUTTONS.iter().enumerate() {
+        let style = WS_TABSTOP | (BS_AUTORADIOBUTTON | BS_PUSHLIKE) as u32 | if i == 0 { WS_GROUP } else { 0 };
+        child(button.as_ptr(), label, style, *id);
+    }
+    let search = child_ex(
+        WS_EX_CLIENTEDGE,
+        edit.as_ptr(),
+        "",
+        WS_TABSTOP | WS_GROUP | ES_AUTOHSCROLL as u32,
+        ID_SEARCH,
+    );
+    let cue = wide("Search name, author, slot or status…");
+    SendMessageW(search, EM_SETCUEBANNER, 1, cue.as_ptr() as isize);
+
+    let list = child_ex(
+        WS_EX_CLIENTEDGE,
         WC_LISTVIEWW,
         "",
-        WS_TABSTOP | WS_BORDER | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
+        WS_TABSTOP | LVS_REPORT | LVS_SHOWSELALWAYS,
         ID_LIST,
     );
     SendMessageW(
         list,
         LVM_SETEXTENDEDLISTVIEWSTYLE,
         0,
-        (LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT) as isize,
+        (LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP) as isize,
     );
     LIST.store(list, Ordering::SeqCst);
     for (i, (name, width)) in [
-        ("Mod", 160),
+        ("Mod", 190),
         ("Version", 90),
-        ("Author", 80),
-        ("Slot / role", 120),
+        ("Author", 110),
+        ("Slot / role", 150),
         ("Status", 360),
     ]
     .iter()
@@ -438,30 +718,24 @@ unsafe fn create_children(parent: HWND) {
         SendMessageW(list, LVM_INSERTCOLUMNW, i, &col as *const _ as isize);
     }
 
-    for (id, label) in TAB_BUTTONS {
-        child(button.as_ptr(), label, WS_TABSTOP, id);
+    for (i, tone) in Tone::ALL.iter().enumerate() {
+        child(static_class.as_ptr(), tone.legend(), 0, ID_LEGEND + i);
     }
-    child(button.as_ptr(), "Check online", WS_TABSTOP, ID_CHECK);
-    child(button.as_ptr(), "Install / update selected", WS_TABSTOP, ID_INSTALL);
-    child(button.as_ptr(), "Install all updates", WS_TABSTOP, ID_UPDATE_ALL);
-    child(button.as_ptr(), "Refresh", WS_TABSTOP, ID_REFRESH);
-    child(button.as_ptr(), "Open Mods folder", WS_TABSTOP, ID_OPEN);
-    let status = child(static_class.as_ptr(), "", 0, ID_STATUS);
-    STATUS_LABEL.store(status, Ordering::SeqCst);
-    let peer = child(static_class.as_ptr(), "", 0, ID_PEER);
-    PEER_LABEL.store(peer, Ordering::SeqCst);
 
-    let banner = child(static_class.as_ptr(), "", SS_BITMAP, ID_BANNER);
-    match banner_bitmap() {
-        Ok((bmp, w, h)) => {
-            SendMessageW(banner, STM_SETIMAGE, IMAGE_BITMAP as usize, bmp as isize);
-            // Two atomics: usize is 32 bits in WA's process, so packing both
-            // into one word silently dropped the width.
-            BANNER_W.store(w, Ordering::SeqCst);
-            BANNER_H.store(h, Ordering::SeqCst);
-        }
-        Err(e) => log_error(&format!("mod loader banner: {e}")),
+    let bold = FONT_BOLD.load(Ordering::SeqCst);
+    for (id, label) in [(ID_GROUP_PACKS, "Packs"), (ID_GROUP_ONLINE, "Online catalogue")] {
+        let g = child(button.as_ptr(), label, BS_GROUPBOX as u32, id);
+        SendMessageW(g, WM_SETFONT, bold as usize, 1);
     }
+    for (id, label) in PACK_BUTTONS.iter().chain(ONLINE_BUTTONS.iter()) {
+        child(button.as_ptr(), label, WS_TABSTOP, *id);
+    }
+
+    let status = child(static_class.as_ptr(), "", 0, ID_STATUS);
+    SendMessageW(status, WM_SETFONT, bold as usize, 1);
+    STATUS_LABEL.store(status, Ordering::SeqCst);
+    let peer = child(static_class.as_ptr(), "", SS_ENDELLIPSIS, ID_PEER);
+    PEER_LABEL.store(peer, Ordering::SeqCst);
 }
 
 /// Decode the embedded PNG, box-filter it to `BANNER_WIDTH` if needed,
@@ -522,13 +796,24 @@ unsafe fn banner_bitmap() -> Result<(*mut c_void, i32, i32), String> {
     Ok((bmp, dw as i32, dh as i32))
 }
 
+/// Lay out `ids` as equal-width buttons inside a group box at `(x, y, w)`.
+unsafe fn layout_group(hwnd: HWND, group: usize, ids: &[usize], x: i32, y: i32, w: i32) {
+    let ctl = |id: usize| -> HWND { GetDlgItem(hwnd, id as i32) };
+    let (inner, gap, button_h) = (10, 6, 28);
+    MoveWindow(ctl(group), x, y, w, button_h + 34, 1);
+    let n = ids.len() as i32;
+    let bw = ((w - 2 * inner - (n - 1) * gap) / n).max(60);
+    for (i, id) in ids.iter().enumerate() {
+        MoveWindow(ctl(*id), x + inner + i as i32 * (bw + gap), y + 22, bw, button_h, 1);
+    }
+}
+
 unsafe fn layout(hwnd: HWND) {
     let mut rc: RECT = std::mem::zeroed();
     GetClientRect(hwnd, &mut rc);
     let w = rc.right - rc.left;
     let h = rc.bottom - rc.top;
-    let pad = 8;
-    let button_h = 26;
+    let pad = 12;
     let line_h = 18;
     let (bw, bh) = (BANNER_W.load(Ordering::SeqCst), BANNER_H.load(Ordering::SeqCst));
     let ctl = |id: usize| -> HWND { GetDlgItem(hwnd, id as i32) };
@@ -537,44 +822,57 @@ unsafe fn layout(hwnd: HWND) {
     MoveWindow(ctl(ID_BANNER), ((w - bw) / 2).max(0), pad, bw, bh, 1);
     let mut y = pad + bh + pad;
 
-    // Kind tabs: All / Weapons / Gameplay.
-    let tab_w = 96;
+    // Tabs left, search right.
+    let (tab_w, tab_h) = (120, 28);
     for (i, (id, _)) in TAB_BUTTONS.iter().enumerate() {
-        MoveWindow(ctl(*id), pad + i as i32 * (tab_w + pad), y, tab_w, button_h, 1);
+        MoveWindow(ctl(*id), pad + i as i32 * (tab_w + 4), y, tab_w, tab_h, 1);
     }
-    y += button_h + pad;
+    let search_w = (w - 2 * pad - 3 * (tab_w + 4) - pad).clamp(160, 320);
+    MoveWindow(ctl(ID_SEARCH), w - pad - search_w, y + 2, search_w, tab_h - 4, 1);
+    y += tab_h + 8;
 
-    // List, then one row of buttons, then the two status lines.
-    let footer = button_h + pad + line_h + 4 + line_h + pad;
-    let list_h = (h - y - footer - pad).max(40);
-    MoveWindow(ctl(ID_LIST), pad, y, w - 2 * pad, list_h, 1);
-    y = y + list_h + pad;
-    let buttons = [ID_CHECK, ID_INSTALL, ID_UPDATE_ALL, ID_REFRESH, ID_OPEN];
-    let n = buttons.len() as i32;
-    let bwidth = ((w - 2 * pad - (n - 1) * pad) / n).max(80);
-    for (i, id) in buttons.iter().enumerate() {
-        MoveWindow(ctl(*id), pad + i as i32 * (bwidth + pad), y, bwidth, button_h, 1);
+    // List fills the middle; legend, action groups and status sit below it.
+    let group_h = 28 + 34;
+    let footer = 6 + line_h + 8 + group_h + 8 + 2 * line_h + line_h + pad;
+    let list_h = (h - y - footer).max(60);
+    let list = ctl(ID_LIST);
+    MoveWindow(list, pad, y, w - 2 * pad, list_h, 1);
+    SendMessageW(list, LVM_SETCOLUMNWIDTH, 4, LVSCW_AUTOSIZE_USEHEADER as isize);
+    y += list_h + 6;
+
+    let mut x = pad;
+    for (i, tone) in Tone::ALL.iter().enumerate() {
+        let lw = 18 + 7 * tone.legend().chars().count() as i32;
+        MoveWindow(ctl(ID_LEGEND + i), x, y, lw, line_h, 1);
+        x += lw + 14;
     }
-    y = y + button_h + pad;
-    MoveWindow(ctl(ID_STATUS), pad, y, w - 2 * pad, line_h, 1);
-    MoveWindow(ctl(ID_PEER), pad, y + line_h + 4, w - 2 * pad, line_h, 1);
+    y += line_h + 8;
+
+    let avail = w - 3 * pad;
+    let left_w = avail * 4 / 7;
+    let pack_ids: Vec<usize> = PACK_BUTTONS.iter().map(|(id, _)| *id).collect();
+    let online_ids: Vec<usize> = ONLINE_BUTTONS.iter().map(|(id, _)| *id).collect();
+    layout_group(hwnd, ID_GROUP_PACKS, &pack_ids, pad, y, left_w);
+    layout_group(hwnd, ID_GROUP_ONLINE, &online_ids, 2 * pad + left_w, y, avail - left_w);
+    y += group_h + 8;
+
+    MoveWindow(ctl(ID_STATUS), pad, y, w - 2 * pad, 2 * line_h, 1);
+    MoveWindow(ctl(ID_PEER), pad, y + 2 * line_h, w - 2 * pad, line_h, 1);
 }
 
-unsafe fn set_filter(hwnd: HWND, filter: usize) {
+unsafe fn set_filter(filter: usize) {
     FILTER.store(filter, Ordering::SeqCst);
-    paint_tabs(hwnd);
     fill_list_from_all();
 }
 
-unsafe fn paint_tabs(hwnd: HWND) {
+/// Tab labels carry their pack counts; the active tab stays pressed.
+unsafe fn paint_tabs(hwnd: HWND, all: &[Row]) {
     let filter = FILTER.load(Ordering::SeqCst);
     for (i, (id, label)) in TAB_BUTTONS.iter().enumerate() {
-        let text = if i == filter {
-            format!("[{label}]")
-        } else {
-            (*label).to_string()
-        };
-        SetWindowTextW(GetDlgItem(hwnd, *id as i32), wide(&text).as_ptr());
+        let n = all.iter().filter(|r| row_matches_filter(r, i)).count();
+        let tab = GetDlgItem(hwnd, *id as i32);
+        SetWindowTextW(tab, wide(&format!("{label}  ({n})")).as_ptr());
+        SendMessageW(tab, BM_SETCHECK, (i == filter) as usize, 0);
     }
 }
 
@@ -582,6 +880,50 @@ unsafe fn set_network_buttons(hwnd: HWND, enabled: bool) {
     for id in NETWORK_BUTTONS {
         EnableWindow(GetDlgItem(hwnd, id as i32), enabled as i32);
     }
+    if enabled {
+        update_buttons();
+    }
+}
+
+/// Grey out actions that would do nothing, and give the next useful one the
+/// default-button accent: Check online first, then Update all.
+unsafe fn update_buttons() {
+    let hwnd = WINDOW.load(Ordering::SeqCst);
+    if hwnd.is_null() {
+        return;
+    }
+    let busy = BUSY.load(Ordering::SeqCst);
+    let settings = LoaderSettings::load(&mods_dir());
+    let fetched = REMOTE.lock().map(|g| g.is_some()).unwrap_or(false);
+    let pending = ALL_ROWS
+        .lock()
+        .map(|rows| rows.iter().filter(|r| r.needs_install(&settings)).count())
+        .unwrap_or(0);
+    let selectable = selected_rows().iter().any(|r| r.remote.is_some());
+    let shown_toggleable = ROWS
+        .lock()
+        .map(|rows| rows.iter().any(Row::toggleable))
+        .unwrap_or(false);
+    let enable = |id: usize, on: bool| {
+        EnableWindow(GetDlgItem(hwnd, id as i32), on as i32);
+    };
+    enable(ID_CHECK, !busy);
+    enable(ID_INSTALL, !busy && selectable);
+    enable(ID_UPDATE_ALL, !busy && pending > 0);
+    enable(ID_ENABLE_ALL, shown_toggleable);
+    enable(ID_DISABLE_ALL, shown_toggleable);
+    let update_label = if pending > 0 {
+        format!("Update all ({pending})")
+    } else {
+        "Update all".to_string()
+    };
+    SetWindowTextW(GetDlgItem(hwnd, ID_UPDATE_ALL as i32), wide(&update_label).as_ptr());
+    let accent = |id: usize, on: bool| {
+        let style = if on { BS_DEFPUSHBUTTON } else { BS_PUSHBUTTON };
+        SendMessageW(GetDlgItem(hwnd, id as i32), BM_SETSTYLE, style as usize, 1);
+    };
+    accent(ID_CHECK, !fetched);
+    accent(ID_UPDATE_ALL, fetched && pending > 0);
 }
 
 unsafe fn open_folder(hwnd: HWND) {
@@ -683,12 +1025,13 @@ fn local_entries(rows: &[Row]) -> Vec<ModEntry> {
     rows.iter().filter_map(|r| r.local.clone()).collect()
 }
 
-/// Per-row status text: manifest errors, missing `requires`, duplicate ids,
-/// every slot fight with the packs named, then the online state.
-fn row_status(rows: &[Row], conflicts: &[SlotConflict], settings: &LoaderSettings, row: &Row) -> String {
-    let online = match row.online(settings) {
+/// Per-row status text and colour: manifest errors, missing `requires`,
+/// duplicate ids, every slot fight with the packs named, then the online state.
+fn row_status(rows: &[Row], conflicts: &[SlotConflict], settings: &LoaderSettings, row: &Row) -> (String, Tone) {
+    let state = row.online(settings);
+    let online = match state {
         Online::Unknown => String::new(),
-        Online::NotInstalled => "not installed - select it and press Install".into(),
+        Online::NotInstalled => "online only - double-click or Install selected".into(),
         Online::UpToDate => "up to date".into(),
         Online::UpdateAvailable => format!(
             "update available (online v{})",
@@ -696,13 +1039,14 @@ fn row_status(rows: &[Row], conflicts: &[SlotConflict], settings: &LoaderSetting
         ),
     };
     let Some(local) = &row.local else {
-        return online;
+        return (online, Tone::OnlineOnly);
     };
     let m = match &local.manifest {
         Ok(m) => m,
-        Err(e) => return format!("error: {e}"),
+        Err(e) => return (format!("error: {e}"), Tone::Problem),
     };
     let mut parts = Vec::new();
+    let mut problem = false;
     if !local.enabled {
         parts.push("off".to_string());
     } else {
@@ -721,6 +1065,7 @@ fn row_status(rows: &[Row], conflicts: &[SlotConflict], settings: &LoaderSetting
         if let Some(first) = first.and_then(|r| r.local.as_ref()) {
             if first.folder != local.folder {
                 parts.push(format!("duplicate id; {} loads instead", first.folder));
+                problem = true;
             }
         }
         let missing: Vec<&str> = m
@@ -732,16 +1077,30 @@ fn row_status(rows: &[Row], conflicts: &[SlotConflict], settings: &LoaderSetting
             .collect();
         if !missing.is_empty() {
             parts.push(format!("skipped: needs {}", missing.join(", ")));
+            problem = true;
         }
         let conflict = conflict_text(conflicts, &m.id);
         if !conflict.is_empty() {
             parts.push(format!("CONFLICT: {conflict}"));
+            problem = true;
+        }
+        if parts.is_empty() {
+            parts.push("on".to_string());
         }
     }
     if !online.is_empty() {
         parts.push(online);
     }
-    parts.join(" | ")
+    let tone = if problem {
+        Tone::Problem
+    } else if state == Online::UpdateAvailable {
+        Tone::Update
+    } else if local.enabled {
+        Tone::On
+    } else {
+        Tone::Off
+    };
+    (parts.join(" | "), tone)
 }
 
 /// "N of M packs enabled" plus a conflict count and the contested slots.
@@ -749,10 +1108,7 @@ fn summary_line(rows: &[Row], conflicts: &[SlotConflict], settings: &LoaderSetti
     let total = rows.iter().filter(|r| r.local.is_some()).count();
     let enabled = rows.iter().filter(|r| r.enabled()).count();
     let mut s = format!("{enabled} of {total} packs enabled.");
-    let updates = rows
-        .iter()
-        .filter(|r| matches!(r.online(settings), Online::UpdateAvailable | Online::NotInstalled))
-        .count();
+    let updates = rows.iter().filter(|r| r.needs_install(settings)).count();
     if updates > 0 {
         s.push_str(&format!(" {updates} online pack(s) new or updated."));
     }
@@ -820,9 +1176,13 @@ unsafe fn set_item_checked(list: HWND, item: i32, checked: bool) {
     SendMessageW(list, LVM_SETITEMSTATE, item as usize, &lvi as *const _ as isize);
 }
 
+unsafe fn item_checked(list: HWND, item: i32) -> bool {
+    let state = SendMessageW(list, LVM_GETITEMSTATE, item as usize, LVIS_STATEIMAGEMASK as isize);
+    ((state as u32 & LVIS_STATEIMAGEMASK) >> 12) == 2
+}
+
 /// Rescan `Mods\`, merge the cached index, rebuild every row.
 unsafe fn populate() {
-    let hwnd = WINDOW.load(Ordering::SeqCst);
     let dir = mods_dir();
     let entries = match list_mods(&dir) {
         Ok(e) => e,
@@ -838,63 +1198,89 @@ unsafe fn populate() {
     if let Ok(mut g) = ALL_ROWS.lock() {
         *g = all;
     }
-    if !hwnd.is_null() {
-        paint_tabs(hwnd);
-    }
     fill_list_from_all();
 }
 
-/// Paint the current tab's rows from `ALL_ROWS` into the list view.
-unsafe fn fill_list_from_all() {
+fn search_text() -> String {
+    let hwnd = WINDOW.load(Ordering::SeqCst);
+    if hwnd.is_null() {
+        return String::new();
+    }
+    let mut buf = [0u16; 256];
+    let n = unsafe { GetWindowTextW(GetDlgItem(hwnd, ID_SEARCH as i32), buf.as_mut_ptr(), buf.len() as i32) };
+    String::from_utf16_lossy(&buf[..n.max(0) as usize]).trim().to_lowercase()
+}
+
+/// The text a row shows in each column, for display and for search.
+fn row_columns(row: &Row, settings: &LoaderSettings) -> Option<[String; 4]> {
+    let (name, version, author) = match (&row.local, &row.remote) {
+        (Some(l), remote) => match &l.manifest {
+            Ok(m) => {
+                let version = match remote {
+                    Some(r) if r.version != m.version && row.online(settings) == Online::UpdateAvailable => {
+                        format!("{} \u{2192} {}", m.version, r.version)
+                    }
+                    _ => m.version.clone(),
+                };
+                (display_name(&m.id), version, m.author.clone())
+            }
+            Err(_) => (format!("{} (broken mod.toml)", l.folder), String::new(), String::new()),
+        },
+        (None, Some(r)) => (display_name(&r.id), r.version.clone(), r.author.clone()),
+        (None, None) => return None,
+    };
+    Some([name, version, author, role_column(row)])
+}
+
+/// Paint the current tab + search from `ALL_ROWS` into the list view and
+/// return the summary line it set.
+unsafe fn fill_list_from_all() -> String {
     let list = LIST.load(Ordering::SeqCst);
+    let hwnd = WINDOW.load(Ordering::SeqCst);
     if list.is_null() {
-        return;
+        return String::new();
     }
     let dir = mods_dir();
     let settings = LoaderSettings::load(&dir);
     let filter = FILTER.load(Ordering::SeqCst);
+    let query = search_text();
     let all = ALL_ROWS.lock().map(|g| g.clone()).unwrap_or_default();
     let conflicts = slot_conflicts(&local_entries(&all));
-    let rows: Vec<Row> = all
-        .iter()
-        .filter(|r| row_matches_filter(r, filter))
-        .cloned()
-        .collect();
+    if !hwnd.is_null() {
+        paint_tabs(hwnd, &all);
+    }
+
+    let mut rows = Vec::new();
+    let mut tones = Vec::new();
+    let mut shown = Vec::new();
+    for row in all.iter().filter(|r| row_matches_filter(r, filter)) {
+        let Some(cols) = row_columns(row, &settings) else {
+            continue;
+        };
+        // Conflicts / requires use the full set so a Weapons-tab pack still
+        // shows fights against a Gameplay pack that is enabled but hidden.
+        let (status, tone) = row_status(&all, &conflicts, &settings, row);
+        if !query.is_empty()
+            && !cols.iter().chain(std::iter::once(&status)).any(|c| c.to_lowercase().contains(&query))
+        {
+            continue;
+        }
+        rows.push(row.clone());
+        tones.push(tone);
+        shown.push((cols, status));
+    }
+    if let Ok(mut g) = TONES.lock() {
+        *g = tones;
+    }
 
     POPULATING.store(true, Ordering::SeqCst);
     SendMessageW(list, LVM_DELETEALLITEMS, 0, 0);
-    for (i, row) in rows.iter().enumerate() {
+    for (i, ((cols, status), row)) in shown.iter().zip(rows.iter()).enumerate() {
         let i = i as i32;
-        let (name, version, author) = match (&row.local, &row.remote) {
-            (Some(l), remote) => match &l.manifest {
-                Ok(m) => {
-                    let version = match remote {
-                        Some(r)
-                            if r.version != m.version
-                                && row.online(&settings) == Online::UpdateAvailable =>
-                        {
-                            format!("{} -> {}", m.version, r.version)
-                        }
-                        _ => m.version.clone(),
-                    };
-                    (display_name(&m.id), version, m.author.clone())
-                }
-                Err(_) => (
-                    format!("{} (broken mod.toml)", l.folder),
-                    String::new(),
-                    String::new(),
-                ),
-            },
-            (None, Some(r)) => (display_name(&r.id), r.version.clone(), r.author.clone()),
-            (None, None) => continue,
-        };
-        set_item_text(list, i, 0, &name);
-        set_item_text(list, i, 1, &version);
-        set_item_text(list, i, 2, &author);
-        set_item_text(list, i, 3, &role_column(row));
-        // Conflicts / requires use the full set so a Weapons-tab pack still
-        // shows fights against a Gameplay pack that is enabled but hidden.
-        set_item_text(list, i, 4, &row_status(&all, &conflicts, &settings, row));
+        for (c, text) in cols.iter().enumerate() {
+            set_item_text(list, i, c as i32, text);
+        }
+        set_item_text(list, i, 4, status);
         set_item_checked(list, i, row.enabled());
     }
     POPULATING.store(false, Ordering::SeqCst);
@@ -908,17 +1294,19 @@ unsafe fn fill_list_from_all() {
         format!("No Mods folder yet: {}", dir.display())
     } else if all.is_empty() {
         format!("No packs in {}. Press Check online.", dir.display())
+    } else if rows.is_empty() && !query.is_empty() {
+        format!("Nothing in {tab} matches \"{query}\".")
     } else if rows.is_empty() {
         format!("No {tab} packs. Try another tab or Check online.")
     } else {
-        let mut s = summary_line(&all, &conflicts, &settings);
-        s.push_str(&format!(" Showing {tab} ({}/{}).", rows.len(), all.len()));
-        s
+        summary_line(&all, &conflicts, &settings)
     };
     if let Ok(mut g) = ROWS.lock() {
         *g = rows;
     }
     set_status(&summary);
+    update_buttons();
+    summary
 }
 
 unsafe fn refresh_status_column() {
@@ -929,15 +1317,65 @@ unsafe fn refresh_status_column() {
     let all = ALL_ROWS.lock().map(|g| g.clone()).unwrap_or_else(|_| rows.clone());
     let settings = LoaderSettings::load(&mods_dir());
     let conflicts = slot_conflicts(&local_entries(&all));
+    let mut tones = Vec::with_capacity(rows.len());
     for (i, row) in rows.iter().enumerate() {
-        set_item_text(list, i as i32, 4, &row_status(&all, &conflicts, &settings, row));
+        let (status, tone) = row_status(&all, &conflicts, &settings, row);
+        set_item_text(list, i as i32, 4, &status);
+        tones.push(tone);
     }
+    drop(rows);
+    if let Ok(mut g) = TONES.lock() {
+        *g = tones;
+    }
+    InvalidateRect(list, std::ptr::null(), 1);
     set_status(&format!("Saved. {}", summary_line(&all, &conflicts, &settings)));
+}
+
+/// "Enable all" / "Disable all": every pack the list shows right now (tab and
+/// search applied), saved in one write.
+unsafe fn set_all_shown(checked: bool) {
+    let ids: Vec<String> = ROWS
+        .lock()
+        .map(|rows| rows.iter().filter(|r| r.toggleable()).map(Row::id).collect())
+        .unwrap_or_default();
+    if ids.is_empty() {
+        return;
+    }
+    let dir = mods_dir();
+    let mut settings = LoaderSettings::load(&dir);
+    for id in &ids {
+        settings.set_enabled(id, checked);
+    }
+    if let Err(e) = settings.save(&dir) {
+        set_status(&format!("Could not write {}: {e}", weapons::SETTINGS_FILE));
+        return;
+    }
+    if let Ok(mut all) = ALL_ROWS.lock() {
+        for row in all.iter_mut().filter(|r| ids.contains(&r.id())) {
+            if let Some(l) = row.local.as_mut() {
+                l.enabled = checked;
+            }
+        }
+    }
+    log_line(&format!(
+        "mod loader: {} {} pack(s)",
+        if checked { "enabled" } else { "disabled" },
+        ids.len()
+    ));
+    let summary = fill_list_from_all();
+    set_status(&format!(
+        "Saved: {} {} pack(s). {summary}",
+        if checked { "enabled" } else { "disabled" },
+        ids.len()
+    ));
 }
 
 unsafe fn on_item_changed(nm: &NMLISTVIEW) {
     if POPULATING.load(Ordering::SeqCst) || nm.uChanged & LVIF_STATE == 0 {
         return;
+    }
+    if (nm.uOldState ^ nm.uNewState) & LVIS_SELECTED != 0 {
+        update_buttons();
     }
     let old = nm.uOldState & LVIS_STATEIMAGEMASK;
     let new = nm.uNewState & LVIS_STATEIMAGEMASK;
@@ -980,13 +1418,17 @@ unsafe fn on_item_changed(nm: &NMLISTVIEW) {
     let id = match outcome {
         Outcome::Toggle(id) => id,
         Outcome::Broken => {
-            set_item_checked(LIST.load(Ordering::SeqCst), nm.iItem, false);
+            if checked {
+                set_item_checked(LIST.load(Ordering::SeqCst), nm.iItem, false);
+            }
             set_status("Fix that pack's mod.toml before enabling it.");
             return;
         }
         Outcome::NotInstalled => {
-            set_item_checked(LIST.load(Ordering::SeqCst), nm.iItem, false);
-            set_status("That pack is online only. Select it and press Install / update selected.");
+            if checked {
+                set_item_checked(LIST.load(Ordering::SeqCst), nm.iItem, false);
+            }
+            set_status("That pack is online only. Double-click it or press Install selected.");
             return;
         }
     };
@@ -1003,6 +1445,22 @@ unsafe fn on_item_changed(nm: &NMLISTVIEW) {
         }
     }
     refresh_status_column();
+}
+
+/// Double-click: toggle an installed pack, install an online-only one.
+unsafe fn on_double_click(hwnd: HWND, item: i32) {
+    if item < 0 {
+        return;
+    }
+    let Some(row) = ROWS.lock().ok().and_then(|r| r.get(item as usize).cloned()) else {
+        return;
+    };
+    if row.local.is_none() {
+        install_rows(hwnd, vec![row]);
+        return;
+    }
+    let list = LIST.load(Ordering::SeqCst);
+    set_item_checked(list, item, !item_checked(list, item));
 }
 
 // ---------------------------------------------------------------- online
@@ -1063,62 +1521,73 @@ unsafe fn check_online(hwnd: HWND) {
             .iter()
             .filter(|r| r.online(&settings) == Online::UpdateAvailable)
             .count();
-        Ok(format!(
-            "Online index has {} packs ({}): {new} not installed, {upd} with updates.",
-            idx.packs.len(),
-            if idx.generated.is_empty() { "no date" } else { idx.generated.as_str() }
-        ))
+        Ok(if new + upd == 0 {
+            format!("Online index has {} packs; everything is up to date.", idx.packs.len())
+        } else {
+            format!(
+                "Online index has {} packs ({}): {new} not installed, {upd} with updates.",
+                idx.packs.len(),
+                if idx.generated.is_empty() { "no date" } else { idx.generated.as_str() }
+            )
+        })
     });
 }
 
-fn selected_row() -> Option<Row> {
+fn selected_rows() -> Vec<Row> {
     let list = LIST.load(Ordering::SeqCst);
-    let i = unsafe { SendMessageW(list, LVM_GETNEXTITEM, usize::MAX, LVNI_SELECTED as isize) };
-    if i < 0 {
-        return None;
+    if list.is_null() {
+        return Vec::new();
     }
-    ROWS.lock().ok()?.get(i as usize).cloned()
+    let Ok(rows) = ROWS.lock() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut i: isize = -1;
+    loop {
+        i = unsafe { SendMessageW(list, LVM_GETNEXTITEM, i as usize, LVNI_SELECTED as isize) };
+        if i < 0 {
+            break;
+        }
+        if let Some(r) = rows.get(i as usize) {
+            out.push(r.clone());
+        }
+    }
+    out
 }
 
-unsafe fn install_selected(hwnd: HWND) {
-    let Some(row) = selected_row() else {
-        set_status("Select a pack in the list first.");
-        return;
-    };
-    let Some(remote) = row.remote.clone() else {
-        set_status(if REMOTE.lock().map(|g| g.is_none()).unwrap_or(true) {
-            "Press Check online first."
-        } else {
-            "That pack is not in the online index; nothing to install."
-        });
-        return;
-    };
-    let Some(index) = REMOTE.lock().ok().and_then(|g| g.clone()) else {
-        return;
-    };
-    run_network(hwnd, move || install_packs(&index, &[remote]));
-}
-
-unsafe fn install_all(hwnd: HWND) {
+unsafe fn install_rows(hwnd: HWND, rows: Vec<Row>) {
     let Some(index) = REMOTE.lock().ok().and_then(|g| g.clone()) else {
         set_status("Press Check online first.");
         return;
     };
+    let packs: Vec<RemotePack> = rows.into_iter().filter_map(|r| r.remote).collect();
+    if packs.is_empty() {
+        set_status("Those packs are not in the online index; nothing to install.");
+        return;
+    }
+    run_network(hwnd, move || install_packs(&index, &packs));
+}
+
+unsafe fn install_selected(hwnd: HWND) {
+    let rows = selected_rows();
+    if rows.is_empty() {
+        set_status("Select one or more packs in the list first.");
+        return;
+    }
+    install_rows(hwnd, rows);
+}
+
+unsafe fn install_all(hwnd: HWND) {
     let settings = LoaderSettings::load(&mods_dir());
-    let todo: Vec<RemotePack> = ROWS
+    let todo: Vec<Row> = ALL_ROWS
         .lock()
-        .map(|rows| {
-            rows.iter()
-                .filter(|r| matches!(r.online(&settings), Online::NotInstalled | Online::UpdateAvailable))
-                .filter_map(|r| r.remote.clone())
-                .collect()
-        })
+        .map(|rows| rows.iter().filter(|r| r.needs_install(&settings)).cloned().collect())
         .unwrap_or_default();
     if todo.is_empty() {
         set_status("Everything is up to date.");
         return;
     }
-    run_network(hwnd, move || install_packs(&index, &todo));
+    install_rows(hwnd, todo);
 }
 
 /// Download, verify and install each pack in turn; record its hash.
