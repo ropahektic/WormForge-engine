@@ -378,6 +378,15 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
         if let Some(&id) = pass.sprite_ids.get(&idx) {
             if claim.params.actor_spawn().is_none() && claim.params.on_click_id == 0 {
                 let old = entry.sprite_id();
+                // A placed weapon's held sheet follows its flight sprite;
+                // keep the stock one unless the pack draws the worm itself.
+                if entry.fire_type() == 2
+                    && entry.fire_method() == 2
+                    && claim.params.worm_sprites.is_empty()
+                    && crate::worm_sprite::hold_as(idx, old)
+                {
+                    log_line(&format!("{} worm holds slot {idx} as stock sprite {old}", claim.mod_id));
+                }
                 entry.retarget_sprite_id(old, id);
                 log_line(&format!(
                     "{} fire sprite {old} -> {id} (defined={})",

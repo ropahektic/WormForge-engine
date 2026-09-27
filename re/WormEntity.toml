@@ -71,3 +71,9 @@ va = 0x00512E80
 name = "WormEntity__calc_sprite"
 calling_convention = "__usercall"
 plate_comment = "WA 3.8.1 byte-verified: ESI=worm, EAX=sprite_out, stack x_out/y_out/phase_out, RET 12. DrawSprite at 0x50FCD0 calls this before stock blit. Wrap calls original, then remaps only sprite_out for the selected slot; retains stock animation, slope and flip."
+
+[[function]]
+va = 0x0051C060
+name = "Weapon__hold_sheet"
+calling_convention = "__usercall"
+plate_comment = "WA 3.8.1: EAX = weapon entry, stack = worm, RET 4. Returns the sheet the worm aims or holds the weapon with, or 0 for none WA knows. Projectiles switch on +0x34 (1-12); placed weapons with fire method 2 map their flight sprite (+0x60): 74 vase, 78 dynamite, 153 sheep, 162/163 old woman, 164 cow, 166 mole, 173 skunk. Five callers in WormEntity."
