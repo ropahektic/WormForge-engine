@@ -622,6 +622,24 @@ wa.weapons.replace({
   cluster = { sprite = "bit.png", homing_sprite = "homing.png" },
 })
 "#,
+        );
+        std::fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../mods/examples/gravler_strike/sprites/gravlerdive.png"),
+            root.join("bit.png"),
+        )
+        .unwrap();
+        std::fs::copy(root.join("bit.png"), root.join("homing.png")).unwrap();
+        let scripts = run_mods(&[own]).unwrap();
+        let params = &scripts.resolved.applied[0].params;
+        assert_eq!(params.cluster_sprite_path.as_deref(), Some("bit.png"));
+        assert_eq!(params.cluster_sprite_id, None, "the id comes when the sheet is installed");
+        assert!(params.extra_sheets.iter().any(|(p, _)| p == "bit.png"));
+        assert_eq!(params.cluster_homing_sprite_path.as_deref(), Some("homing.png"));
+        assert!(params.extra_sheets.iter().any(|(p, _)| p == "homing.png"));
+    }
+
+    #[test]
     fn a_strike_takes_its_own_plane() {
         let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-strike-plane");
@@ -641,17 +659,16 @@ replace = ["mb_bomb"]
         std::fs::copy(
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../mods/examples/gravler_strike/sprites/gravlerdive.png"),
-            root.join("bit.png"),
+            root.join("plane.png"),
         )
         .unwrap();
-        std::fs::copy(root.join("bit.png"), root.join("homing.png")).unwrap();
         let scripts = run_mods(&[own]).unwrap();
         let params = &scripts.resolved.applied[0].params;
-        assert_eq!(params.cluster_sprite_path.as_deref(), Some("bit.png"));
-        assert_eq!(params.cluster_sprite_id, None, "the id comes when the sheet is installed");
-        assert!(params.extra_sheets.iter().any(|(p, _)| p == "bit.png"));
-        assert_eq!(params.cluster_homing_sprite_path.as_deref(), Some("homing.png"));
-        assert!(params.extra_sheets.iter().any(|(p, _)| p == "homing.png"));
+        assert_eq!(params.plane_sprite_path.as_deref(), Some("plane.png"));
+        assert!(params.extra_sheets.iter().any(|(p, _)| p == "plane.png"));
+    }
+
+    #[test]
     fn fire_repeat_is_one_to_twenty_shots() {
         let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-fire-repeat");
@@ -663,21 +680,29 @@ entry = "weapons.lua"
 [weapons]
 replace = ["shotgun"]
 "#;
-        let five = pack(&root, "t.repeat", manifest, r#"wa.weapons.replace({ weapon = "shotgun", fire_repeat = 5 })"#);
+        let five = pack(
+            &root,
+            "t.repeat",
+            manifest,
+            r#"wa.weapons.replace({ weapon = "shotgun", fire_repeat = 5 })"#,
+        );
         let scripts = run_mods(&[five]).unwrap();
         assert_eq!(scripts.resolved.applied[0].params.fire_repeat, 5);
-        let stock = pack(&root, "t.repeat", manifest, r#"wa.weapons.replace({ weapon = "shotgun" })"#);
+        let stock = pack(
+            &root,
+            "t.repeat",
+            manifest,
+            r#"wa.weapons.replace({ weapon = "shotgun" })"#,
+        );
         assert_eq!(run_mods(&[stock]).unwrap().resolved.applied[0].params.fire_repeat, 1);
-        let bad = pack(&root, "t.repeat", manifest, r#"wa.weapons.replace({ weapon = "shotgun", fire_repeat = 0 })"#);
+        let bad = pack(
+            &root,
+            "t.repeat",
+            manifest,
+            r#"wa.weapons.replace({ weapon = "shotgun", fire_repeat = 0 })"#,
+        );
         let err = run_mods(&[bad]).err().expect("no shot at all is refused");
         assert!(err.contains("fire_repeat is 1 to 20"), "{err}");
-            root.join("plane.png"),
-        )
-        .unwrap();
-        let scripts = run_mods(&[own]).unwrap();
-        let params = &scripts.resolved.applied[0].params;
-        assert_eq!(params.plane_sprite_path.as_deref(), Some("plane.png"));
-        assert!(params.extra_sheets.iter().any(|(p, _)| p == "plane.png"));
     }
 
     #[test]

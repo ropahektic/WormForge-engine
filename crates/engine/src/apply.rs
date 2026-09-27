@@ -435,6 +435,8 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                     "{} homing cluster sprite {path} was not installed",
                     claim.mod_id
                 )),
+            }
+        }
         if let Some(path) = &claim.params.plane_sprite_path {
             match sprite::lookup_key(&gfx::sprite_key(&claim.mod_id, path)) {
                 Some(s) if entry.fire_type() == 3 => {
