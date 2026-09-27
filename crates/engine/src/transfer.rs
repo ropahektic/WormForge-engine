@@ -953,7 +953,17 @@ fn client_work(work: Work) {
                 }
             }
             log_line(&format!("sync: generation {generation} ready ({total} bytes) at {}", dir.display()));
-            note("the host's packs are ready".into());
+            match install_synced_into_mods(&dir) {
+                Ok(msg) if !msg.is_empty() => {
+                    log_line(&format!("sync: Mods install: {msg}"));
+                    note(format!("the host's packs are ready ({msg})"));
+                }
+                Ok(_) => note("the host's packs are ready".into()),
+                Err(e) => {
+                    log_error(&format!("sync: Mods install failed: {e}"));
+                    note(format!("the host's packs are ready (Mods install failed: {e})"));
+                }
+            }
             if let Ok(mut r) = READY.lock() {
                 *r = Some((digest, dir));
             }
@@ -1111,6 +1121,35 @@ fn prune_clients(keep: &std::path::Path) {
         }
         let _ = std::fs::remove_dir_all(entry.path());
     }
+}
+
+/// Mirror a finished client session into `Mods/` for later offline use.
+fn install_synced_into_mods(session_dir: &std::path::Path) -> Result<String, String> {
+    let mods = lua_host::mods_root_from(&wa_directory());
+    let report = netsync::install_session_into_mods(session_dir, &mods)?;
+    crate::modloader::refresh_list();
+    let mut parts = Vec::new();
+    if !report.installed.is_empty() {
+        parts.push(format!(
+            "saved {} new pack(s) disabled: {}",
+            report.installed.len(),
+            report.installed.join(", ")
+        ));
+    }
+    if !report.updated.is_empty() {
+        parts.push(format!(
+            "updated {}: {}",
+            report.updated.len(),
+            report.updated.join(", ")
+        ));
+    }
+    for (id, err) in &report.errors {
+        log_error(&format!("sync: could not install {id} into Mods: {err}"));
+    }
+    if !report.errors.is_empty() {
+        parts.push(format!("{} pack(s) failed", report.errors.len()));
+    }
+    Ok(parts.join("; "))
 }
 
 // -------------------------------------------------------------------- hooks
