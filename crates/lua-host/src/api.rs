@@ -994,12 +994,9 @@ fn table_to_claim(
             worm_sprites_animate,
             extra_sounds,
             cluster_sprite_id,
-<<<<<<< HEAD
             cluster_sprite_path,
             cluster_homing_sprite_path,
-=======
             plane_sprite_path,
->>>>>>> ad3f849 (plane: a strike's own plane sprite)
             cluster_damage,
             cluster_bounce_pct,
             cluster_gravity_pct,

@@ -407,7 +407,6 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 claim.mod_id
             ));
         }
-<<<<<<< HEAD
         if let Some(path) = &claim.params.cluster_sprite_path {
             match sprite::lookup_key(&gfx::sprite_key(&claim.mod_id, path)) {
                 Some(s) => {
@@ -436,7 +435,6 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                     "{} homing cluster sprite {path} was not installed",
                     claim.mod_id
                 )),
-=======
         if let Some(path) = &claim.params.plane_sprite_path {
             match sprite::lookup_key(&gfx::sprite_key(&claim.mod_id, path)) {
                 Some(s) if entry.fire_type() == 3 => {
@@ -448,7 +446,6 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                     claim.mod_id
                 )),
                 None => log_error(&format!("{} plane {path} was not installed", claim.mod_id)),
->>>>>>> ad3f849 (plane: a strike's own plane sprite)
             }
         }
         if let Some(name) = &claim.params.name {
