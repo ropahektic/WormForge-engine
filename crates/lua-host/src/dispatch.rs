@@ -128,7 +128,15 @@ pub fn gravity_after(motion: Motion) -> Result<Motion, String> {
     run_motion_hook("gravity_after", motion)
 }
 
-pub fn missile_frame(motion: Motion, msg: u32, phase: &str) -> Result<Motion, String> {
+/// `slot`: the weapon the missile was fired from, when the engine knows it
+/// (projectiles, their cluster bits, Armageddon; not strike bombs). Lua sees
+/// it as `m.weapon`, the same stock slot name as `worm.weapon`.
+pub fn missile_frame(
+    motion: Motion,
+    msg: u32,
+    phase: &str,
+    slot: Option<usize>,
+) -> Result<Motion, String> {
     with_lua(|lua| {
         let list = hook_list(lua, "missile_frame")?;
         if list.len().map_err(|e| e.to_string())? == 0 {
@@ -137,6 +145,10 @@ pub fn missile_frame(motion: Motion, msg: u32, phase: &str) -> Result<Motion, St
         let t = motion_to_table(lua, &motion)?;
         t.set("msg", msg).map_err(|e| e.to_string())?;
         t.set("phase", phase).map_err(|e| e.to_string())?;
+        let weapon = slot
+            .and_then(|s| StockWeapon::from_index(s as u32))
+            .map(|w| w.name());
+        t.set("weapon", weapon).map_err(|e| e.to_string())?;
         call_each(&list, t.clone())?;
         table_to_motion(&t, motion)
     })

@@ -59,6 +59,7 @@ type MissileFreeFn = unsafe extern "thiscall" fn(*mut u8, u32) -> *mut u8;
 
 /// Drop everything remembered about homing missiles. Called at match start.
 pub fn clear_homing() {
+    crate::missile_boom::clear_weapons();
     if let Ok(mut g) = HM_CUSTOM.lock() {
         g.clear();
     }
@@ -68,6 +69,7 @@ pub fn clear_homing() {
 }
 
 fn forget_missile(key: usize) {
+    crate::missile_boom::forget_weapon(key);
     if let Ok(mut g) = HM_CUSTOM.lock() {
         g.retain(|(e, _)| *e != key);
     }
@@ -360,7 +362,8 @@ unsafe extern "thiscall" fn missile_hook(
     unsafe { remap_homing_body_sprites(this) };
     if msg == MSG_FRAME_FINISH {
         if let Some(m) = unsafe { read_motion(this) } {
-            if let Ok(after) = lua_host::missile_frame(m, msg, "pre") {
+            let weapon = crate::missile_boom::weapon_of(this);
+            if let Ok(after) = lua_host::missile_frame(m, msg, "pre", weapon) {
                 unsafe { write_motion(this, &after) };
             }
         }
@@ -374,7 +377,8 @@ unsafe extern "thiscall" fn missile_hook(
     unsafe { remap_homing_body_sprites(this) };
     if msg == MSG_FRAME_FINISH {
         if let Some(m) = unsafe { read_motion(this) } {
-            if let Ok(after) = lua_host::missile_frame(m, msg, "post") {
+            let weapon = crate::missile_boom::weapon_of(this);
+            if let Ok(after) = lua_host::missile_frame(m, msg, "post", weapon) {
                 unsafe { write_motion(this, &after) };
             }
         }

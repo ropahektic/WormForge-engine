@@ -1047,6 +1047,38 @@ end)
     }
 
     #[test]
+    fn missile_frame_names_the_missiles_weapon() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-missile-weapon");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("m"),
+            "m.obs",
+            r#"
+id = "m.obs"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = []
+"#,
+            r#"
+wa.on.missile_frame(function(m)
+  if m.weapon == "longbow" then m.vx = 1
+  elseif m.weapon == nil then m.vx = 2 end
+end)
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        park_lua(scripts.lua);
+        let m = game::entity::Motion {
+            id: 1, class_type: 0, damp: 0, wind_scale: 0, gravity_scale: 0, moved: 0,
+            x: 0, y: 0, vx: 0, vy: 0, cm_gravity: 0, cm_wind: 0,
+        };
+        assert_eq!(missile_frame(m, 2, "pre", Some(15)).unwrap().vx, 1, "slot 15 is the longbow");
+        assert_eq!(missile_frame(m, 2, "pre", None).unwrap().vx, 2, "no slot is nil");
+    }
+
+    #[test]
     fn hurt_pre_scales_and_can_eat() {
         let _host = lock_host();
         let root = std::env::temp_dir().join("wklua-lua-host-hurt");
