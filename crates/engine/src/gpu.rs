@@ -77,6 +77,8 @@ static FRAME: Mutex<Option<Frame>> = Mutex::new(None);
 /// nothing could be intercepted until a frame existed, and no frame was built
 /// until something had been intercepted -- so every sprite fell through to WA.
 static PENDING: Mutex<Vec<Pending>> = Mutex::new(Vec::new());
+/// This rendered frame's `wa.draw.quad`s, in world pixels.
+static QUADS: Mutex<Vec<lua_host::DrawQuad>> = Mutex::new(Vec::new());
 /// The packed atlas, held until a device exists to upload it to.
 ///
 /// Sheets are registered at `on_gfx_ready`, which runs at LoadSprites — long
@@ -182,6 +184,9 @@ pub fn clear() {
     if let Ok(mut pending) = PENDING.lock() {
         pending.clear();
     }
+    if let Ok(mut quads) = QUADS.lock() {
+        quads.clear();
+    }
     if let Ok(mut frame) = FRAME.lock() {
         *frame = None;
     }
@@ -191,6 +196,9 @@ pub fn clear() {
 pub fn begin_frame() {
     if let Ok(mut pending) = PENDING.lock() {
         pending.clear();
+    }
+    if let Ok(mut quads) = QUADS.lock() {
+        quads.clear();
     }
     if let Ok(mut state) = FRAME.lock() {
         if let Some(frame) = state.as_mut() {
@@ -256,7 +264,8 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
     // Fog changes that: the HUD exemption it needs comes from the same
     // dispatch split below, so when fog is active we run the split even with
     // no sprites of our own, purely to learn where the HUD landed.
-    let queued = PENDING.lock().map(|p| p.len()).unwrap_or(0);
+    let queued = PENDING.lock().map(|p| p.len()).unwrap_or(0)
+        + QUADS.lock().map(|q| q.len()).unwrap_or(0);
     if queued == 0 {
         return false;
     }
@@ -578,6 +587,35 @@ fn ensure_atlas() -> bool {
     ok
 }
 
+/// Run the packs' `wa.on.draw` for this rendered frame and keep its quads.
+/// Called at the start of RENDER_SCENE, before WA's own draws.
+pub fn collect_draws() {
+    if !is_active() {
+        return;
+    }
+    match lua_host::run_draw() {
+        Ok(quads) => {
+            if let Ok(mut held) = QUADS.lock() {
+                *held = quads;
+            }
+        }
+        Err(e) => warn(&format!("wa.on.draw: {e}")),
+    }
+}
+
+/// A `wa.draw.quad` colour (straight 0xAARRGGBB) as a vertex `Tint`:
+/// premultiplied, and alpha 0 when it is added to the scene.
+fn quad_tint(argb: u32, additive: bool) -> u32 {
+    let a = argb >> 24;
+    let scale = |shift: u32| (((argb >> shift) & 0xFF) * a / 255) << shift;
+    let rgb = scale(16) | scale(8) | scale(0);
+    if additive {
+        rgb
+    } else {
+        (a << 24) | rgb
+    }
+}
+
 /// One intercepted draw, in WA's own coordinates.
 #[derive(Clone, Copy)]
 struct Pending {
@@ -759,6 +797,38 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
             }
         }
     }
+    drop(pending);
+
+    // The packs' quads, through the same world-to-screen transform.
+    let Ok(quads) = QUADS.lock() else {
+        return;
+    };
+    for q in quads.iter() {
+        let Some((rect, frames, _)) = crate::sprite::gpu_frame(q.sprite as u32) else {
+            warn("wa.draw.quad: its sprite is not a GPU sheet");
+            continue;
+        };
+        let Some(rect) = rect((q.frame as usize).min(frames.saturating_sub(1))) else {
+            continue;
+        };
+        let screen = |(x, y): (f32, f32)| {
+            (x - clip_x as f32 + cam_x as f32, y - clip_y as f32 + cam_y as f32)
+        };
+        let quad = render::Quad {
+            corners: q.corners.map(screen),
+            colours: q.colours.map(|c| quad_tint(c, q.additive)),
+            rect,
+        };
+        if quad.offscreen(w, h) {
+            continue;
+        }
+        const TERRAIN_DEPTH: u32 = 0x0018_0000;
+        if q.depth >= TERRAIN_DEPTH {
+            quad.emit(w, h, &mut frame.vertices);
+        } else {
+            quad.emit(w, h, &mut frame.vertices_front);
+        }
+    }
 }
 
 /// Read WA's 8bpp surface: its address, size, and a row-copy closure.
@@ -884,5 +954,18 @@ mod depth_order_tests {
         let pending = [at(0x10000, 1), at(0xD0000, 2), at(0x190000, 3), at(0xD0000, 4)];
         let order: Vec<u32> = back_to_front(&pending).iter().map(|p| p.sprite).collect();
         assert_eq!(order, vec![3, 2, 4, 1], "equal depths keep collection order");
+    }
+}
+
+#[cfg(test)]
+mod quad_tint_tests {
+    use super::quad_tint;
+
+    #[test]
+    fn quad_colours_are_premultiplied_and_additive_has_no_alpha() {
+        assert_eq!(quad_tint(0xFFFF_3030, false), 0xFFFF_3030, "opaque is unchanged");
+        assert_eq!(quad_tint(0x8000_FF00, false), 0x8000_8000, "half green, premultiplied");
+        assert_eq!(quad_tint(0xFFFF_3030, true), 0x00FF_3030, "added to the scene");
+        assert_eq!(quad_tint(0x10FF_3030, true), 0x0010_0303, "a faint fade, added");
     }
 }

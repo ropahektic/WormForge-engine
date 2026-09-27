@@ -11,6 +11,61 @@ use std::cell::RefCell;
 use crate::PARKED_LUA;
 use weapons::StockWeapon;
 
+/// One `wa.draw.quad`, in world pixels. The engine turns it into screen
+/// space with the camera, exactly as it does the GPU sprites.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DrawQuad {
+    /// Clockwise from the corner that takes the sheet's top-left.
+    pub corners: [(f32, f32); 4],
+    /// Per corner, 0xAARRGGBB, not premultiplied.
+    pub colours: [u32; 4],
+    pub sprite: i32,
+    pub frame: u32,
+    /// Added to the scene rather than drawn over it.
+    pub additive: bool,
+    /// Render-queue depth: at or behind terrain (0x180000) terrain hides it.
+    pub depth: u32,
+}
+
+thread_local! {
+    static DRAW_QUADS: RefCell<Vec<DrawQuad>> = const { RefCell::new(Vec::new()) };
+    static DRAWING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// True while `wa.on.draw` handlers run: drawing is allowed, and anything
+/// that would reach the lockstep simulation (`wa.random`) is refused.
+pub fn drawing() -> bool {
+    DRAWING.with(|d| d.get())
+}
+
+pub fn push_draw_quad(q: DrawQuad) {
+    DRAW_QUADS.with(|s| s.borrow_mut().push(q));
+}
+
+/// Run every `wa.on.draw` handler for one rendered frame and return what it
+/// drew. Render time, not simulation: it runs as often as WA renders, which
+/// is not once per sim frame, and differently on every peer.
+pub fn run_draw() -> Result<Vec<DrawQuad>, String> {
+    DRAW_QUADS.with(|s| s.borrow_mut().clear());
+    let ran = with_lua_impl(false, |lua| {
+        let list = hook_list(lua, "draw")?;
+        if list.len().map_err(|e| e.to_string())? == 0 {
+            return Ok(());
+        }
+        DRAWING.with(|d| d.set(true));
+        struct Done;
+        impl Drop for Done {
+            fn drop(&mut self) {
+                DRAWING.with(|d| d.set(false));
+            }
+        }
+        let _done = Done;
+        call_each(&list, ())
+    });
+    let quads = DRAW_QUADS.with(|s| s.replace(Vec::new()));
+    ran.map(|_| quads)
+}
+
 #[derive(Clone, Debug)]
 pub struct HudLine {
     pub text: String,

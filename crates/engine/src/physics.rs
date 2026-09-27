@@ -509,6 +509,7 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if msg == MSG_RENDER_SCENE {
         crate::gpu::begin_frame();
         crate::actor::begin_puff_frame();
+        crate::gpu::collect_draws();
     }
     // Stamp mask silhouettes into the walk grid before stock physics so worms,
     // hitscan, and missile bounce treat GIF/PNG solids as dirt.

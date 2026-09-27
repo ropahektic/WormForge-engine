@@ -124,6 +124,61 @@ impl Sprite {
     }
 }
 
+/// A free-form textured quad, in screen pixels: four corners, clockwise from
+/// the one that takes the sheet's top-left, each with its own colour. What
+/// Project X's `AddSpriteQ` draws (its laser ray is a strip of these).
+#[derive(Clone, Copy, Debug)]
+pub struct Quad {
+    pub corners: [(f32, f32); 4],
+    /// Per corner, as `Tint`: premultiplied, alpha 0 additive.
+    pub colours: [u32; 4],
+    pub rect: SheetRect,
+}
+
+impl Quad {
+    /// Axis-aligned screen bounds, as inclusive pixel extents.
+    pub fn bounds(&self) -> (i32, i32, i32, i32) {
+        let xs = self.corners.map(|c| c.0);
+        let ys = self.corners.map(|c| c.1);
+        let min = |v: [f32; 4]| v.iter().copied().fold(f32::INFINITY, f32::min);
+        let max = |v: [f32; 4]| v.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        (
+            min(xs).floor() as i32,
+            min(ys).floor() as i32,
+            max(xs).ceil() as i32,
+            max(ys).ceil() as i32,
+        )
+    }
+
+    pub fn offscreen(&self, width: u32, height: u32) -> bool {
+        let (x0, y0, x1, y1) = self.bounds();
+        x1 < 0 || y1 < 0 || x0 >= width as i32 || y0 >= height as i32
+    }
+
+    /// Append this quad's six vertices, as `Sprite::emit` does.
+    pub fn emit(&self, width: u32, height: u32, out: &mut Vec<Vertex>) {
+        let (u0, v0, u1, v1) = self.rect.uv();
+        let uvs = [(u0, v0), (u1, v0), (u1, v1), (u0, v1)];
+        let vertex = |i: usize| {
+            let (cx, cy) = self.corners[i];
+            let (x, y) = (cx - 0.5, cy - 0.5);
+            Vertex {
+                x,
+                y,
+                z: 0.0,
+                rhw: 1.0,
+                colour: self.colours[i],
+                u: uvs[i].0,
+                v: uvs[i].1,
+                su: (x + 0.5) / width as f32,
+                sv: (y + 0.5) / height as f32,
+            }
+        };
+        let (a, b, c, d) = (vertex(0), vertex(1), vertex(2), vertex(3));
+        out.extend_from_slice(&[a, b, c, a, c, d]);
+    }
+}
+
 /// Build the frame's vertex buffer, skipping anything off-screen.
 pub fn build(sprites: &[Sprite], width: u32, height: u32) -> Vec<Vertex> {
     let mut out = Vec::with_capacity(sprites.len() * VERTICES_PER_QUAD);
@@ -154,6 +209,27 @@ mod tests {
             tint: Tint::OPAQUE,
             mirror_x: false,
         }
+    }
+
+    #[test]
+    fn a_free_quad_keeps_its_corners_colours_and_sheet_corners() {
+        let q = Quad {
+            corners: [(10.0, 10.0), (110.0, 10.0), (110.0, 12.0), (10.0, 12.0)],
+            colours: [1, 2, 3, 4],
+            rect: rect(),
+        };
+        let mut v = Vec::new();
+        q.emit(256, 128, &mut v);
+        assert_eq!(v.len(), VERTICES_PER_QUAD);
+        // Two triangles: a b c, a c d.
+        let order: Vec<u32> = v.iter().map(|v| v.colour).collect();
+        assert_eq!(order, vec![1, 2, 3, 1, 3, 4]);
+        assert!((v[1].x - 109.5).abs() < 0.01 && (v[2].y - 11.5).abs() < 0.01);
+        let (u0, v0, u1, v1) = rect().uv();
+        assert_eq!((v[0].u, v[0].v, v[2].u, v[2].v), (u0, v0, u1, v1));
+        assert_eq!(q.bounds(), (10, 10, 110, 12));
+        assert!(!q.offscreen(256, 128));
+        assert!(q.offscreen(5, 5));
     }
 
     #[test]

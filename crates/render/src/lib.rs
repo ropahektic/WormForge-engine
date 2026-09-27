@@ -22,7 +22,7 @@ pub mod atlas;
 pub mod geom;
 
 pub use atlas::{Atlas, SheetId, SheetRect};
-pub use geom::{Sprite, Vertex, VERTICES_PER_QUAD};
+pub use geom::{Quad, Sprite, Vertex, VERTICES_PER_QUAD};
 
 /// Colour written into a vertex, premultiplied BGRA in D3D's `D3DCOLOR` order.
 ///
