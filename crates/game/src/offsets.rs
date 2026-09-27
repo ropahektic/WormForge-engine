@@ -199,6 +199,12 @@ pub const FIRE_PARAMS_SIZE: usize = WEAPON_ENTRY_SIZE - WEAPON_FIRE_PARAMS;
 pub const FIRE_DAMAGE: usize = 0x18;
 pub const FIRE_SPRITE: usize = 0x24;
 pub const FIRE_FUSE: usize = 0x50;
+/// `sound.soundIndex`: the sound the missile plays in flight (0 none).
+pub const FIRE_SOUND: usize = 0x54;
+/// `explodeInto`: what it bursts into, WA's `impact_spawn_kind` (entry
+/// +0xF0): 0 nothing, 1 clustlets (the cluster bomb, mortar and banana
+/// records; `CreateClusters`, from the record's own cluster params), 2 fire.
+pub const FIRE_EXPLODE_INTO: usize = 0xB4;
 /// The shoot description the constructor takes (0x2C bytes; OpenWA's
 /// `WeaponReleaseContext`, Project X's `CShootDesc`).
 pub const SHOOT_DESC_SIZE: usize = 0x2C;

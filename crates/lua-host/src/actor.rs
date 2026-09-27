@@ -47,6 +47,10 @@ pub struct LaunchArgs {
     pub sprite: Option<i32>,
     /// Fuse in ms.
     pub fuse: Option<i32>,
+    /// The sound it plays in flight (0 for none).
+    pub sound: Option<i32>,
+    /// What it bursts into: 0 nothing, 1 clustlets, 2 fire.
+    pub explode_into: Option<i32>,
 }
 
 pub struct SpawnArgs {

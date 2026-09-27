@@ -478,6 +478,8 @@ wa.weapons.replace({
                     damage: Some(40),
                     sprite: Some(54),
                     fuse: Some(5000),
+                    sound: None,
+                    explode_into: None,
                 }]
             )
         });
@@ -488,6 +490,16 @@ wa.weapons.replace({
                 .contains("needs x"));
             assert!(err("wa.weapons.launch{ weapon = 'nope', owner = wa.worms.all()[1], x = 0, y = 0 }")
                 .contains("nope"));
+            assert!(err("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0, y = 0, explode_into = 'confetti' }")
+                .contains("clustlets"));
+            lua.load("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0, y = 0, sound = 0, explode_into = 'clustlets' }")
+                .exec()
+                .unwrap();
+        });
+        LAUNCHED.with(|l| {
+            let l = l.borrow();
+            let nuke = l.last().unwrap();
+            assert_eq!((nuke.slot, nuke.sound, nuke.explode_into), (StockWeapon::Mine.index() as u32, Some(0), Some(1)));
         });
     }
 
