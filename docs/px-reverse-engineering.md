@@ -109,9 +109,11 @@ Some older names in our engine do not match this table: 0x7B's setup is
 
 WA tells a worm it touched another entity through the worm's vtable slot
 8, `WormEntity__OnWormPush` (0x50D9A0, thiscall `(other, flags)`). This is
-PX's `CWorm::Collide`. The landscape takes part too (ClassType 28, 0x1C).
-PX passes it as `NullObj`, which is why its Helicopter lands smoothly;
-`wa.on.contact` gives it as kind `"land"`.
+PX's `CWorm::Collide`. The landscape takes part too (ClassType 28, 0x1C),
+and PX's `Collide` gets it as an object like any other, not `NullObj`: the
+Helicopter crashes on landing faster than a pixel a frame, and "smooth
+landing" is only that threshold (checked in PX). `wa.on.contact` gives it
+as kind `"land"`.
 
 ## WA's fire punch
 
