@@ -192,6 +192,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         hurt: crate::physics::hit_worm,
         set_worm_state: crate::physics::set_worm_state,
         retreat_ms: crate::world::retreat_ms,
+        launch: crate::missile_boom::launch,
         retarget_weapon_sprites: |slot, body, cluster| {
             crate::apply::retarget_sprites(
                 slot as usize,
@@ -1018,7 +1019,7 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     Ok(this as u32)
 }
 
-fn physics_parent(entity: *mut u8) -> Option<*mut u8> {
+pub(crate) fn physics_parent(entity: *mut u8) -> Option<*mut u8> {
     if entity.is_null() {
         return None;
     }

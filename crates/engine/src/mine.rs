@@ -461,6 +461,7 @@ fn fire_step(
             slot,
             x,
             y,
+            0,
         ) {
             log_error(&format!("{label}: {e}"));
         }

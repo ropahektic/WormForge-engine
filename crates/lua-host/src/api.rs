@@ -91,6 +91,23 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     }
 
     {
+        let f = lua
+            .create_function(|_, spec: Table| {
+                let args = launch_args(&spec)?;
+                if !crate::sim_context::active() {
+                    return Err(mlua::Error::external(
+                        "weapons.launch: only valid in simulation callbacks",
+                    ));
+                }
+                let launch = crate::actor::native_launch()
+                    .ok_or_else(|| mlua::Error::external("weapons.launch: native not bound"))?;
+                launch(&args).map_err(mlua::Error::external)
+            })
+            .map_err(|e| e.to_string())?;
+        weapons.set("launch", f).map_err(|e| e.to_string())?;
+    }
+
+    {
         let push_claim = Rc::clone(&push_claim);
         let mod_id = ctx.mod_id.clone();
         let root = ctx.root.clone();
@@ -595,6 +612,49 @@ fn spec_slot(spec: &Table) -> mlua::Result<StockWeapon> {
 
 /// WA's team colours: alliance 0 (red) to 5 (cyan).
 const WORM_SPRITE_TEAMS: usize = 6;
+
+/// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse }`.
+fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
+    let name: String = spec
+        .get("weapon")
+        .map_err(|_| mlua::Error::external("weapons.launch needs weapon = \"bazooka\""))?;
+    let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
+    let owner = spawn::parse_owner(&spec.get::<Value>("owner")?)?;
+    if owner == 0 {
+        return Err(mlua::Error::external("weapons.launch needs owner = the worm it is fired for"));
+    }
+    let need = |key: &str| {
+        get_i32(spec, key)?
+            .ok_or_else(|| mlua::Error::external(format!("weapons.launch needs {key} (16.16)")))
+    };
+    let sprite = match spec.get::<Value>("sprite")? {
+        Value::Nil => None,
+        Value::Integer(n) => Some(n as i32),
+        Value::Number(n) => Some(n as i32),
+        Value::String(s) => {
+            let s = s.to_str()?;
+            Some(stock_sprite_id(&s).ok_or_else(|| {
+                mlua::Error::external(format!("weapons.launch: unknown stock sprite '{}'", &*s))
+            })?)
+        }
+        other => {
+            return Err(mlua::Error::external(format!(
+                "weapons.launch: sprite must be a stock sprite name or id, got {other:?}"
+            )))
+        }
+    };
+    Ok(crate::LaunchArgs {
+        slot: slot.index() as u32,
+        owner,
+        x: need("x")?,
+        y: need("y")?,
+        vx: get_i32(spec, "vx")?.unwrap_or(0),
+        vy: get_i32(spec, "vy")?.unwrap_or(0),
+        damage: get_i32(spec, "damage")?,
+        sprite,
+        fuse: get_i32(spec, "fuse")?,
+    })
+}
 
 fn table_to_claim(
     lua: &Lua,
