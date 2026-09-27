@@ -542,6 +542,22 @@ fn is_stock_homing_body(id: i32) -> bool {
     matches!(id, 58 | 59 | 49 | 175 | 176 | 177 | 178 | 673 | 674)
 }
 
+/// Cluster debris (`particles`): a game frame of motion, from WA's own
+/// gravity, wind, water line and landscape, all read-only.
+fn tick_particles() {
+    if crate::particles::count() == 0 {
+        return;
+    }
+    let (gravity, wind) = crate::world::forces();
+    let water = crate::world::water_fixed() as f32 / 65536.0;
+    crate::particles::tick(
+        gravity as f32 / 65536.0,
+        wind as f32 / 65536.0,
+        if water > 0.0 { water } else { f32::MAX },
+        |x, y| crate::world::solid_fixed(x << 16, y << 16),
+    );
+}
+
 unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
     // BEFORE stock entity blits fill the GPU pending list. Clearing after
     // would wipe quads between enqueue and dispatch (ghost trails).
@@ -564,11 +580,13 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         crate::actor::flush_deferred();
         crate::contact::flush();
         crate::actor::tick_puffs();
+        tick_particles();
         unsafe { crate::mask_collide::resolve_all(this) };
     }
     if msg == MSG_RENDER_SCENE {
         crate::truecolor::begin_frame();
         crate::actor::draw_puffs(this);
+        crate::actor::draw_particles(this);
     }
     // End of a sim frame, after WA's own handler: this is the state both
     // peers must agree on, and the point WA increments its frame counter.

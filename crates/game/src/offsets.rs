@@ -182,6 +182,9 @@ pub const MISSILE_WEAPON_DATA: usize = 0x15C;
 /// `WEAPON_CLUSTER_MISSILE_TYPE`. (MissileEntity's own dispatch field,
 /// render_data[0x17], numbers these differently -- this is not that.)
 pub const MISSILE_TYPE: usize = 0x1C4;
+/// `MissileEntity__CreateClusters` (0x5096A0): usercall, the missile in ESI,
+/// (x, y) on the stack, `ret 8`. Makes the record's cluster pellets.
+pub const MISSILE_CREATE_CLUSTERS: u32 = 0x0050_96A0;
 pub const MISSILE_TYPE_HOMING: i32 = 1;
 /// MissileEntity.fire_particle_trigger — sprite id missile render actually blits.
 pub const MISSILE_RENDER_SPRITE: usize = 0x2EC;
