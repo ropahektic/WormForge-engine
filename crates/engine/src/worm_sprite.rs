@@ -770,6 +770,9 @@ mod tests {
         assert!(super::hold_as(23, 153));
         assert_eq!(super::HELD.lock().unwrap().iter().find(|(s, _)| *s == 23).map(|(_, id)| *id), Some(343));
         assert!(!super::hold_as(23, 900), "no held sheet for an unknown sprite");
+    }
+
+    #[test]
     fn putting_a_weapon_away_plays_the_draw_again() {
         use super::{drive_phase, ANIM};
         let (worm, sheet) = (0x5EED_0001usize, 0x0100_0061);
