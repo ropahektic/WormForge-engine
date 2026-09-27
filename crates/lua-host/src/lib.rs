@@ -479,6 +479,13 @@ replace = ["holy_grenade"]
         assert_eq!(scripts.resolved.applied.len(), 1);
         let claim = &scripts.resolved.applied[0];
         assert_eq!(claim.slot, StockWeapon::Bazooka);
+        match &claim.params.panel_icon {
+            Some(weapons::PanelIcon::File { path, width, height, .. }) => {
+                assert_eq!(path, "sprites/ico_sentrygun.png");
+                assert_eq!((*width, *height), (32, 32), "a full PX icon image");
+            }
+            other => panic!("expected a PNG icon, got {other:?}"),
+        }
         // Six worm poses, each baked once per team colour, in alliance order.
         let sheets = &claim.params.worm_sprites;
         assert_eq!(sheets.len(), 6 * 6);
