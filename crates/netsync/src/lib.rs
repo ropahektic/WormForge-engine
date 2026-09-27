@@ -11,6 +11,7 @@
 
 pub mod download;
 pub mod gate;
+pub mod install;
 pub mod proto;
 pub mod store;
 
@@ -20,6 +21,7 @@ use std::path::{Component, Path, PathBuf};
 use weapons::LoadedMod;
 
 pub use assets::sha256::digest;
+pub use install::{install_session_into_mods, InstallReport};
 
 /// First line of every manifest. Bump it when the format changes.
 pub const MANIFEST_HEADER: &str = "wormforge-sync-manifest 1";
