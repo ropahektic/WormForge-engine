@@ -166,11 +166,17 @@ impl WeaponEntry {
     /// banks: +0x2EC ← +0x180 (sprite_id), +0x36C/+0x370 ← +0x200/+0x204
     /// (entry +0xE0/+0xE4). Lock mode (`entity+0x394 == 1`) blits that blink
     /// pair — so every sibling must become `new`, not only +0x60/+0xAC.
+    ///
+    /// A slot with no flight sprite (`old` 0: a special weapon such as the
+    /// battle axe) has no siblings to follow it. Matching 0 there would
+    /// write the sprite into every unused field in the list, the cluster's
+    /// parameters among them.
     pub fn retarget_sprite_id(&mut self, old: i32, new: i32) {
         if old == new {
             return;
         }
         self.set_sprite_id(new);
+        let follows = |v: i32| old != 0 && v == old;
         const DONKEY_GFX: i32 = 82;
         // Flight + burn/turn siblings: HM (58/59), bullet (49), pigeon turns.
         const HOMING_ALTS: &[i32] = &[58, 59, 49, 175, 176, 177, 178, 673, 674];
@@ -185,13 +191,13 @@ impl WeaponEntry {
             WEAPON_CLUSTER_RENDER_TIMER,
         ] {
             let v = self.read_i32(off);
-            if v == old || v == DONKEY_GFX || HOMING_ALTS.contains(&v) {
+            if follows(v) || v == DONKEY_GFX || HOMING_ALTS.contains(&v) {
                 self.write_i32(off, new);
             }
         }
         for off in [WEAPON_WIND_PCT, 0x110usize, 0x114, 0x118] {
             let v = self.read_i32(off);
-            if v == old || v == DONKEY_GFX {
+            if follows(v) || v == DONKEY_GFX {
                 self.write_i32(off, new);
             }
         }
@@ -353,6 +359,18 @@ mod tests {
         assert_eq!(dest.read_i32(0x64), 801);
         assert_eq!(dest.read_i32(0x68), 801);
         assert_eq!(dest.wind_pct(), 801);
+    }
+
+    #[test]
+    fn retarget_from_no_sprite_touches_only_the_sprite() {
+        let mut e = WeaponEntry { raw: [0; WEAPON_ENTRY_SIZE] };
+        e.write_i32(0x114, 100);
+        e.retarget_sprite_id(0, 900);
+        assert_eq!(e.sprite_id(), 900);
+        for off in [0x68usize, 0xDC, 0xE0, 0xE4, WEAPON_CLUSTER_SPRITE, WEAPON_CLUSTER_RENDER_TIMER, 0x110] {
+            assert_eq!(e.read_i32(off), 0, "{off:#x} is not a sibling of no sprite");
+        }
+        assert_eq!(e.read_i32(0x114), 100);
     }
 
     #[test]
