@@ -10,7 +10,8 @@ use game::offsets::{
     MISSILE_ALT_BANK_SPRITE, MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_SPRITE_A,
     MISSILE_HOMING_SPRITE_B, MISSILE_RENDER_SPRITE, MISSILE_RENDER_SPRITE_ALT,
     MISSILE_WEAPON_ALT_SPRITE, MISSILE_WEAPON_DATA, MISSILE_WEAPON_SPRITE, STOCK_WEAPON_COUNT,
-    WEAPON_ENTRY_SIZE, ENT_WORLD, ENT_WORM_TEAM, FIRE_DAMAGE, FIRE_FUSE, FIRE_PARAMS_SIZE,
+    WEAPON_ENTRY_SIZE, ENT_WORLD, ENT_WORM_TEAM, FIRE_DAMAGE, FIRE_EXPLODE_INTO, FIRE_FUSE,
+    FIRE_PARAMS_SIZE, FIRE_SOUND,
     FIRE_SPRITE, GAME_WORLD_OBJECT_POOL, GAME_WORLD_WEAPON_TABLE, MISSILE_ENTITY_SIZE,
     MISSILE_ENTITY_ZEROED, OBJECT_POOL_LIMIT, OBJECT_POOL_MISSILE, SHOOT_DESC_SIZE, SHOOT_FUSE,
     SHOOT_SETTLE, SHOOT_TARGET_X, SHOOT_TARGET_Y, SHOOT_TEAM, SHOOT_VX, SHOOT_VY, SHOOT_WORM,
@@ -312,7 +313,12 @@ fn shoot_desc(team: i32, worm: i32, args: &lua_host::LaunchArgs) -> [u8; SHOOT_D
 /// A copy of a slot's fire params with this missile's changes, or None when
 /// it has none and can fly with the slot's own, as WA's missiles do.
 fn tuned_fire_params(src: &[u8], args: &lua_host::LaunchArgs) -> Option<Box<[u8]>> {
-    if args.damage.is_none() && args.sprite.is_none() && args.fuse.is_none() {
+    if args.damage.is_none()
+        && args.sprite.is_none()
+        && args.fuse.is_none()
+        && args.sound.is_none()
+        && args.explode_into.is_none()
+    {
         return None;
     }
     let mut p: Box<[u8]> = src.into();
@@ -324,6 +330,8 @@ fn tuned_fire_params(src: &[u8], args: &lua_host::LaunchArgs) -> Option<Box<[u8]
     put(FIRE_DAMAGE, args.damage);
     put(FIRE_SPRITE, args.sprite);
     put(FIRE_FUSE, args.fuse);
+    put(FIRE_SOUND, args.sound);
+    put(FIRE_EXPLODE_INTO, args.explode_into);
     Some(p)
 }
 
@@ -456,7 +464,9 @@ fn fire_step(
 #[cfg(test)]
 mod launch_tests {
     use super::{shoot_desc, tuned_fire_params};
-    use game::offsets::{FIRE_DAMAGE, FIRE_FUSE, FIRE_PARAMS_SIZE, FIRE_SPRITE};
+    use game::offsets::{
+        FIRE_DAMAGE, FIRE_EXPLODE_INTO, FIRE_FUSE, FIRE_PARAMS_SIZE, FIRE_SOUND, FIRE_SPRITE,
+    };
 
     fn at(b: &[u8], off: usize) -> i32 {
         i32::from_le_bytes(b[off..off + 4].try_into().unwrap())
@@ -487,6 +497,13 @@ mod launch_tests {
         };
         let p = tuned_fire_params(&own, &args).unwrap();
         assert_eq!((at(&p, FIRE_DAMAGE), at(&p, FIRE_SPRITE), at(&p, FIRE_FUSE)), (40, 54, 5000));
+        assert_eq!(at(&p, FIRE_SOUND), 0x1111_1111, "untouched unless asked");
+        // The Nuke Rocket's flying nuke: silent, bursting into clustlets.
+        let nuke = lua_host::LaunchArgs {
+            sound: Some(0), explode_into: Some(1), ..Default::default()
+        };
+        let p = tuned_fire_params(&own, &nuke).unwrap();
+        assert_eq!((at(&p, FIRE_SOUND), at(&p, FIRE_EXPLODE_INTO)), (0, 1));
         assert_eq!(p.len(), FIRE_PARAMS_SIZE);
         assert!(own.iter().all(|b| *b == 0x11), "the record is untouched");
         assert_eq!(p[0], 0x11);

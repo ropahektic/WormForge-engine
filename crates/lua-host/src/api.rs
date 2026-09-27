@@ -613,7 +613,8 @@ fn spec_slot(spec: &Table) -> mlua::Result<StockWeapon> {
 /// WA's team colours: alliance 0 (red) to 5 (cyan).
 const WORM_SPRITE_TEAMS: usize = 6;
 
-/// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse }`.
+/// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse,
+/// sound, explode_into }`.
 fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
     let name: String = spec
         .get("weapon")
@@ -653,6 +654,25 @@ fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
         damage: get_i32(spec, "damage")?,
         sprite,
         fuse: get_i32(spec, "fuse")?,
+        sound: get_i32(spec, "sound")?,
+        explode_into: match spec.get::<Value>("explode_into")? {
+            Value::Nil => None,
+            Value::String(s) => Some(match &*s.to_str()? {
+                "nothing" => 0,
+                "clustlets" => 1,
+                "fire" => 2,
+                other => {
+                    return Err(mlua::Error::external(format!(
+                        "weapons.launch: explode_into is \"nothing\", \"clustlets\" or \"fire\", got '{other}'"
+                    )))
+                }
+            }),
+            other => {
+                return Err(mlua::Error::external(format!(
+                    "weapons.launch: explode_into is \"nothing\", \"clustlets\" or \"fire\", got {other:?}"
+                )))
+            }
+        },
     })
 }
 
