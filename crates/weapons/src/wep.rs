@@ -146,6 +146,160 @@ pub fn patch(entry: &mut WeaponEntry, fields: &[(usize, i32)]) {
     keep_stock_sprites(entry, &before);
 }
 
+/// Strike munitions reuse the missile slab 0x14 bytes later in the entry.
+const STRIKE_SHIFT: usize = 0x14;
+
+/// One named weapon field the web editor may put in `patch = { damage = 70 }`.
+/// `slab` fields shift by [`STRIKE_SHIFT`] when the weapon's fire type is 3.
+#[derive(Clone, Copy, Debug)]
+struct PatchName {
+    name: &'static str,
+    off: usize,
+    slab: bool,
+}
+
+/// Field names match the web editor's `wep_schema.js` (no `unk_*` unknowns).
+const PATCH_NAMES: &[PatchName] = &[
+    // Header / handling
+    PatchName { name: "requires_aiming", off: 0x0C, slab: false },
+    PatchName { name: "shots", off: 0x14, slab: false },
+    PatchName { name: "uses_turn", off: 0x18, slab: false },
+    PatchName { name: "retreat", off: 0x1C, slab: false },
+    PatchName { name: "creates_projectile", off: 0x20, slab: false },
+    PatchName { name: "fire_type", off: 0x30, slab: false },
+    PatchName { name: "hold_pose", off: 0x34, slab: false },
+    PatchName { name: "special_subtype", off: 0x34, slab: false },
+    PatchName { name: "subtype_param", off: 0x34, slab: false },
+    PatchName { name: "fire_method", off: 0x38, slab: false },
+    PatchName { name: "plane_sprite", off: 0x38, slab: false },
+    PatchName { name: "special_param", off: 0x38, slab: false },
+    PatchName { name: "power_pct", off: 0x1C8, slab: false },
+    PatchName { name: "weight2", off: 0x1CC, slab: false },
+    // Missile / strike body (slab)
+    PatchName { name: "pellets", off: 0x3C, slab: true },
+    PatchName { name: "spread", off: 0x40, slab: true },
+    PatchName { name: "grenade_style", off: 0x44, slab: true },
+    PatchName { name: "collision_radius", off: 0x48, slab: true },
+    PatchName { name: "bias", off: 0x4C, slab: true },
+    PatchName { name: "damage", off: 0x50, slab: true },
+    PatchName { name: "blast", off: 0x54, slab: true },
+    PatchName { name: "sprite", off: 0x60, slab: true },
+    PatchName { name: "impact", off: 0x64, slab: true },
+    PatchName { name: "flight_flags", off: 0x68, slab: true },
+    PatchName { name: "trail", off: 0x6C, slab: true },
+    PatchName { name: "gravity_pct", off: 0x70, slab: true },
+    PatchName { name: "wind_pct", off: 0x74, slab: true },
+    PatchName { name: "bounce_pct", off: 0x78, slab: true },
+    PatchName { name: "bounce_extra", off: 0x7C, slab: true },
+    PatchName { name: "friction_pct", off: 0x84, slab: true },
+    PatchName { name: "fuse_default", off: 0x88, slab: true },
+    PatchName { name: "fuse", off: 0x8C, slab: true },
+    PatchName { name: "alt_sprite", off: 0x90, slab: true },
+    PatchName { name: "glow_enable", off: 0x94, slab: true },
+    PatchName { name: "glow_sprite", off: 0x98, slab: true },
+    PatchName { name: "glow_time", off: 0x9C, slab: true },
+    PatchName { name: "space_control", off: 0xA0, slab: true },
+    PatchName { name: "missile_type", off: 0xA4, slab: true },
+    PatchName { name: "render_size", off: 0xA8, slab: true },
+    PatchName { name: "burn_sprite", off: 0xAC, slab: true },
+    PatchName { name: "homing_strength", off: 0xB0, slab: true },
+    PatchName { name: "homing_sprite", off: 0xB4, slab: true },
+    PatchName { name: "homing_turn", off: 0xB8, slab: true },
+    PatchName { name: "homing_accel", off: 0xBC, slab: true },
+    PatchName { name: "homing_speed", off: 0xC0, slab: true },
+    PatchName { name: "homing_kind", off: 0xC4, slab: true },
+    PatchName { name: "homing_arm", off: 0xC8, slab: true },
+    PatchName { name: "homing_time", off: 0xCC, slab: true },
+    PatchName { name: "detonation", off: 0xF0, slab: true },
+    PatchName { name: "cluster_count", off: 0xF8, slab: true },
+    PatchName { name: "cluster_speed", off: 0xFC, slab: true },
+    PatchName { name: "cluster_power", off: 0x100, slab: true },
+    PatchName { name: "cluster_angle", off: 0x104, slab: true },
+    PatchName { name: "cluster_spread", off: 0x108, slab: true },
+    PatchName { name: "c_collision_radius", off: 0x10C, slab: true },
+    PatchName { name: "c_bias", off: 0x110, slab: true },
+    PatchName { name: "c_damage", off: 0x114, slab: true },
+    PatchName { name: "c_blast", off: 0x118, slab: true },
+    PatchName { name: "c_sprite", off: 0x124, slab: true },
+    PatchName { name: "c_impact", off: 0x128, slab: true },
+    PatchName { name: "c_flags", off: 0x12C, slab: true },
+    PatchName { name: "c_trail", off: 0x130, slab: true },
+    PatchName { name: "c_gravity_pct", off: 0x134, slab: true },
+    PatchName { name: "c_wind_pct", off: 0x138, slab: true },
+    PatchName { name: "c_bounce_pct", off: 0x13C, slab: true },
+    PatchName { name: "c_friction_pct", off: 0x148, slab: true },
+    PatchName { name: "c_fuse_default", off: 0x14C, slab: true },
+    PatchName { name: "c_fuse", off: 0x150, slab: true },
+    PatchName { name: "c_space_control", off: 0x164, slab: true },
+    PatchName { name: "c_missile_type", off: 0x168, slab: true },
+    PatchName { name: "c_render_size", off: 0x16C, slab: true },
+    PatchName { name: "c_burn_sprite", off: 0x170, slab: true },
+    PatchName { name: "c_homing_strength", off: 0x174, slab: true },
+    PatchName { name: "c_homing_sprite", off: 0x178, slab: true },
+    PatchName { name: "c_homing_turn", off: 0x17C, slab: true },
+    PatchName { name: "c_homing_accel", off: 0x180, slab: true },
+    PatchName { name: "c_homing_speed", off: 0x184, slab: true },
+    PatchName { name: "c_homing_kind", off: 0x188, slab: true },
+    PatchName { name: "c_homing_arm", off: 0x18C, slab: true },
+    PatchName { name: "c_homing_time", off: 0x190, slab: true },
+    // Hitscan
+    PatchName { name: "h_shots", off: 0x3C, slab: false },
+    PatchName { name: "h_spread", off: 0x40, slab: false },
+    PatchName { name: "h_delay", off: 0x44, slab: false },
+    PatchName { name: "h_flag", off: 0x48, slab: false },
+    PatchName { name: "h_range", off: 0x50, slab: false },
+    PatchName { name: "h_radius", off: 0x54, slab: false },
+    PatchName { name: "h_damage", off: 0x5C, slab: false },
+    PatchName { name: "h_kind", off: 0x64, slab: false },
+    PatchName { name: "h_range_px", off: 0x68, slab: false },
+    // Arrow / spray
+    PatchName { name: "a_param0", off: 0x3C, slab: false },
+    PatchName { name: "s_count", off: 0x3C, slab: false },
+    PatchName { name: "s_spread", off: 0x40, slab: false },
+    PatchName { name: "s_life", off: 0x44, slab: false },
+    PatchName { name: "s_speed", off: 0x48, slab: false },
+    // Mine
+    PatchName { name: "m_proximity", off: 0x3C, slab: false },
+    PatchName { name: "m_fuse", off: 0x40, slab: false },
+    PatchName { name: "m_mask", off: 0x44, slab: false },
+    PatchName { name: "m_trigger", off: 0x48, slab: false },
+    PatchName { name: "m_damage", off: 0x50, slab: false },
+    PatchName { name: "m_blast", off: 0x54, slab: false },
+    // Strike header
+    PatchName { name: "k_count", off: 0x3C, slab: false },
+    PatchName { name: "k_spacing", off: 0x40, slab: false },
+    PatchName { name: "k_munition", off: 0x4C, slab: false },
+];
+
+/// Resolve a web-editor field name to an absolute weapon-entry offset.
+/// `strike` is true when the weapon's fire type is (or will be) 3.
+pub fn patch_offset_for_name(name: &str, strike: bool) -> Result<usize, String> {
+    let field = PATCH_NAMES.iter().find(|f| f.name == name).ok_or_else(|| {
+        format!("patch field `{name}` is not a known weapon field; use names like damage, fuse, cluster_count")
+    })?;
+    let off = if field.slab && strike {
+        field.off + STRIKE_SHIFT
+    } else {
+        field.off
+    };
+    Ok(off)
+}
+
+/// Stock slots whose table entry is fire type 3 (strike plane + munition slab).
+pub fn stock_is_strike(slot: crate::stock::StockWeapon) -> bool {
+    use crate::stock::StockWeapon::*;
+    matches!(
+        slot,
+        AirStrike
+            | NapalmStrike
+            | MailStrike
+            | MineStrike
+            | MoleSquadron
+            | SheepStrike
+            | CarpetBomb
+    )
+}
+
 fn keep_stock_sprites(entry: &mut WeaponEntry, before: &WeaponEntry) {
     let flies = entry.read_i32(MISSILE_TYPE) != 0;
     let strike = entry.is_strike();

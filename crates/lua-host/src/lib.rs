@@ -953,10 +953,10 @@ replace = ["bazooka"]
   weapon = "bazooka",
   copy_from = "bazooka",
   patch = {
-    [0xF8] = 5,     -- cluster count
-    [0x50] = 70,    -- damage
-    [0xF0] = 1,     -- on detonation: clusters
-    [0x0C] = 0,     -- no aim
+    cluster_count = 5,
+    damage = 70,
+    detonation = 1,
+    requires_aiming = 0,
   },
 })"#,
         );
@@ -964,6 +964,19 @@ replace = ["bazooka"]
         let p = &scripts.resolved.applied[0].params;
         assert_eq!(p.copy_from, Some(StockWeapon::Bazooka));
         assert_eq!(p.patch, vec![(0x0C, 0), (0x50, 70), (0xF0, 1), (0xF8, 5)], "sorted by offset");
+
+        let legacy = pack(
+            &root,
+            "t.patch",
+            manifest,
+            r#"wa.weapons.replace({
+  weapon = "bazooka",
+  copy_from = "bazooka",
+  patch = { [0x50] = 55 },
+})"#,
+        );
+        let scripts = run_mods(&[legacy]).unwrap();
+        assert_eq!(scripts.resolved.applied[0].params.patch, vec![(0x50, 55)]);
 
         let bad_offset = pack(
             &root,
@@ -978,7 +991,7 @@ replace = ["bazooka"]
             &root,
             "t.patch",
             manifest,
-            r#"wa.weapons.replace({ weapon = "bazooka", patch = { [0x30] = 7 } })"#,
+            r#"wa.weapons.replace({ weapon = "bazooka", patch = { fire_type = 7 } })"#,
         );
         let err = run_mods(&[bad_fire]).err().expect("fire type 7 is not WA's");
         assert!(err.contains("fire type 7"), "{err}");
@@ -987,10 +1000,10 @@ replace = ["bazooka"]
             &root,
             "t.patch",
             manifest,
-            r#"wa.weapons.replace({ weapon = "bazooka", patch = { damage = 70 } })"#,
+            r#"wa.weapons.replace({ weapon = "bazooka", patch = { no_such_field = 70 } })"#,
         );
-        let err = run_mods(&[bad_key]).err().expect("names are not offsets");
-        assert!(err.contains("patch keys are weapon table offsets"), "{err}");
+        let err = run_mods(&[bad_key]).err().expect("unknown names are refused");
+        assert!(err.contains("not a known weapon field"), "{err}");
     }
 
     #[test]

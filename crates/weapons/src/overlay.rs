@@ -304,8 +304,8 @@ pub struct OverlayParams {
     /// applied where `copy_from` is; the two are exclusive.
     pub wep: Option<crate::wep::Wep>,
     /// Single weapon table fields written after `copy_from` / `wep`
-    /// (`patch = { [0x50] = 100 }`), as (offset, value) sorted by offset:
-    /// the web editor's readable diff against a stock base.
+    /// (`patch = { damage = 70 }` or legacy `[0x50] = 70`), as (offset, value)
+    /// sorted by offset: the web editor's readable diff against a stock base.
     pub patch: Vec<(usize, i32)>,
     /// Legacy `actor = "drop"` string. Prefer `on_click.spawn`.
     pub actor: Option<String>,

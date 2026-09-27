@@ -734,40 +734,70 @@ fn table_to_claim(
         None => None,
     };
 
-    // `patch = { [0x50] = 100, [0xF0] = 1 }`: single weapon table fields on
-    // top of the base `copy_from` / `wep` laid down -- the web editor's
-    // readable diff. Offsets are the entry's dword offsets.
+    // `patch = { damage = 70, fuse = 5000 }` or legacy `[0x50] = 70`: single
+    // weapon table fields on top of the base `copy_from` / `wep`. Named keys
+    // match the web editor; integer keys stay for older packs.
     let mut patch = Vec::new();
     match spec.get::<Value>("patch")? {
         Value::Nil => {}
         Value::Table(fields) => {
+            let mut numbered: Vec<(i64, i32)> = Vec::new();
+            let mut named: Vec<(String, i32)> = Vec::new();
+            let mut fire_hint: Option<i32> = None;
             for pair in fields.pairs::<Value, Value>() {
                 let (key, value) = pair?;
-                let Value::Integer(offset) = key else {
-                    return Err(mlua::Error::external(format!(
-                        "patch keys are weapon table offsets like [0x50]; got {key:?}"
-                    )));
-                };
                 let value = match value {
                     Value::Integer(n) => i32::try_from(n).map_err(|_| {
-                        mlua::Error::external(format!("patch [{offset:#x}] = {n} does not fit a dword"))
+                        mlua::Error::external(format!("patch value {n} does not fit a dword"))
                     })?,
                     Value::Number(f) if f.fract() == 0.0 && f.abs() < i32::MAX as f64 => f as i32,
                     other => {
                         return Err(mlua::Error::external(format!(
-                            "patch [{offset:#x}] must be a whole number, got {other:?}"
+                            "patch values must be whole numbers, got {other:?}"
                         )))
                     }
                 };
+                match key {
+                    Value::Integer(offset) => {
+                        if offset == 0x30 {
+                            fire_hint = Some(value);
+                        }
+                        numbered.push((offset, value));
+                    }
+                    Value::String(s) => {
+                        let name = s.to_str().map_err(mlua::Error::external)?.to_string();
+                        if name == "fire_type" {
+                            fire_hint = Some(value);
+                        }
+                        named.push((name, value));
+                    }
+                    other => {
+                        return Err(mlua::Error::external(format!(
+                            "patch keys are field names like damage or offsets like [0x50]; got {other:?}"
+                        )));
+                    }
+                }
+            }
+            let strike = fire_hint == Some(3)
+                || wep.as_ref().map(|w| w.fire_type() == 3).unwrap_or(false)
+                || copy_from.map(weapons::wep::stock_is_strike).unwrap_or(false);
+            for (offset, value) in numbered {
                 let off = weapons::wep::check_patch(offset, value).map_err(mlua::Error::external)?;
+                patch.push((off, value));
+            }
+            for (name, value) in named {
+                let off = weapons::wep::patch_offset_for_name(&name, strike)
+                    .map_err(mlua::Error::external)?;
+                let off = weapons::wep::check_patch(off as i64, value).map_err(mlua::Error::external)?;
                 patch.push((off, value));
             }
             // pairs() order is per process; the write order must not be.
             patch.sort_by_key(|(off, _)| *off);
+            patch.dedup_by_key(|(off, _)| *off);
         }
         other => {
             return Err(mlua::Error::external(format!(
-                "patch must be a table of [offset] = value, got {other:?}"
+                "patch must be a table of field = value, got {other:?}"
             )))
         }
     }
