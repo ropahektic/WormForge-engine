@@ -61,7 +61,7 @@ The cdylib is `target/i686-pc-windows-msvc/release/wkLua.dll`. Off Windows, trea
 
 ## Contributors
 
-- **[EdLud](https://github.com/EdLud)** — Too many things to list.
+- **[EdLud](https://github.com/EdLud)** — Truecolor render, wormnet compatibility, replays and more.
 
 ## License
 
