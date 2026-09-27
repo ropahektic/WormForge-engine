@@ -8,6 +8,8 @@ Not a Programmer? Are you a coding agent? [CLICK HERE](contributing-with-an-agen
 
 WormForge is meant to stay compact. New power is either a **Lua pack** or one **verb**. It is not a dump of `WA.exe` into scripts.
 
+**Pull requests:** read [docs/pull-request-code-of-conduct.md](docs/pull-request-code-of-conduct.md) before you open one (update from `main`, resolve conflicts first, one feature when practical, CI via [`.github/workflows/rust.yml`](.github/workflows/rust.yml)).
+
 The Lua names are a first cut. Help curating them is welcome. Changing a name is a breaking change: bump `api_version` in `mod.toml` and say so in the PR.
 
 ## Two lanes
