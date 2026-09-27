@@ -257,11 +257,41 @@ PX's sprite numbers are WA 3.6.31's. The Double Bazooka's second shell
 takes 54, which in WA 3.8.1 is `clustlet`, a cluster bit; the Highlander
 port keeps the record's bazooka shell (48, `missile`).
 
+**More fire params fields:** `sound.soundIndex` at +0x54 is the sound the
+missile plays in flight (the Nuke Rocket's record has WA's `Fuse`, looping);
+`explodeInto` at +0xB4 (the entry's +0xF0, OpenWA's `impact_spawn_kind`) is
+what it bursts into: 0 nothing, 1 clustlets (the cluster bomb, mortar and
+banana bomb records; WA's `CreateClusters`, from the record's own cluster
+params), 2 fire.
+
+**A placed weapon can fire as a missile.** `FireWeapon` sends a placed
+weapon (type 2) with method 2 to `CreateWeaponProjectile` too: dynamite,
+the sheep and the mole bomb go that way. So does the scheme's Nuke Rocket,
+whose record already carries everything PX's `FireFinal` gives its rocket.
+
 **What the worm holds.** `Weapon__hold_sheet` (0x51C060) picks a
 projectile's launcher from the weapon entry's +0x34: 1 `wuzi`, 2 by the
 flight sprite (+0x60; the thrown weapons), 3 `wbaz` (the bazooka), 4 `wmini`, 5 `wshotg`, 6 `whandg`, 7 `wbaz2` (the homing
 missile's recoloured bazooka), 8 `wbaz3`, 9 `wflm`, 10 `wbow`, 11 `wbaz4`,
 12 `wbaz5`. The scheme's Double Bazooka has 7; the port's record has 3.
+
+## WA's sound ids
+
+A sound id is a sound's index in the low 16 bits, plus flags: 0x10000 plays
+it in a loop, 0x20000 skips the master volume (OpenWA's `SoundId`). So a
+record's 65602 (0x10042) is sound 66 looping. PX's sound numbers are WA's:
+66 is `Fuse`, 70 `Explosion2`, 85 `DrillImpact` in WA 3.8.1 (OpenWA's
+`KnownSoundId`), matching what PX's scripts use them for, unlike its
+sprite numbers (see above).
+
+## PX's sprite builder at a fixed angle
+
+`CWormAnimParams.dont_rotate_with_angle` holds a weapon still, whatever the
+aim (`WormSprite::CalculateAngle`): the weapon and hand are placed as if the
+aim were level (`ang = π/2`) and turned by `ang_if_static × π` and
+`hand_ang_if_static × π`, mirrored when the worm faces left. The Nuke
+Rocket uses it (-0.1 and 0.4). Defaults: `hand_scale` 1.0,
+`ang_if_static` 0.5, `hand_ang_if_static` 1.0.
 
 ## WA's contacts
 
