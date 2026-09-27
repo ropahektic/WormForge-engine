@@ -9,7 +9,8 @@ use game::offsets::{
     CLASS_MINE, WORM_INDEX,
     CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_DRILLING, WORM_TURN_ACTIVE, WORM_TURN_SIDE,
+    WORM_AIM_ANGLE, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_CHARGING, WORM_STATE_DRILLING,
+    WORM_TURN_ACTIVE, WORM_TURN_SIDE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -798,6 +799,21 @@ impl UserData for WormHandle {
             let slot = unsafe { read_i32(this.0 as *mut u8, WORM_SELECTED_WEAPON) };
             Ok(StockWeapon::from_index(slot as u32).map(|s| s.name().to_string()))
         });
+        // The aim WA draws: its 180-degree sweep, 0 straight down, 0.5 level,
+        // 1 straight up; `facing` says which side. Project X's FireAngle.
+        fields.add_field_method_get("aim", |_, this| {
+            Ok(if this.0 == 0 {
+                0.0
+            } else {
+                aim_fraction(unsafe { read_i32(this.0 as *mut u8, WORM_AIM_ANGLE) })
+            })
+        });
+        // WA is drawing the worm with its weapon out: standing with it, or
+        // charging a throw (Project X's WS_AIMING / WS_SETPOWER).
+        fields.add_field_method_get("aiming", |_, this| {
+            Ok(this.0 != 0
+                && holds_weapon(unsafe { read_i32(this.0 as *mut u8, WORM_STATE) as u32 }))
+        });
         fields.add_field_method_get("drilling", |_, this| {
             Ok(this.0 != 0
                 && unsafe { read_i32(this.0 as *mut u8, WORM_STATE) as u32 }
@@ -1291,9 +1307,44 @@ pub fn worm_userdata(lua: &Lua, handle: u32) -> Result<mlua::AnyUserData, String
         .map_err(|e| e.to_string())
 }
 
+/// WormEntity +0x270, the aim sweep WA draws: 0x0000 straight down, 0x7FFF
+/// level, 0xFFFF straight up, facing choosing the side. Measured live by
+/// wkFOW, whose view cone is built from it; +0x24C is the aim's target over
+/// a whole turn, not what is drawn.
+fn aim_fraction(raw: i32) -> f64 {
+    f64::from(raw & 0xFFFF) / f64::from(0xFFFF)
+}
+
+/// The worm states in which WA draws the worm with its weapon out: 0x67
+/// standing with it (and its variants 0x68/0x69, where `worm_sprite` maps the
+/// hold sheet), and 0x73 while the power bar charges.
+fn holds_weapon(state: u32) -> bool {
+    matches!(state, 0x67..=0x69) || state == WORM_STATE_CHARGING
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn aim_is_the_drawn_sweep_from_down_to_up() {
+        assert_eq!(super::aim_fraction(0x0000), 0.0);
+        assert_eq!(super::aim_fraction(0xFFFF), 1.0);
+        assert!((super::aim_fraction(0x7FFF) - 0.5).abs() < 1e-4);
+        // Only the low 16 bits are the sweep.
+        assert_eq!(super::aim_fraction(0x1_0000), 0.0);
+    }
+
+    #[test]
+    fn aiming_is_standing_with_the_weapon_or_charging() {
+        for state in [0x67, 0x68, 0x69, 0x73] {
+            assert!(super::holds_weapon(state), "{state:#x}");
+        }
+        // Idle, walking, drilling, jumping, hurt.
+        for state in [0x65, 0x66, 0x6E, 0x77, 0x80] {
+            assert!(!super::holds_weapon(state), "{state:#x}");
+        }
+    }
 
     fn args(src: &str) -> mlua::Result<(u32, f32, f32, u32, u32)> {
         let lua = Lua::new();
