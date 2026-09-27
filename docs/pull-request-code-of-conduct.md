@@ -27,6 +27,7 @@ When practical, **one PR = one feature, one pack, or one focused engine verb**.
 - Do **not** “fix” the 71-slot panel by growing the weapon table in a drive-by PR.
 - Do **not** vendor `Resources/`, wa-engine.js, collisionmanager.rs, wkaim.dll, or other GPL / game-replacement trees.
 - Leave the root `README.md` alone unless the change is the point of the PR. List a new example in `mods/examples/README.md`.
+- Do **not** commit agent working notes, scratch plans, or “docs while we figure it out” under `docs/` (or elsewhere in the tree). Those files are not curated; keep them local or in the PR description. Only add a `docs/*.md` when it is intentional maintainer-facing documentation (this file is one such case).
 
 Small, reviewable PRs merge. Kitchen-sink PRs wait or get split.
 
@@ -57,6 +58,7 @@ Pack-only PRs still go through the same workflow (the tree must keep compiling).
 - [ ] Lua API renames bump `api_version` and say so in the PR description.
 - [ ] Description states **what** changed, **why**, and **how you tested** (CI only / in-game match / which pack).
 - [ ] No secrets, no huge unrelated binaries, no accidental `target/` or local WA paths.
+- [ ] No uncurated agent scratch docs under `docs/` (or similar) — only curated docs belong in the repo.
 
 ## Review and merge
 
