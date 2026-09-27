@@ -220,11 +220,20 @@ local function new_match(opts)
         M.cuts = M.cuts or {}
         M.cuts[#M.cuts + 1] = spec
       end,
+      trace = function() return M.trace_hit end,
+    },
+    draw = {
+      quad = function(q) M.quads[#M.quads + 1] = q end,
+      random = function() return 0.5 end,
+    },
+    sound = {
+      play = function(target, name) M.sounds[#M.sounds + 1] = name end,
     },
     actors = {
       spawn = function(spec)
         local a = { sprite = spec.sprite, x = spec.x, y = spec.y, dead = false }
         function a:gfx(g) self.angle, self.scale = g.angle, g.scale end
+        function a:frame(i) self.shown = i end
         function a:despawn() self.dead = true end
         M.spawned = M.spawned or {}
         M.spawned[#M.spawned + 1] = a
@@ -247,10 +256,13 @@ local function new_match(opts)
         end
       end,
       turn_start = function(f) M.turn_start = f end,
+      missile_frame = function(f) M.missile = f end,
       death = function(f) M.death = f end,
       hud = function(f) M.hud = f end,
+      draw = function(f) M.draw = f end,
     },
   }
+  M.quads, M.sounds, M.trace_hit = {}, {}, nil
   dofile("mods/examples/highlander/rules.lua")
 end
 
@@ -348,7 +360,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("36 slots replaced, each once", #replaced == 36 and not dupes, tostring(#replaced))
+  check("38 slots replaced, each once", #replaced == 38 and not dupes, tostring(#replaced))
   local own_file = true
   for slot, spec in pairs(by_slot) do
     if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
@@ -715,6 +727,108 @@ do
   local before = #M.spawned
   M.message(w, wa.msg.FRAME_FINISH)
   check("no hold for a weapon without one", #M.spawned == before)
+end
+
+print("px holds: a weapon drawn with no hand, animated")
+do
+  new_match()
+  frame()
+  local w = worm(16)
+  w.weapon, w.facing, w.x, w.y, w.aiming, w.aim = "longbow", 1, 100 * 0x10000, 50 * 0x10000, true, 0.5
+  M.message(w, wa.msg.FRAME_FINISH)
+  local bolt = M.spawned[#M.spawned]
+  check("only the weapon: PX draws no hand", #M.spawned == 1 and bolt.sprite == "sprites/px_hold/shadow_bolt")
+  local shown = {}
+  for _ = 1, 26 do
+    M.message(w, wa.msg.FRAME_FINISH)
+    shown[bolt.shown] = true
+  end
+  check("the bolt animates in the hand", shown[0] and shown[5])
+  w.aiming = false
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("and goes when the worm stops aiming", bolt.dead)
+end
+
+print("sniper rifle: PX's laser sight, drawn only")
+do
+  new_match()
+  frame()
+  local P = 0x10000
+  local w = worm(16)
+  for _, o in ipairs(worms) do
+    o.x, o.y = -5000 * P, 0 -- behind the ray
+  end
+  w.weapon, w.facing, w.x, w.y, w.aiming, w.aim, w.turn = "handgun", 1, 100 * P, 50 * P, true, 0.5, true
+  M.message(w, wa.msg.FRAME_FINISH) -- the rifle is drawn with this aim
+  w.aim = 0.53 -- WA's crosshair, rewritten at render time: the ray keeps the rifle's
+  M.draw()
+  check("a full-length ray: 150 quads and the tip", #M.quads == 151, tostring(#M.quads))
+  local q = M.quads[1]
+  -- The quad's first corner is the start plus half the ray's width, across.
+  local sx, sy = (q.points[1][1] + q.points[4][1]) / 2, (q.points[1][2] + q.points[4][2]) / 2
+  check("from 12 pixels out along the aim, on the barrel 2 above the centre line",
+    math.abs(sx - 112 * P) < P / 8 and math.abs(sy - 48 * P) < P / 8, sx / P .. "," .. sy / P)
+  check("added, red, brighter at the start", q.blend == "add" and q.colors[1] == 0xC0FF6060
+    and q.colors[2] == 0xFFFF3030)
+  local tip = M.quads[#M.quads]
+  check("fading out at the tip", tip.colors[2] == 0x10FF3030 and tip.colors[1] == 0xFFFF3030)
+  M.quads, M.trace_hit = {}, { x = 312 * P, y = 50 * P }
+  M.draw()
+  check("stops at terrain 200 pixels on", #M.quads == 3, tostring(#M.quads))
+  M.quads, M.trace_hit = {}, nil
+  local other = worm(32)
+  other.x, other.y = 172 * P, 52 * P
+  M.draw()
+  check("and at a worm in the way", #M.quads == 2, tostring(#M.quads))
+  M.quads = {}
+  w.turn = false
+  M.draw()
+  w.turn, w.aiming = true, false
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.draw()
+  check("only the current worm, only while aiming", #M.quads == 0)
+  w.aiming, w.facing, w.x, w.aim = true, -1, 300 * P, 0.5
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.draw()
+  q = M.quads[1]
+  sx, sy = (q.points[1][1] + q.points[4][1]) / 2, (q.points[1][2] + q.points[4][2]) / 2
+  check("facing left: 12 out to the left, the barrel still above",
+    math.abs(sx - 288 * P) < P / 8 and math.abs(sy - 48 * P) < P / 8, sx / P .. "," .. sy / P)
+  M.quads = {}
+  w.aiming = false
+  M.message(w, wa.msg.FRAME_FINISH)
+  ammo[w.alliance].handgun = 1
+  M.message(w, wa.msg.FIRE_WEAPON)
+  check("its own shot sound on firing", M.sounds[1] == "sounds/sniper_firing.wav")
+end
+
+print("px missile sprites: WeapSprite at run time")
+do
+  new_match()
+  frame()
+  local PX = 0x10000
+  local m = { id = 77, phase = "post", weapon = "longbow", x = 10 * PX, y = 20 * PX, vx = 3 * PX, vy = 0 }
+  M.missile(m)
+  local bolt = M.spawned and M.spawned[#M.spawned]
+  check("a bolt on the Shadow-Bolt's missile", bolt and bolt.sprite == "sprites/shadow_bolt/bolt"
+    and bolt.x == m.x and bolt.y == m.y)
+  check("flying right, turned to its flight", bolt.facing == 1 and math.abs(bolt.angle - 90) < 1e-6,
+    tostring(bolt.angle))
+  local before = #M.spawned
+  m.vx = -3 * PX
+  M.missile(m)
+  check("one bolt per missile, mirrored flying left", #M.spawned == before and bolt.facing == -1)
+  local shown = {}
+  for _ = 1, 26 do
+    M.missile(m)
+    shown[bolt.shown] = true
+  end
+  check("steps through all six frames", shown[0] and shown[5], tostring(bolt.shown))
+  m.phase = "pre"
+  M.missile(m)
+  m.phase, m.weapon, m.id = "post", "bazooka", 78
+  M.missile(m)
+  check("nothing for another weapon's missile", #M.spawned == before)
 end
 
 print("")
