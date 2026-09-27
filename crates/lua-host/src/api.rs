@@ -761,6 +761,34 @@ fn table_to_claim(
         mole_dig_rotation.sort_by_key(|(id, _)| *id);
     }
 
+    // `sprite_overrides = { wsvbd = "sprites/trail", [466] = "sprites/x" }`:
+    // any stock sprite, by Gfx.dir name or id, replaced for the whole match.
+    // Project X weapons point their records at stock sprites some library
+    // repurposes this way, e.g. the Salvation Army's `wsv*` as trails.
+    let mut sprite_overrides = Vec::new();
+    if let Some(list) = spec.get::<Option<Table>>("sprite_overrides")? {
+        for pair in list.pairs::<Value, String>() {
+            let (key, path) = pair?;
+            let id = match &key {
+                Value::Integer(n) => i32::try_from(*n).ok(),
+                Value::String(name) => stock_sprite_id(&name.to_str()?),
+                _ => None,
+            };
+            let id = id.filter(|id| (1..800).contains(id)).ok_or_else(|| {
+                mlua::Error::external(format!(
+                    "sprite_overrides keys are stock sprite names or ids 1-799; got {key:?}"
+                ))
+            })?;
+            let (path, sheet) = load_pack_sheet(root, &path, 1)?;
+            if !extra_sheets.iter().any(|(existing, _)| existing == &path) {
+                extra_sheets.push((path.clone(), sheet));
+            }
+            sprite_overrides.push((id, path));
+        }
+        // pairs() order is per process; the install order must not be.
+        sprite_overrides.sort_by_key(|(id, _)| *id);
+    }
+
     // `weaponlnk = "sprites/equip"`, or one sheet per team colour:
     // `weaponlnk = { red, blue, green, yellow, magenta, cyan }`, indexed by
     // alliance + 1 like the rest of the Lua surface.
@@ -1001,6 +1029,7 @@ fn table_to_claim(
             sprite_path,
             extra_sheets,
             mole_dig_rotation,
+            sprite_overrides,
             worm_sprites,
             layer,
             depth,
