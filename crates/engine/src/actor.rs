@@ -189,6 +189,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         hp: crate::world::worm_hp,
         ammo: crate::world::ammo,
         cavern: crate::world::is_cavern,
+        forces: crate::world::forces,
         hurt: crate::physics::hit_worm,
         set_worm_state: crate::physics::set_worm_state,
         retreat_ms: crate::world::retreat_ms,

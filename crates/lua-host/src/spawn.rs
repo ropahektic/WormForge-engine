@@ -620,6 +620,21 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     world.set("retreat", retreat).map_err(|e| e.to_string())?;
+    // WA's gravity and wind, 16.16 speed per frame (Project X's
+    // Env->Gravity / Env->Wind): what WA adds to anything that takes them at
+    // full strength. The wind changes each turn.
+    let gravity = lua
+        .create_function(|_, ()| {
+            Ok(crate::actor::native_forces().map(|f| f().0).unwrap_or(0))
+        })
+        .map_err(|e| e.to_string())?;
+    world.set("gravity", gravity).map_err(|e| e.to_string())?;
+    let wind = lua
+        .create_function(|_, ()| {
+            Ok(crate::actor::native_forces().map(|f| f().1).unwrap_or(0))
+        })
+        .map_err(|e| e.to_string())?;
+    world.set("wind", wind).map_err(|e| e.to_string())?;
 
     // The guard that makes keys()/pointer() usable at all. They read THIS
     // machine's input, which never goes on the wire, so acting on them in a
