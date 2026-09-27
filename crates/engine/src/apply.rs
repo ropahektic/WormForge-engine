@@ -331,6 +331,15 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 log_line(&format!("{} fires as {} ({})", claim.mod_id, wep.name, wep.path));
             }
         }
+        if !claim.params.patch.is_empty() && spawn.is_none() && claim.params.on_click_id == 0 {
+            weapons::wep::patch(&mut entry, &claim.params.patch);
+            log_line(&format!(
+                "{} patches {} weapon field{}",
+                claim.mod_id,
+                claim.params.patch.len(),
+                if claim.params.patch.len() == 1 { "" } else { "s" }
+            ));
+        }
         apply_params(&mut entry, &claim.params);
         match &claim.params.panel_icon {
             Some(PanelIcon::Stock(icon)) => {

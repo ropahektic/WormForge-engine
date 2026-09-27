@@ -644,6 +644,44 @@ fn table_to_claim(
         None => None,
     };
 
+    // `patch = { [0x50] = 100, [0xF0] = 1 }`: single weapon table fields on
+    // top of the base `copy_from` / `wep` laid down -- the web editor's
+    // readable diff. Offsets are the entry's dword offsets.
+    let mut patch = Vec::new();
+    match spec.get::<Value>("patch")? {
+        Value::Nil => {}
+        Value::Table(fields) => {
+            for pair in fields.pairs::<Value, Value>() {
+                let (key, value) = pair?;
+                let Value::Integer(offset) = key else {
+                    return Err(mlua::Error::external(format!(
+                        "patch keys are weapon table offsets like [0x50]; got {key:?}"
+                    )));
+                };
+                let value = match value {
+                    Value::Integer(n) => i32::try_from(n).map_err(|_| {
+                        mlua::Error::external(format!("patch [{offset:#x}] = {n} does not fit a dword"))
+                    })?,
+                    Value::Number(f) if f.fract() == 0.0 && f.abs() < i32::MAX as f64 => f as i32,
+                    other => {
+                        return Err(mlua::Error::external(format!(
+                            "patch [{offset:#x}] must be a whole number, got {other:?}"
+                        )))
+                    }
+                };
+                let off = weapons::wep::check_patch(offset, value).map_err(mlua::Error::external)?;
+                patch.push((off, value));
+            }
+            // pairs() order is per process; the write order must not be.
+            patch.sort_by_key(|(off, _)| *off);
+        }
+        other => {
+            return Err(mlua::Error::external(format!(
+                "patch must be a table of [offset] = value, got {other:?}"
+            )))
+        }
+    }
+
     let (cursor_on_select, on_select_id) = spawn::parse_select(lua, &spec)?;
 
     let mut damage = None;
@@ -1025,6 +1063,7 @@ fn table_to_claim(
             sprite_sheet,
             copy_from,
             wep,
+            patch,
             actor,
             is_weapon,
             cursor_on_select,

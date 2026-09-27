@@ -868,6 +868,66 @@ replace = ["shotgun"]
     }
 
     #[test]
+    fn patch_lists_weapon_fields_by_offset() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-patch");
+        let _ = std::fs::remove_dir_all(&root);
+        let manifest = r#"
+id = "t.patch"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["bazooka"]
+"#;
+        let mixed = pack(
+            &root,
+            "t.patch",
+            manifest,
+            r#"wa.weapons.replace({
+  weapon = "bazooka",
+  copy_from = "bazooka",
+  patch = {
+    [0xF8] = 5,     -- cluster count
+    [0x50] = 70,    -- damage
+    [0xF0] = 1,     -- on detonation: clusters
+    [0x0C] = 0,     -- no aim
+  },
+})"#,
+        );
+        let scripts = run_mods(&[mixed]).unwrap();
+        let p = &scripts.resolved.applied[0].params;
+        assert_eq!(p.copy_from, Some(StockWeapon::Bazooka));
+        assert_eq!(p.patch, vec![(0x0C, 0), (0x50, 70), (0xF0, 1), (0xF8, 5)], "sorted by offset");
+
+        let bad_offset = pack(
+            &root,
+            "t.patch",
+            manifest,
+            r#"wa.weapons.replace({ weapon = "bazooka", patch = { [0x10] = 1 } })"#,
+        );
+        let err = run_mods(&[bad_offset]).err().expect("the defined flag is the slot's");
+        assert!(err.contains("not a weapon field"), "{err}");
+
+        let bad_fire = pack(
+            &root,
+            "t.patch",
+            manifest,
+            r#"wa.weapons.replace({ weapon = "bazooka", patch = { [0x30] = 7 } })"#,
+        );
+        let err = run_mods(&[bad_fire]).err().expect("fire type 7 is not WA's");
+        assert!(err.contains("fire type 7"), "{err}");
+
+        let bad_key = pack(
+            &root,
+            "t.patch",
+            manifest,
+            r#"wa.weapons.replace({ weapon = "bazooka", patch = { damage = 70 } })"#,
+        );
+        let err = run_mods(&[bad_key]).err().expect("names are not offsets");
+        assert!(err.contains("patch keys are weapon table offsets"), "{err}");
+    }
+
+    #[test]
     fn mine_brain_and_sprite() {
         let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-mine-brain");

@@ -303,6 +303,10 @@ pub struct OverlayParams {
     /// A Project X `.wep` whose firing replaces the slot's (`wep = "..."`),
     /// applied where `copy_from` is; the two are exclusive.
     pub wep: Option<crate::wep::Wep>,
+    /// Single weapon table fields written after `copy_from` / `wep`
+    /// (`patch = { [0x50] = 100 }`), as (offset, value) sorted by offset:
+    /// the web editor's readable diff against a stock base.
+    pub patch: Vec<(usize, i32)>,
     /// Legacy `actor = "drop"` string. Prefer `on_click.spawn`.
     pub actor: Option<String>,
     /// Panel weapon (selectable). `replace()` is already a weapon; Lua still names it.
@@ -412,6 +416,7 @@ impl Default for OverlayParams {
             sprite_sheet: None,
             copy_from: None,
             wep: None,
+            patch: Vec::new(),
             actor: None,
             is_weapon: true,
             cursor_on_select: false,
