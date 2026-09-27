@@ -63,12 +63,19 @@ static TEAM_CLAIMS: Mutex<Vec<(usize, u8, i32, i32)>> = Mutex::new(Vec::new());
 /// Slots whose `weaponlnk*` sheets are one-shot animations (equip, unfold),
 /// not aim-angle sheets: `params.worm_sprites_animate = true`.
 static ANIMATE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
-/// Per worm: which claimed pose is playing, and how far through it:
-/// (worm, pose, phase, sheet, reversed).
+/// Per worm: which claimed pose is playing, how far through it, and how many
+/// game frames since it was last drawn: (worm, pose, phase, sheet,
+/// reversed, idle).
 ///
 /// Used for draw/undraw-style sheets where stock only hands 0x0 / 0x8000.
 /// Aiming (`weaponlnk`*) keeps stock's aim-angle phase instead.
-static ANIM: Mutex<Vec<(usize, i32, u32, i32, bool)>> = Mutex::new(Vec::new());
+static ANIM: Mutex<Vec<(usize, i32, u32, i32, bool, u32)>> = Mutex::new(Vec::new());
+/// Game frames a claimed pose may go undrawn and still continue. Any longer
+/// and its next draw starts over: several weapons share one draw sheet (PX's
+/// posture), so drawing one out after another, with no put-away between,
+/// is the same pose and sheet and would otherwise start on the last frame.
+/// A frame or two of slack covers render frames that skip a game frame.
+const IDLE_RESTART: u32 = 2;
 
 const LINK: i32 = -1;
 const LINK_U: i32 = -2;
@@ -493,7 +500,7 @@ unsafe extern "C" fn after_calc(
         // jump straight to its last frame instead of playing. Dropping the
         // entry the moment the worm leaves a claimed pose guarantees the next
         // one starts fresh.
-        anim.retain(|(w, _, _, _, _)| *w != worm as usize);
+        anim.retain(|(w, _, _, _, _, _)| *w != worm as usize);
     }
 }
 
@@ -509,9 +516,10 @@ pub fn tick(worm: usize) {
     let Ok(mut anim) = ANIM.lock() else {
         return;
     };
-    let Some(entry) = anim.iter_mut().find(|(w, _, _, _, _)| *w == worm) else {
+    let Some(entry) = anim.iter_mut().find(|(w, _, _, _, _, _)| *w == worm) else {
         return;
     };
+    entry.5 = entry.5.saturating_add(1);
     let Some(frames) = sprite::frame_count(entry.3) else {
         return;
     };
@@ -533,18 +541,19 @@ unsafe fn drive_phase(worm: usize, pose: i32, sprite: i32, reversed: bool, phase
     let Ok(mut anim) = ANIM.lock() else {
         return;
     };
-    let phase = match anim.iter_mut().find(|(w, _, _, _, _)| *w == worm) {
+    let phase = match anim.iter_mut().find(|(w, _, _, _, _, _)| *w == worm) {
         Some(entry) => {
-            if entry.1 != pose || entry.3 != sprite || entry.4 != reversed {
+            if entry.1 != pose || entry.3 != sprite || entry.4 != reversed || entry.5 > IDLE_RESTART {
                 entry.1 = pose;
                 entry.3 = sprite;
                 entry.4 = reversed;
                 entry.2 = 0;
             }
+            entry.5 = 0;
             entry.2
         }
         None => {
-            anim.push((worm, pose, 0, sprite, reversed));
+            anim.push((worm, pose, 0, sprite, reversed, 0));
             0
         }
     };
@@ -578,6 +587,30 @@ mod tests {
         assert_eq!(phase(false), 0xF334, "the same draw holds its last frame");
         // WA puts it away: the same pose and sheet, reversed.
         assert_eq!(phase(true), 0, "the put-away starts over");
+        ANIM.lock().unwrap().retain(|e| e.0 != worm);
+    }
+
+    #[test]
+    fn a_draw_after_a_gap_starts_over() {
+        use super::{drive_phase, tick, ANIM, IDLE_RESTART};
+        // The Sniper Rifle drawn out, aimed a while, then the Igniter drawn
+        // out: both on PX's posture draw sheet, with no put-away between.
+        let (worm, sheet) = (0x5EED_0002usize, 0x0100_0062);
+        let phase = || {
+            let mut out = 0u32;
+            unsafe { drive_phase(worm, THROW, sheet, false, &mut out) };
+            out
+        };
+        assert_eq!(phase(), 0);
+        for entry in ANIM.lock().unwrap().iter_mut().filter(|e| e.0 == worm) {
+            entry.2 = 0xF334;
+        }
+        tick(worm);
+        assert_eq!(phase(), 0xF334, "drawn every frame: it goes on");
+        for _ in 0..=IDLE_RESTART {
+            tick(worm);
+        }
+        assert_eq!(phase(), 0, "undrawn for a while: it starts over");
         ANIM.lock().unwrap().retain(|e| e.0 != worm);
     }
 
