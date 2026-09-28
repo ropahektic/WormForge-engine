@@ -67,6 +67,8 @@ PATCH_NAMES: list[tuple[str, int, bool]] = [
     ("c_bias", 0x110, True),
     ("c_damage", 0x114, True),
     ("c_blast", 0x118, True),
+    ("c_sprite_count", 0x120, True),
+    ("c_sprite", 0x124, True),
     ("c_impact", 0x128, True),
     ("c_flags", 0x12C, True),
     ("c_gravity_pct", 0x134, True),
@@ -112,7 +114,12 @@ PATCH_NAMES: list[tuple[str, int, bool]] = [
     ("k_munition", 0x4C, False),
 ]
 
-# Sprite / trail ids: import/patch keeps the stock ones.
+# WA 3.8.1's last stock sprite (crates/weapons/src/wep.rs LAST_STOCK_SPRITE).
+LAST_STOCK_SPRITE = 696
+
+# Sprite / trail ids: import/patch keeps the stock ones. The cluster's sprite
+# is the exception when it is one of WA's own (a clustlet, the skunk): the
+# bits need it, and patch() keeps a PX-only id stock anyway.
 SPRITE_OFFSETS = {
     0x60, 0x90, 0x98, 0xAC, 0xB4, 0x6C, 0xDC, 0xE0, 0xE4,
     0x124, 0x130, 0x170, 0x178,
@@ -215,6 +222,11 @@ def diff_patch(stock: bytes, wep: bytes) -> list[tuple[str, int]]:
     by_off: dict[int, tuple[str, int]] = {}
     for name, off, slab in names_for_weapon(ft, fm):
         abs_off = off + STRIKE_SHIFT if (slab and strike) else off
+        if name == "c_sprite":
+            wv, sv = i32(wep, abs_off), i32(stock, abs_off)
+            if 0 < wv <= LAST_STOCK_SPRITE and wv != sv and abs_off not in by_off:
+                by_off[abs_off] = (name, wv)
+            continue
         # Strike plane sprite sits at 0x38 (named fire_method in the table).
         if abs_off in SPRITE_OFFSETS or (strike and abs_off == 0x38):
             continue
