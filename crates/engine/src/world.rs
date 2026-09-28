@@ -1888,9 +1888,31 @@ unsafe fn dssound_load_wav(this: *mut u8, slot: i32, path: *const i8) -> bool {
     }
 }
 
+/// Whether `entity` carries the sound emitter WA's WorldEntity constructor
+/// embeds at +0xE8 (0x4FED8A), the one PlaySoundLocal calls through. A
+/// missile's owner, for one, has none: a pack that played a sound on an
+/// explosion's `ev.worm` made WA call through garbage. Without the locator
+/// the check cannot be made and every entity passes, as before it.
+unsafe fn has_sound_emitter(entity: *mut u8) -> bool {
+    match crate::wa::try_address("SOUND_EMITTER_VTABLE") {
+        Some(vtable) => read_i32(entity, ENT_SOUND_EMITTER) as u32 == vtable,
+        None => true,
+    }
+}
+
 /// PlaySoundLocal (0x4FDFE0): EAX=pitch, ECX=volume, EDI=entity, stack id+flags, RET 8.
 unsafe fn play_sound_local(entity: *mut u8, id: i32, flags: i32, volume: i32, pitch: i32) {
     if entity.is_null() {
+        return;
+    }
+    if !has_sound_emitter(entity) {
+        static REPORTED: AtomicBool = AtomicBool::new(false);
+        if !REPORTED.swap(true, Ordering::Relaxed) {
+            log_error(&format!(
+                "sound.play: {:#x} is not a game entity (no sound emitter); not played",
+                entity as u32
+            ));
+        }
         return;
     }
     let f = crate::wa::address("PLAY_SOUND_LOCAL") as u32;
