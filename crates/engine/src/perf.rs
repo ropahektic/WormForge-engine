@@ -2,7 +2,7 @@
 //!
 //! - `counter`: a one-line FPS counter at the top right of the screen: the
 //!   live frame rate (the last quarter second), the average over the last
-//!   five seconds, and the longest frame in those five seconds.
+//!   two seconds, and the longest frame in the last five.
 //! - `profile`: time per section of a rendered frame, summed per frame and
 //!   written to `wkLua.log` every ten seconds.
 //!
@@ -41,8 +41,10 @@ pub enum Section {
 const SECTIONS: usize = 5;
 const NAMES: [&str; SECTIONS] = ["sim", "scene", "draw", "present", "hud"];
 
-/// The counter's average and spike cover this much time.
+/// The counter's spike covers this much time, and it keeps frames this long.
 const WINDOW_NS: u64 = 5_000_000_000;
+/// Its average covers this much.
+const AVERAGE_NS: u64 = 2_000_000_000;
 /// Its live rate covers this much, and its text is rebuilt this often.
 const LIVE_NS: u64 = 250_000_000;
 /// The profiler writes a report this often.
@@ -204,7 +206,7 @@ fn counter_text(frames: &[(u64, u64)]) -> String {
         }
     };
     let live = rate(&mut frames.iter().filter(|(ago, _)| *ago < LIVE_NS).map(|(_, dt)| *dt));
-    let avg = rate(&mut frames.iter().map(|(_, dt)| *dt));
+    let avg = rate(&mut frames.iter().filter(|(ago, _)| *ago < AVERAGE_NS).map(|(_, dt)| *dt));
     let spike = frames.iter().map(|(_, dt)| *dt).max().unwrap_or(0);
     format!("{live:.0} fps  avg {avg:.1}  spike {:.1} ms", spike as f64 / 1e6)
 }
@@ -271,9 +273,11 @@ mod tests {
         let text = counter_text(&frames);
         assert!(text.starts_with("100 fps  avg "), "{text}");
         assert!(text.ends_with("spike 80.0 ms"), "{text}");
-        let sum: u64 = frames.iter().map(|(_, dt)| dt).sum();
-        let avg = frames.len() as f64 * 1e9 / sum as f64;
+        // The average: the last 2 s only, so without the 80 ms frame.
+        let recent: Vec<u64> = frames.iter().filter(|(ago, _)| *ago < 2_000 * MS).map(|(_, dt)| *dt).collect();
+        let avg = recent.len() as f64 * 1e9 / recent.iter().sum::<u64>() as f64;
         assert!(text.contains(&format!("avg {avg:.1}")), "{text}");
+        assert!(!recent.contains(&(80 * MS)));
     }
 
     #[test]
