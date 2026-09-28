@@ -593,6 +593,21 @@ unsafe extern "C" fn fire_weapon_click_only_eat(
         return 1;
     }
     let fire_type = unsafe { read_i32(weapon, WEAPON_FIRE_TYPE) };
+    // A gun (fire type 1, method 2: the uzi, minigun, handgun and shotgun)
+    // whose slot has an `on_fire`: every shot WA would fire goes to the pack
+    // instead, and WA's bullet is skipped, as Project X's FireFinal does
+    // without `super`. The worm's own firing state runs on (see
+    // `worm.shots_fired`). Projectiles reach `on_fire` through
+    // CreateWeaponProjectile instead.
+    if fire_type == 1 && unsafe { read_i32(weapon, WEAPON_FIRE_METHOD) } == 2 {
+        if let Some(fire) = fire_for_slot(slot).filter(|c| c.fire_id != 0) {
+            let (x, y) = unsafe { (read_i32(worm, ENT_POS_X), read_i32(worm, ENT_POS_Y)) };
+            if let Err(e) = lua_host::weapon_fire(fire.fire_id, worm as u32, slot as i32, x, y, 0, 0) {
+                log_error(&format!("on_fire: {e}"));
+            }
+            return 1;
+        }
+    }
     if fire_type != 3 {
         return 0;
     }
