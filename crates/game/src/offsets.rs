@@ -53,6 +53,12 @@ pub const WORM_RELEASE_WEAPON: u32 = 0x0051_C010;
 pub const WORM_TURN_ACTIVE: usize = 0x104;
 /// WormEntity.weapons_enabled (+0x28C). ReleaseWeapon no-ops if 0.
 pub const WORM_WEAPONS_ENABLED: usize = 0x28C;
+/// A repeat-fire weapon's shots: fired so far, and to fire. While fired is
+/// below to-fire, WA's repeat-fire step (0x5182B1) counts down the delay at
+/// +0x298 and then fires again (SetState 0x69). Project X's nShooted and
+/// nShoots (its CWorm fields sit 0x10 higher).
+pub const WORM_SHOTS_FIRED: usize = 0x290;
+pub const WORM_SHOTS_TO_FIRE: usize = 0x294;
 /// WormEntity.selected_weapon_ammo (+0x174).
 pub const WORM_SELECTED_AMMO: usize = 0x174;
 /// WormEntity.active_weapon_entry (+0x36C) — `&WeaponTable[selected]`.

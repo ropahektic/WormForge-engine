@@ -9,7 +9,7 @@ use game::offsets::{
     CLASS_MINE, WORM_INDEX,
     CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_SINKING, ENT_COLLISION_MASK,
+    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_SINKING, ENT_COLLISION_MASK,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -869,6 +869,27 @@ impl UserData for WormHandle {
             }
             Ok(())
         });
+        // A repeat-fire weapon's shots, fired and to fire (Project X's
+        // nShooted and nShoots). While fired is below to-fire WA fires again
+        // after the weapon's delay, so a pack that holds them (0 and 1 each
+        // frame) keeps the worm firing. Writes are lockstep: simulation
+        // callbacks only.
+        for (name, off) in [("shots_fired", WORM_SHOTS_FIRED), ("shots_to_fire", WORM_SHOTS_TO_FIRE)] {
+            fields.add_field_method_get(name, move |_, this| {
+                Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, off) } })
+            });
+            fields.add_field_method_set(name, move |_, this, v: i32| {
+                if !crate::sim_context::active() {
+                    return Err(mlua::Error::external(format!(
+                        "worm.{name}: only from a simulation callback"
+                    )));
+                }
+                if this.0 != 0 {
+                    unsafe { write_i32(this.0 as *mut u8, off, v) };
+                }
+                Ok(())
+            });
+        }
         // Jet pack fuel, 16.16 (Project X's JetFuel); 0 is unlimited.
         fields.add_field_method_get("fuel", |_, this| {
             Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, WORM_JET_FUEL) } })
