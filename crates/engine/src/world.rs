@@ -778,6 +778,11 @@ fn poll_keys() -> u32 {
     if key_down(0x20) {
         m |= 128;
     }
+    // The digit held, top row or keypad (the lowest, if several): 1..10 for
+    // 0..9 in bits 8..11 (game::sync_input::DIGIT_SHIFT).
+    if let Some(d) = (0..10u32).find(|&d| key_down(0x30 + d as i32) || key_down(0x60 + d as i32)) {
+        m |= (d + 1) << game::sync_input::DIGIT_SHIFT;
+    }
     m
 }
 
@@ -1242,6 +1247,51 @@ pub fn forces() -> (i32, i32) {
     unsafe {
         let cm = read_i32(world, GAME_WORLD_COLLISION_MANAGER) as *mut u8;
         game::entity::read_cm_forces(cm)
+    }
+}
+
+/// Set the match's gravity (GameInfo +0xD9A8, the scheme's). WA recomputes
+/// the collision manager's +0x22C from it every frame
+/// (`TurnManager__ProcessFrame`, 0x55FDA0) as gravity x the low-gravity
+/// percentage / 100, so a write to +0x22C alone lasts until the turn manager
+/// runs; this sets both, the same way. Project X writes `Env->Gravity`.
+pub fn set_gravity(v: i32) {
+    let world = session_world();
+    if world.is_null() {
+        return;
+    }
+    unsafe {
+        let info = read_i32(world, game::offsets::GAME_WORLD_GAME_INFO) as *mut u8;
+        let cm = read_i32(world, GAME_WORLD_COLLISION_MANAGER) as *mut u8;
+        if info.is_null() || cm.is_null() {
+            return;
+        }
+        game::entity::write_i32(info, game::offsets::GAME_INFO_GRAVITY, v);
+        let pct = read_i32(world, game::offsets::GAME_WORLD_GRAVITY_PCT);
+        game::entity::write_i32(cm, game::offsets::CM_PARTICLE_GRAVITY_Y, v.wrapping_mul(pct) / 100);
+    }
+}
+
+/// Set WA's wind as WA's own wind change does (`RandomiseWind`, 0x55BC80):
+/// message 0x54 to the object under shared key 0x14, a 0x408-byte payload
+/// whose first dword is the wind. Its handler (0x5541A1) stores it into the
+/// collision manager's +0x230 and passes it on, so the clouds and the wind
+/// bar follow (Project X's `M_UPDATEWIND`).
+pub fn set_wind(v: i32) {
+    unsafe {
+        let root = session_root_ptr();
+        if root.is_null() {
+            return;
+        }
+        let Some(target) = crate::actor::shared_object(root, game::offsets::SHARED_KEY_WIND) else {
+            return;
+        };
+        let mut data = [0u8; 0x408];
+        data[..4].copy_from_slice(&v.to_le_bytes());
+        let vt = *(target as *const *const u32);
+        let handle: unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut u8) =
+            std::mem::transmute(*vt.add(2) as usize);
+        handle(target, root as u32, game::offsets::MSG_SET_WIND, data.len() as u32, data.as_mut_ptr());
     }
 }
 

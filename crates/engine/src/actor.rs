@@ -190,6 +190,8 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         ammo: crate::world::ammo,
         cavern: crate::world::is_cavern,
         forces: crate::world::forces,
+        set_gravity: crate::world::set_gravity,
+        set_wind: crate::world::set_wind,
         hurt: crate::physics::hit_worm,
         set_worm_state: crate::physics::set_worm_state,
         retreat_ms: crate::world::retreat_ms,
@@ -1025,6 +1027,12 @@ pub(crate) fn physics_parent(entity: *mut u8) -> Option<*mut u8> {
         return None;
     }
     unsafe { lookup_shared(entity, 0, SHARED_FILTER_PHYSICS) }
+}
+
+/// The object WA keeps in `entity`'s shared-data table under `key` (WA's
+/// 0x4FDF90 lookup with the first key 0).
+pub(crate) fn shared_object(entity: *mut u8, key: u32) -> Option<*mut u8> {
+    unsafe { lookup_shared(entity, 0, key) }
 }
 
 unsafe fn lookup_shared(entity: *mut u8, key_esi: u32, key_edi: u32) -> Option<*mut u8> {
