@@ -259,6 +259,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
 
     let draw = lua.create_table().map_err(|e| e.to_string())?;
     draw.set("quad", draw_quad_fn(lua)?).map_err(|e| e.to_string())?;
+    draw.set("ribbon", draw_ribbon_fn(lua)?).map_err(|e| e.to_string())?;
     draw.set("random", draw_random_fn(lua)?).map_err(|e| e.to_string())?;
     wa.set("draw", draw).map_err(|e| e.to_string())?;
 
@@ -1455,6 +1456,7 @@ fn draw_quad_fn(lua: &Lua) -> Result<Function, String> {
         dispatch::push_draw_quad(dispatch::DrawQuad {
             corners,
             colours,
+            uvs: [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
             sprite,
             frame: spec.get::<Option<u32>>("frame")?.unwrap_or(0),
             additive,
@@ -1463,6 +1465,69 @@ fn draw_quad_fn(lua: &Lua) -> Result<Function, String> {
         Ok(())
     })
     .map_err(|e| e.to_string())
+}
+
+/// `wa.draw.ribbon{ points = { {x,y,width,color,u}, ... }, sprite, blend, depth }`.
+/// Coordinates are 16.16; width is in pixels. Each adjacent pair forms a
+/// textured quad. The caller supplies u=0..1 along the whole beam, so the
+/// beam texture does not restart at every bend. This is presentation only.
+fn draw_ribbon_fn(lua: &Lua) -> Result<Function, String> {
+    lua.create_function(|lua, spec: Table| {
+        if !dispatch::drawing() {
+            return Err(mlua::Error::external("wa.draw.ribbon: only inside wa.on.draw"));
+        }
+        let points: Table = spec.get("points")?;
+        let count = points.len()? as usize;
+        if !(2..=256).contains(&count) {
+            return Err(mlua::Error::external("wa.draw.ribbon: points needs 2..256 entries"));
+        }
+        let name: String = spec.get("sprite")?;
+        let (sprite, ..) = crate::spawn::resolve_sprite_name(lua, &name)?;
+        let additive = match spec.get::<Option<String>>("blend")?.as_deref() {
+            None | Some("alpha") => false,
+            Some("add") => true,
+            Some(other) => return Err(mlua::Error::external(format!("wa.draw.ribbon: invalid blend {other:?}"))),
+        };
+        let depth = spec.get::<Option<u32>>("depth")?.unwrap_or(0x1_0000);
+        let mut data = Vec::with_capacity(count);
+        for i in 1..=count {
+            let p: Table = points.get(i)?;
+            let x = p.get::<f64>("x")? / 65536.0;
+            let y = p.get::<f64>("y")? / 65536.0;
+            let width = p.get::<f64>("width")?;
+            let u = p.get::<f64>("u")?;
+            if !x.is_finite() || !y.is_finite() || !width.is_finite() || !u.is_finite()
+                || !(0.0..=512.0).contains(&width) || !(0.0..=1.0).contains(&u) {
+                return Err(mlua::Error::external("wa.draw.ribbon: non-finite or out-of-range point"));
+            }
+            let colour = p.get::<Option<i64>>("color")?.unwrap_or(0xFFFF_FFFF) as u32;
+            data.push((x as f32, y as f32, width as f32, colour, u as f32));
+        }
+        for pair in data.windows(2) {
+            let (x0, y0, w0, c0, u0) = pair[0];
+            let (x1, y1, w1, c1, u1) = pair[1];
+            let dx = x1 - x0;
+            let dy = y1 - y0;
+            let length = dx.hypot(dy);
+            if length <= f32::EPSILON { continue; }
+            let nx = -dy / length;
+            let ny = dx / length;
+            let a = (x0 + nx * w0 * 0.5, y0 + ny * w0 * 0.5);
+            let b = (x1 + nx * w1 * 0.5, y1 + ny * w1 * 0.5);
+            let c = (x1 - nx * w1 * 0.5, y1 - ny * w1 * 0.5);
+            let d = (x0 - nx * w0 * 0.5, y0 - ny * w0 * 0.5);
+            dispatch::push_draw_quad(dispatch::DrawQuad {
+                corners: [a, b, c, d],
+                colours: [c0, c1, c1, c0],
+                uvs: [(u0, 0.0), (u1, 0.0), (u1, 1.0), (u0, 1.0)],
+                sprite,
+                frame: spec.get::<Option<u32>>("frame")?.unwrap_or(0),
+                additive,
+                depth,
+            });
+        }
+        Ok(())
+    }).map_err(|e| e.to_string())
 }
 
 /// `wa.draw.random()`: 0 <= r < 1, for looks only (flicker, jitter). A

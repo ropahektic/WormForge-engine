@@ -438,4 +438,20 @@ mod tests {
         bytes[4 + WEAPON_FIRE_TYPE] = 9;
         assert!(parse_wep("x.wep", &bytes).unwrap_err().contains("fire type 9"));
     }
+
+    #[test]
+    fn highlander_electrical_records_are_scheme_weapons() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../mods/examples/highlander/weps");
+        for (slot, name, fire_type) in [
+            ("earthquake", "Electric Grenade", 1),
+            ("napalm_strike", "Lightning Strike", 3),
+        ] {
+            let path = root.join(format!("{slot}.wep"));
+            let bytes = std::fs::read(&path).unwrap();
+            let wep = parse_wep(&path.display().to_string(), &bytes).unwrap();
+            assert_eq!(wep.name, name);
+            assert_eq!(wep.fire_type(), fire_type);
+        }
+    }
 }

@@ -31,6 +31,7 @@ static ORIG_FIRE_DISPATCH: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut
 static ORIG_CREATE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static VTABLE: OnceLock<[usize; WORLD_ENTITY_VTABLE_SLOTS]> = OnceLock::new();
 static ORIG_FREE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ORIG_WORM_FREE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_MSG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 #[derive(Clone)]
@@ -110,6 +111,12 @@ static NEXT_SEQ: AtomicU32 = AtomicU32::new(1);
 
 pub fn install(catalog: &Catalog) -> Result<(), String> {
     build_vtable();
+    let worm_free_va = catalog.function_va("WormEntity__Free").unwrap_or(WORM_ENTITY_FREE);
+    let worm_free_tr = unsafe {
+        MinHook::create_hook(rb(worm_free_va) as *mut c_void, worm_free_hook as *mut c_void)
+            .map_err(|e| format!("WormEntity Free hook: {e:?}"))?
+    };
+    ORIG_WORM_FREE.store(worm_free_tr, Ordering::SeqCst);
     let va = catalog.function_va("FireWeapon__StrikeFire").unwrap_or(STRIKE_FIRE);
     let trampoline = unsafe {
         MinHook::create_hook(rb(va) as *mut c_void, strike_fire_hook as *mut c_void)
@@ -187,6 +194,14 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         body_hidden: crate::physics::body_hidden,
         equip: crate::world::equip_weapon,
         hp: crate::world::worm_hp,
+        heal: crate::world::heal_worm,
+        arm_mine: crate::world::arm_mine,
+        mine_fuse: crate::world::mine_fuse,
+        hit_object: crate::world::hit_object,
+        revive_grave: crate::world::revive_grave,
+        grave_identity: crate::world::grave_identity,
+        electrical_nearby: crate::world::electrical_nearby,
+        electrical_trace: crate::world::electrical_trace,
         ammo: crate::world::ammo,
         cavern: crate::world::is_cavern,
         forces: crate::world::forces,
@@ -2564,6 +2579,29 @@ unsafe extern "thiscall" fn actor_free(this: *mut u8, flags: u32) -> *mut u8 {
     }
     let f: WorldFreeFn = unsafe { std::mem::transmute(orig) };
     unsafe { f(this, flags) }
+}
+
+/// Stock WormEntity::Free creates the gravestone before returning. Compare
+/// grave handles around that one call and attach the dying worm's stable ID
+/// to the new grave. PX also pairs graves in CWorm::Free, after `super`.
+unsafe extern "thiscall" fn worm_free_hook(this: *mut u8, flags: u32) -> *mut u8 {
+    let id = if this.is_null() { 0 } else {
+        read_i32(this, ENT_WORM_TEAM).wrapping_mul(16).wrapping_add(read_i32(this, WORM_INDEX)) as u32
+    };
+    let dying = id != 0 && crate::world::worm_hp(this as u32) <= 0;
+    let before = if dying { crate::world::list_kind(CLASS_GRAVE, this as u32) } else { Vec::new() };
+    let orig = ORIG_WORM_FREE.load(Ordering::SeqCst);
+    if orig.is_null() { return this; }
+    let free: WorldFreeFn = std::mem::transmute(orig);
+    let result = free(this, flags);
+    if dying {
+        for grave in crate::world::list_kind(CLASS_GRAVE, 0) {
+            if !before.contains(&grave) {
+                crate::world::remember_grave_owner(grave, id);
+            }
+        }
+    }
+    result
 }
 
 /// Solid collision under the sprite's bottom opaque row.

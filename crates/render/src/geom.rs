@@ -132,6 +132,8 @@ pub struct Quad {
     pub corners: [(f32, f32); 4],
     /// Per corner, as `Tint`: premultiplied, alpha 0 additive.
     pub colours: [u32; 4],
+    /// Normalized coordinates inside `rect`, in corner order.
+    pub uvs: [(f32, f32); 4],
     pub rect: SheetRect,
 }
 
@@ -158,7 +160,7 @@ impl Quad {
     /// Append this quad's six vertices, as `Sprite::emit` does.
     pub fn emit(&self, width: u32, height: u32, out: &mut Vec<Vertex>) {
         let (u0, v0, u1, v1) = self.rect.uv();
-        let uvs = [(u0, v0), (u1, v0), (u1, v1), (u0, v1)];
+        let uvs = self.uvs.map(|(u, v)| (u0 + (u1 - u0) * u, v0 + (v1 - v0) * v));
         let vertex = |i: usize| {
             let (cx, cy) = self.corners[i];
             let (x, y) = (cx - 0.5, cy - 0.5);
@@ -216,6 +218,7 @@ mod tests {
         let q = Quad {
             corners: [(10.0, 10.0), (110.0, 10.0), (110.0, 12.0), (10.0, 12.0)],
             colours: [1, 2, 3, 4],
+            uvs: [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
             rect: rect(),
         };
         let mut v = Vec::new();
@@ -230,6 +233,29 @@ mod tests {
         assert_eq!(q.bounds(), (10, 10, 110, 12));
         assert!(!q.offscreen(256, 128));
         assert!(q.offscreen(5, 5));
+    }
+
+    #[test]
+    fn ribbon_segment_uses_continuous_u_faded_colours_and_culls_offscreen() {
+        let q = Quad {
+            // A tapered horizontal segment after ribbon expansion.
+            corners: [(10.0, 8.0), (50.0, 9.0), (50.0, 11.0), (10.0, 12.0)],
+            colours: [0xDC78_8CFF, 0x1E78_8CFF, 0x1E78_8CFF, 0xDC78_8CFF],
+            uvs: [(0.25, 0.0), (0.75, 0.0), (0.75, 1.0), (0.25, 1.0)],
+            rect: rect(),
+        };
+        let mut out = Vec::new();
+        q.emit(128, 64, &mut out);
+        let (u0, v0, u1, v1) = rect().uv();
+        assert_eq!(out[0].u, u0 + (u1-u0)*0.25);
+        assert_eq!(out[1].u, u0 + (u1-u0)*0.75);
+        assert_eq!(out[0].v, v0);
+        assert_eq!(out[2].v, v1);
+        assert_eq!(out[0].colour, 0xDC78_8CFF);
+        assert_eq!(out[1].colour, 0x1E78_8CFF);
+        assert_eq!(q.bounds(), (10, 8, 50, 12));
+        assert!(!q.offscreen(128, 64));
+        assert!(q.offscreen(8, 8));
     }
 
     #[test]

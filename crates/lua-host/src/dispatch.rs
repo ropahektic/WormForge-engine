@@ -19,6 +19,9 @@ pub struct DrawQuad {
     pub corners: [(f32, f32); 4],
     /// Per corner, 0xAARRGGBB, not premultiplied.
     pub colours: [u32; 4],
+    /// Sheet-local UVs. A ribbon carries its longitudinal texture coordinate
+    /// across adjacent segments instead of restarting it at each quad.
+    pub uvs: [(f32, f32); 4],
     pub sprite: i32,
     pub frame: u32,
     /// Added to the scene rather than drawn over it.

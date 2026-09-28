@@ -207,6 +207,15 @@ pub struct ActorNative {
     /// Stock SelectWeapon (F1 path). Returns ammo after equip, 0 if not this worm's turn.
     pub equip: fn(handle: u32, slot: u32) -> i32,
     pub hp: fn(handle: u32) -> i32,
+    pub heal: fn(handle: u32, amount: i32) -> i32,
+    pub arm_mine: fn(handle: u32, fuse_ms: i32) -> bool,
+    pub mine_fuse: fn(handle: u32) -> i32,
+    pub hit_object: fn(handle: u32, from: u32, damage: i32, vx: i32, vy: i32) -> bool,
+    /// Rebuild the dead worm associated by the pack with a live grave.
+    pub revive_grave: fn(grave: u32, worm_id: u32, health: i32) -> u32,
+    pub grave_identity: fn(grave: u32) -> u32,
+    pub electrical_nearby: fn(x: i32, y: i32, radius_px: i32, graves: bool) -> Vec<u32>,
+    pub electrical_trace: fn(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32, u32)>,
     /// Team ammo. `None` reads. `Add` leaves infinite (-1) alone; `Set`
     /// overwrites it. Returns the ammo afterwards.
     pub ammo: fn(handle: u32, slot: u32, change: Option<AmmoChange>) -> i32,
@@ -290,6 +299,14 @@ impl Default for ActorNative {
             body_hidden: |_| false,
             equip: |_, _| 0,
             hp: |_| 0,
+            heal: |_, _| 0,
+            arm_mine: |_, _| false,
+            mine_fuse: |_| 0,
+            hit_object: |_, _, _, _, _| false,
+            revive_grave: |_, _, _| 0,
+            grave_identity: |_| 0,
+            electrical_nearby: |_, _, _, _| Vec::new(),
+            electrical_trace: |_, _, _, _| None,
             ammo: |_, _, _| 0,
             cavern: || false,
             forces: || (0, 0),
@@ -1100,6 +1117,12 @@ impl UserData for WormHandle {
             }
             Ok(())
         });
+        methods.add_method("heal", |_, this, amount: i32| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("worm:heal: only from a simulation callback"));
+            }
+            Ok(native_heal().map(|f| f(this.0, amount)).unwrap_or(0))
+        });
     }
 }
 
@@ -1111,7 +1134,35 @@ impl UserData for WorldHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, this| Ok(this.0));
         fields.add_field_method_get("kind", |_, this| Ok(kind_name(this.0)));
+        fields.add_field_method_get("worm_id", |_, this| {
+            Ok(native_grave_identity().map(|f| f(this.0)).unwrap_or(0))
+        });
+        fields.add_field_method_get("fuse", |_, this| {
+            Ok(native_mine_fuse().map(|f| f(this.0)).unwrap_or(0))
+        });
         bind_pos_fields(fields, |h| h.0);
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("arm", |_, this, fuse_ms: i32| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("mine:arm: only from a simulation callback"));
+            }
+            Ok(native_arm_mine().map(|f| f(this.0, fuse_ms)).unwrap_or(false))
+        });
+        methods.add_method("hit", |_, this, (damage, vx, vy): (i32, i32, i32)| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("object:hit: only from a simulation callback"));
+            }
+            Ok(native_hit_object().map(|f| f(this.0, spawn_owner(), damage, vx, vy)).unwrap_or(false))
+        });
+        methods.add_method("revive", |lua, this, (worm_id, health): (u32, i32)| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("grave:revive: only from a simulation callback"));
+            }
+            let h = native_revive_grave().map(|f| f(this.0, worm_id, health)).unwrap_or(0);
+            if h == 0 { Ok(None) } else { Ok(Some(worm_userdata(lua, h).map_err(mlua::Error::external)?)) }
+        });
     }
 }
 
@@ -1138,6 +1189,7 @@ fn kind_name(handle: u32) -> &'static str {
         CLASS_CRATE => "crate",
         CLASS_WORM => "worm",
         CLASS_OIL => "oil",
+        game::offsets::CLASS_GRAVE => "grave",
         CLASS_LAND => "land",
         _ => "object",
     }
@@ -1375,6 +1427,38 @@ pub fn native_equip() -> Option<fn(u32, u32) -> i32> {
 
 pub fn native_hp() -> Option<fn(u32) -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hp)
+}
+
+fn native_heal() -> Option<fn(u32, i32) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.heal)
+}
+
+fn native_arm_mine() -> Option<fn(u32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.arm_mine)
+}
+
+fn native_mine_fuse() -> Option<fn(u32) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.mine_fuse)
+}
+
+fn native_hit_object() -> Option<fn(u32, u32, i32, i32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.hit_object)
+}
+
+fn native_revive_grave() -> Option<fn(u32, u32, i32) -> u32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.revive_grave)
+}
+
+fn native_grave_identity() -> Option<fn(u32) -> u32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.grave_identity)
+}
+
+pub fn native_electrical_nearby() -> Option<fn(i32, i32, i32, bool) -> Vec<u32>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.electrical_nearby)
+}
+
+pub fn native_electrical_trace() -> Option<fn(i32, i32, i32, i32) -> Option<(i32, i32, u32)>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.electrical_trace)
 }
 
 pub fn native_ammo() -> Option<fn(u32, u32, Option<AmmoChange>) -> i32> {
