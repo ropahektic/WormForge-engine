@@ -2,8 +2,9 @@
 
 use crate::log_line;
 use game::offsets::{
-    DISPLAY_VIEW_X, DISPLAY_VIEW_Y, DISPLAY_VT_DRAW_SCALED, GAME_RUNTIME_WORLD,
-    GAME_SESSION_RUNTIME, GAME_WORLD_DISPLAY, GAME_WORLD_TEXTBOX,
+    DISPLAY_VIEW_X, DISPLAY_VIEW_Y, DISPLAY_VT_DRAW_SCALED, DISPLAY_WIDTH, GAME_RUNTIME_WORLD,
+    GAME_SESSION_RUNTIME, GAME_WORLD_DISPLAY, GAME_WORLD_TEXTBOX, TEXTBOX_CACHED_SCALE,
+    TEXTBOX_STYLE, TEXTBOX_STYLE_SMALL,
 };
 use lua_host::run_hud;
 use std::ffi::CString;
@@ -110,10 +111,13 @@ unsafe extern "C" fn hooked_render_waiting() {
             options(nostack),
         );
     }
+    // Once per rendered frame: where the profiler's frames end.
+    crate::perf::frame();
     flush_hud();
 }
 
 fn flush_hud() {
+    let _perf = crate::perf::probe(crate::perf::Section::Hud);
     let lines = run_hud().unwrap_or_default();
     let Some(world) = resolve_world() else {
         return;
@@ -124,11 +128,16 @@ fn flush_hud() {
             continue;
         }
         let draw_y = if line.y >= 0 { line.y } else { y };
-        if blit_line(world, line.x, draw_y, &line.text) {
+        if blit_line(world, line.x, draw_y, &line.text, Line::default()) {
             y = draw_y + 14;
         } else {
             break;
         }
+    }
+    // `wa.perf.enable{ counter = true }`, at the top right.
+    if let Some(text) = crate::perf::counter() {
+        let small = Line { right: true, style: Some(TEXTBOX_STYLE_SMALL) };
+        blit_line(world, 10, 6, &text, small);
     }
     let display = unsafe { *((world + GAME_WORLD_DISPLAY) as *const *mut u8) };
     crate::overlay::present(display);
@@ -150,7 +159,16 @@ pub(crate) fn resolve_world() -> Option<usize> {
     }
 }
 
-fn blit_line(world: usize, screen_x: i32, screen_y: i32, text: &str) -> bool {
+#[derive(Clone, Copy, Default)]
+struct Line {
+    /// `screen_x` is the gap between the text's right edge and the screen's.
+    right: bool,
+    /// Bake in this font style rather than the world textbox's own, which is
+    /// put back after.
+    style: Option<i32>,
+}
+
+fn blit_line(world: usize, screen_x: i32, screen_y: i32, text: &str, how: Line) -> bool {
     unsafe {
         let display = *((world + GAME_WORLD_DISPLAY) as *const usize);
         let textbox = *((world + GAME_WORLD_TEXTBOX) as *const usize);
@@ -164,6 +182,11 @@ fn blit_line(world: usize, screen_x: i32, screen_y: i32, text: &str) -> bool {
         let mut h = 0i32;
         let set_text: SetTextboxTextFn =
             std::mem::transmute(crate::wa::address("SET_TEXTBOX_TEXT") as usize);
+        let style_at = (textbox + TEXTBOX_STYLE) as *mut i32;
+        let own_style = *style_at;
+        if let Some(style) = how.style {
+            *style_at = style;
+        }
         let bm = set_text(
             textbox as *mut u8,
             c.as_ptr() as *const u8,
@@ -174,6 +197,11 @@ fn blit_line(world: usize, screen_x: i32, screen_y: i32, text: &str) -> bool {
             &mut h,
             0x1_0000,
         );
+        if how.style.is_some() {
+            *style_at = own_style;
+            // The cache does not compare the style: the next line redraws.
+            *((textbox + TEXTBOX_CACHED_SCALE) as *mut i32) = -1;
+        }
         if bm == 0 || w <= 0 || h <= 0 {
             if !WARNED.swap(true, Ordering::SeqCst) {
                 log_line("HUD textbox bake failed");
@@ -189,6 +217,11 @@ fn blit_line(world: usize, screen_x: i32, screen_y: i32, text: &str) -> bool {
             return false;
         }
         let draw: DrawScaledFn = std::mem::transmute(slot);
+        let screen_x = if how.right {
+            *((display + DISPLAY_WIDTH) as *const i32) - screen_x - w
+        } else {
+            screen_x
+        };
         let cam_x = *((display + DISPLAY_VIEW_X) as *const i32);
         let cam_y = *((display + DISPLAY_VIEW_Y) as *const i32);
         let x = ((screen_x - cam_x + w / 2) << 16) as i32;

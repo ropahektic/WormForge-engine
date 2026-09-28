@@ -19,6 +19,9 @@ pub struct DrawQuad {
     pub corners: [(f32, f32); 4],
     /// Per corner, 0xAARRGGBB, not premultiplied.
     pub colours: [u32; 4],
+    /// Sheet-local UVs. A ribbon carries its longitudinal texture coordinate
+    /// across adjacent segments instead of restarting it at each quad.
+    pub uvs: [(f32, f32); 4],
     pub sprite: i32,
     pub frame: u32,
     /// Added to the scene rather than drawn over it.
@@ -123,11 +126,13 @@ fn with_lua_impl<T>(
         let Some(lua) = guard.as_ref() else {
             return Err("no lua state".into());
         };
-        if simulation {
-            crate::sim_context::with_sim(|| f(lua))
-        } else {
-            f(lua)
-        }
+        crate::perf::time(|| {
+            if simulation {
+                crate::sim_context::with_sim(|| f(lua))
+            } else {
+                f(lua)
+            }
+        })
     })
 }
 
@@ -219,12 +224,17 @@ pub fn gravity_after(motion: Motion) -> Result<Motion, String> {
 /// `sprite`: the sprite WA draws the missile with (MissileEntity+0x2EC). Lua
 /// sees it as `m.sprite` and may write it; 0 draws nothing, as Project X's
 /// records and `red_spb` hide a missile it draws itself.
+///
+/// `mask`: the layers the missile collides with (+0x34, Project X's
+/// `ColGroup`), as `m.collision_mask`, writable: Project X's Swim Suit lets a
+/// missile in the water hit a swimming worm.
 pub fn missile_frame(
     motion: Motion,
     msg: u32,
     phase: &str,
     slot: Option<usize>,
     sprite: &mut i32,
+    mask: &mut i32,
 ) -> Result<Motion, String> {
     with_lua(|lua| {
         let list = hook_list(lua, "missile_frame")?;
@@ -239,8 +249,10 @@ pub fn missile_frame(
             .map(|w| w.name());
         t.set("weapon", weapon).map_err(|e| e.to_string())?;
         t.set("sprite", *sprite).map_err(|e| e.to_string())?;
+        t.set("collision_mask", *mask as u32).map_err(|e| e.to_string())?;
         call_each(&list, t.clone())?;
         *sprite = t.get("sprite").unwrap_or(*sprite);
+        *mask = t.get::<i64>("collision_mask").map(|v| v as u32 as i32).unwrap_or(*mask);
         table_to_motion(&t, motion)
     })
 }

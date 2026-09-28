@@ -7,10 +7,12 @@
 mod actor;
 mod api;
 mod dispatch;
+mod perf;
 mod sandbox;
 mod sim_context;
 mod spawn;
 
+pub use perf::{perf_flags, take_lua_time, PerfFlags};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
     weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
@@ -50,6 +52,7 @@ pub struct MatchScripts {
 
 pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
     actor::reset();
+    perf::reset();
     let lua = sandbox::new_lua()?;
     let logs = Rc::new(RefCell::new(Vec::new()));
     let claims = Rc::new(RefCell::new(Vec::new()));
@@ -550,10 +553,16 @@ wa.weapons.replace({
         let claim = &scripts.resolved.applied[0];
         assert_eq!(claim.slot, StockWeapon::HolyGrenade);
         assert_eq!(claim.params.name.as_deref(), Some("Hellish Hand-Grenade"));
-        assert_eq!(claim.params.copy_from, None);
-        let wep = claim.params.wep.as_ref().expect("PX's weapon file");
-        assert_eq!(wep.name, "Hellish Hand-Grenade");
-        assert_eq!(wep.path, "hellish.wep");
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::HolyGrenade));
+        assert!(claim.params.wep.is_none(), "firing is copy_from + patch, not a .wep file");
+        assert!(
+            claim.params.patch.iter().any(|&(off, v)| off == 0x50 && v == 70),
+            "damage 70 from the hellish patch"
+        );
+        assert!(
+            claim.params.patch.iter().any(|&(off, v)| off == 0xF0 && v == 2),
+            "CreateFire1 on detonation"
+        );
         match &claim.params.panel_icon {
             Some(weapons::PanelIcon::File { path, width, height, .. }) => {
                 assert_eq!(path, "sprites/hhh_ico.png");
@@ -590,16 +599,19 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 45);
+        assert_eq!(applied.len(), 51);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         // The scheme's record for the girder slot is the Baseball Bat:
         // a special weapon, subtype 2, as WA's own bat.
         let bat = claim(StockWeapon::Girder);
-        let wep = bat.params.wep.as_ref().unwrap();
-        assert_eq!(wep.name, "Baseball Bat");
+        assert_eq!(bat.params.copy_from, Some(StockWeapon::Girder));
+        assert!(bat.params.wep.is_none());
         assert_eq!(bat.params.name.as_deref(), Some("Baseball Bat"));
-        assert_eq!((wep.fire_type(), i32::from_le_bytes(wep.record[0x34..0x38].try_into().unwrap())), (4, 2));
-        assert_eq!(
+        // Subtype 2, as WA's own bat (stock girder is 17).
+        assert!(
+            bat.params.patch.iter().any(|&(off, v)| off == 0x34 && v == 2),
+            "subtype_param baseball bat"
+        );        assert_eq!(
             bat.params.panel_icon,
             Some(weapons::PanelIcon::Stock(StockWeapon::BaseballBat))
         );
@@ -1433,6 +1445,7 @@ wa.on.missile_frame(function(m)
   if m.weapon == "longbow" then m.vx = 1
   elseif m.weapon == nil then m.vx = 2 end
   if m.weapon == "super_banana" and m.sprite == 51 then m.sprite = 0 end
+  if m.weapon == "cluster_bomb" and m.collision_mask == 0x400000 then m.collision_mask = 0x40007C end
 end)
 "#,
         );
@@ -1442,13 +1455,20 @@ end)
             id: 1, class_type: 0, damp: 0, wind_scale: 0, gravity_scale: 0, moved: 0,
             x: 0, y: 0, vx: 0, vy: 0, cm_gravity: 0, cm_wind: 0,
         };
+        let mut mask = 0x400000;
         let mut sprite = 48;
-        assert_eq!(missile_frame(m, 2, "pre", Some(15), &mut sprite).unwrap().vx, 1, "slot 15 is the longbow");
-        assert_eq!(missile_frame(m, 2, "pre", None, &mut sprite).unwrap().vx, 2, "no slot is nil");
+        assert_eq!(missile_frame(m, 2, "pre", Some(15), &mut sprite, &mut mask).unwrap().vx, 1, "slot 15 is the longbow");
+        assert_eq!(missile_frame(m, 2, "pre", None, &mut sprite, &mut mask).unwrap().vx, 2, "no slot is nil");
         assert_eq!(sprite, 48, "left alone");
         let mut sprite = 51;
-        missile_frame(m, 2, "pre", Some(42), &mut sprite).unwrap();
+        missile_frame(m, 2, "pre", Some(42), &mut sprite, &mut mask).unwrap();
         assert_eq!(sprite, 0, "m.sprite = 0 hides it");
+        // Project X's Swim Suit: a missile in the water also hits worms.
+        assert_eq!(mask, 0x400000, "left alone");
+        let mut mask = 0x400000;
+        let mut sprite = 1;
+        missile_frame(m, 2, "pre", Some(7), &mut sprite, &mut mask).unwrap();
+        assert_eq!(mask, 0x40007C);
     }
 
     #[test]
@@ -2223,6 +2243,59 @@ wa.weapons.replace({
         });
         crate::weapon_select(p.on_select_id, 0x22, 9).unwrap();
         assert_eq!(OWNER.with(|c| c.get()), 0x22);
+    }
+
+    #[test]
+    fn a_pack_turns_on_the_perf_counter_and_profiler() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-perf");
+        let _ = std::fs::remove_dir_all(&root);
+        let manifest = |id: &str| {
+            format!("id = \"{id}\"\napi_version = 1\nentry = \"weapons.lua\"\n")
+        };
+        let counter = pack(
+            &root.join("c"),
+            "p.counter",
+            &manifest("p.counter"),
+            "wa.perf.enable({ counter = true })",
+        );
+        run_mods(&[counter]).unwrap();
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: false });
+        let both = pack(&root.join("b"), "p.both", &manifest("p.both"), "wa.perf.enable()");
+        run_mods(&[both]).unwrap();
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: true });
+        let none = pack(&root.join("n"), "p.none", &manifest("p.none"), "");
+        run_mods(&[none]).unwrap();
+        assert_eq!(perf_flags(), PerfFlags::default(), "a new match's packs decide afresh");
+        let typo = pack(
+            &root.join("t"),
+            "p.typo",
+            &manifest("p.typo"),
+            "wa.perf.enable({ countr = true })",
+        );
+        assert!(run_mods(&[typo]).is_err(), "an unknown option is an error");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn world_sets_gravity_and_wind_only_in_the_simulation() {
+        let _host = lock_host();
+        use std::sync::atomic::{AtomicI32, Ordering};
+        static GRAVITY: AtomicI32 = AtomicI32::new(0);
+        static WIND: AtomicI32 = AtomicI32::new(0);
+        crate::bind_actor_native(crate::ActorNative {
+            set_gravity: |v| GRAVITY.store(v, Ordering::SeqCst),
+            set_wind: |v| WIND.store(v, Ordering::SeqCst),
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        assert!(lua.load("wa.world.set_wind(0x1000)").exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            lua.load("wa.world.set_gravity(0x3AE * 2); wa.world.set_wind(-0x81D)").exec().unwrap();
+        });
+        crate::bind_actor_native(crate::ActorNative::default());
+        assert_eq!((GRAVITY.load(Ordering::SeqCst), WIND.load(Ordering::SeqCst)), (0x3AE * 2, -0x81D));
     }
 
     #[test]

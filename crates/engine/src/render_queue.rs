@@ -159,6 +159,7 @@ impl Queue {
 }
 
 unsafe extern "C" fn dispatch(base: usize, display: usize, clip: usize) {
+    let _perf = crate::perf::probe(crate::perf::Section::Draw);
     // Latch the entity-view transform (clip + display cam) for screen→world.
     // Not the HUD path — HUD stays in screen absolutes.
     crate::world::latch_entity_view(display, clip);

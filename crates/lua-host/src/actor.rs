@@ -9,7 +9,7 @@ use game::offsets::{
     CLASS_MINE, WORM_INDEX,
     CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE,
+    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_SINKING, ENT_COLLISION_MASK,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -207,6 +207,15 @@ pub struct ActorNative {
     /// Stock SelectWeapon (F1 path). Returns ammo after equip, 0 if not this worm's turn.
     pub equip: fn(handle: u32, slot: u32) -> i32,
     pub hp: fn(handle: u32) -> i32,
+    pub heal: fn(handle: u32, amount: i32) -> i32,
+    pub arm_mine: fn(handle: u32, fuse_ms: i32) -> bool,
+    pub mine_fuse: fn(handle: u32) -> i32,
+    pub hit_object: fn(handle: u32, from: u32, damage: i32, vx: i32, vy: i32) -> bool,
+    /// Rebuild the dead worm associated by the pack with a live grave.
+    pub revive_grave: fn(grave: u32, worm_id: u32, health: i32) -> u32,
+    pub grave_identity: fn(grave: u32) -> u32,
+    pub electrical_nearby: fn(x: i32, y: i32, radius_px: i32, graves: bool) -> Vec<u32>,
+    pub electrical_trace: fn(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32, u32)>,
     /// Team ammo. `None` reads. `Add` leaves infinite (-1) alone; `Set`
     /// overwrites it. Returns the ammo afterwards.
     pub ammo: fn(handle: u32, slot: u32, change: Option<AmmoChange>) -> i32,
@@ -215,6 +224,11 @@ pub struct ActorNative {
     /// WA's gravity and wind, (gravity, wind), 16.16: the collision
     /// manager's values, which WA's physics scale per object.
     pub forces: fn() -> (i32, i32),
+    /// Set the match's gravity, 16.16 (GameInfo +0xD9A8), which WA scales by
+    /// its low-gravity percentage into the collision manager every frame.
+    pub set_gravity: fn(i32),
+    /// Set WA's wind, 16.16, as WA's own wind change does: message 0x54.
+    pub set_wind: fn(i32),
     /// Stock SpecialImpact (msg 0x4B). No explosion. Pose restored so the worm does not move.
     pub hurt: fn(target: u32, from: u32, amount: i32),
     /// Rewrite a stock weapon slot's body sprite (and optional cluster bit) on
@@ -285,9 +299,19 @@ impl Default for ActorNative {
             body_hidden: |_| false,
             equip: |_, _| 0,
             hp: |_| 0,
+            heal: |_, _| 0,
+            arm_mine: |_, _| false,
+            mine_fuse: |_| 0,
+            hit_object: |_, _, _, _, _| false,
+            revive_grave: |_, _, _| 0,
+            grave_identity: |_| 0,
+            electrical_nearby: |_, _, _, _| Vec::new(),
+            electrical_trace: |_, _, _, _| None,
             ammo: |_, _, _| 0,
             cavern: || false,
             forces: || (0, 0),
+            set_gravity: |_| {},
+            set_wind: |_| {},
             hurt: |_, _, _| {},
             retarget_weapon_sprites: |_, _, _| Err("retarget not bound".into()),
             launch: |_| Err("launch not bound".into()),
@@ -604,7 +628,7 @@ fn with_lua<T>(f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
         let Some(lua) = guard.as_ref() else {
             return Err("no lua state".into());
         };
-        crate::sim_context::with_sim(|| f(lua))
+        crate::perf::time(|| crate::sim_context::with_sim(|| f(lua)))
     })
 }
 
@@ -868,8 +892,21 @@ impl UserData for WormHandle {
                 Ok(())
             });
         }
+        // Which collision layers the worm collides with (WA's +0x34, Project
+        // X's ColGroup): a bit per layer. Bit 22 (0x400000), the landscape's,
+        // is also what WA's water acts on (0x4FDE20): without it a worm in the
+        // water neither sinks nor drowns.
+        fields.add_field_method_get("collision_mask", |_, this| {
+            Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, ENT_COLLISION_MASK) } })
+        });
+        fields.add_field_method_set("collision_mask", |_, this, v: i64| {
+            if this.0 != 0 {
+                unsafe { write_i32(this.0 as *mut u8, ENT_COLLISION_MASK, v as u32 as i32) };
+            }
+            Ok(())
+        });
         // The worm's own move requests (WA's, from lockstep input), unlike
-        // wa.world.keys() which is this machine's keyboard.
+        // wa.world.keys(), the keyboard of the player whose turn it is.
         fields.add_field_method_get("keys", |lua, this| {
             let t = lua.create_table()?;
             for (name, off) in WORM_KEYS {
@@ -1080,6 +1117,12 @@ impl UserData for WormHandle {
             }
             Ok(())
         });
+        methods.add_method("heal", |_, this, amount: i32| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("worm:heal: only from a simulation callback"));
+            }
+            Ok(native_heal().map(|f| f(this.0, amount)).unwrap_or(0))
+        });
     }
 }
 
@@ -1091,7 +1134,35 @@ impl UserData for WorldHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, this| Ok(this.0));
         fields.add_field_method_get("kind", |_, this| Ok(kind_name(this.0)));
+        fields.add_field_method_get("worm_id", |_, this| {
+            Ok(native_grave_identity().map(|f| f(this.0)).unwrap_or(0))
+        });
+        fields.add_field_method_get("fuse", |_, this| {
+            Ok(native_mine_fuse().map(|f| f(this.0)).unwrap_or(0))
+        });
         bind_pos_fields(fields, |h| h.0);
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("arm", |_, this, fuse_ms: i32| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("mine:arm: only from a simulation callback"));
+            }
+            Ok(native_arm_mine().map(|f| f(this.0, fuse_ms)).unwrap_or(false))
+        });
+        methods.add_method("hit", |_, this, (damage, vx, vy): (i32, i32, i32)| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("object:hit: only from a simulation callback"));
+            }
+            Ok(native_hit_object().map(|f| f(this.0, spawn_owner(), damage, vx, vy)).unwrap_or(false))
+        });
+        methods.add_method("revive", |lua, this, (worm_id, health): (u32, i32)| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("grave:revive: only from a simulation callback"));
+            }
+            let h = native_revive_grave().map(|f| f(this.0, worm_id, health)).unwrap_or(0);
+            if h == 0 { Ok(None) } else { Ok(Some(worm_userdata(lua, h).map_err(mlua::Error::external)?)) }
+        });
     }
 }
 
@@ -1118,6 +1189,7 @@ fn kind_name(handle: u32) -> &'static str {
         CLASS_CRATE => "crate",
         CLASS_WORM => "worm",
         CLASS_OIL => "oil",
+        game::offsets::CLASS_GRAVE => "grave",
         CLASS_LAND => "land",
         _ => "object",
     }
@@ -1253,16 +1325,22 @@ pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
         WORM_STATE_JETPACKING => "jetpacking",
         WORM_STATE_PARACHUTING => "parachuting",
         WORM_STATE_AIRBORNE => "sliding",
+        WORM_STATE_BUNGEE => "bungee",
+        WORM_STATE_SINKING => "sinking",
         _ => return None,
     })
 }
 
 /// The states `worm:set_state` may enter: the ones a script ends a move
-/// with. Entering an action state from outside would skip WA's fire path.
+/// with, and the two Project X's Swim Suit holds a worm in (a bungee's, to
+/// swim; sinking, when the suit gives out). Entering an action state from
+/// outside would skip WA's fire path.
 pub(crate) fn settable_worm_state(name: &str) -> Option<u32> {
     match name {
         "standing" => Some(WORM_STATE_STANDING),
         "sliding" => Some(WORM_STATE_AIRBORNE),
+        "bungee" => Some(WORM_STATE_BUNGEE),
+        "sinking" => Some(WORM_STATE_SINKING),
         _ => None,
     }
 }
@@ -1351,6 +1429,38 @@ pub fn native_hp() -> Option<fn(u32) -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hp)
 }
 
+fn native_heal() -> Option<fn(u32, i32) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.heal)
+}
+
+fn native_arm_mine() -> Option<fn(u32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.arm_mine)
+}
+
+fn native_mine_fuse() -> Option<fn(u32) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.mine_fuse)
+}
+
+fn native_hit_object() -> Option<fn(u32, u32, i32, i32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.hit_object)
+}
+
+fn native_revive_grave() -> Option<fn(u32, u32, i32) -> u32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.revive_grave)
+}
+
+fn native_grave_identity() -> Option<fn(u32) -> u32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.grave_identity)
+}
+
+pub fn native_electrical_nearby() -> Option<fn(i32, i32, i32, bool) -> Vec<u32>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.electrical_nearby)
+}
+
+pub fn native_electrical_trace() -> Option<fn(i32, i32, i32, i32) -> Option<(i32, i32, u32)>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.electrical_trace)
+}
+
 pub fn native_ammo() -> Option<fn(u32, u32, Option<AmmoChange>) -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.ammo)
 }
@@ -1361,6 +1471,10 @@ pub fn native_cavern() -> Option<fn() -> bool> {
 
 pub fn native_forces() -> Option<fn() -> (i32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.forces)
+}
+
+pub fn native_set_forces() -> Option<(fn(i32), fn(i32))> {
+    NATIVE.lock().ok()?.as_ref().map(|n| (n.set_gravity, n.set_wind))
 }
 
 /// `worm:ammo(name)` reads, `worm:ammo(name, n)` adds, and
@@ -1577,6 +1691,11 @@ mod tests {
         // Not guessed: 0x7B's setup is Batroping, whatever it was called.
         assert_eq!(worm_state_name(0x7B), None);
         assert_eq!(settable_worm_state("sliding"), Some(0x7E));
+        // Project X's Swim Suit: a bungee's state to swim, sinking when the
+        // suit gives out; and both read back by name.
+        assert_eq!(settable_worm_state("bungee"), Some(0x7C));
+        assert_eq!(settable_worm_state("sinking"), Some(0x7F));
+        assert_eq!((worm_state_name(0x7C), worm_state_name(0x7F)), (Some("bungee"), Some("sinking")));
         assert_eq!(settable_worm_state("standing"), Some(0x65));
         assert_eq!(settable_worm_state("jetpacking"), None);
     }

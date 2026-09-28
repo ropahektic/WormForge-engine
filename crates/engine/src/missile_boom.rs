@@ -18,7 +18,7 @@ use game::offsets::{
 };
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicPtr, AtomicU32, Ordering};
 use std::sync::Mutex;
 use weapons::AttachedSpawn;
 
@@ -207,7 +207,12 @@ unsafe extern "thiscall" fn ctor_hook(
     if p.is_null() {
         return p;
     }
+    // A new missile at this address is never the old one: a new id, and
+    // whatever explode step the last missile here had goes, even if this one
+    // has none.
+    assign_id(p as u32);
     remember_weapon(p, fire_params);
+    forget_live(p as u32);
     let Some(slot) = mine::slot_from_fire_params(p, fire_params).or_else(launching) else {
         return p;
     };
@@ -218,7 +223,6 @@ unsafe extern "thiscall" fn ctor_hook(
         return p;
     };
     if let Ok(mut live) = LIVE.lock() {
-        live.retain(|m| m.handle != p as u32);
         live.push(Live {
             handle: p as u32,
             owner,
@@ -277,9 +281,50 @@ pub fn weapon_of(missile: *mut u8) -> Option<usize> {
     g.as_ref()?.get(&(missile as u32)).copied()
 }
 
+// ------------------------------------------------------------ missile ids
+
+/// A missile's id for packs (`m.id`, `ev.missile`, `wa.weapons.launch`):
+/// a number counted up from here, per match, in the order WA builds missiles.
+/// Both machines build them in the same lockstep order, so a missile has the
+/// same id everywhere, and an id is never reused within a match. Its memory
+/// address was neither: a pack keeping per-missile state by it (the
+/// Highlander's Chilli children) matched a new missile WA built where a dead
+/// one had been, on one machine only, and the games parted. The base keeps
+/// ids clear of worm ids and of entity addresses.
+const MISSILE_ID_BASE: u32 = 0xF000_0000;
+static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+static ID_OF: Mutex<Option<HashMap<u32, u32>>> = Mutex::new(None);
+
+/// Give the missile just built at `missile` the next id.
+fn assign_id(missile: u32) -> u32 {
+    let id = MISSILE_ID_BASE.wrapping_add(NEXT_ID.fetch_add(1, Ordering::SeqCst));
+    if let Ok(mut g) = ID_OF.lock() {
+        g.get_or_insert_with(HashMap::new).insert(missile, id);
+    }
+    id
+}
+
+/// The id of the live missile at `missile`: the one its constructor gave it.
+pub fn missile_id(missile: *mut u8) -> u32 {
+    let key = missile as u32;
+    let known = ID_OF.lock().ok().and_then(|g| g.as_ref().and_then(|m| m.get(&key).copied()));
+    known.unwrap_or_else(|| assign_id(key))
+}
+
 /// Called from the missile free hook: the address may be reused.
+///
+/// Everything kept by a missile's address must go here. An explode step left
+/// behind fired for the next missile WA built at that address -- a Pogo
+/// Sheep's burst ran the Chilli Bomb's -- and since which addresses WA
+/// reuses depends on each machine's heap, only on some machines: a desync.
 pub fn forget_weapon(missile: usize) {
     if let Ok(mut g) = WEAPON_OF.lock() {
+        if let Some(map) = g.as_mut() {
+            map.remove(&(missile as u32));
+        }
+    }
+    forget_live(missile as u32);
+    if let Ok(mut g) = ID_OF.lock() {
         if let Some(map) = g.as_mut() {
             map.remove(&(missile as u32));
         }
@@ -294,6 +339,10 @@ pub fn clear_weapons() {
     if let Ok(mut g) = WEAPON_OF.lock() {
         *g = None;
     }
+    if let Ok(mut g) = ID_OF.lock() {
+        *g = None;
+    }
+    NEXT_ID.store(0, Ordering::SeqCst);
     if let Ok(mut g) = LAUNCHED.lock() {
         g.clear();
     }
@@ -410,11 +459,19 @@ pub fn launch(args: &lua_host::LaunchArgs) -> Result<u32, String> {
                 g.push((p as u32, tuned));
             }
         }
+        let id = missile_id(p);
         log_line(&format!(
-            "weapons.launch: slot {slot} missile {:#x} at ({:#x},{:#x}) speed ({:#x},{:#x})",
-            p as u32, args.x, args.y, args.vx, args.vy
+            "weapons.launch: slot {slot} missile {id:#x} at ({:#x},{:#x}) speed ({:#x},{:#x})",
+            args.x, args.y, args.vx, args.vy
         ));
-        Ok(p as u32)
+        Ok(id)
+    }
+}
+
+/// Drop the explode step kept for the missile at `handle`.
+fn forget_live(handle: u32) {
+    if let Ok(mut live) = LIVE.lock() {
+        live.retain(|m| m.handle != handle);
     }
 }
 
@@ -478,13 +535,68 @@ fn fire_step(
     }
     let worm = if owner != 0 { owner } else { this as u32 };
     if cb != 0 {
-        if let Err(e) = lua_host::weapon_emit("_explodes", cb, "on_explode", worm, slot, x, y, this as u32) {
+        if let Err(e) = lua_host::weapon_emit("_explodes", cb, "on_explode", worm, slot, x, y, missile_id(this)) {
             log_error(&format!("missile on_explode: {e}"));
         }
     }
     if let Some(spawn) = spawn {
         let body = crate::actor::stock_owner(this, owner);
         crate::actor::emit_attached(body, x, y, spawn, inherit_sprite);
+    }
+}
+
+#[cfg(test)]
+mod id_tests {
+    use super::{assign_id, clear_weapons, forget_weapon, missile_id, MISSILE_ID_BASE};
+
+    #[test]
+    fn missiles_are_numbered_in_build_order_and_never_reuse_an_id() {
+        clear_weapons();
+        let (a, b) = (0x0E9A_0A98u32, 0x0E8F_8018u32);
+        assert_eq!(assign_id(a), MISSILE_ID_BASE);
+        assert_eq!(assign_id(b), MISSILE_ID_BASE + 1);
+        assert_eq!(missile_id(a as *mut u8), MISSILE_ID_BASE);
+        // WA frees the first and builds a new missile at its address.
+        forget_weapon(a as usize);
+        assert_eq!(assign_id(a), MISSILE_ID_BASE + 2, "a new id, not the dead one's");
+        assert_eq!(missile_id(a as *mut u8), MISSILE_ID_BASE + 2);
+        // A new match counts from the start again.
+        clear_weapons();
+        assert_eq!(assign_id(b), MISSILE_ID_BASE);
+        clear_weapons();
+    }
+}
+
+#[cfg(test)]
+mod live_tests {
+    use super::{forget_live, forget_weapon, live_of, BoomTune, Live, LIVE};
+
+    fn keep(handle: u32, slot: usize) {
+        LIVE.lock().unwrap().push(Live { handle, owner: 1, slot, tune: BoomTune::default() });
+    }
+
+    #[test]
+    fn a_freed_missile_leaves_no_explode_step_behind() {
+        // A Chilli Bomb (slot 42) freed by WA: the next missile WA builds
+        // at its address, a Pogo Sheep with no explode step, must not fire it.
+        let at = 0x0E9A_0A98;
+        keep(at, 42);
+        assert_eq!(live_of(at as *mut u8).map(|l| l.slot), Some(42));
+        forget_weapon(at as usize);
+        assert!(live_of(at as *mut u8).is_none());
+    }
+
+    #[test]
+    fn a_new_missile_at_an_old_address_starts_clean() {
+        let at = 0x0E9A_1000;
+        keep(at, 1);
+        forget_live(at);
+        assert!(live_of(at as *mut u8).is_none());
+        let other = 0x0E9A_2000;
+        keep(other, 22);
+        forget_live(at);
+        assert!(live_of(other as *mut u8).is_some(), "only that address");
+        forget_live(other);
     }
 }
 

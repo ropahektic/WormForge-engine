@@ -576,6 +576,14 @@ derive = "match"
 target_section = ".text"
 
 [[locator]]
+name = "WORM_ENTITY_CTOR"
+reference_va = 0x0050bfb0
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 14 8B 44 24 28 53 55 8B 6C 24 2C 56 57"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
 name = "WORM_START_FIRING"
 reference_va = 0x0051b7f0
 section = ".text"

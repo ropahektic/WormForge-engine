@@ -74,6 +74,12 @@ pub const WORM_STATE_JETPACKING: u32 = 0x78;
 /// setup_Parachuting; also entered directly by WormEntity__fire_parachute
 /// (0x51A680), from TryFireWeaponSpecial and the aiming handler.
 pub const WORM_STATE_PARACHUTING: u32 = 0x7D;
+/// `setup_Bungeing` (SetState's table at 0x50F484): hanging from a bungee.
+/// Project X's Swim Suit holds a swimming worm here (WS_BUNGEE).
+pub const WORM_STATE_BUNGEE: u32 = 0x7C;
+/// Drowning: WA's hurt handler enters it for water damage (kind 1); Project
+/// X's WS_SINKING.
+pub const WORM_STATE_SINKING: u32 = 0x7F;
 /// Jet pack fuel (16.16), drained by WormEntity__handle_JetPacking by the
 /// thrust / 10 each frame; 0 is unlimited, and running out sets 0x65.
 pub const WORM_JET_FUEL: usize = 0x220;
@@ -321,6 +327,21 @@ pub const TEAM_MSG_HANDLER: u32 = 0x0055_7310;
 pub const TEAM_MSG_CURSOR_CLICK: u32 = 0x32;
 /// TeamEntity index (`+0x38`); `data[0]` of every team message.
 pub const TEAM_INDEX: usize = 0x38;
+/// TeamEntity: the machine that controls the team, copied from its GameInfo
+/// team record's `owner_player_slot` (0 the host, 1.. the clients; negative
+/// for a computer team).
+pub const TEAM_OWNER_MACHINE: usize = 0x40;
+/// GameWorld's GameInfo, and in it this machine's index (`local_team_index`,
+/// set per machine by `InitTeamsFromLobby`: 0 the host, 1.. the clients).
+pub const GAME_WORLD_GAME_INFO: usize = 0x24;
+pub const GAME_INFO_LOCAL_MACHINE: usize = 0xD9DC;
+/// GameInfo: the match's gravity, 16.16, from the scheme. Every frame
+/// `TurnManager__ProcessFrame` (0x55FDA0, at 0x5603CF) sets the collision
+/// manager's gravity to it times `GAME_WORLD_GRAVITY_PCT` / 100.
+pub const GAME_INFO_GRAVITY: usize = 0xD9A8;
+/// GameWorld: the gravity percentage that recompute uses: 50 while a team's
+/// low gravity is on, else 100.
+pub const GAME_WORLD_GRAVITY_PCT: usize = 0x5F4;
 /// TeamEntity selected weapon slot (`+0x60`).
 pub const TEAM_SELECTED_WEAPON: usize = 0x60;
 /// TeamEntity colour index (`+0x50`). Stock land cursor sprite is
@@ -352,6 +373,15 @@ pub const STUB_RETURNS0: u32 = 0x0054_5780;
 pub const STUB_RETURNS1: u32 = 0x0059_2A50;
 pub const STUB_NOOP: u32 = 0x004A_A060;
 pub const SET_TEXTBOX_TEXT: u32 = 0x004F_B070;
+/// Textbox: its style row (0 small, 1 standard, 2 medium fonts), which
+/// `SetTextboxText` multiplies by 10 into its font table (0x6A9020) with the
+/// call's font index; and its cached scale, -1 to make the next call redraw
+/// (the cache compares the text, font index, colours and scale, not the style).
+pub const TEXTBOX_STYLE: usize = 0x8;
+pub const TEXTBOX_CACHED_SCALE: usize = 0x130;
+/// The small fonts' style row: font index 6 is `smlwht1.fnt`, 7 pixels high,
+/// half the HUD's (the world textbox is style 2, `medwht1.fnt`).
+pub const TEXTBOX_STYLE_SMALL: i32 = 0;
 pub const RENDER_WAITING_FOR_PEERS: u32 = 0x0053_4F20;
 pub const GAME_RENDER_WAIT_CALL: u32 = 0x0053_448B;
 pub const MISSILE_VTABLE: u32 = 0x0066_4438;
@@ -401,6 +431,10 @@ pub const MSG_HIT: u32 = 0x4B;
 pub const MSG_COMMIT_HEALTH: u32 = 0x44;
 /// Bazooka-style blast (`Explosion`).
 pub const MSG_EXPLOSION: u32 = 0x1C;
+/// SetWind: WA's wind change (RandomiseWind), data[0] the wind, 16.16.
+pub const MSG_SET_WIND: u32 = 0x54;
+/// The shared-data key WA's wind change sends it to.
+pub const SHARED_KEY_WIND: u32 = 0x14;
 /// Shot contact (`ProjectileImpact`) — same payload as explosion.
 pub const MSG_IMPACT: u32 = 0x76;
 
@@ -631,6 +665,10 @@ pub const CLASS_MISSILE: i32 = 11;
 pub const CLASS_CRATE: i32 = 15;
 pub const CLASS_WORM: i32 = 18;
 pub const CLASS_OIL: i32 = 30;
+/// WA CrossEntity, the gravestone left by a dead worm.
+pub const CLASS_GRAVE: i32 = 21;
+/// WormEntity::Constructor(this, team parent, team, worm, setup), WA 3.8.1.
+pub const WORM_ENTITY_CTOR: u32 = 0x0050_BFB0;
 /// The landscape (ClassType 28, 0x1C). It takes part in WA's entity
 /// contacts, so a worm touching down reaches `wa.on.contact` with it.
 pub const CLASS_LAND: i32 = 28;

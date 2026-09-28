@@ -172,6 +172,45 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     msg.set("IMPACT", 0x76).map_err(|e| e.to_string())?;
     wa.set("msg", msg).map_err(|e| e.to_string())?;
 
+    // `wa.perf.enable{ counter = true, profile = true }`: this machine's FPS
+    // counter and profiler. With no table, both. Nothing is readable back.
+    let perf = lua.create_table().map_err(|e| e.to_string())?;
+    let enable = lua
+        .create_function(|_, opts: Option<Table>| {
+            let flags = match opts {
+                None => crate::PerfFlags { counter: true, profile: true },
+                Some(t) => {
+                    let mut flags = crate::PerfFlags::default();
+                    for pair in t.pairs::<Value, Value>() {
+                        let (k, v) = pair?;
+                        let on = match v {
+                            Value::Boolean(b) => b,
+                            _ => {
+                                return Err(mlua::Error::external(
+                                    "wa.perf.enable: counter and profile take true or false",
+                                ))
+                            }
+                        };
+                        match k.as_str().as_deref() {
+                            Some("counter") => flags.counter = on,
+                            Some("profile") => flags.profile = on,
+                            _ => {
+                                return Err(mlua::Error::external(
+                                    "wa.perf.enable: unknown option (counter, profile)",
+                                ))
+                            }
+                        }
+                    }
+                    flags
+                }
+            };
+            crate::perf::enable(flags);
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    perf.set("enable", enable).map_err(|e| e.to_string())?;
+    wa.set("perf", perf).map_err(|e| e.to_string())?;
+
     let hooks = lua.create_table().map_err(|e| e.to_string())?;
     for name in [
         "gravity_before",
@@ -220,6 +259,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
 
     let draw = lua.create_table().map_err(|e| e.to_string())?;
     draw.set("quad", draw_quad_fn(lua)?).map_err(|e| e.to_string())?;
+    draw.set("ribbon", draw_ribbon_fn(lua)?).map_err(|e| e.to_string())?;
     draw.set("random", draw_random_fn(lua)?).map_err(|e| e.to_string())?;
     wa.set("draw", draw).map_err(|e| e.to_string())?;
 
@@ -1416,6 +1456,7 @@ fn draw_quad_fn(lua: &Lua) -> Result<Function, String> {
         dispatch::push_draw_quad(dispatch::DrawQuad {
             corners,
             colours,
+            uvs: [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
             sprite,
             frame: spec.get::<Option<u32>>("frame")?.unwrap_or(0),
             additive,
@@ -1424,6 +1465,111 @@ fn draw_quad_fn(lua: &Lua) -> Result<Function, String> {
         Ok(())
     })
     .map_err(|e| e.to_string())
+}
+
+/// `wa.draw.ribbon{ points = { {x,y,width,color,u}, ... }, sprite, blend, depth }`.
+/// Coordinates are 16.16; width is in pixels. Each adjacent pair forms a
+/// textured quad. The caller supplies u=0..1 along the whole beam, so the
+/// beam texture does not restart at every bend. This is presentation only.
+fn draw_ribbon_fn(lua: &Lua) -> Result<Function, String> {
+    lua.create_function(|lua, spec: Table| {
+        if !dispatch::drawing() {
+            return Err(mlua::Error::external("wa.draw.ribbon: only inside wa.on.draw"));
+        }
+        let points: Table = spec.get("points")?;
+        let count = points.len()? as usize;
+        if !(2..=256).contains(&count) {
+            return Err(mlua::Error::external("wa.draw.ribbon: points needs 2..256 entries"));
+        }
+        let name: String = spec.get("sprite")?;
+        let (sprite, ..) = crate::spawn::resolve_sprite_name(lua, &name)?;
+        let additive = match spec.get::<Option<String>>("blend")?.as_deref() {
+            None | Some("alpha") => false,
+            Some("add") => true,
+            Some(other) => return Err(mlua::Error::external(format!("wa.draw.ribbon: invalid blend {other:?}"))),
+        };
+        let depth = spec.get::<Option<u32>>("depth")?.unwrap_or(0x1_0000);
+        let mut data = Vec::with_capacity(count);
+        for i in 1..=count {
+            let p: Table = points.get(i)?;
+            let x = p.get::<f64>("x")? / 65536.0;
+            let y = p.get::<f64>("y")? / 65536.0;
+            let width = p.get::<f64>("width")?;
+            let u = p.get::<f64>("u")?;
+            if !x.is_finite() || !y.is_finite() || !width.is_finite() || !u.is_finite()
+                || !(0.0..=512.0).contains(&width) || !(0.0..=1.0).contains(&u) {
+                return Err(mlua::Error::external("wa.draw.ribbon: non-finite or out-of-range point"));
+            }
+            let colour = p.get::<Option<i64>>("color")?.unwrap_or(0xFFFF_FFFF) as u32;
+            data.push((x as f32, y as f32, width as f32, colour, u as f32));
+        }
+        let frame = spec.get::<Option<u32>>("frame")?.unwrap_or(0);
+        for (corners, colours, uvs) in ribbon_quads(&data) {
+            dispatch::push_draw_quad(dispatch::DrawQuad {
+                corners,
+                colours,
+                uvs,
+                sprite,
+                frame,
+                additive,
+                depth,
+            });
+        }
+        Ok(())
+    }).map_err(|e| e.to_string())
+}
+
+type RibbonQuad = ([(f32, f32); 4], [u32; 4], [(f32, f32); 4]);
+
+/// The quads of a ribbon through `points` (x, y, full width, colour, u).
+/// Each point has one normal, the average of the sections either side of it,
+/// and the sections on both sides share its two corners, so the strip bends
+/// without a kink or a gap at the joints (as Project X's `pxtexbeam` does).
+/// Points at the same place as the one before are skipped.
+fn ribbon_quads(points: &[(f32, f32, f32, u32, f32)]) -> Vec<RibbonQuad> {
+    let mut pts: Vec<(f32, f32, f32, u32, f32)> = Vec::with_capacity(points.len());
+    for &p in points {
+        if pts.last().is_none_or(|q| (p.0 - q.0).hypot(p.1 - q.1) > f32::EPSILON) {
+            pts.push(p);
+        }
+    }
+    if pts.len() < 2 {
+        return Vec::new();
+    }
+    // Each section's unit normal.
+    let section: Vec<(f32, f32)> = pts
+        .windows(2)
+        .map(|w| {
+            let (dx, dy) = (w[1].0 - w[0].0, w[1].1 - w[0].1);
+            let length = dx.hypot(dy);
+            (-dy / length, dx / length)
+        })
+        .collect();
+    // Each point's: its one section's at the ends, else the two averaged.
+    let normal: Vec<(f32, f32)> = (0..pts.len())
+        .map(|i| {
+            let before = section[i.saturating_sub(1)];
+            let after = section[i.min(section.len() - 1)];
+            let (nx, ny) = (before.0 + after.0, before.1 + after.1);
+            let length = nx.hypot(ny);
+            if length <= f32::EPSILON { after } else { (nx / length, ny / length) }
+        })
+        .collect();
+    let side = |i: usize, sign: f32| {
+        let (x, y, w, ..) = pts[i];
+        (x + sign * normal[i].0 * w * 0.5, y + sign * normal[i].1 * w * 0.5)
+    };
+    (0..pts.len() - 1)
+        .map(|i| {
+            let (c0, u0) = (pts[i].3, pts[i].4);
+            let (c1, u1) = (pts[i + 1].3, pts[i + 1].4);
+            (
+                [side(i, 1.0), side(i + 1, 1.0), side(i + 1, -1.0), side(i, -1.0)],
+                [c0, c1, c1, c0],
+                [(u0, 0.0), (u1, 0.0), (u1, 1.0), (u0, 1.0)],
+            )
+        })
+        .collect()
 }
 
 /// `wa.draw.random()`: 0 <= r < 1, for looks only (flicker, jitter). A
@@ -1449,6 +1595,30 @@ fn draw_random_fn(lua: &Lua) -> Result<Function, String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn ribbon_sections_share_their_corners_at_a_bend() {
+        // Right 10, then down 10: a right-angle bend at (10, 0).
+        let quads = ribbon_quads(&[
+            (0.0, 0.0, 4.0, 1, 0.0),
+            (10.0, 0.0, 4.0, 2, 0.5),
+            (10.0, 0.0, 4.0, 2, 0.5), // a repeat, skipped
+            (10.0, 10.0, 2.0, 3, 1.0),
+        ]);
+        assert_eq!(quads.len(), 2);
+        let (first, second) = (quads[0].0, quads[1].0);
+        // The joint's two corners are the same in both sections.
+        assert_eq!((first[1], first[2]), (second[0], second[3]));
+        // Across the joint: the full width, along the averaged normal.
+        let (a, b) = (first[1], first[2]);
+        assert!(((a.0 - b.0).hypot(a.1 - b.1) - 4.0).abs() < 1e-4);
+        assert!((a.0 - 10.0 + 2.0 / 2f32.sqrt()).abs() < 1e-4 && (a.1 - 2.0 / 2f32.sqrt()).abs() < 1e-4);
+        // The far end: its own section's normal, its own width.
+        assert_eq!((second[1], second[2]), ((9.0, 10.0), (11.0, 10.0)));
+        assert_eq!(quads[1].1, [2, 3, 3, 2]);
+        assert_eq!(quads[1].2, [(0.5, 0.0), (1.0, 0.0), (1.0, 1.0), (0.5, 1.0)]);
+    }
+
     use super::*;
 
     fn ctx(mod_id: &str) -> BindContext {

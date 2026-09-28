@@ -73,6 +73,12 @@ function Worm:ammo(name, change)
   store[name] = change.set
   return change.set
 end
+function Worm:heal(amount) if self.hp > 0 then self.hp = self.hp + amount end end
+function Worm:hurt(amount) self.hp = math.max(0, self.hp - amount) end
+function Worm:carry(x, y) self.x, self.y, self.carried = x, y, true end
+function Worm:drop() self.carried = false end
+function Worm:clear_keys() self.keys = {} end
+function Worm:set_state(state) self.state = state end
 
 local function inventory_api()
   local api = {}
@@ -183,6 +189,7 @@ local function new_match(opts)
     for index = 0, 1 do
       worms[#worms + 1] = setmetatable({
         id = team * 16 + index, team = team, alliance = team - 1, hp = 100,
+        kind = "worm", x = 0, y = 0, facing = 1,
         gravity = 0x10000, -- WA's normal
       }, Worm)
     end
@@ -196,16 +203,24 @@ local function new_match(opts)
     ammo[a].skip_go = -1
   end
   wa = {
+    sorted = function(t)
+      local out = {}
+      for k in pairs(t) do out[#out + 1] = k end
+      table.sort(out)
+      return out
+    end,
     log = function(s) logs[#logs + 1] = s end,
-    hud = { line = function() end },
-    msg = { FRAME_FINISH = 2, START_TURN = 0x34, FIRE_WEAPON = 0x26 },
+    hud = { line = function(text) M.hud_lines = M.hud_lines or {}; M.hud_lines[#M.hud_lines + 1] = text end },
+    msg = { FRAME_FINISH = 2, START_TURN = 0x34, FIRE_WEAPON = 0x26, JUMP = 0x24 },
     world = {
       cavern = function() return cavern end,
       retreat = function() return M.retreat or 0 end,
       water = function() return M.water or 0x7FFFFFFF end,
       gravity = function() return M.gravity or 0 end,
       wind = function() return M.wind or 0 end,
-      keys = function() return { sprint = M.shift or false } end,
+      keys = function() return { sprint = M.shift or false, digit = M.digit } end,
+      set_gravity = function(v) M.gravity = v end,
+      set_wind = function(v) M.wind = v end,
     },
     -- A fixed LCG: the pack must not care which numbers, only that it draws
     -- through here.
@@ -223,6 +238,10 @@ local function new_match(opts)
         return live
       end,
     },
+    mines = { all = function() return M.mines end },
+    crates = { all = function() return M.crates end },
+    oil = { all = function() return M.oil end },
+    graves = { all = function() return M.graves end },
     inventory = inventory_api(),
     land = {
       cut = function(spec)
@@ -237,6 +256,7 @@ local function new_match(opts)
     },
     draw = {
       quad = function(q) M.quads[#M.quads + 1] = q end,
+      ribbon = function(q) M.ribbons[#M.ribbons + 1] = q end,
       random = function() return 0.5 end,
     },
     sound = {
@@ -262,7 +282,7 @@ local function new_match(opts)
         if spec.owner == nil then
           error("spawn needs an owner worm or actor", 2)
         end
-        local a = { sprite = spec.sprite, x = spec.x, y = spec.y, dead = false, explode = spec.explode,
+        local a = { sprite = spec.sprite, x = spec.x, y = spec.y, dead = false, explode = spec.explode, on = spec.on,
                     owner = spec.owner }
         function a:gfx(g)
           self.angle, self.scale, self.tint, self.blend, self.depth = g.angle, g.scale, g.tint, g.blend, g.depth
@@ -293,8 +313,13 @@ local function new_match(opts)
       worm_message = function(f)
         M.handlers = M.handlers or {}
         M.handlers[#M.handlers + 1] = f
+        -- "eat" from any handler swallows the message, as the engine's.
         M.message = function(w, msg)
-          for _, h in ipairs(M.handlers) do h(w, msg) end
+          local eat
+          for _, h in ipairs(M.handlers) do
+            if h(w, msg) == "eat" then eat = "eat" end
+          end
+          return eat
         end
       end,
       -- Every handler, as for worm_message: the balloon's and the rules'.
@@ -314,11 +339,24 @@ local function new_match(opts)
       end,
       death = function(f) M.death = f end,
       hud = function(f) M.hud = f end,
-      draw = function(f) M.draw = f end,
-      contact = function(f) M.contact = f end,
+      draw = function(f)
+        M.draws = M.draws or {}
+        M.draws[#M.draws + 1] = f
+        M.draw = function()
+          for _, h in ipairs(M.draws) do h() end
+        end
+      end,
+      contact = function(f)
+        M.contacts = M.contacts or {}
+        M.contacts[#M.contacts + 1] = f
+        M.contact = function(...)
+          for _, h in ipairs(M.contacts) do h(...) end
+        end
+      end,
     },
   }
-  M.quads, M.sounds, M.trace_hit = {}, {}, nil
+  M.quads, M.ribbons, M.sounds, M.trace_hit, M.draws = {}, {}, {}, nil, nil
+  M.mines, M.crates, M.oil, M.graves = {}, {}, {}, {}
   dofile("mods/examples/highlander/rules.lua")
 end
 
@@ -416,7 +454,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("45 slots replaced, each once", #replaced == 45 and not dupes, tostring(#replaced))
+  check("51 slots replaced, each once", #replaced == 51 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -436,9 +474,14 @@ do
   end
   local own_file = true
   for slot, spec in pairs(by_slot) do
-    if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
+    if slot == "earthquake" or slot == "napalm_strike" then
+      if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
+    elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
-  check("each from its own scheme record", own_file)
+  check("PX lightning slots use scheme records; others copy stock", own_file)
+  check("Lightning Strike claims the stock land cursor and click dispatch",
+    by_slot.napalm_strike and by_slot.napalm_strike.on_select.cursor
+      and type(by_slot.napalm_strike.on_click) == "function")
   check("Baseball Bat on the girder slot, with its own icon",
     by_slot.girder and by_slot.girder.panel_icon == "baseball_bat")
   check("a weapon on its own slot keeps its icon",
@@ -582,6 +625,7 @@ do
   ammo[0].bungee = 1 -- one left over from the last turn
   turn(16)
   check("the active team has 3 again", ammo[0].bungee == 3, tostring(ammo[0].bungee))
+  check("and a Wind Changer", ammo[0].surrender == 1, tostring(ammo[0].surrender))
 end
 
 print("turn: only the active worm's hand is usable, one of each")
@@ -1159,15 +1203,10 @@ do
   for _, r in ipairs(replaced) do
     if r.weapon == "bazooka" then spec = r end
   end
-  local wep_file = io and io.open("mods/examples/highlander/weps/bazooka.wep", "rb")
-  if wep_file then
-    local wep = wep_file:read("a")
-    wep_file:close()
-    check("held as a plain bazooka: launcher 3 at +0x34, not the scheme's 7",
-      string.unpack("<i4", wep, 4 + 0x34 + 1) == 3)
-  end
+  check("held as a plain bazooka: subtype_param stays stock (3), not the scheme's 7",
+    not (spec.patch and spec.patch.subtype_param))
   check("the Double Bazooka on the bazooka slot, with its icon and an explode step", spec
-    and spec.wep == "weps/bazooka.wep" and spec.panel_icon == "sprites/double_bazooka/double_bazooka_ico.png"
+    and spec.copy_from == "bazooka" and spec.panel_icon == "sprites/double_bazooka/double_bazooka_ico.png"
     and type(spec.on_explode) == "function")
   local w = worm(16)
   w.weapon = "bazooka"
@@ -1208,7 +1247,7 @@ do
     if r.weapon == "super_banana" then spec = r end
   end
   check("the Chilli Bomb on the super banana slot, with its icon, the banana kept, and an explode step", spec
-    and spec.wep == "weps/super_banana.wep" and spec.panel_icon == "sprites/chilli_bomb/chilli_ico.png"
+    and spec.copy_from == "super_banana" and spec.panel_icon == "sprites/chilli_bomb/chilli_ico.png"
     and spec.sprite == "banana" and type(spec.on_explode) == "function")
   local w = worm(16)
   w.weapon = "super_banana"
@@ -1257,7 +1296,7 @@ do
     if r.weapon == "mine" then spec = r end
   end
   check("the Nuke Rocket on the mine slot, its icon, its rocket, an explode step", spec
-    and spec.wep == "weps/mine.wep" and spec.panel_icon == "sprites/nuke_rocket/nuke_rocket_ico.png"
+    and spec.copy_from == "mine" and spec.panel_icon == "sprites/nuke_rocket/nuke_rocket_ico.png"
     and spec.sprite == "sprites/nuke_rocket/nuke_rocket_bullet.png" and type(spec.on_explode) == "function")
   check("its launch sound registered, so it can play", spec.sounds and spec.sounds[1] == "sounds/nuke_rocket_launch.wav")
   for _, o in ipairs(worms) do
@@ -1536,6 +1575,149 @@ do
   check("the Hot Air Balloon's parachute is left alone", not glider)
 end
 
+print("swim suit: PX's swimming on WA's laser sight")
+do
+  new_match()
+  frame()
+  local P = 0x10000
+  M.water = 500 * P
+  local w = worm(16)
+  for i, o in ipairs(worms) do
+    if o ~= w then o.x, o.y, o.turn = -1000 * P * i, 0, false end
+  end
+  w.weapon, w.state, w.x, w.y, w.vx, w.vy, w.facing, w.turn = "laser_sight", "standing", 100 * P, 400 * P, 0, 0, 1, true
+  w.gravity, w.body_visible, w.keys, w.collision_mask = P, true, {}, 0x420CC6
+  function w:set_state(s) self.state = s end
+  function w:clear_keys() self.keys = {} end
+  local spent = 0
+  function w:ammo(slot, n) if slot == "laser_sight" then spent = spent + n end end
+  M.spawned, M.sounds, M.quads = {}, {}, {}
+  check("putting it on replaces WA's laser sight", M.message(w, wa.msg.FIRE_WEAPON) == "eat" and spent == -1)
+  check("the suit's mask: without the bit WA's water acts on", w.collision_mask == 134342)
+  check("its sound", M.sounds[#M.sounds] == "sounds/swim_suit/putting_on_ssuit.wav")
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.draw()
+  check("a bubble while worn", #M.quads == 1 and M.quads[1].sprite == "sprites/swim_suit/ring")
+  local bubble = M.quads[1]
+  local h = 25 * P
+  check("centred on the worm", bubble.points[1][1] == w.x - h and bubble.points[3][1] == w.x + h
+    and bubble.points[1][2] == w.y - h and bubble.points[3][2] == w.y + h)
+  -- Into the water, falling fast: a splash, no gravity, the speed capped, a
+  -- bungee's state.
+  w.state, w.y, w.vx, w.vy = "sliding", 510 * P, 9 * P, 12 * P
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("splash, no gravity, swimming", M.sounds[#M.sounds] == 57 and w.gravity == 0 and w.state == "bungee")
+  check("the speed capped at 5 (2.5 times the swim speed 2), then eased", w.vx < 5 * P and w.vy < 5 * P
+    and w.vx > 4 * P, w.vx .. " " .. w.vy)
+  check("the swim animation in its place, facing left art mirrored", w.body_visible == false
+    and M.spawned[#M.spawned].sprite == "sprites/swim_suit/swim" and M.spawned[#M.spawned].facing == -1)
+  -- Swimming left: a push, turned, and the key used up.
+  w.vx, w.vy, w.keys = 0, 0, { left = true }
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("left: 0.2 a frame that way, facing it, the key taken", w.vx == -13107 and w.facing == -1
+    and not w.keys.left, tostring(w.vx))
+  check("no jumping while it swims", M.message(w, wa.msg.JUMP) == "eat")
+  -- Still, no key: the float animation.
+  w.vx, w.vy = 0, 0
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("still: floating", M.spawned[#M.spawned].sprite == "sprites/swim_suit/float")
+  -- Out of the water: on as from a jump, gravity back.
+  w.y, w.vy = 490 * P, -2 * P
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("out: airborne, gravity back, the suit still on", w.state == "sliding" and w.gravity == P
+    and w.collision_mask == 134342)
+  -- Back in, then too deep: it gives out and the worm sinks.
+  w.y = 510 * P
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.y = 700 * P
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("too deep: sinking, the water's bit back in its mask, drawn as itself", w.state == "sinking"
+    and w.collision_mask == 134342 | 0x400000 and w.body_visible == true)
+  -- Fast Walk: swim speed 6 for the turn.
+  w.weapon = "fast_walk"
+  M.message(w, wa.msg.FIRE_WEAPON)
+  w.weapon, w.state, w.y, w.vx, w.vy = "laser_sight", "sliding", 400 * P, 0, 0
+  M.message(w, wa.msg.FIRE_WEAPON)
+  w.y, w.vx, w.vy = 510 * P, 20 * P, 0
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("Fast Walk: capped at 15", w.vx > 14 * P and w.vx <= 15 * P, tostring(w.vx / P))
+  -- A missile in the water hits worms, and blows up on a swimmer.
+  local m = { id = 1, phase = "pre", weapon = "bazooka", x = 0, y = 0, vx = 0, vy = 0, collision_mask = 0x400000 }
+  M.missile(m)
+  check("a missile in the water also hits worms", m.collision_mask == 0x40007C)
+  local n = #M.spawned
+  local missile = { kind = "missile", x = 120 * P, y = 520 * P }
+  M.contact(w, missile, { vx = 0, vy = 0, flags = 0 })
+  local boom = M.spawned[n + 1]
+  check("it blows up on the swimmer (100, 50) and is gone", boom and boom.explode and boom.explode.damage == 100
+    and boom.explode.id == 50 and missile.y > M.water)
+  M.turn_start({ worm = w, active = w })
+end
+
+print("wind changer and gravity control: 0-9 and 1-5, then fire")
+do
+  new_match()
+  M.gravity, M.wind, M.digit = 0x3AE, 0, nil
+  frame()
+  local P = 0x10000
+  M.sounds = {}
+  local w = worm(16)
+  for _, o in ipairs(worms) do o.turn = false end
+  w.turn, w.facing, w.weapon = true, -1, "surrender"
+  -- Choose 7: once, on the key going down.
+  M.digit = 7
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("a digit counts once, when it goes down", #M.sounds == 1 and M.sounds[1] == 107)
+  M.hud_lines = {}
+  M.hud()
+  check("the HUD says the force and the keys", M.hud_lines[1] and M.hud_lines[1]:find("force 7"))
+  M.digit = nil
+  check("firing it goes on to WA's no-op utility", M.message(w, wa.msg.FIRE_WEAPON) == nil)
+  check("wind 7 x 0.0317 towards where the worm faces, a strong wind (6 and up)",
+    M.wind == -math.floor(7 * 0.0317 * P) and M.sounds[#M.sounds] == "sounds/wind_changer/strong_wind.wav",
+    tostring(M.wind) .. " " .. tostring(M.sounds[#M.sounds]))
+  -- Gravity Control: nothing chosen, no shot.
+  w.weapon = "low_gravity"
+  check("nothing chosen: not fired, an error sound", M.message(w, wa.msg.FIRE_WEAPON) == "eat"
+    and M.sounds[#M.sounds] == "sounds/gravity_control/error.wav" and M.gravity == 0x3AE)
+  M.digit = 9
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.digit = 5
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.digit = nil
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("5: very high gravity chosen (9 means nothing)", M.message(w, wa.msg.FIRE_WEAPON) == nil
+    and M.gravity == math.floor(0x3AE * 2.4), tostring(M.gravity))
+  M.turn_start({ worm = w, active = w })
+  check("the next turn: the match's gravity", M.gravity == 0x3AE)
+end
+
+print("jump: the worm leaves with the shot")
+do
+  new_match()
+  frame()
+  local P = 0x10000
+  local spec
+  for _, r in ipairs(replaced) do
+    if r.weapon == "ninja_rope" then spec = r end
+  end
+  check("on the ninja rope's slot, PX's record and aim sheets", spec and spec.copy_from == "ninja_rope"
+    and spec.worm_sprites.weaponlnk == "sprites/jump/aim" and type(spec.on_fire) == "function")
+  local w = worm(33)
+  w.turn, w.weapon, w.facing, w.body_visible = true, "ninja_rope", 1, true
+  w.x, w.y, w.vx, w.vy, w.state = 100 * P, 50 * P, 0, 0, "standing"
+  function w:set_state(s) self.state = s end
+  M.spawned, M.sounds = {}, {}
+  M.message(w, wa.msg.FIRE_WEAPON)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("charging: the worm keeps its aim posture", #M.spawned == 0 and w.body_visible)
+  spec.on_fire({ worm = w, x = w.x, y = w.y, vx = 3 * P, vy = -5 * P })
+  check("fired: the shot's speed, airborne", w.vx == 3 * P and w.vy == -5 * P and w.state == "sliding")
+  check("the team's Jump line: team 2's bank", M.sounds[#M.sounds] == 150 + 54, tostring(M.sounds[#M.sounds]))
+end
+
 print("px missile sprites: WeapSprite at run time")
 do
   new_match()
@@ -1583,6 +1765,191 @@ do
     shown[bullet.shown] = true
   end
   check("steps through all sixteen frames", shown[0] and shown[15])
+end
+
+print("lightning strike: warning, hit, grave identity and copied hand")
+do
+  local P = 0x10000
+  new_match()
+  local by_slot = {}
+  for _, spec in ipairs(replaced) do by_slot[spec.weapon] = spec end
+  local owner, target = worm(16), worm(17)
+  owner.x, owner.y = 100 * P, 100 * P
+  target.x, target.y = 100 * P, 100 * P
+  for _, w in ipairs(worms) do
+    if w ~= owner and w ~= target then w.x, w.y = 1000 * P, 1000 * P end
+  end
+  by_slot.napalm_strike.on_click({ worm=owner, x=100*P, y=100*P })
+  local effect = M.spawned[#M.spawned]
+  for _ = 1, 149 do effect.on(effect) end
+  check("150 frame warning leaves health alone", target.hp == 100)
+  effect.on(effect)
+  M.draw()
+  check("active strike emits a terrain-occluded GPU ribbon",
+    #M.ribbons > 0 and M.ribbons[1].depth == 0x00190000)
+  for _ = 1, 15 do effect.on(effect) end
+  check("beam stays active for 16 frames", target.hp == 100)
+  effect.on(effect)
+  check("final hit heals the living worm by 25", target.hp == 125)
+  M.quads = {}
+  M.draw()
+  local puffs = 0
+  for _, q in ipairs(M.quads) do
+    if q.sprite == "sprites/lightning/cloud.png" and q.blend == "alpha" and (q.color & 0xFFFFFF) == 0x2D283C then
+      puffs = puffs + 1
+    end
+  end
+  check("PX's cloud: dark puffs built up over the warning, drawn behind the terrain", puffs > 60, tostring(puffs))
+  for _ = 1, 60 do effect.on(effect) end
+  check("after the 60 frame tail the effect waits for its last puff", not effect.dead)
+  for _ = 1, 140 do effect.on(effect) end
+  check("the last puff gone, the effect is released", effect.dead)
+
+  -- The grave is matched to the dead worm before the strike; revival returns
+  -- the same stable ID and restores the copied inventory to that worm.
+  new_match()
+  by_slot = {}
+  for _, spec in ipairs(replaced) do by_slot[spec.weapon] = spec end
+  owner, target = worm(16), worm(17)
+  owner.x, owner.y = 100 * P, 100 * P
+  target.x, target.y = 140 * P, 100 * P
+  for _, w in ipairs(worms) do
+    if w ~= owner and w ~= target then w.x, w.y = 1000 * P, 1000 * P end
+  end
+  turn(16)
+  frame()
+  local original = hand(17)
+  kill(17)
+  remove(17)
+  local grave = { id=701, kind="grave", worm_id=17, x=140*P, y=100*P }
+  function grave:revive(id, hp)
+    assert(id == 17 and hp == 10)
+    local revived = setmetatable({ id=id, kind="worm", team=1, alliance=0,
+      hp=hp, x=self.x, y=self.y-5*P, facing=1 }, Worm)
+    worms[#worms+1] = revived
+    M.graves = {}
+    return revived
+  end
+  M.graves = { grave }
+  by_slot.napalm_strike.on_click({ worm=owner, x=140*P, y=100*P })
+  effect = M.spawned[#M.spawned]
+  for _ = 1, 166 do effect.on(effect) end
+  local revived = worm(17)
+  check("linked grave revives its own worm at 10 HP", revived and revived.hp == 10)
+  turn(17)
+  local have = {}
+  for _, name in ipairs(original) do have[name] = true end
+  local restored = true
+  for name in pairs(have) do if ammo[0][name] ~= 1 then restored = false end end
+  check("the original Highlander hand is restored", restored)
+
+  new_match()
+  by_slot = {}
+  for _, spec in ipairs(replaced) do by_slot[spec.weapon] = spec end
+  owner = worm(16)
+  owner.x, owner.y = 100*P, 100*P
+  for _, w in ipairs(worms) do if w ~= owner then w.x, w.y = 1000*P, 1000*P end end
+  local mine = { id=702, kind="mine", x=100*P, y=100*P, fuse=2500 }
+  function mine:arm(fuse) self.armed = fuse end
+  M.mines = {mine}
+  local before_rng = rng
+  by_slot.napalm_strike.on_click({ worm=owner, x=100*P, y=100*P })
+  effect = M.spawned[#M.spawned]
+  for _ = 1, 166 do effect.on(effect) end
+  check("a fixed-fuse mine keeps its timer without an RNG draw",
+    mine.armed == 2500 and rng == before_rng)
+  mine.fuse, mine.armed = -1, nil
+  by_slot.napalm_strike.on_click({ worm=owner, x=100*P, y=100*P })
+  effect = M.spawned[#M.spawned]
+  for _ = 1, 166 do effect.on(effect) end
+  check("a random-fuse mine draws one 1–5 s fuse in simulation",
+    mine.armed >= 1000 and mine.armed <= 5000 and rng ~= before_rng)
+end
+
+print("electric grenade: seek, delayed zap, and target kinds")
+do
+  local P = 0x10000
+  local function setup()
+    new_match()
+    local spec
+    for _, r in ipairs(replaced) do if r.weapon == "earthquake" then spec = r end end
+    local owner = worm(16)
+    for _, w in ipairs(worms) do w.x, w.y = 1000*P, 1000*P end
+    owner.x, owner.y = 0, 0
+    return spec, owner
+  end
+  local function tick(n)
+    local a = M.spawned[#M.spawned]
+    for _ = 1, n do if not a.dead then a.on(a) end end
+  end
+  local spec, owner = setup()
+  check("a stock grenade for the worm's throw sheet, PX's hold over it",
+    spec.sprite == "grenade" and spec.worm_sprites and spec.worm_sprites.weaponlnk == "sprites/px_hold/aim"
+    and spec.params.gpu_prefix == "sprites/px_hold/")
+  -- In flight: the stock grenade hidden, PX's grenade drawn in its place.
+  M.spawned = {}
+  owner.turn = true
+  local m = { id = 501, phase = "pre", weapon = "earthquake", x = 10*P, y = 20*P, vx = P, vy = 0, sprite = 50 }
+  M.missile(m)
+  m.phase = "post"
+  M.missile(m)
+  check("thrown: WA's sprite hidden, PX's grenade follows it", m.sprite == 0
+    and M.spawned[1] and M.spawned[1].sprite == "sprites/px_hold/electric_grenade.png")
+  -- It spins as a grenade (its record's WAT_Rotation), not faces its flight:
+  -- flying right at 4 px a frame, 0.5 * 4 * 0.15 = 0.3 rad a frame.
+  m.vx, m.vy = 4*P, 0
+  local before = M.spawned[1].angle
+  M.missile(m)
+  local turned = (M.spawned[1].angle - before) % 360
+  check("thrown: it spins with its speed, as PX's grenade", math.abs(turned - math.deg(0.3)) < 1e-6,
+    tostring(turned))
+  owner.turn = false
+  local target = worm(17)
+  target.x, target.y = 5*P, 0
+  spec.on_explode({ worm=owner, x=0, y=0 })
+  tick(1)
+  check("near worm is held in tazed pose", target.carried and target.body_visible == false)
+  -- The current, drawn: a glow at every point of the strip, and PX's
+  -- widths (9 at the thickest, a half width).
+  M.quads, M.ribbons = {}, {}
+  M.draw()
+  local glows = 0
+  for _, q in ipairs(M.quads) do if q.sprite == "sprites/lightning/glow.png" then glows = glows + 1 end end
+  local strip = M.ribbons[1]
+  check("the current glows at every point, PX's width at its ends",
+    strip and glows >= #strip.points and math.abs(strip.points[1].width - 2 * 9 * 0.1) < 1e-9,
+    tostring(glows) .. " glows")
+  tick(23)
+  check("zap waits 24 frames", target.hp == 100)
+  tick(1)
+  check("zap deals 24 and releases movement", target.hp == 76 and target.carried == false
+    and target.body_visible == true)
+  spec, owner = setup()
+  local first, second = worm(17), worm(32)
+  first.x, first.y = 5*P, 0
+  second.x, second.y = 14*P, 0
+  spec.on_explode({ worm=owner, x=0, y=0 })
+  tick(50)
+  check("arc chains to a second unvisited worm", first.hp == 76 and second.hp == 76)
+  spec, owner = setup()
+  local mine = { id=800, kind="mine", x=5*P, y=0 }
+  function mine:arm(fuse) self.fuse = fuse end
+  M.mines = {mine}
+  spec.on_explode({ worm=owner, x=0, y=0 })
+  tick(25)
+  check("chained mine arms on a 400 ms fuse", mine.fuse == 400)
+  spec, owner = setup()
+  local crate = { id=801, kind="crate", x=5*P, y=0 }
+  function crate:hit(damage) self.damage = damage end
+  M.crates = {crate}
+  spec.on_explode({ worm=owner, x=0, y=0 })
+  tick(25)
+  check("object zap passes 12 damage", crate.damage == 12)
+  spec, owner = setup()
+  M.trace_hit = { x=0, y=-5*P, nx=1, ny=0, tx=0, ty=1, starts_solid=false }
+  spec.on_explode({ worm=owner, x=0, y=0 })
+  tick(1)
+  check("terrain trace can redirect the arc", #M.spawned > 0 and not M.spawned[#M.spawned].dead)
 end
 
 print("pack sounds: every WAV registered")

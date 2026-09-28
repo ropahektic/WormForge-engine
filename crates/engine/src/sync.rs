@@ -68,6 +68,9 @@ const MODSET_MAX_BYTES: u32 = 4096;
 #[derive(Clone, Copy)]
 struct LiveInput {
     sample: InputSample,
+    /// The team whose turn it was when this was accepted: its input holds
+    /// for that turn only.
+    team: u32,
 }
 
 static LIVE_INPUT: Mutex<Option<LiveInput>> = Mutex::new(None);
@@ -339,16 +342,50 @@ unsafe fn push_checkpoint(buffer: *mut BufferObject, tag: u32, frame: u32, hash:
     true
 }
 
-fn set_input(_frame: i32, sample: InputSample) {
+fn set_input(_frame: i32, sample: InputSample, team: u32) {
     let Ok(mut live) = LIVE_INPUT.lock() else {
         return;
     };
-    *live = Some(LiveInput { sample });
+    *live = Some(LiveInput { sample, team });
 }
 
+/// The input of the turn in progress: none before its player's first record
+/// (a new turn starts with no key held), or between turns.
 fn current_input() -> Option<InputSample> {
+    let (team, _) = turn_control()?;
     let live = LIVE_INPUT.lock().ok()?;
-    Some(live.as_ref()?.sample)
+    let live = live.as_ref()?;
+    (live.team == team).then_some(live.sample)
+}
+
+/// The team whose turn it is (the parent of the worm whose turn it is) and
+/// the machine that controls it. Every peer reads the same, at the same
+/// point of the lockstep.
+fn turn_control() -> Option<(u32, i32)> {
+    let worm = crate::actor::list_worms_pub(0)
+        .into_iter()
+        .find(|&w| w != 0 && unsafe { read_i32(w as *mut u8, game::offsets::WORM_TURN_ACTIVE) } != 0)?;
+    let team = unsafe { read_i32(worm as *mut u8, game::offsets::ENT_PARENT) } as u32;
+    if team == 0 {
+        return None;
+    }
+    Some((team, unsafe { read_i32(team as *mut u8, game::offsets::TEAM_OWNER_MACHINE) }))
+}
+
+/// Whether a record counts: only one from the machine whose turn it is. One
+/// that does not say who sent it (an older build) never does, nor does any
+/// during a computer team's turn (a negative owner).
+fn accepts(sender: Option<u8>, owner: i32) -> bool {
+    sender.map(|s| s as i32) == Some(owner)
+}
+
+/// This machine's index among the players (0 the host).
+fn local_machine(world: *mut u8) -> Option<u8> {
+    let info = unsafe { read_i32(world, game::offsets::GAME_WORLD_GAME_INFO) } as *mut u8;
+    if info.is_null() {
+        return None;
+    }
+    Some(unsafe { *info.add(game::offsets::GAME_INFO_LOCAL_MACHINE) } as u8)
 }
 
 /// Latest state published by the player whose WA input queue is authoritative.
@@ -359,8 +396,8 @@ pub(crate) fn input(_frame: i64) -> Option<(u32, i32, i32, bool)> {
     Some((sample.keys, sample.px, sample.py, sample.down))
 }
 
-unsafe fn push_input(buffer: *mut BufferObject, sample: InputSample) -> bool {
-    let (controls, pointer) = sync_input::pack(sample);
+unsafe fn push_input(buffer: *mut BufferObject, sample: InputSample, sender: u8) -> bool {
+    let (controls, pointer) = sync_input::pack_from(sample, sender);
     push_checkpoint(buffer, TAG_INPUT, controls, pointer)
 }
 
@@ -390,7 +427,15 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
         }
         let buffer = *(runtime.add(0x40) as *const *mut BufferObject);
 
+        // Only the machine whose team is taking its turn publishes input: the
+        // other player's keys are not this turn's. (Records from anyone else
+        // are dropped on arrival, too.)
         if LAST_INPUT_OBSERVED_FRAME.swap(frame_u32, Ordering::Relaxed) != frame_u32 {
+            let me = local_machine(world);
+            let my_turn = match (me, turn_control()) {
+                (Some(me), Some((_, owner))) => owner == me as i32,
+                _ => false,
+            };
             let local = crate::world::local_input_for_sync();
             // Quantize locally through the wire representation too, so the
             // sender consumes exactly the value received by its peers.
@@ -403,9 +448,11 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
             let (controls, pointer) = sync_input::pack(local);
             let wire =
                 sync_input::unpack(controls, pointer).expect("locally packed input is valid");
+            let sender = me.unwrap_or(0);
             let pointer_requested = crate::world::take_pointer_sync_request();
             let last_sent = LAST_INPUT_SENT_FRAME.load(Ordering::Relaxed);
-            let should_send = sync_input::should_send(
+            let should_send = my_turn
+                && sync_input::should_send(
                 current_input(),
                 wire,
                 frame_u32,
@@ -413,7 +460,7 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
                 pointer_requested,
             );
             if should_send {
-                if push_input(buffer, wire) {
+                if push_input(buffer, wire, sender) {
                     LAST_INPUT_SENT_FRAME.store(frame_u32, Ordering::Relaxed);
                     log_line(&format!(
                         "sync input tx f={frame} keys={:#04x} pointer={},{} down={}",
@@ -500,10 +547,24 @@ unsafe extern "C" fn receive_live_checkpoint(
                 return 1;
             }
             let current = read_i32(world, GAME_WORLD_FRAME_COUNTER);
-            let Some(sample) = sync_input::unpack(frame, remote) else {
+            let Some((sample, sender)) = sync_input::unpack_from(frame, remote) else {
                 log_error(&format!("sync input: malformed control bits {frame:#010x}"));
                 return 1;
             };
+            // Only the input of the machine whose turn it is counts. A record
+            // still on the wire from the last turn's player, or sent by an
+            // older build that did not say who it came from, is dropped.
+            let Some((team, owner)) = turn_control() else {
+                return 1;
+            };
+            if !accepts(sender, owner) {
+                log_line(&format!(
+                    "sync input rx f={current} keys={:#04x} from machine {sender:?} dropped: \
+                     machine {owner}'s turn",
+                    sample.keys
+                ));
+                return 1;
+            }
             if diagnostics_enabled() && sample.keys & 0x80 != 0 && current >= 0 {
                 STOCK_TRACE_LINES.store(0, Ordering::Relaxed);
                 STOCK_TRACE_UNTIL.store((current as u32).saturating_add(25), Ordering::Relaxed);
@@ -512,7 +573,7 @@ unsafe extern "C" fn receive_live_checkpoint(
                     (current as u32).saturating_add(25)
                 ));
             }
-            set_input(current, sample);
+            set_input(current, sample, team);
             log_line(&format!(
                 "sync input rx f={current} keys={:#04x} pointer={},{} down={}",
                 sample.keys,
@@ -1099,4 +1160,19 @@ pub fn finish() {
         g.clear();
     }
     crate::world::clear_input_latch();
+}
+
+#[cfg(test)]
+mod input_owner_tests {
+    use super::accepts;
+
+    #[test]
+    fn only_the_turns_own_machine_steers_it() {
+        assert!(accepts(Some(0), 0), "the host on the host's turn");
+        assert!(accepts(Some(1), 1), "a client on its own turn");
+        assert!(!accepts(Some(1), 0), "the client's keys on the host's turn");
+        assert!(!accepts(Some(0), 1));
+        assert!(!accepts(None, 0), "an unstamped record");
+        assert!(!accepts(Some(0), -20), "a computer team's turn");
+    }
 }

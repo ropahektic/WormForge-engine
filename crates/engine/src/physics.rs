@@ -354,7 +354,8 @@ fn with_cm_forces(cm: *mut u8, mut m: game::entity::Motion) -> game::entity::Mot
 unsafe extern "thiscall" fn gravity_hook(cm: *mut u8, entity: *mut u8) {
     let missile = unsafe { is_missile(entity, missile_vt()) };
     if missile {
-        if let Some(m) = unsafe { read_motion(entity) } {
+        if let Some(mut m) = unsafe { read_motion(entity) } {
+            m.id = crate::missile_boom::missile_id(entity);
             let m = with_cm_forces(cm, m);
             if let Ok(before) = lua_host::gravity_before(m) {
                 unsafe { write_scales(entity, &before) };
@@ -367,7 +368,8 @@ unsafe extern "thiscall" fn gravity_hook(cm: *mut u8, entity: *mut u8) {
         unsafe { f(cm, entity) };
     }
     if missile {
-        if let Some(m) = unsafe { read_motion(entity) } {
+        if let Some(mut m) = unsafe { read_motion(entity) } {
+            m.id = crate::missile_boom::missile_id(entity);
             let m = with_cm_forces(cm, m);
             if let Ok(after) = lua_host::gravity_after(m) {
                 unsafe { write_motion(entity, &after) };
@@ -413,14 +415,20 @@ unsafe extern "thiscall" fn missile_hook(
 /// `wa.on.missile_frame`: its motion, and the sprite WA draws it with
 /// (`m.sprite`, +0x2EC), written back when a pack changes them.
 unsafe fn missile_frame_hook(this: *mut u8, msg: u32, phase: &str) {
-    if let Some(m) = unsafe { read_motion(this) } {
+    if let Some(mut m) = unsafe { read_motion(this) } {
+        // The missile's lockstep id, not its address (`missile_boom::missile_id`).
+        m.id = crate::missile_boom::missile_id(this);
         let weapon = crate::missile_boom::weapon_of(this);
         let before = unsafe { read_i32(this, MISSILE_RENDER_SPRITE) };
-        let mut sprite = before;
-        if let Ok(after) = lua_host::missile_frame(m, msg, phase, weapon, &mut sprite) {
+        let mask_before = unsafe { read_i32(this, game::offsets::ENT_COLLISION_MASK) };
+        let (mut sprite, mut mask) = (before, mask_before);
+        if let Ok(after) = lua_host::missile_frame(m, msg, phase, weapon, &mut sprite, &mut mask) {
             unsafe { write_motion(this, &after) };
             if sprite != before {
                 unsafe { write_i32(this, MISSILE_RENDER_SPRITE, sprite) };
+            }
+            if mask != mask_before {
+                unsafe { write_i32(this, game::offsets::ENT_COLLISION_MASK, mask) };
             }
         }
     }
@@ -577,6 +585,11 @@ fn tick_particles() {
 }
 
 unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
+    let _perf = match msg {
+        MSG_FRAME_FINISH => crate::perf::probe(crate::perf::Section::Sim),
+        MSG_RENDER_SCENE => crate::perf::probe(crate::perf::Section::Scene),
+        _ => None,
+    };
     // BEFORE stock entity blits fill the GPU pending list. Clearing after
     // would wipe quads between enqueue and dispatch (ghost trails).
     if msg == MSG_RENDER_SCENE {
@@ -674,10 +687,27 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if eat {
         return;
     }
+    // WA 3.8.1 makes a dead worm's gravestone while the worm handles one of
+    // its messages, before WormEntity::Free (Project X, on 3.6.31, paired
+    // them in Free). Whatever grave appears during it is this worm's, the
+    // same on every machine: the Lightning Strike revives it by that.
+    let graveless = crate::world::graveless_dead_worm(this);
+    let graves_before = if graveless != 0 {
+        crate::world::list_kind(game::offsets::CLASS_GRAVE, 0)
+    } else {
+        Vec::new()
+    };
     let orig = ORIG_WORM.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
+    }
+    if graveless != 0 {
+        for grave in crate::world::list_kind(game::offsets::CLASS_GRAVE, 0) {
+            if !graves_before.contains(&grave) {
+                crate::world::remember_grave_owner(grave, graveless);
+            }
+        }
     }
     if hurt {
         crate::hurt::after(this, a, msg, b, c, hp_before);

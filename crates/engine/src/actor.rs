@@ -185,9 +185,19 @@ pub fn install() -> Result<(), String> {
         body_hidden: crate::physics::body_hidden,
         equip: crate::world::equip_weapon,
         hp: crate::world::worm_hp,
+        heal: crate::world::heal_worm,
+        arm_mine: crate::world::arm_mine,
+        mine_fuse: crate::world::mine_fuse,
+        hit_object: crate::world::hit_object,
+        revive_grave: crate::world::revive_grave,
+        grave_identity: crate::world::grave_identity,
+        electrical_nearby: crate::world::electrical_nearby,
+        electrical_trace: crate::world::electrical_trace,
         ammo: crate::world::ammo,
         cavern: crate::world::is_cavern,
         forces: crate::world::forces,
+        set_gravity: crate::world::set_gravity,
+        set_wind: crate::world::set_wind,
         hurt: crate::physics::hit_worm,
         set_worm_state: crate::physics::set_worm_state,
         retreat_ms: crate::world::retreat_ms,
@@ -731,16 +741,19 @@ unsafe fn try_lua_projectile(worm: *mut u8, ctx: *mut u8) -> bool {
 }
 
 fn cursor_xy(worm: *mut u8, ctx: *mut u8) -> (i32, i32) {
-    // Land cursor is the live Teleport/strike aim point. Worm +0x2E0/+0x2E4
-    // stay stale (wkAimbot CURSOR.md) — do not prefer them.
+    // The fire context's target is WA's own click, carried in its lockstep:
+    // exactly where the player clicked, the same on every machine. The synced
+    // pointer can lag behind it (only syncing once asked for), so it is the
+    // fallback. Worm +0x2E0/+0x2E4 can be stale (wkAimbot CURSOR.md).
+    if !ctx.is_null() {
+        let (x, y) = unsafe { (read_i32(ctx, CTX_CURSOR_X), read_i32(ctx, CTX_CURSOR_Y)) };
+        if x != 0 || y != 0 {
+            return (x, y);
+        }
+    }
     let (px, py, _) = crate::world::pointer();
     if px != 0 || py != 0 {
         return (px, py);
-    }
-    if !ctx.is_null() {
-        return (unsafe { read_i32(ctx, CTX_CURSOR_X) }, unsafe {
-            read_i32(ctx, CTX_CURSOR_Y)
-        });
     }
     if !worm.is_null() {
         return (unsafe { read_i32(worm, WORM_CURSOR_X) }, unsafe {
@@ -1000,6 +1013,12 @@ pub(crate) fn physics_parent(entity: *mut u8) -> Option<*mut u8> {
         return None;
     }
     unsafe { lookup_shared(entity, 0, SHARED_FILTER_PHYSICS) }
+}
+
+/// The object WA keeps in `entity`'s shared-data table under `key` (WA's
+/// 0x4FDF90 lookup with the first key 0).
+pub(crate) fn shared_object(entity: *mut u8, key: u32) -> Option<*mut u8> {
+    unsafe { lookup_shared(entity, 0, key) }
 }
 
 unsafe fn lookup_shared(entity: *mut u8, key_esi: u32, key_edi: u32) -> Option<*mut u8> {
@@ -2533,6 +2552,7 @@ unsafe extern "thiscall" fn actor_free(this: *mut u8, flags: u32) -> *mut u8 {
     let f: WorldFreeFn = unsafe { std::mem::transmute(orig) };
     unsafe { f(this, flags) }
 }
+
 
 /// Solid collision under the sprite's bottom opaque row.
 unsafe fn terrain_under_feet(this: *mut u8) -> bool {

@@ -45,14 +45,23 @@ Crate Strike and Lightning Strike.
 
 ## Ported weapons
 
-Each takes its record from the scheme itself (`weps/<slot>.wep`), which
-carries PX's tuning for this scheme and its name. They are cut from
-`HL - 0rang3 - 1.1.pxs` with:
+Most start from the stock WA table entry (`copy_from = "<slot>"`) with a
+named `patch` for the fields PX's scheme changed. Lightning Strike and
+Electric Grenade use the scheme's full `.wep` records, extracted with
+`tools/px_scheme_weps.py` from `HL - 0rang3 - 1.1.pxs`.
 
-```sh
-python3 tools/px_scheme_weps.py "HL - 0rang3 - 1.1.pxs" mods/examples/highlander/weps <slot> ...
-```
+### Electrical weapons
 
+| Slot | Weapon | Behavior |
+|---|---|---|
+| napalm_strike | Lightning Strike | Cursor-aimed 30° beam, 150-frame warning, 16-frame strike, 60-frame tail; heals live worms, revives linked graves at 10 HP, arms mines, and hits crates/oil drums. |
+| earthquake | Electric Grenade | WA grenade flight and explosion followed by PX's seeking, terrain-following, chaining tazer arc; delayed 24 damage to worms and 12 to objects, mine arming, and a temporary tazed pose. |
+
+The beams, glows, and explosion use the GPU atlas. Gameplay runs in simulation
+callbacks; drawing only varies presentation. A grave records its original worm
+ID when WA creates it. On revival, Highlander restores the dead worm's saved
+hand while the active worm keeps the weapons it gained at death. PX's sentry
+ownership transfer is deferred.
 ### WA's own weapons
 
 | Slot | Weapon | Notes |
@@ -154,6 +163,10 @@ bazooka hold, as the Cow Launcher's.
 | bazooka | Double Bazooka | icon | a second shell from where the first explodes |
 | mine | Nuke Rocket | icon, the rocket, the hold, the launch sound | a nuke climbs out of the fusing rocket |
 | super_banana | Chilli Bomb | icon, the chilli (held and in flight) | five more Chillis burst out of it and burst into fire |
+| laser_sight | Swim Suit | icon, the swim and float animations, the bubble, its sound | PX's swimming on WA's laser sight |
+| surrender | Wind Changer | icon, three wind sounds | 0-9 choose the force, firing sets the wind |
+| low_gravity | Gravity Control | icon, its two sounds | 1-5 choose the gravity, firing holds it for the turn |
+| ninja_rope | Jump | icon, the worm aiming it | the worm leaves with the shot's speed |
 | parachute | Hang-Glider | icon, the glider, its pack-away, its two sounds | PX's glider flight on WA's parachute |
 
 Played in game: the Fire Jump, the Sticky Bomb and Igniter holds, the
@@ -309,6 +322,52 @@ missile's own copy is set to 0 in flight instead (`m.sprite`). Not ported: PX's 
 of 20, and PX writing the five's changes into the weapon's own launch data,
 so that every later Chilli Bomb flies with them.
 
+**Swim Suit.** PX's `swimsuit_SCRIPT` (StepS), with `fastswim_SCRIPT` and
+`swim_suit_diving_s` (PyroMan), on WA's laser sight, which never switches on.
+Worn, a worm that falls into the water swims instead of drowning:
+- **Swimming:** it is held in WA's bungee state with no gravity and moved by
+  its own four keys, up to 2.5 pixels a frame times the swim speed, and glides
+  to a stop when they are let go. Left and right turn it unless Shift is held.
+  Enter does nothing while it swims.
+- **Leaving the water:** out of the water it flies on as from a jump. Too deep,
+  or knocked out of those states, the suit gives out and it sinks.
+- **Speed:** Fast Walk switches the swim speed between 2 and 6 for the turn.
+- **Missiles:** a missile in the water blows up on a swimming worm (100, 50).
+- **Looks:** the swim or float animation is drawn in its place, with a bubble
+  drawn in `wa.on.draw` from live worm.x/y while the suit is worn (no ring actor).
+- **Engine pieces:** `worm.collision_mask` and `m.collision_mask`, and the
+  `bungee` and `sinking` states.
+- **Not ported:** PX's ghost-jet and battyswim interplay, the Ninja Rope
+  workaround (the Jump is on that slot), inverted controls, and the team
+  message.
+
+**Wind Changer and Gravity Control.** PX's `wind_changer_script` (ravander,
+improved by 0rang3) and `gravity_control_script` (DabbyB, edited by 0rang3).
+Both records are one of WA's turn utilities with an index WA doesn't use, so
+WA fires a utility that does nothing and the script does the work:
+- **Wind Changer:** while it is selected, 0-9 choose the force. Firing it sets
+  the wind to force × 0.0317 towards where the worm faces, through WA's own
+  wind change (the clouds and the wind bar follow). The rules grant one every
+  turn, as PX's GiveWeapons does.
+- **Gravity Control:** 1-5 choose 0.3, 0.5, 1, 1.7 or 2.4 times the match's
+  gravity. Firing it holds WA's gravity there until the next turn. Fired with
+  nothing chosen, it doesn't fire.
+- **Keys:** the digit keys are synced like the other keys.
+- **Differences:** a HUD line shows the keys and the choice, in place of PX's
+  team messages. PX also puts the gravity back after 10 s with the turn clock
+  stopped; that isn't ported.
+
+**Jump.** PX's `jumpscript` (`utility_jump`), on the Ninja Rope's slot. Its
+record throws like a grenade, but nothing leaves the worm:
+- **Firing:** the worm itself leaves with the shot's speed, from the aim and
+  the charge, and says its team's "Jump" line.
+- **Aiming:** the worm looks along the aim (PX's `eyes` sheets) until it
+  jumps, charging included.
+- **Differences:** PX shows WA's `wjump` crouch while the charge builds, which
+  looks ahead rather than along the aim. PX also mutes the worm's "Fire!" and
+  "Watch this" lines while the Jump is selected, and stops a fuse or bounce
+  being chosen for it.
+
 **Hang-Glider.** PX's `paratest` (`utility_hangglider_render`), on WA's
 parachute. Opened with the Hang-Glider, the parachute flies as PX's glider:
 gravity at 0.75, the wind along the wing's up side at 3x, a quarter of the
@@ -342,9 +401,7 @@ frames) are drawn by the GPU renderer, in true colour, and take none.
 
 These are deliberate, and each one is explained in `rules.lua`:
 
-- PX grants 3 Hot Air Balloons and 1 Wind Changer every turn. The balloons
-  are granted; the Wind Changer is not ported yet, so its slot (WA's
-  Surrender) is left to the scheme.
+- PX grants 3 Hot Air Balloons and 1 Wind Changer every turn; so does the pack.
 - There's no removal at turn end. The next turn start does the same job.
 - Every pooled slot is zeroed at each turn start, not only the previous
   worm's. PX left that to its own scheme; here any scheme works.
@@ -387,7 +444,9 @@ lua mods/examples/highlander/test_rules.lua     # from the repo root
 These run `rules.lua` against a mocked WA. Ammo is stored per alliance, and
 the mock scheme has an infinite bazooka. Which row a team's writes land in is
 the engine's job, and the mock can't test it. They cover:
-- the ported slots, each from its own scheme record, with PX's art (39)
+- all 51 slot claims, including the two full scheme records
+- strike timing, grave identity, revival and restored Highlander hand
+- tazer seeking, delayed zap, stun, mine fuse, object damage and terrain trace
 - the Fire Jump's timeline, counted from the punch, not the fire key
 - the run-time holds: placed from the aim, mirrored, grown in, and dropped;
   animated, and with no hand

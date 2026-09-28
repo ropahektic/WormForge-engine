@@ -33,8 +33,7 @@
 --     zero. Here the scheme can say anything, so the pack enforces it itself.
 --
 --   * PX's GiveWeapons also sets the Hot Air Balloon to 3 and the Wind
---     Changer to 1 each turn. The balloon is granted; the Wind Changer is
---     not ported yet, and its slot would hand out WA's stock Surrender.
+--     Changer to 1 each turn; so does start_turn.
 --
 -- Lockstep: dealing, turn_start and death are all dispatched from WA's own
 -- simulation messages, and every random choice is wa.random(). Two peers, or
@@ -59,6 +58,10 @@ local PX_HANDS = {
 local double_bazooka_explode
 local nuke_rocket_explode
 local chilli_bomb_explode
+local jump_fire
+local lightning_click
+local electric_grenade_explode
+local restore_lightning_inventory
 -- Ported weapons. Each takes its scheme record, cut from the .pxs with
 -- tools/px_scheme_weps.py: how it fires, and its PX name. Anything else in an
 -- entry goes to wa.weapons.replace as it is.
@@ -86,6 +89,40 @@ local PORTED = {
 -- tools/px_split_strip.py. Where PX draws the worm's hold at run time with
 -- its sprite builder (p_sprite_builder), so does the pack (PX_HOLDS below).
 local PX_ART = {
+  { -- Electric Grenade: stock flight and explosion, then PX's chaining arc.
+    -- PX's record leaves the flight sprite 0 and PX draws the grenade at run
+    -- time (electric_grenade_anim, PX_WEAP_SPRITES below). A grenade-type
+    -- slot picks the worm's throw sheet from its flight sprite, and 0 has
+    -- none, so the worm vanished: here the stock grenade, hidden in flight,
+    -- as for the Sticky Bomb. The arc's sheets come with the Lightning
+    -- Strike's (its entry below), this prefix being the hold's.
+    weapon = "earthquake",
+    wep = "weps/earthquake.wep",
+    panel_icon = "sprites/electric_grenade/icon.png",
+    sprite = "grenade",
+    worm_sprites = PX_POSTURE,
+    sprites = { "sprites/px_hold/electric_grenade.png", PX_HANDS[1], PX_HANDS[2], PX_HANDS[3] },
+    sounds = { "sounds/lightning/tazer_loop.wav" },
+    params = { gpu_prefix = "sprites/px_hold/" },
+    on_explode = function(ev) electric_grenade_explode(ev) end,
+  },
+  { -- Lightning Strike: the PX strike is an effect, not WA's napalm plane.
+    weapon = "napalm_strike",
+    wep = "weps/napalm_strike.wep",
+    panel_icon = "sprites/lightning/icon.png",
+    -- With the Electric Grenade's arc and zap sheets: both weapons' effects
+    -- are GPU sheets under this prefix.
+    sprites = {
+      "sprites/lightning/beam.png", "sprites/lightning/glow.png", "sprites/lightning/cloud.png",
+      "sprites/electric_grenade/explosion", "sprites/electric_grenade/tazed1",
+      "sprites/electric_grenade/tazed2",
+    },
+    sounds = { "sounds/lightning/thunder.wav", "sounds/lightning/hit.wav" },
+    params = { gpu_prefix = "sprites/" },
+    -- Click-only dispatch keeps the strike's cursor and turn handling.
+    on_select = { cursor = true },
+    on_click = function(ev) lightning_click(ev) end,
+  },
   { -- Double Bazooka: a second shell carries on from where the first
     -- explodes (its section below). Held as a plain bazooka: the pack's
     -- record has launcher 3 (wbaz) at +0x34 where the scheme's has 7, the
@@ -379,6 +416,35 @@ local PX_ART = {
     sounds = { "sounds/hang_glider/hangopen.wav", "sounds/hang_glider/hangclose.wav" },
     params = { gpu_prefix = "sprites/hang_glider/" },
   },
+  { -- Swim Suit: on the laser sight's slot; worn, the worm swims (below).
+    weapon = "laser_sight",
+    panel_icon = "sprites/swim_suit/ico_swimsuit.png",
+    sprites = { "sprites/swim_suit/swim", "sprites/swim_suit/float", "sprites/swim_suit/ring" },
+    sounds = { "sounds/swim_suit/putting_on_ssuit.wav" },
+    params = { gpu_prefix = "sprites/swim_suit/" },
+  },
+  { -- Jump: on the ninja rope's slot; the worm leaves with the shot (below).
+    weapon = "ninja_rope",
+    panel_icon = "sprites/jump/jumpic.png",
+    worm_sprites = {
+      weaponlnk = "sprites/jump/aim", weaponlnku = "sprites/jump/aimu",
+      weaponlnkd = "sprites/jump/aimd",
+    },
+    on_fire = function(fire) jump_fire(fire) end,
+  },
+  { -- Wind Changer: on the surrender's slot; sets the wind (below).
+    weapon = "surrender",
+    panel_icon = "sprites/wind_changer/ico_windchanger.png",
+    sounds = {
+      "sounds/wind_changer/breeze.wav", "sounds/wind_changer/calm_wind.wav",
+      "sounds/wind_changer/strong_wind.wav",
+    },
+  },
+  { -- Gravity Control: on low gravity's slot; sets the gravity (below).
+    weapon = "low_gravity",
+    panel_icon = "sprites/gravity_control/gravity_control_ico.png",
+    sounds = { "sounds/gravity_control/activate.wav", "sounds/gravity_control/error.wav" },
+  },
   { -- Helicopter: WA's jet pack, flown by PX's script (below).
     weapon = "jet_pack",
     panel_icon = "sprites/helicopter/heli_ico.png",
@@ -428,9 +494,926 @@ local PX_ART = {
   },
 }
 
+-- WEP_PATCH begin
+-- Display names + named patches from each former weps/<slot>.wep,
+-- as copy_from + name + patch (web editor style). Generated by tools/embed_weps.py.
+local WEP_NAME = {
+  air_strike = "Mortar Strike",
+  aqua_sheep = "Ghost Sheep",
+  banana_bomb = "Super Gravedigger",
+  battle_axe = "Thumper Nade",
+  bazooka = "Double Bazooka",
+  blow_torch = "BlowTorch",
+  bungee = "Hot Air Balloon",
+  carpet_bomb = "Thumper Nade Strike",
+  cluster_bomb = "Windy Cluster",
+  crate_shower = "Crate Shower",
+  crate_spy = "Crate Spy",
+  damage_x2 = "Skunk",
+  double_turn_time = "Mole Bomb",
+  dynamite = "Dynamite",
+  fast_walk = "Fast Walk",
+  fire_punch = "Fire Jump",
+  flame_thrower = "Flame Thrower",
+  girder = "Baseball Bat",
+  girder_pack = "3 Girder Pack",
+  grenade = "Sticky Bomb",
+  handgun = "Sniper Rifle",
+  holy_grenade = "Hellish Hand-Grenade",
+  homing_missile = "Igniter",
+  homing_pigeon = "Blaster Worm",
+  invisibility = "Teleport",
+  jet_pack = "Helicopter",
+  laser_sight = "Swim Suit",
+  longbow = "Shadow-Bolt",
+  low_gravity = "Gravity Control",
+  mad_cow = "Cow Launcher",
+  magic_bullet = "Cluster Bomb",
+  mail_strike = "Pigeon Strike",
+  mb_bomb = "Banana Express",
+  mine = "Nuke Rocket",
+  ming_vase = "Priceless Ming Vase",
+  minigun = "Burst Rifle",
+  mole_bomb = "Gravler",
+  mole_squadron = "Gravler Strike",
+  mortar = "S.M.A.R.T Bomb",
+  ninja_rope = "Jump",
+  old_woman = "Old Woman Launcher",
+  parachute = "Hang-Glider",
+  pneumatic_drill = "Super Drill",
+  sheep = "Pogo Sheep",
+  sheep_launcher = "Burning Sheep Launcher",
+  shotgun = "Real Shotgun",
+  skunk = "Remote Roller",
+  super_banana = "Chilli Bomb",
+  surrender = "Wind Changer",
+}
+local WEP_PATCH = {
+  air_strike = {
+    uses_turn = 0,
+    k_count = 4,
+    k_spacing = 30,
+    collision_radius = 4331582,
+    damage = 100,
+    flight_flags = 466,
+    gravity_pct = 260,
+    fuse = 10000,
+    detonation = 1,
+    cluster_count = 5,
+    cluster_speed = 30,
+    cluster_power = 30,
+    cluster_angle = -1,
+    cluster_spread = 40,
+    c_collision_radius = 4331646,
+    c_damage = 100,
+    c_blast = 15,
+    c_impact = 2,
+    c_flags = 260,
+    c_gravity_pct = 160,
+    c_wind_pct = 50,
+    c_bounce_pct = 100,
+    c_friction_pct = 100,
+    c_fuse = 10000,
+    c_missile_type = 2,
+    c_render_size = 4194368,
+    c_homing_strength = 50,
+  },
+  aqua_sheep = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    retreat = 5000,
+    m_blast = 90,
+    wind_pct = 50,
+    fuse_default = 8000,
+    fuse = 8000,
+    render_size = 137342,
+  },
+  banana_bomb = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    pellets = 3,
+    collision_radius = 4339766,
+    bias = 75,
+    blast = 50,
+    impact = 5,
+    flight_flags = 0,
+    gravity_pct = 145,
+    friction_pct = 116,
+    fuse_default = 0,
+    missile_type = 0,
+    render_size = 4325376,
+    homing_strength = 99,
+    homing_arm = 50,
+    cluster_speed = 37,
+    cluster_power = 35,
+    cluster_spread = 45,
+    c_collision_radius = 4194304,
+    c_bias = 50,
+    c_blast = 18,
+    c_impact = 5,
+    c_flags = 0,
+    c_gravity_pct = 0,
+    c_wind_pct = 0,
+    c_friction_pct = 116,
+    c_fuse = 0,
+    c_homing_strength = 99,
+    c_homing_arm = 15,
+    power_pct = 50,
+    weight2 = 0,
+  },
+  battle_axe = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    fire_type = 1,
+    subtype_param = 2,
+    fire_method = 3,
+    pellets = 2,
+    grenade_style = 1,
+    collision_radius = 4194304,
+    bias = 10,
+    damage = 100,
+    blast = 40,
+    impact = 1,
+    flight_flags = 251,
+    gravity_pct = 150,
+    wind_pct = 50,
+    bounce_pct = 100,
+    friction_pct = 120,
+    fuse = 9000,
+    missile_type = 2,
+    render_size = 4373598,
+    homing_strength = 50,
+    homing_turn = 8,
+    detonation = 1,
+    cluster_count = 6,
+    cluster_speed = 40,
+    cluster_power = 30,
+    cluster_spread = 45,
+    c_collision_radius = 4395070,
+    c_damage = 100,
+    c_blast = 30,
+    c_impact = 5,
+    c_flags = 252,
+    c_gravity_pct = 120,
+    c_bounce_pct = 100,
+    c_friction_pct = 100,
+    c_fuse = 9000,
+    c_missile_type = 2,
+    c_render_size = 4200512,
+    c_homing_strength = 100,
+    weight2 = 70,
+  },
+  bazooka = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    blast = 20,
+  },
+  blow_torch = {
+    uses_turn = 0,
+  },
+  bungee = {
+    retreat = -1,
+    subtype_param = 12,
+    fire_method = 100,
+  },
+  carpet_bomb = {
+    uses_turn = 0,
+    retreat = 3000,
+    k_count = 3,
+    k_spacing = 30,
+    blast = 40,
+    impact = 1,
+    flight_flags = 251,
+    gravity_pct = 150,
+    render_size = 4439166,
+    homing_strength = 50,
+    homing_accel = 0,
+    homing_kind = 0,
+    detonation = 1,
+    cluster_count = 6,
+    cluster_speed = 40,
+    cluster_power = 30,
+    cluster_spread = 45,
+    c_collision_radius = 137342,
+    c_damage = 100,
+    c_blast = 25,
+    c_impact = 5,
+    c_flags = 252,
+    c_gravity_pct = 120,
+    c_bounce_pct = 100,
+    c_friction_pct = 100,
+    c_fuse = 9000,
+    c_missile_type = 2,
+    power_pct = 50,
+  },
+  cluster_bomb = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    grenade_style = 0,
+    bounce_extra = 48,
+    cluster_count = 8,
+    cluster_speed = 35,
+    cluster_power = 25,
+    cluster_spread = 40,
+    c_flags = 615,
+    c_gravity_pct = 200,
+  },
+  damage_x2 = {
+    requires_aiming = 1,
+    shots = 0,
+    uses_turn = 1,
+    creates_projectile = 1,
+    fire_type = 2,
+    subtype_param = 0,
+    fire_method = 2,
+    m_proximity = 2,
+    m_fuse = 5,
+    m_damage = 100,
+    impact = 6,
+    flight_flags = 131,
+    gravity_pct = 100,
+    wind_pct = 50,
+    bounce_pct = 100,
+    friction_pct = 100,
+    missile_type = 3,
+    render_size = 4331646,
+    homing_strength = 100,
+    homing_kind = 15,
+    homing_arm = 120,
+    homing_time = 43,
+    detonation = 1,
+    cluster_count = 1,
+    c_damage = 100,
+    c_blast = 30,
+    c_impact = 6,
+    c_flags = 131,
+    c_gravity_pct = 100,
+    c_wind_pct = 50,
+    c_bounce_pct = 100,
+    c_friction_pct = 100,
+    c_fuse_default = 5000,
+    c_fuse = 10000,
+    c_missile_type = 3,
+    c_render_size = 4331646,
+    c_homing_strength = 100,
+    c_homing_kind = 15,
+    c_homing_arm = 120,
+    c_homing_time = 43,
+  },
+  double_turn_time = {
+    requires_aiming = 1,
+    shots = 0,
+    uses_turn = 1,
+    creates_projectile = 1,
+    fire_type = 2,
+    subtype_param = 0,
+    fire_method = 2,
+    m_proximity = 2,
+    m_fuse = 5,
+    m_damage = 100,
+    impact = 6,
+    flight_flags = 131,
+    gravity_pct = 100,
+    wind_pct = 50,
+    bounce_pct = 100,
+    friction_pct = 100,
+    fuse_default = 5000,
+    fuse = 5000,
+    space_control = 1,
+    missile_type = 3,
+    render_size = 4331646,
+    homing_strength = 50,
+    homing_kind = 15,
+    homing_arm = 75,
+    homing_time = 40,
+    detonation = 1,
+    cluster_count = 1,
+    c_collision_radius = 137340,
+    c_damage = 110,
+    c_blast = 40,
+    c_impact = 6,
+    c_flags = 80,
+    c_gravity_pct = 50,
+    c_wind_pct = 50,
+    c_bounce_pct = 100,
+    c_friction_pct = 100,
+    c_fuse_default = 5000,
+    c_fuse = 20000,
+    c_space_control = 1,
+    c_missile_type = 4,
+    c_render_size = 50,
+    c_homing_strength = 65574,
+    c_homing_turn = 159,
+    c_homing_accel = 160,
+    c_homing_speed = 160,
+  },
+  dynamite = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    retreat = 0,
+  },
+  fire_punch = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    fire_method = 45,
+    spread = 80,
+    power_pct = 2090598400,
+  },
+  girder = {
+    uses_turn = 0,
+    creates_projectile = 1,
+    subtype_param = 2,
+    fire_method = 30,
+    pellets = 125,
+  },
+  girder_pack = {
+    shots = 3,
+    uses_turn = 0,
+  },
+  grenade = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    collision_radius = 4394622,
+    bias = 0,
+    damage = 0,
+    blast = 0,
+    fuse_default = 0,
+    fuse = 2000000,
+    missile_type = 0,
+    homing_strength = 6,
+    homing_kind = 2,
+    homing_arm = 1,
+    homing_time = 20000,
+    detonation = 1,
+    cluster_count = 1,
+    c_collision_radius = 4194304,
+    c_damage = 60,
+    c_blast = 55,
+    c_impact = 1,
+    c_flags = 80,
+    c_gravity_pct = 50,
+    c_wind_pct = 50,
+    c_friction_pct = 100,
+    c_fuse_default = 4000,
+    c_fuse = 4000,
+    c_missile_type = 4,
+    c_homing_turn = 467,
+    c_homing_accel = 467,
+    c_homing_speed = 467,
+    power_pct = 25,
+  },
+  handgun = {
+    requires_aiming = 0,
+    shots = 3,
+    uses_turn = 0,
+    h_shots = 1,
+    h_spread = 1000,
+    h_delay = 0,
+    h_range = 4398206,
+    h_damage = 18,
+    h_kind = 7,
+    weight2 = 20,
+  },
+  holy_grenade = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    damage = 70,
+    blast = 80,
+    flight_flags = 8,
+    detonation = 2,
+    cluster_count = 150,
+    cluster_speed = 70,
+    cluster_power = 1000,
+    cluster_angle = 1,
+  },
+  homing_missile = {
+    uses_turn = 0,
+    subtype_param = 3,
+    bias = 0,
+    impact = 2,
+    gravity_pct = 0,
+    fuse = 9000,
+    missile_type = 2,
+    render_size = 4194304,
+    homing_strength = 0,
+    homing_turn = 8,
+    homing_accel = 0,
+    homing_speed = 0,
+    homing_kind = 0,
+    homing_arm = 0,
+    homing_time = 0,
+    detonation = 2,
+    cluster_count = 150,
+    cluster_speed = 150,
+    cluster_power = 1000,
+    cluster_angle = 1,
+  },
+  homing_pigeon = {
+    uses_turn = 0,
+    subtype_param = 3,
+    spread = 0,
+    bias = 0,
+    blast = 50,
+    impact = 2,
+    gravity_pct = 0,
+    wind_pct = 0,
+    fuse = 9000,
+    missile_type = 0,
+    render_size = 4194304,
+    homing_strength = 0,
+    homing_turn = 8,
+    homing_accel = 0,
+    homing_speed = 0,
+    homing_kind = 0,
+    homing_arm = 0,
+    homing_time = 0,
+    detonation = 1,
+    cluster_count = 1,
+    cluster_speed = 80,
+    cluster_power = 80,
+    cluster_spread = 100,
+    c_impact = 1,
+    c_flags = 249,
+    c_gravity_pct = 125,
+    c_bounce_pct = 99,
+    c_friction_pct = 100,
+    c_fuse = 7000,
+    c_missile_type = 2,
+    c_render_size = 4398206,
+    c_homing_strength = 60,
+  },
+  invisibility = {
+    requires_aiming = 0,
+    uses_turn = 1,
+    subtype_param = 10,
+    pellets = 0,
+  },
+  jet_pack = {
+    retreat = -1,
+    fire_method = 255,
+    pellets = 8,
+  },
+  laser_sight = {
+    requires_aiming = 0,
+  },
+  longbow = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    subtype_param = 2,
+    fire_method = 3,
+    pellets = 3,
+    collision_radius = 4332604,
+    bias = 8,
+    damage = 250,
+    blast = 28,
+    impact = 2,
+    flight_flags = 453,
+    gravity_pct = 180,
+    wind_pct = 50,
+    bounce_pct = 100,
+    friction_pct = 110,
+    fuse = 10000,
+    missile_type = 2,
+    render_size = 1077936192,
+    homing_strength = 80,
+  },
+  low_gravity = {
+    retreat = -1,
+    pellets = 8,
+  },
+  mad_cow = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    fire_type = 1,
+    subtype_param = 3,
+    fire_method = 3,
+    spread = 50,
+  },
+  magic_bullet = {
+    requires_aiming = 1,
+    subtype_param = 2,
+    spread = 0,
+    grenade_style = 1,
+    collision_radius = 0,
+    damage = 0,
+    blast = 20,
+    flight_flags = 131,
+    fuse_default = 5000,
+    fuse = 0,
+    missile_type = 2,
+    render_size = 4331614,
+    homing_strength = 100,
+    homing_turn = 8,
+    homing_accel = 0,
+    homing_speed = 0,
+    homing_kind = 0,
+    homing_arm = 0,
+    homing_time = 0,
+    detonation = 1,
+    cluster_count = 5,
+    cluster_speed = 30,
+    cluster_power = 30,
+    cluster_spread = 45,
+    c_collision_radius = 137342,
+    c_damage = 100,
+    c_blast = 20,
+    c_impact = 1,
+    c_flags = 131,
+    c_gravity_pct = 100,
+    c_wind_pct = 50,
+    c_bounce_pct = 100,
+    c_friction_pct = 100,
+    c_fuse = 9000,
+    c_missile_type = 2,
+    c_render_size = 4331614,
+    c_homing_strength = 100,
+    c_homing_turn = 8,
+    power_pct = 25,
+    weight2 = 70,
+  },
+  mail_strike = {
+    uses_turn = 0,
+    retreat = 3000,
+    subtype_param = 0,
+    k_count = 3,
+    k_spacing = 45,
+    h_delay = 1200,
+    collision_radius = 4331646,
+    blast = 55,
+    impact = 3,
+    flight_flags = 0,
+    bounce_pct = 95,
+    fuse = 12000,
+    missile_type = 1,
+    homing_strength = 1,
+    homing_turn = 25,
+    homing_accel = 40,
+    homing_speed = 50,
+    homing_kind = 1,
+    detonation = 1,
+    cluster_count = 18,
+    cluster_speed = 15,
+    cluster_power = 30,
+    cluster_spread = 20,
+    c_collision_radius = 137282,
+    c_impact = 1,
+    c_wind_pct = 50,
+    c_bounce_pct = 99,
+    c_friction_pct = 45,
+    c_fuse = 10000,
+    c_missile_type = 2,
+    c_render_size = 137282,
+    c_homing_strength = 20,
+    c_homing_turn = 8,
+    power_pct = 50,
+  },
+  mb_bomb = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    retreat = 3000,
+    subtype_param = 0,
+    k_spacing = 30,
+    h_delay = 150,
+    h_flag = 52,
+    collision_radius = 0,
+    damage = 80,
+    blast = 70,
+    impact = 1,
+    flight_flags = 131,
+    gravity_pct = 100,
+    wind_pct = 50,
+    bounce_pct = 100,
+    fuse_default = 3000,
+    fuse = 10000,
+    render_size = 4398718,
+    homing_strength = 100,
+    detonation = 1,
+    cluster_count = 5,
+    cluster_speed = 45,
+    cluster_power = 30,
+    cluster_spread = 25,
+    c_collision_radius = 4331646,
+    c_damage = 80,
+    c_blast = 60,
+    c_impact = 1,
+    c_flags = 131,
+    c_gravity_pct = 100,
+    c_wind_pct = 50,
+    c_bounce_pct = 100,
+    c_friction_pct = 100,
+    c_fuse = 9000,
+    c_missile_type = 2,
+    c_render_size = 204414,
+    c_homing_strength = 100,
+    c_homing_turn = 8,
+    power_pct = 50,
+  },
+  mine = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    fire_method = 2,
+    m_proximity = 2,
+    m_fuse = 5,
+    m_mask = 1,
+    m_trigger = 0,
+    m_damage = 70,
+    m_blast = 0,
+    impact = 2,
+    flight_flags = 131,
+    gravity_pct = 100,
+    wind_pct = 50,
+    bounce_pct = 100,
+    friction_pct = 100,
+    fuse = 3000,
+    missile_type = 2,
+    render_size = 4331614,
+    homing_turn = 8,
+    cluster_count = 5,
+    cluster_speed = 33,
+    cluster_power = 33,
+    cluster_spread = 30,
+    c_collision_radius = 4332670,
+    c_damage = 25,
+    c_blast = 20,
+    c_impact = 1,
+    c_flags = 131,
+    c_gravity_pct = 100,
+    c_wind_pct = 50,
+    c_bounce_pct = 100,
+    c_friction_pct = 100,
+    c_fuse = 7770,
+    c_missile_type = 2,
+    c_homing_turn = 8,
+    weight2 = 100,
+  },
+  ming_vase = {
+    requires_aiming = 0,
+    uses_turn = 0,
+  },
+  minigun = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    h_shots = 10,
+    h_spread = 63,
+    h_delay = 6,
+    h_flag = 2,
+    bias = 6,
+    h_radius = 15,
+    h_damage = 7,
+  },
+  mole_bomb = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    retreat = 3000,
+    fire_type = 1,
+    subtype_param = 3,
+    fire_method = 3,
+    spread = 0,
+    collision_radius = 137340,
+    damage = 110,
+    blast = 40,
+    impact = 2,
+    flight_flags = 0,
+    gravity_pct = 0,
+    friction_pct = 85,
+    fuse = 20000,
+    space_control = 0,
+    missile_type = 4,
+    render_size = 50,
+    homing_strength = 65574,
+    homing_turn = 246,
+    homing_accel = 247,
+    homing_speed = 248,
+    detonation = 0,
+    weight2 = 100,
+  },
+  mole_squadron = {
+    uses_turn = 0,
+    k_count = 4,
+    k_spacing = 15,
+    h_delay = 110,
+    collision_radius = 135228,
+    blast = 37,
+    impact = 2,
+    flight_flags = 0,
+    gravity_pct = 0,
+    fuse_default = 3000,
+    fuse = 5000,
+    homing_turn = 246,
+    homing_accel = 247,
+    homing_speed = 248,
+  },
+  mortar = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    subtype_param = 3,
+    spread = 0,
+    collision_radius = 170110,
+    flight_flags = 250,
+    gravity_pct = 120,
+    friction_pct = 125,
+    cluster_count = 7,
+    cluster_speed = 50,
+    cluster_angle = 0,
+    cluster_spread = 45,
+    c_damage = 115,
+    c_blast = 25,
+    c_impact = 1,
+    c_flags = 0,
+    c_gravity_pct = 600,
+    c_wind_pct = 0,
+    c_missile_type = 1,
+    c_homing_strength = 1,
+    c_homing_turn = 6,
+    c_homing_accel = 500,
+    c_homing_kind = 1,
+    c_homing_arm = 1100,
+    c_homing_time = 1200,
+  },
+  ninja_rope = {
+    requires_aiming = 0,
+    retreat = 3000,
+    creates_projectile = 1,
+    fire_type = 1,
+    subtype_param = 2,
+    fire_method = 3,
+    pellets = 2,
+    grenade_style = 1,
+    bias = 10,
+    damage = 100,
+    blast = 50,
+    impact = 1,
+    flight_flags = 131,
+    gravity_pct = 100,
+    wind_pct = 50,
+    bounce_pct = 100,
+    friction_pct = 100,
+    fuse_default = 5000,
+    missile_type = 2,
+    render_size = 4331614,
+    homing_strength = 100,
+    homing_turn = 8,
+    weight2 = 70,
+  },
+  old_woman = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    fire_type = 1,
+    subtype_param = 3,
+    fire_method = 3,
+    spread = 50,
+    flight_flags = 135,
+    fuse = 6000,
+    homing_time = 65,
+    cluster_count = 20,
+    cluster_speed = 30,
+    cluster_power = 2000,
+  },
+  pneumatic_drill = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    grenade_style = 2000,
+  },
+  sheep = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    m_fuse = 6,
+    m_blast = 65,
+    impact = 2,
+    friction_pct = 70,
+    fuse_default = 0,
+    missile_type = 2,
+    render_size = 1078074494,
+    detonation = 1,
+    cluster_count = 48,
+    cluster_speed = 1,
+    cluster_power = 30,
+    cluster_spread = 45,
+    c_flags = 249,
+    c_gravity_pct = 20,
+    c_wind_pct = 50,
+    c_bounce_pct = 65,
+    c_friction_pct = 75,
+    c_fuse = 2000,
+    c_missile_type = 2,
+    c_render_size = 2,
+    c_homing_strength = 10,
+  },
+  sheep_launcher = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    subtype_param = 3,
+    spread = 0,
+    collision_radius = 0,
+    damage = 100,
+    blast = 50,
+    impact = 1,
+    gravity_pct = 50,
+    wind_pct = 0,
+    fuse = 9000,
+    space_control = 0,
+    render_size = 4194430,
+    homing_strength = 30,
+    homing_accel = 50,
+    homing_kind = 100,
+    homing_arm = 50,
+    detonation = 2,
+    cluster_count = 40,
+    cluster_speed = 100,
+    cluster_power = 4000,
+  },
+  shotgun = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    h_delay = 10,
+    bias = 10,
+    h_range = 4365438,
+  },
+  skunk = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    m_fuse = 15,
+    m_mask = 1,
+    bias = 10,
+    m_damage = 110,
+    m_blast = 43,
+    flight_flags = 80,
+    gravity_pct = 30,
+    bounce_pct = 101,
+    friction_pct = 90,
+    fuse_default = 0,
+    fuse = 15000,
+    render_size = 1078139998,
+    homing_strength = 110,
+    homing_turn = 25,
+    homing_accel = 50,
+    homing_speed = 88,
+    homing_kind = 0,
+    homing_arm = 0,
+    homing_time = 88,
+    detonation = 0,
+    cluster_count = 0,
+    c_damage = 0,
+    c_blast = 0,
+    c_impact = 0,
+    c_flags = 0,
+    c_gravity_pct = 0,
+    c_wind_pct = 0,
+    c_bounce_pct = 0,
+    c_friction_pct = 0,
+    c_fuse_default = 0,
+    c_fuse = 0,
+    c_space_control = 0,
+    c_missile_type = 0,
+    c_render_size = 0,
+    c_homing_strength = 0,
+    c_homing_kind = 0,
+    c_homing_arm = 0,
+    c_homing_time = 0,
+    weight2 = 70,
+  },
+  super_banana = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    retreat = 3000,
+    grenade_style = 1,
+    damage = 75,
+    blast = 50,
+    fuse_default = 5000,
+    fuse = 0,
+    space_control = 0,
+    render_size = 4331614,
+    detonation = 0,
+    cluster_count = 20,
+    cluster_speed = 30,
+    cluster_power = 1500,
+    cluster_spread = 45,
+    c_collision_radius = 137342,
+    c_bias = 1,
+    c_blast = 20,
+    c_fuse = 2000,
+    c_space_control = 0,
+    c_render_size = 4331614,
+    power_pct = 25,
+    weight2 = 70,
+  },
+  surrender = {
+    requires_aiming = 0,
+    uses_turn = 0,
+    retreat = 0,
+    subtype_param = 19,
+    pellets = 8,
+  },
+}
+-- WEP_PATCH end
+
 for _, list in ipairs({ PORTED, PX_ART }) do
   for _, w in ipairs(list) do
-    local spec = { wep = "weps/" .. w.weapon .. ".wep" }
+    -- copy_from + name + named patch (stock base); was weps/<slot>.wep
+    local spec = w.wep and { wep = w.wep } or { copy_from = w.weapon, name = WEP_NAME[w.weapon] }
+    if not w.wep and WEP_PATCH[w.weapon] then
+      spec.patch = WEP_PATCH[w.weapon]
+    end
     for key, value in pairs(w) do
       spec[key] = value
     end
@@ -564,6 +1547,12 @@ end
 
 -- Slot -> the weapon's CWormAnimParams, as its PX script states them.
 local PX_HOLDS = {
+  earthquake = { -- Electric Grenade (electric_grenade_anim)
+    thrown = true,
+    sheet = "sprites/px_hold/electric_grenade.png", hand_type = 1,
+    hand_radius = 15, hand_scale = 0.8,
+    weap_rotation = 0.5, weap_radius = 9,
+  },
   grenade = { -- Sticky Bomb (sb_script)
     -- Thrown: once fired it has left the worm's hands, and WA puts nothing
     -- away (as for its own grenades), so neither does the rule.
@@ -959,6 +1948,11 @@ end
 -- matches and nothing is drawn. With `hide`, WA draws nothing for the
 -- missile (m.sprite = 0), as PX's sprite 0 does; its record keeps its
 -- sprite, which a thrown weapon's worm posture is picked by.
+--
+-- How it turns follows the record's animation type (the entry's +0x64,
+-- PX's launchdata.anim.type): 2, WAT_TrackMovement, faces its flight
+-- (WeapSprite type 2, as a bazooka shell); 1, WAT_Rotation, spins with its
+-- speed (type 3, as a grenade), which `spin` asks for.
 
 -- Slot -> the weapon's WeapSpriteParams, as its PX script states them.
 local PX_WEAP_SPRITES = {
@@ -967,11 +1961,19 @@ local PX_WEAP_SPRITES = {
   },
   super_banana = { -- Chilli Bomb (chilli_bomb_anim) and the five it bursts into
     sheet = "sprites/px_hold/chilli_bomb", frames = 1,
+    spin = true, -- its record's WAT_Rotation
     -- WA's own sprite 0, as PX's record has it: nothing under the chilli.
     hide = true,
   },
   homing_missile = { -- Igniter (igniter_anim: igniter_bullet, 16 frames)
     sheet = "sprites/igniter/flight", animate = true, anim_speed = 1.0, frames = 16,
+  },
+  earthquake = { -- Electric Grenade (electric_grenade_anim: electric_grenade_bullet)
+    sheet = "sprites/px_hold/electric_grenade.png", frames = 1,
+    spin = true, -- its record's WAT_Rotation
+    -- PX's record has sprite 0; the pack's stock grenade is only for the
+    -- worm's throw sheet.
+    hide = true,
   },
 }
 
@@ -1017,7 +2019,7 @@ wa.on.missile_frame(function(m)
     if not owner then
       return
     end
-    f = { phase = 0 }
+    f = { phase = 0, rot = 0 }
     f.actor = wa.actors.spawn({
       sprite = p.sheet, x = m.x, y = m.y, gravity = false, collide = false,
       owner = owner, on = follow_missile(m.id),
@@ -1032,8 +2034,18 @@ wa.on.missile_frame(function(m)
     f.phase = next_phase(f.phase, p.anim_speed)
     a:frame(frame_of(f.phase, p.frames))
   end
-  -- WeapSprite::CalculateAngle, rotation 0.
-  local rot = -math.atan(m.vx, m.vy) - math.pi
+  local rot
+  if p.spin then
+    -- WeapSprite type 3: 0.5 * (vx * 0.15 + |vy| * 0.01, towards vx) a
+    -- frame, in pixels a frame and radians.
+    local vx, vy = m.vx / 0x10000, m.vy / 0x10000
+    local sign = vx > 0 and 1 or vx < 0 and -1 or 0
+    f.rot = f.rot + 0.5 * (vx * 0.15 + math.abs(vy * 0.01) * sign)
+    rot = f.rot
+  else
+    -- WeapSprite::CalculateAngle, rotation 0.
+    rot = -math.atan(m.vx, m.vy) - math.pi
+  end
   a:gfx({ angle = math.deg(rot) % 360, depth = HOLD_DEPTH })
 end)
 
@@ -1860,6 +2872,411 @@ if wa.world.gravity and wa.world.wind then
   end)
 end
 
+-- --------------------------------------------------------------- Swim Suit
+--
+-- PX's swimsuit_SCRIPT (StepS; swim sprites by Team17) with fastswim_SCRIPT
+-- and swim_suit_diving_s (PyroMan), on WA's laser sight. Using it puts the
+-- suit on (or, out of the water, takes it off): WA's laser sight never
+-- switches on, as PX's FireFinal never calls super. A worm in the suit that
+-- falls into the water splashes and swims instead of drowning: held in WA's
+-- bungee state with no gravity, moved by its own four keys (up to 2.5 pixels
+-- a frame times the swim speed, gliding to a stop when they are let go),
+-- turned by left and right unless Shift is held. Enter does nothing while it
+-- swims. Out of the water it flies on as from a jump; too deep (180 pixels
+-- under the water, or the bottom of a cavern) or knocked out of those states,
+-- the suit gives out and it sinks. Fast Walk switches the swim speed between
+-- 2 and 6 for the turn. Missiles in the water can hit a swimming worm: they
+-- blow up on it (damage 100, blast 50).
+--
+-- Drawn in the worm's place: the swim or, when still, the float animation,
+-- and a bubble around the worm while it wears the suit.
+--
+-- Not ported: PX's ghost jet and battyswim interplay (other libraries), the
+-- Ninja Rope workaround after leaving the water (the Jump is on the rope's
+-- slot here), inverted controls, and the team message on putting it on.
+
+local SWIM_CAP = 2.5          -- pixels a frame, times the swim speed
+local SWIM_PUSH = 0.1
+local SWIM_DRAG = 1.05
+local SWIM_STILL = 0.05
+local SWIM_FLOAT_STEP = 0.0099
+local SWIM_DEPTH = 180        -- how far under the water the suit holds
+local SWIM_SUIT_MASK = 134342 -- 0x20CC6: the worm's 0x420CC6 without SWIM_WATER
+-- Bit 22 of a collision mask: WA's water acts on what has it (0x4FDE20), and
+-- sinks or drowns it. The suit takes it off; a missile sinking in the water
+-- has only it.
+local SWIM_WATER = 0x400000
+local SWIM_MISSILE_MASK = 0x40007C -- a missile in the water that hits worms
+local SWIM_SPLASH = 57        -- WA's sound
+local SWIM_BODY_DEPTH = 0x10000
+local SWIM_RING_DEPTH = 0x10001
+-- Ring sheet is 50×50; wa.draw.quad corners are centred on the worm like a:gfx.
+local SWIM_RING_HALF = 25 * 0x10000
+
+local swim_speed = 2          -- fastswim: Fast Walk switches 2 and 6
+local swim_in_game = false    -- SwimInGame: someone has worn the suit
+local swimmers = {} -- worm id -> { suit, plopready, plopped, floating, plophase, flophase, fmult, keys, body }
+
+local function swimmer_of(worm)
+  local s = swimmers[worm.id]
+  if not s then
+    s = { suit = false, plopready = false, plopped = false, floating = false,
+      plophase = 0, flophase = 0, fmult = 5, keys = {} }
+    swimmers[worm.id] = s
+  end
+  return s
+end
+
+local function swim_drop_art(worm, s)
+  if s.body then s.body:despawn(); s.body = nil end
+  worm.body_visible = true
+end
+
+-- The suit comes off: gravity back, the water's bit back in its mask, and
+-- sinking if it gave out in the water.
+local function suit_off(worm, s, sink)
+  s.suit, s.plopready, s.plopped, s.floating = false, false, false, false
+  worm.gravity = FX
+  worm.collision_mask = worm.collision_mask | SWIM_WATER
+  swim_drop_art(worm, s)
+  if sink then
+    worm:set_state("sinking")
+  end
+end
+
+-- One step towards the cap on a held key, as PX's: while under it, a push;
+-- past it, back to it.
+local function swim_push(v, dir, cap)
+  if dir > 0 then
+    if v < cap then return v + SWIM_PUSH * swim_speed end
+    return cap
+  end
+  if v > -cap then return v - SWIM_PUSH * swim_speed end
+  return -cap
+end
+
+local function swim_frame(worm)
+  local s = swimmers[worm.id]
+  if not s or not s.suit then
+    return
+  end
+  local P = 0x10000
+  local water = wa.world.water()
+  local cap = SWIM_CAP * swim_speed
+  if worm.y >= water and s.plopready and worm.state ~= "teleporting" then
+    wa.sound.play(worm, SWIM_SPLASH)
+    s.plopready, s.plopped = false, true
+    worm.gravity = 0
+    worm.vx = math.min(worm.vx, trunc(cap * P))
+    worm.vy = math.min(worm.vy, trunc(cap * P))
+    worm:set_state("bungee")
+    s.plophase = 0
+  end
+  if s.plopped then
+    local vx, vy = math.min(worm.vx / P, cap), math.min(worm.vy / P, cap)
+    local held = s.keys
+    local still = math.abs(vx) <= SWIM_STILL * swim_speed and math.abs(vy) <= SWIM_STILL * swim_speed
+    if still and not (held.left or held.up or held.down or held.right) then
+      -- Floating: the float animation, back and forth.
+      s.floating = true
+      s.flophase = s.flophase + SWIM_FLOAT_STEP * s.fmult
+      if s.flophase >= 0.99 and s.fmult == 5 then
+        s.flophase, s.fmult = 0.99, -5
+      elseif s.flophase <= 0 and s.fmult == -5 then
+        s.flophase, s.fmult = 0, 5
+      end
+    elseif vx ~= 0 and vy ~= 0 then
+      -- Swimming: the stroke follows the faster of the two directions.
+      s.floating = false
+      if math.abs(vx) >= math.abs(vy) then
+        s.plophase = s.plophase + SWIM_FLOAT_STEP * vx * worm.facing
+      else
+        s.plophase = s.plophase - SWIM_FLOAT_STEP * vy
+      end
+    elseif vx ~= 0 then
+      s.floating = false
+      s.plophase = s.plophase + SWIM_FLOAT_STEP * vx
+    elseif vy ~= 0 then
+      s.floating = false
+      s.plophase = s.plophase - SWIM_FLOAT_STEP * vy
+    end
+    if s.plophase >= 1 or s.plophase <= -1 then
+      s.plophase = 0
+    end
+    local k = worm.keys
+    local up, down, left, right = k.up, k.down, k.left, k.right
+    if up == down then vy = vy / SWIM_DRAG end
+    if left == right then vx = vx / SWIM_DRAG end
+    if up then vy = swim_push(vy, -1, cap) end
+    if down then vy = swim_push(vy, 1, cap) end
+    local shift = wa.world.keys().sprint
+    if left then
+      if not shift then worm.facing = -1 end
+      vx = swim_push(vx, -1, cap)
+    end
+    if right then
+      if not shift then worm.facing = 1 end
+      vx = swim_push(vx, 1, cap)
+    end
+    s.keys = { up = up, down = down, left = left, right = right }
+    worm:clear_keys()
+    worm.vx, worm.vy = trunc(vx * P), trunc(vy * P)
+    -- Out of the water: on through the air, as from a jump.
+    if worm.y < water then
+      if worm.state ~= "teleporting" then
+        worm:set_state("sliding")
+      end
+      s.floating = false
+      worm.gravity = FX
+      s.plopready, s.plopped = true, false
+    end
+    -- Knocked out of its states, or too deep: the suit gives out.
+    local state = worm.state
+    local y, w = worm.y / P, water / P
+    local deep
+    if not wa.world.cavern() then
+      deep = y > w + SWIM_DEPTH
+    elseif w > 610 then
+      deep = y > w + SWIM_DEPTH
+    else
+      deep = y > 768
+    end
+    if (state ~= "bungee" and state ~= "parachuting" and state ~= "sliding" and state ~= "teleporting")
+        or deep then
+      suit_off(worm, s, true)
+      return
+    end
+  end
+  -- Between turns, a worm out of the water takes the suit off.
+  if not current_worm() and worm.y < water then
+    suit_off(worm, s, false)
+    return
+  end
+  -- RenderWorm: in the water, the swim or float animation in the worm's
+  -- place (its art faces left). The bubble is drawn at render time below.
+  local function art(sheet)
+    return wa.actors.spawn({
+      sprite = sheet, x = worm.x, y = worm.y, gravity = false,
+      collide = false, owner = worm, on = function() end,
+    })
+  end
+  if s.plopped and worm.state ~= "teleporting" then
+    local sheet = s.floating and "sprites/swim_suit/float" or "sprites/swim_suit/swim"
+    if s.body and s.body_sheet ~= sheet then
+      s.body:despawn()
+      s.body = nil
+    end
+    s.body = s.body or art(sheet)
+    s.body_sheet = sheet
+    local phase = s.floating and s.flophase or s.plophase
+    s.body.x, s.body.y, s.body.vx, s.body.vy = worm.x, worm.y, 0, 0
+    s.body.facing = -worm.facing
+    s.body:frame(math.floor((phase % 1) * 20) % 20)
+    s.body:gfx({ depth = SWIM_BODY_DEPTH })
+    worm.body_visible = false
+  elseif s.body then
+    s.body:despawn()
+    s.body = nil
+    worm.body_visible = true
+  end
+end
+
+-- Bubble while the suit is worn: draw-only, from the live worm position each
+-- rendered frame (keeps the 16.16 fraction). A follower LuaActor + a:gfx was
+-- pixel-snapped and could wobble when airborne.
+if wa.on.draw then
+  wa.on.draw(function()
+    for _, worm in ipairs(wa.worms.all()) do
+      local s = swimmers[worm.id]
+      if s and s.suit then
+        local x, y, h = worm.x, worm.y, SWIM_RING_HALF
+        wa.draw.quad({
+          points = {
+            { x - h, y - h }, { x + h, y - h }, { x + h, y + h }, { x - h, y + h },
+          },
+          sprite = "sprites/swim_suit/ring",
+          depth = SWIM_RING_DEPTH,
+        })
+      end
+    end
+  end)
+end
+
+wa.on.worm_message(function(worm, msg)
+  if msg == wa.msg.FRAME_FINISH then
+    swim_frame(worm)
+  elseif msg == wa.msg.JUMP then
+    -- M_ENTER: no jumping while it swims.
+    local s = swimmers[worm.id]
+    if s and s.plopped then
+      return "eat"
+    end
+  elseif msg == wa.msg.FIRE_WEAPON then
+    if worm.weapon == "fast_walk" then
+      swim_speed = swim_speed ~= 6 and 6 or 2
+    elseif worm.weapon == "laser_sight" then
+      -- FireFinal(Swim Suit), in place of WA's laser sight.
+      local s = swimmer_of(worm)
+      if not s.suit then
+        wa.sound.play(worm, "sounds/swim_suit/putting_on_ssuit.wav")
+        s.suit, s.plopready = true, true
+        swim_in_game = true
+        worm.collision_mask = SWIM_SUIT_MASK
+      elseif worm.y < wa.world.water() then
+        suit_off(worm, s, false)
+      end
+      worm:ammo("laser_sight", -1)
+      return "eat"
+    end
+  end
+end)
+
+-- fastswim: the swim speed is 2 again every turn.
+wa.on.turn_start(function()
+  swim_speed = 2
+end)
+
+-- A missile in the water hits worms too, once anyone has worn the suit.
+wa.on.missile_frame(function(m)
+  if swim_in_game and m.phase == "pre" and m.collision_mask == SWIM_WATER then
+    m.collision_mask = SWIM_MISSILE_MASK
+  end
+end)
+
+-- CMissile::Collide: such a missile blows up on a swimming worm, and is gone
+-- (sent below the water, where WA frees it).
+if wa.on.contact then
+  wa.on.contact(function(worm, other)
+    local s = swimmers[worm.id]
+    if s and s.plopped and other.kind == "missile" then
+      wa.actors.spawn({
+        sprite = false, x = other.x, y = other.y, gravity = false, collide = false,
+        owner = worm, explode = { damage = 100, id = 50, now = true },
+      })
+      other.y = wa.world.water() + 0x10000 * 4096
+    end
+  end)
+end
+
+-- ---------------------------------------------- Wind Changer, Gravity Control
+--
+-- PX's wind_changer_script (ravander, improved by 0rang3) and
+-- gravity_control_script (DabbyB, edited by 0rang3). Both records are one of
+-- WA's turn utilities (subtype 19) with an index WA does not use (8), so WA
+-- fires them as a utility that does nothing, spending the shot as usual, and
+-- the script does the work.
+--
+-- Wind Changer, on the surrender's slot: while it is selected, 0..9 choose
+-- the force; firing it sets the wind to force x 0.0317 towards where the
+-- worm faces, through WA's own wind change, so the clouds and the wind bar
+-- follow. Gravity Control, on low gravity's slot: 1..5 choose 0.3, 0.5, 1,
+-- 1.7 or 2.4 times the match's gravity; firing it holds WA's gravity there
+-- until the next turn. Fired with nothing chosen it does not fire (PX gives
+-- the shot back).
+--
+-- Differences: a HUD line says which keys to press and what is chosen, in
+-- place of PX's team messages; and PX also puts the gravity back after 10 s
+-- with the turn clock stopped, which needs the turn clock (not ported).
+
+local WIND_STEP = 0.0317       -- wind per point of force (PX's), a turn's wind is up to about 0.29
+local GRAVITY_FACTORS = { 0.3, 0.5, 1.0, 1.7, 2.4 }
+local GRAVITY_NAMES = { "Very Low Gravity", "Low Gravity", "Normal Gravity", "High Gravity", "Very High Gravity" }
+
+local wind_force = 0          -- wf
+local gravity_choice          -- TransformedGravity's index, until fired
+local gravity_initial         -- InitialGravity: the match's
+local gravity_factor          -- ModulatedGravity while Gravity Control is on
+local last_digit              -- KeyPressedNow: a digit counts when it goes down
+
+local function world_physics_frame(worm)
+  gravity_initial = gravity_initial or wa.world.gravity()
+  if not worm.turn then
+    return
+  end
+  local digit = wa.world.keys().digit
+  local pressed = digit ~= nil and digit ~= last_digit
+  last_digit = digit
+  if not pressed then
+    return
+  end
+  if worm.weapon == "surrender" then
+    wind_force = digit
+    wa.sound.play(worm, 107)
+  elseif worm.weapon == "low_gravity" and digit >= 1 and digit <= 5 then
+    gravity_choice = digit
+    wa.sound.play(worm, 92)
+  end
+end
+
+wa.on.worm_message(function(worm, msg)
+  if msg == wa.msg.FRAME_FINISH then
+    world_physics_frame(worm)
+  elseif msg == wa.msg.FIRE_WEAPON and worm.weapon == "surrender" then
+    -- FireFinal(Wind Changer): breeze for none, a calm wind up to 5, strong
+    -- above; towards where the worm faces.
+    local f = wind_force
+    wa.sound.play(worm, f == 0 and "sounds/wind_changer/breeze.wav"
+      or f < 6 and "sounds/wind_changer/calm_wind.wav" or "sounds/wind_changer/strong_wind.wav")
+    wa.world.set_wind(trunc(f * WIND_STEP * FX) * worm.facing)
+  elseif msg == wa.msg.FIRE_WEAPON and worm.weapon == "low_gravity" then
+    if not gravity_choice then
+      wa.sound.play(worm, "sounds/gravity_control/error.wav")
+      return "eat"
+    end
+    gravity_initial = gravity_initial or wa.world.gravity()
+    gravity_factor, gravity_choice = GRAVITY_FACTORS[gravity_choice], nil
+    wa.sound.play(worm, "sounds/gravity_control/activate.wav")
+    wa.world.set_gravity(trunc(gravity_initial * gravity_factor))
+  end
+end)
+
+-- M_TURNBEGIN: the match's gravity back.
+wa.on.turn_start(function()
+  if gravity_factor then
+    gravity_factor = nil
+    wa.world.set_gravity(gravity_initial)
+  end
+  gravity_choice = nil
+end)
+
+if wa.on.hud then
+  wa.on.hud(function()
+    local worm = current_worm()
+    if not worm then
+      return
+    end
+    if worm.weapon == "surrender" then
+      wa.hud.line(string.format("Wind Changer: force %d (keys 0-9), then Space", wind_force))
+    elseif worm.weapon == "low_gravity" then
+      wa.hud.line("Gravity Control: " .. (gravity_choice and GRAVITY_NAMES[gravity_choice]
+        or "choose 1-5") .. ", then Space")
+    end
+  end)
+end
+
+-- ------------------------------------------------------------------ Jump
+--
+-- PX's jumpscript (utility_jump). Its record throws like a grenade, but
+-- nothing leaves the worm: FireFinal gives the worm the shot's own speed --
+-- the aim and the charge -- and plays the team's "Jump" line. The worm keeps
+-- its aim posture, eyes on the crosshair, until it jumps.
+--
+-- Differences: PX shows WA's wjump while the charge builds
+-- (SetAnimEx(269, FirePower)), which looks ahead rather than along the aim;
+-- it also mutes the worm's "Fire!" and "Watch this" lines while the Jump is
+-- selected, and stops a fuse and bounce being chosen for it.
+
+-- The first team's "Jump1" speech: WA loads each team's 54 lines in turn
+-- after its own sounds, so a worm's is 54 on per team (PX's PlaySoundBank(150)).
+local JUMP_SPEECH, SPEECH_LINES = 150, 54
+
+jump_fire = function(fire)
+  local worm = fire.worm
+  worm:set_state("sliding")
+  worm.vx, worm.vy = fire.vx, fire.vy
+  wa.sound.play(worm, JUMP_SPEECH + SPEECH_LINES * (worm.team - 1))
+end
+
 -- ----------------------------------------------------------------- pools
 
 -- Offensive: PX's `Weapons`, 29 entries.
@@ -1940,8 +3357,8 @@ local CAVE_SECOND = 16
 -- The slots Highlander never pools -- Kamikaze Rocket, Gravler, Hot Air
 -- Balloon, Skip Go/Surrender, Wind Changer, Muahaha 3, Weapon Crate, Cluster
 -- Bomb, Fast Walk, Teleport, Skunk, Crate Spy, Mole Bomb, Crate Shower -- keep
--- whatever ammo the scheme gives them, except the Hot Air Balloon, which
--- start_turn sets to 3.
+-- whatever ammo the scheme gives them, except the Hot Air Balloon and the
+-- Wind Changer, which start_turn sets to 3 and 1.
 
 -- Every slot this pack owns, in a fixed order. Zeroing walks this list, so it
 -- must not depend on pairs() order: Lua's string hashing is seeded per
@@ -1961,6 +3378,20 @@ end
 -- and is materialized from one worm's inventory at turn start.
 local arsenal = wa.inventory.create({ id = "arsenal", slots = POOLED })
 local dealt = {}
+local dead_hands = {}
+local revived_by_lightning = {}
+
+-- The current Highlander port moves a dead worm's hand to the active worm.
+-- A grave revived by Lightning also gets that original hand back. This is a
+-- copy: the active worm keeps the weapons it already stole.
+restore_lightning_inventory = function(worm)
+  local hand = dead_hands[worm.id]
+  if not hand then return end
+  arsenal:clear(worm)
+  for _, weapon in ipairs(hand) do arsenal:add(worm, weapon, 1) end
+  dealt[worm.id] = true
+  dead_hands[worm.id] = nil
+end
 
 local function describe(list)
   if not list or #list == 0 then
@@ -1999,14 +3430,18 @@ end
 
 local function start_turn(worm)
   arsenal:apply(worm, { clear = true, each = 1 })
-  -- GiveWeapons: three Hot Air Balloons for the turn, whatever is left.
+  -- GiveWeapons: three Hot Air Balloons and a Wind Changer for the turn,
+  -- whatever is left.
   worm:ammo("bungee", { set = 3 })
+  worm:ammo("surrender", { set = 1 })
 end
 
 local function on_death(event)
   local victim = event.victim
   local active = event.active
+  revived_by_lightning[victim.id] = nil
   local mine = arsenal:list(victim)
+  dead_hands[victim.id] = mine
 
   if active and active.id == victim.id then
     -- Died on its own turn: nothing to hand on, just take its weapons away.
@@ -2041,3 +3476,501 @@ wa.on.turn_start(function(event)
 end)
 
 wa.on.death(on_death)
+
+-- --------------------------------------------------------- electrical weapons
+-- PX's lightningstrike.txt and tazer.txt share these target classes and beam
+-- textures. Only gameplay advances in the actor brains. Drawing below may run
+-- at any frame rate and consumes only wa.draw.random(), never WA's sim RNG.
+local EP = 0x10000
+local ELECTRIC_DEPTH = 0x00190000 -- behind WA terrain, in the GPU occlusion mask
+local BEAM = "sprites/lightning/beam.png"
+local GLOW = "sprites/lightning/glow.png"
+local CLOUD = "sprites/lightning/cloud.png" -- a puff made for the pack, in place of WA's cloudl
+local CLOUD_DEPTH = ELECTRIC_DEPTH - 0x1000  -- in front of the beam's top, behind the terrain
+local GRENADE_BURST = "sprites/electric_grenade/explosion"
+local strikes, arcs, tazed = {}, {}, {}
+
+local function effect_actor(x, y, owner, frame)
+  return wa.actors.spawn({
+    sprite = GLOW, visible = false, gravity = false, collide = false,
+    owner = owner, x = x, y = y, on = frame,
+  })
+end
+
+local function electrical_targets(graves)
+  local out = {}
+  for _, group in ipairs({ wa.worms, wa.mines, wa.crates, wa.oil }) do
+    for _, obj in ipairs(group.all()) do out[#out + 1] = obj end
+  end
+  if graves and wa.graves then
+    for _, obj in ipairs(wa.graves.all()) do out[#out + 1] = obj end
+  end
+  return out
+end
+
+local function target_radius(obj)
+  if obj.kind == "worm" then return 6 end
+  if obj.kind == "grave" then return 8 end
+  if obj.kind == "mine" then return 5 end
+  return 9
+end
+
+-- A ray against terrain and the objects PX's collision mask names. Projection
+-- is done in world pixels; the chosen endpoint is converted back to 16.16.
+-- Equal-distance objects retain the engine's entity traversal order.
+local function electrical_trace(x0, y0, dx, dy)
+  local far = 10000
+  if wa.world.electrical_trace then
+    return wa.world.electrical_trace(math.floor(x0), math.floor(y0),
+      math.floor(x0 + dx * far * EP), math.floor(y0 + dy * far * EP))
+  end
+  local land = wa.land.trace(math.floor(x0), math.floor(y0),
+    math.floor(x0 + dx * far * EP), math.floor(y0 + dy * far * EP))
+  local best = land and math.sqrt(((land.x - x0) / EP) ^ 2 + ((land.y - y0) / EP) ^ 2) or far
+  local hit = land and { x = land.x, y = land.y, obj = nil } or nil
+  for _, obj in ipairs(electrical_targets(true)) do
+    local ox, oy = (obj.x - x0) / EP, (obj.y - y0) / EP
+    local along = ox * dx + oy * dy
+    local across = math.abs(ox * dy - oy * dx)
+    if along > 0 and along < best and across <= target_radius(obj) then
+      best = along
+      hit = { x = obj.x, y = obj.y, obj = obj }
+    end
+  end
+  return hit
+end
+
+local function strike_hit(s)
+  if not s.hit then return end
+  local radius2 = (6 * EP) ^ 2
+  local targets = wa.world.electrical_nearby
+    and wa.world.electrical_nearby(s.ex, s.ey, 24, true) or electrical_targets(true)
+  for _, obj in ipairs(targets) do
+    local dx, dy = obj.x - s.ex, obj.y - s.ey
+    local r = (target_radius(obj) + 6) * EP
+    if dx * dx + dy * dy <= math.max(radius2, r * r) then
+      if obj.kind == "worm" then
+        if not revived_by_lightning[obj.id] then obj:heal(25) end
+      elseif obj.kind == "grave" then
+        if obj.worm_id ~= 0 then
+          local id = obj.worm_id
+          local worm = obj:revive(id, 10)
+          if worm then
+            revived_by_lightning[worm.id] = true
+            restore_lightning_inventory(worm)
+          end
+        end
+      elseif obj.kind == "mine" then
+        obj:arm(obj.fuse < 0 and wa.random(1000, 5000) or obj.fuse)
+      elseif obj.kind == "crate" or obj.kind == "oil" then
+        obj:hit(100, 0, 0)
+      end
+    end
+  end
+end
+
+-- PX's cloud: every second frame of the strike's life a puff of WA's large
+-- cloud, tinted a dark bluish grey, is thrown out from the top of the beam
+-- and slowed by the air; a core puff (100 frames, 1.2x to 0.6x) until the
+-- strike is spent, a surrounding one (140 frames, 1x to nothing) until the
+-- strike is gone. Each fades in from nothing. Also PX's sparks: while the
+-- beam holds, a glow thrown from where it hit, falling. Both are advanced
+-- here, once per game frame, from the strike's own generator, and only drawn
+-- below; nothing else reads them.
+local function strike_rand(s)
+  s.seed = (s.seed * 1103515245 + 12345) % 0x80000000
+  return s.seed / 0x80000000
+end
+
+local function strike_puff(s, life, drag, s0, s1)
+  local xvel = strike_rand(s) * 2 - 1
+  local yvel = 1 - xvel * xvel
+  s.cloud[#s.cloud + 1] = { x = s.sx, y = s.sy, vx = 16 * xvel * EP,
+    vy = (strike_rand(s) * 9 - 8) * yvel * EP, drag = drag, age = 0, life = life, s0 = s0, s1 = s1 }
+end
+
+local function strike_particles(s)
+  if s.tail > 0 then
+    s.cloud_timer = s.cloud_timer - 1
+    if s.cloud_timer <= 0 then
+      if s.life > 0 then strike_puff(s, 100, 0.3, 1.2, 0.6) end
+      strike_puff(s, 140, 0.15, 1.0, 0.01)
+      s.cloud_timer = 2
+    end
+    if s.delay == 0 and s.life > 0 and s.hit then
+      local a = strike_rand(s) * 2 * math.pi
+      local v = (1 + strike_rand(s) * 2) * EP
+      s.sparks[#s.sparks + 1] = { x = s.ex, y = s.ey, vx = math.cos(a) * v, vy = math.sin(a) * v, age = 0 }
+    end
+  end
+  for i = #s.cloud, 1, -1 do
+    local p = s.cloud[i]
+    p.age = p.age + 1
+    if p.age >= p.life then
+      table.remove(s.cloud, i)
+    else
+      p.x, p.y = p.x + p.vx, p.y + p.vy
+      p.vx, p.vy = p.vx * (1 - p.drag), p.vy * (1 - p.drag)
+    end
+  end
+  for i = #s.sparks, 1, -1 do
+    local p = s.sparks[i]
+    p.age = p.age + 1
+    if p.age >= 50 then
+      table.remove(s.sparks, i)
+    else
+      p.x, p.y, p.vy = p.x + p.vx, p.y + p.vy, p.vy + EP // 8
+    end
+  end
+end
+
+lightning_click = function(ev)
+  local dirx = 0.5 * ev.worm.facing
+  local diry = math.sqrt(3) / 2
+  local sy = -270 * EP
+  local sx = math.floor(ev.x - ((ev.y - sy) / EP) * dirx / diry * EP)
+  local hit = electrical_trace(sx, sy, dirx, diry)
+  local ex, ey = hit and hit.x or sx + math.floor(300 * dirx * EP),
+    hit and hit.y or sy + math.floor(300 * diry * EP)
+  local distance = math.sqrt(((ex - sx) / EP) ^ 2 + ((ey - sy) / EP) ^ 2)
+  if hit and distance > 300 then
+    sx, sy = ex - math.floor(300 * dirx * EP), ey - math.floor(300 * diry * EP)
+  end
+  local s = { sx = sx, sy = sy, ex = ex, ey = ey, hit = hit, dirx = dirx, diry = diry,
+    delay = 150, life = 16, tail = 60, owner = ev.worm, ticks = 0,
+    seed = (ex // EP * 7919 + ey // EP) % 0x80000000, cloud_timer = 0, cloud = {}, sparks = {} }
+  strikes[#strikes + 1] = s
+  wa.sound.play(ev.worm, "sounds/lightning/thunder.wav")
+  effect_actor(ex, ey, ev.worm, function(a)
+    s.ticks = s.ticks + 1
+    strike_particles(s)
+    if s.delay > 0 then
+      s.delay = s.delay - 1
+      if s.delay == 0 then wa.sound.play(a, "sounds/lightning/hit.wav") end
+    elseif s.life > 0 then
+      s.life = s.life - 1
+      if s.life == 0 then strike_hit(s) end
+    elseif s.tail > 0 then
+      s.tail = s.tail - 1
+    elseif #s.cloud == 0 and #s.sparks == 0 then
+      for i, held in ipairs(strikes) do
+        if held == s then table.remove(strikes, i); break end
+      end
+      a:despawn()
+    end
+  end)
+end
+
+local function target_key(obj)
+  return obj.kind .. ":" .. obj.id
+end
+
+local function find_target(key)
+  for _, obj in ipairs(electrical_targets(false)) do
+    if target_key(obj) == key then return obj end
+  end
+end
+
+local function closest_target(arc)
+  local best, distance = nil, (200 * EP) ^ 2
+  local targets = wa.world.electrical_nearby
+    and wa.world.electrical_nearby(arc.x, arc.y, 200, false) or electrical_targets(false)
+  for _, obj in ipairs(targets) do
+    local key = target_key(obj)
+    if not arc.ignore[key] and (obj.kind ~= "worm" or obj.hp > 0) then
+      local dx, dy = obj.x - arc.x, obj.y - arc.y
+      local d = dx * dx + dy * dy
+      if d < distance then best, distance = obj, d end
+    end
+  end
+  return best, distance
+end
+
+local function release_taze(key)
+  local hold = tazed[key]
+  if not hold then return end
+  hold.count = hold.count - 1
+  if hold.count > 0 then return end
+  local worm = find_target(key)
+  if worm then
+    worm:drop()
+    worm.body_visible = true
+  end
+  tazed[key] = nil
+end
+
+local function zap_target(arc, pending)
+  local obj = find_target(pending.key)
+  release_taze(pending.key)
+  if not obj then return end
+  if obj.kind == "worm" then
+    obj:hurt(24)
+    obj.vx, obj.vy = pending.side * 1.2 * EP, -4 * EP
+  elseif obj.kind == "mine" then
+    obj:arm(400)
+  elseif obj.kind == "crate" or obj.kind == "oil" then
+    obj:hit(12, pending.side * 1.2 * EP, -4 * EP)
+  end
+end
+
+local function progress_arc(arc)
+  arc.explosion = arc.explosion + 1
+  for i = #arc.pending, 1, -1 do
+    local p = arc.pending[i]
+    p.time = p.time - 1
+    if p.time <= 0 then
+      zap_target(arc, p)
+      table.remove(arc.pending, i)
+    end
+  end
+  for _, key in ipairs(wa.sorted(tazed)) do
+    local hold = tazed[key]
+    local worm = find_target(key)
+    if worm then
+      worm:clear_keys()
+      worm:set_state("standing")
+      worm:carry(hold.x, hold.y)
+    end
+  end
+  if arc.pause > 0 then arc.pause = arc.pause - 1; return end
+  if arc.life <= 0 then
+    if #arc.points > 0 then table.remove(arc.points, 1) end
+    return
+  end
+  arc.life = arc.life - 1
+  local target, distance = closest_target(arc)
+  if target then
+    local dx, dy = target.x - arc.x, target.y - arc.y
+    local d = math.sqrt(distance)
+    if d <= 10 * EP then
+      local key = target_key(target)
+      arc.ignore[key] = true
+      arc.pending[#arc.pending + 1] = { key = key, side = dx < 0 and -1 or 1, time = 24 }
+      if target.kind == "worm" then
+        if tazed[key] then
+          tazed[key].count = tazed[key].count + 1
+        else
+          tazed[key] = { x = target.x, y = target.y, count = 1,
+            sheet = wa.random(1, 2) == 1 and "sprites/electric_grenade/tazed1" or "sprites/electric_grenade/tazed2" }
+        end
+        target.body_visible = false
+        target:carry(target.x, target.y)
+      end
+      arc.x, arc.y = target.x, target.y
+      arc.life = 20
+      arc.pause = 14
+      for i = #arc.points, 2, -1 do table.remove(arc.points, i) end
+      arc.points[#arc.points + 1] = { arc.x, arc.y }
+      return
+    end
+    local pull = math.min(1, math.sqrt(10 * EP / d))
+    arc.dx = arc.dx + ((dx / d) - arc.dx) * pull
+    arc.dy = arc.dy + ((dy / d) - arc.dy) * pull
+  else
+    arc.dx = arc.dx + wa.random(-100, 100) / 100
+    arc.dy = arc.dy + wa.random(-100, 100) / 100
+  end
+  local norm = math.sqrt(arc.dx * arc.dx + arc.dy * arc.dy)
+  if norm < 0.01 then arc.dx, arc.dy = 0, -1 else arc.dx, arc.dy = arc.dx / norm, arc.dy / norm end
+  local nx, ny = arc.x + arc.dx * 20 * EP, arc.y + arc.dy * 20 * EP
+  local land = wa.land.trace(math.floor(arc.x), math.floor(arc.y), math.floor(nx), math.floor(ny))
+  if land then
+    if land.starts_solid then arc.life = 0; return end
+    -- Follow the tangent that moves closer to the target, as PX's arc does.
+    local tx, ty = land.tx or 1, land.ty or 0
+    if target then
+      local a = (target.x - (land.x + tx * 10 * EP)) ^ 2 + (target.y - (land.y + ty * 10 * EP)) ^ 2
+      local b = (target.x - (land.x - tx * 10 * EP)) ^ 2 + (target.y - (land.y - ty * 10 * EP)) ^ 2
+      if b < a then tx, ty = -tx, -ty end
+    end
+    arc.dx, arc.dy = tx, ty
+    arc.x, arc.y = land.x + (land.nx or 0) * 10 * EP + tx * 10 * EP,
+      land.y + (land.ny or -1) * 10 * EP + ty * 10 * EP
+  else
+    arc.x, arc.y = arc.x + arc.dx * 10 * EP, arc.y + arc.dy * 10 * EP
+  end
+  arc.points[#arc.points + 1] = { arc.x, arc.y }
+  if #arc.points > 33 then table.remove(arc.points, 1) end
+end
+
+electric_grenade_explode = function(ev)
+  local arc = { x = ev.x, y = ev.y, dx = 0, dy = -1, life = 16, pause = 0,
+    points = { { ev.x, ev.y } }, ignore = {}, pending = {}, explosion = 0,
+    burst_x = ev.x, burst_y = ev.y, sound_age = 0 }
+  if ev.worm then arc.ignore[target_key(ev.worm)] = true end
+  arcs[#arcs + 1] = arc
+  local driver = effect_actor(ev.x, ev.y, ev.worm, function(a)
+    arc.sound_age = arc.sound_age + 1
+    if arc.life > 0 and arc.sound_age % 46 == 0 then
+      wa.sound.play(a, "sounds/lightning/tazer_loop.wav")
+    end
+    progress_arc(arc)
+    if arc.life <= 0 and #arc.points == 0 and #arc.pending == 0 then
+      for i, held in ipairs(arcs) do
+        if held == arc then table.remove(arcs, i); break end
+      end
+      a:despawn()
+    end
+  end)
+  wa.sound.play(driver, "sounds/lightning/tazer_loop.wav")
+end
+
+if wa.on.draw and wa.draw.ribbon then
+  local function colour(a, r, g, b)
+    return (math.floor(a) << 24) | (r << 16) | (g << 8) | b
+  end
+  local function glow(x, y, size, color)
+    local h = size * EP / 2
+    wa.draw.quad({ sprite = GLOW, blend = "add", color = color, depth = ELECTRIC_DEPTH,
+      points = { {x-h,y-h}, {x+h,y-h}, {x+h,y+h}, {x-h,y+h} } })
+  end
+  -- PX's lightningstrike RenderLightning. Its shape is fractal noise, made
+  -- afresh each game frame while the beam holds: each point is the middle of
+  -- its two neighbours plus a random nudge, halving the span each pass. A
+  -- look, so from wa.draw.random, never WA's generator.
+  local LR, LG, LB = 120, 140, 255
+  local function lerp(t, a, b) return a + (b - a) * t end
+  local function noise_span(noise, off, divs, scale, first, last)
+    for i = 0, divs - 1 do noise[off + i] = 0 end
+    noise[off], noise[off + divs - 1] = first, last
+    local k = divs
+    local l = k >> 1
+    while l > 0 do
+      for i = l, divs - 1 - l, k do
+        noise[off + i] = (noise[off + i - l] + noise[off + i + l]) * 0.5 + (wa.draw.random() * 2 - 1) * scale
+      end
+      k = l
+      l = k >> 1
+    end
+  end
+  -- The main beam's 9 points, and 6 branches of 9 at random points on it.
+  local function new_shape(s)
+    s.noise, s.attach = {}, {}
+    noise_span(s.noise, 0, 9, 1.0, 0, 0)
+    for _ = 1, 6 do s.attach[1 + math.floor(wa.draw.random() * 8)] = true end
+    for i = 0, 5 do
+      local off = 2 + wa.draw.random() * 4
+      if wa.draw.random() < 0.5 then off = -off end
+      noise_span(s.noise, 9 + 9 * i, 9, 0.5, 0, off)
+    end
+    s.ground = 0.5 + wa.draw.random() * 0.3
+    s.shape_tick = s.ticks
+  end
+  -- PX's RenderBeam: one textured strip through the noise, `width` (a half
+  -- width, as PX's) tapering to `endwidth`, and a glow at every point fading
+  -- towards the end.
+  local function beam(noise, off, divs, width, endwidth, scale, x1, y1, x2, y2, glowalpha)
+    if divs < 2 then return end
+    local dx, dy = (x2 - x1) / EP, (y2 - y1) / EP
+    local dd = math.sqrt(dx * dx + dy * dy)
+    if dd <= 0 then return end
+    dx, dy = dx / dd, dy / dd
+    local pts, d = {}, divs - 1
+    for i = 0, divs - 1 do
+      local f = i / d
+      local n = noise[off + i] or 0
+      local x = lerp(f, x1, x2) + scale * dy * n * EP
+      local y = lerp(f, y1, y2) - scale * dx * n * EP
+      pts[#pts + 1] = { x = x, y = y, width = 2 * lerp(f, width, endwidth), u = f,
+        color = colour(255, LR, LG, LB) }
+      local a = 255 * glowalpha * (1 - f)
+      if a >= 1 then glow(x, y, 64, colour(a, LR, LG, LB)) end
+    end
+    wa.draw.ribbon({ sprite = BEAM, blend = "add", depth = ELECTRIC_DEPTH, points = pts })
+  end
+  local function draw_strike(s)
+    -- The cloud, dark and alpha-blended over the sky.
+    for _, p in ipairs(s.cloud) do
+      local t = p.age / p.life
+      local size = lerp(t, p.s0, p.s1)
+      local hw, hh = 64 * size * EP, 40 * size * EP
+      wa.draw.quad({ sprite = CLOUD, blend = "alpha", depth = CLOUD_DEPTH,
+        color = colour(255 * t, 45, 40, 60),
+        points = { { p.x - hw, p.y - hh }, { p.x + hw, p.y - hh }, { p.x + hw, p.y + hh }, { p.x - hw, p.y + hh } } })
+    end
+    for _, p in ipairs(s.sparks) do
+      local t = p.age / 50
+      glow(p.x, p.y, 13 * (1 - t) + 1, colour(255, LR, LG, LB))
+    end
+    if s.life <= 0 or s.delay >= 8 then return end
+    if not s.noise or (s.delay == 0 and s.shape_tick ~= s.ticks) then new_shape(s) end
+    -- Before it lands the beam grows down from the cloud over 8 frames.
+    local divs, ex, ey = 9, s.ex, s.ey
+    if s.delay > 0 then
+      local fr = (8 - s.delay) / 8
+      divs = math.floor(9 * fr)
+      ex, ey = lerp(fr, s.sx, s.ex), lerp(fr, s.sy, s.ey)
+    end
+    beam(s.noise, 0, divs, 35, 3, 15, s.sx, s.sy, ex, ey, 1.0)
+    local sub, d = 0, divs - 1
+    for i = 0, divs - 1 do
+      if s.attach[i] and d > 0 then
+        local f = i / d
+        local x = lerp(f, s.sx, ex) + 10 * s.diry * s.noise[i] * EP
+        local y = lerp(f, s.sy, ey) - 10 * s.dirx * s.noise[i] * EP
+        beam(s.noise, 9 + 9 * sub, 9, lerp(f, 10, 1), 0.1, 15 * (1 - f), x, y,
+          x + s.dirx * 100 * (1 - f) * EP, y + s.diry * 100 * (1 - f) * EP, 0.5 * (1 - f))
+        sub = sub + 1
+      end
+    end
+    glow(s.sx + 10 * s.dirx * EP, s.sy + 10 * s.diry * EP, 230, colour(255, LR, LG, LB))
+    if s.delay == 0 and s.hit then glow(s.ex, s.ey, 128 * s.ground, colour(255, LR, LG, LB)) end
+  end
+  wa.on.draw(function()
+    for _, s in ipairs(strikes) do
+      draw_strike(s)
+    end
+    for _, arc in ipairs(arcs) do
+      if arc.explosion < 10 then
+        local h = 75 * EP
+        wa.draw.quad({ sprite=GRENADE_BURST, frame=arc.explosion,
+          blend="add", color=0x551E14EB, depth=ELECTRIC_DEPTH,
+          points={{arc.burst_x-h,arc.burst_y-h},{arc.burst_x+h,arc.burst_y-h},
+            {arc.burst_x+h,arc.burst_y+h},{arc.burst_x-h,arc.burst_y+h}} })
+      end
+      if #arc.points >= 2 then
+        -- PX's CTazerShot: one strip through the arc's points, thickest in
+        -- the middle (9, a half width, as PX's), wobbling up to 10 px across
+        -- its path by fractal noise made afresh each game frame, a glow at
+        -- every point and a big one at the tip; all fading as the arc dies.
+        if arc.shape_tick ~= arc.sound_age then
+          arc.noise = {}
+          noise_span(arc.noise, 0, 33, 1.0, 0, 0)
+          arc.shape_tick = arc.sound_age
+        end
+        local pts, num = {}, #arc.points - 1
+        local fade = math.min(1, arc.life / 6)
+        for i = 0, num do
+          local t = i / num
+          local x, y = arc.points[i + 1][1], arc.points[i + 1][2]
+          if i > 0 and i < num then
+            local px, py = arc.points[i][1], arc.points[i][2]
+            local nx, ny = (y - py) / EP, (px - x) / EP
+            local d = math.sqrt(nx * nx + ny * ny)
+            if d > 0 then
+              local n = 10 * (arc.noise[i - 1] or 0) / d * EP
+              x, y = x + n * nx, y + n * ny
+            end
+          end
+          local f = math.min(1, 4 * t * (1 - t) + 0.1)
+          local f2 = f * fade
+          local c = colour(255, math.floor(80 * f2), math.floor(100 * f2), math.floor(255 * f2))
+          pts[i + 1] = { x = x, y = y, width = 2 * 9 * f, u = t, color = c }
+          glow(x, y, i == num - 1 and 115 or 38, c)
+        end
+        wa.draw.ribbon({ sprite = BEAM, blend = "add", depth = ELECTRIC_DEPTH, points = pts })
+      end
+    end
+    for key, hold in pairs(tazed) do
+      local worm = find_target(key)
+      if worm then
+        local x, y = worm.x, worm.y
+        local h = 30 * EP
+        wa.draw.quad({ sprite=hold.sheet, frame=math.floor(wa.draw.random()*4), blend="alpha", depth=ELECTRIC_DEPTH,
+          points={{x-h,y-h},{x+h,y-h},{x+h,y+h},{x-h,y+h}} })
+        -- PX's tazed worm: a glow 0.4 to 0.7 of the sheet, flickering.
+        glow(x, y, 128 * (0.4 + 0.3 * wa.draw.random()), colour(255, 80, 100, 255))
+      end
+    end
+  end)
+end
