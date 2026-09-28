@@ -3,6 +3,8 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
+pub mod signature;
+
 #[derive(Debug, Clone, Default)]
 pub struct Catalog {
     pub functions: HashMap<String, Function>,
@@ -197,11 +199,19 @@ mod tests {
         assert_eq!(c.function_va("InitWeaponTable"), Some(0x0053CAB0));
         assert_eq!(c.global_va("STR_VERSION_381"), Some(0x00641C60));
         let world = c.structs.get("GameWorld").unwrap();
-        let wt = world.fields.iter().find(|f| f.name.as_deref() == Some("weapon_table")).unwrap();
+        let wt = world
+            .fields
+            .iter()
+            .find(|f| f.name.as_deref() == Some("weapon_table"))
+            .unwrap();
         assert_eq!(wt.offset, 0x510);
         let cm = c.structs.get("CollisionManager").unwrap();
         assert_eq!(cm.size, Some(0x264));
-        let wind = cm.fields.iter().find(|f| f.name.as_deref() == Some("wind_bias")).unwrap();
+        let wind = cm
+            .fields
+            .iter()
+            .find(|f| f.name.as_deref() == Some("wind_bias"))
+            .unwrap();
         assert_eq!(wind.offset, 0x230);
         assert_eq!(
             c.function_va("CollisionManager__apply_projectile_gravity"),
@@ -230,7 +240,10 @@ mod tests {
         assert_eq!(hooks[0].wa_function, "InitWeaponTable");
         assert_eq!(hooks[0].action, "wrap_after");
         assert_eq!(hooks[1].wa_function, "GfxHandler__LoadSprites");
-        assert_eq!(hooks[2].wa_function, "CollisionManager__apply_projectile_gravity");
+        assert_eq!(
+            hooks[2].wa_function,
+            "CollisionManager__apply_projectile_gravity"
+        );
         assert_eq!(hooks.len(), 9);
         assert_eq!(hooks[8].wa_function, "WormEntity__calc_sprite");
         assert_eq!(hooks[8].action, "wrap_after");

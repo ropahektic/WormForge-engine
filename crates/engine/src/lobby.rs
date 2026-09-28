@@ -14,10 +14,7 @@
 //! Every transition is logged with the observer that saw it first.
 
 use crate::log::{log_error, log_line, panic_text, wa_directory, wormforge_dir};
-use crate::rebase::rb;
 use game::entity::read_i32;
-use minhook::MinHook;
-use re_catalog::Catalog;
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -27,7 +24,7 @@ static ORIGINAL_LIST: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_NET_LIST: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_GATE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
-/// `rb(G_CPLAYERS)`, once installed.
+/// `crate::wa::address("G_CPLAYERS")`, once installed.
 static PLAYERS: AtomicU32 = AtomicU32::new(0);
 /// The local bulb as last observed: (host, lit).
 static LAST: Mutex<Option<(bool, bool)>> = Mutex::new(None);
@@ -48,57 +45,23 @@ const RECORDS: i32 = 13;
 
 type UpdateReadyFn = unsafe extern "thiscall" fn(*mut u8);
 
-/// WA 3.8.1 bytes each target must start with, from wkFOW's signatures.
-/// Their first bytes are skipped (`None`): another module's hook may have
-/// patched them, and MinHook chains onto its jump.
-const LIST_BYTES: &[Option<u8>] = &[
-    None, None, None, None, None, None, None, Some(0x33), Some(0xD2), Some(0x85), Some(0xDB),
-    Some(0x0F), Some(0x8E), Some(0xA7), Some(0x00), Some(0x00), Some(0x00),
-];
-const NET_LIST_BYTES: &[Option<u8>] = &[
-    None, None, None, None, None, None, None, None, None, None, None, Some(0x8B), Some(0xE9),
-    Some(0x0F), Some(0x8E), Some(0xBA), Some(0x00), Some(0x00), Some(0x00),
-];
-const GATE_BYTES: &[Option<u8>] = &[
-    None, None, None, None, None, None, None, None, Some(0x7D), Some(0x04), Some(0x33), Some(0xC0),
-    Some(0x59), Some(0xC3), Some(0x80), Some(0xBF), Some(0x06), Some(0x57), Some(0x00), Some(0x00),
-];
-
-pub fn install(catalog: &Catalog) -> Result<(), String> {
-    let players = catalog.global_va("G_CPLAYERS").ok_or("missing G_CPLAYERS catalog entry")?;
-    let list = target(catalog, "LobbyList__UpdateReady", LIST_BYTES)?;
-    let net_list = target(catalog, "LobbyNetList__UpdateReady", NET_LIST_BYTES)?;
-    let gate = target(catalog, "CPlayers__IsOkToStartNetGame", GATE_BYTES)?;
+pub fn install() -> Result<(), String> {
+    let players = crate::wa::try_address("G_CPLAYERS").ok_or("missing G_CPLAYERS locator")?;
+    let list = target("LOBBY_LIST_UPDATE_READY")?;
+    let net_list = target("LOBBY_NET_LIST_UPDATE_READY")?;
+    let gate = target("CPLAYERS_OK_TO_START_NET_GAME")?;
     unsafe {
-        let tr = MinHook::create_hook(list, list_update_ready_hook as *mut c_void)
-            .map_err(|e| format!("lobby list hook: {e:?}"))?;
-        ORIGINAL_LIST.store(tr, Ordering::SeqCst);
-        let tr = MinHook::create_hook(net_list, net_list_update_ready_hook as *mut c_void)
-            .map_err(|e| format!("lobby network list hook: {e:?}"))?;
-        ORIGINAL_NET_LIST.store(tr, Ordering::SeqCst);
-        let tr = MinHook::create_hook(gate, start_gate_hook as *mut c_void)
-            .map_err(|e| format!("lobby start gate hook: {e:?}"))?;
-        ORIGINAL_GATE.store(tr, Ordering::SeqCst);
+        ORIGINAL_LIST.store(crate::wa::create_hook(list, list_update_ready_hook as *mut c_void)?, Ordering::SeqCst);
+        ORIGINAL_NET_LIST.store(crate::wa::create_hook(net_list, net_list_update_ready_hook as *mut c_void)?, Ordering::SeqCst);
+        ORIGINAL_GATE.store(crate::wa::create_hook(gate, start_gate_hook as *mut c_void)?, Ordering::SeqCst);
     }
-    PLAYERS.store(rb(players), Ordering::SeqCst);
+    PLAYERS.store(players, Ordering::SeqCst);
     log_line("lobby ready-bulb hooks installed");
     Ok(())
 }
 
-pub(crate) fn target(
-    catalog: &Catalog,
-    name: &str,
-    expected: &[Option<u8>],
-) -> Result<*mut c_void, String> {
-    let va = catalog.function_va(name).ok_or_else(|| format!("missing {name} catalog entry"))?;
-    let at = rb(va) as *const u8;
-    let actual = unsafe { std::slice::from_raw_parts(at, expected.len()) };
-    for (i, (want, got)) in expected.iter().zip(actual).enumerate() {
-        if want.is_some_and(|w| w != *got) {
-            return Err(format!("{name}: WA bytes differ at {va:#010x}+{i}"));
-        }
-    }
-    Ok(at as *mut c_void)
+pub(crate) fn target(name: &str) -> Result<*mut c_void, String> {
+    crate::wa::check_callable(name).map(|addr| addr as *mut c_void)
 }
 
 /// This machine's bulb: (host, lit), or `None` outside a network lobby.

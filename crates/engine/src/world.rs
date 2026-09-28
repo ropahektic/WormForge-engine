@@ -2,7 +2,6 @@
 //! (Jelly CTask children), PlaySoundLocal, stock SelectWeapon / StartFiring.
 
 use crate::log::{log_error, log_line};
-use crate::rebase::rb;
 use game::entity::{read_i32, write_i32};
 use game::latch::FrameLatch;
 use game::offsets::*;
@@ -22,6 +21,7 @@ struct CustomWav {
 }
 
 static WAVS: Mutex<Vec<(String, CustomWav)>> = Mutex::new(Vec::new());
+static GRAVE_OWNERS: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
 static NEXT_WAV: AtomicI32 = AtomicI32::new(CUSTOM_SOUND_SLOT_MIN);
 
 struct SpaceLatch {
@@ -39,6 +39,37 @@ pub fn clear_sounds() {
         g.clear();
     }
     NEXT_WAV.store(CUSTOM_SOUND_SLOT_MIN, Ordering::SeqCst);
+    if let Ok(mut owners) = GRAVE_OWNERS.lock() { owners.clear(); }
+}
+
+pub fn remember_grave_owner(grave: u32, worm_id: u32) {
+    if grave == 0 || worm_id == 0 { return; }
+    if let Ok(mut owners) = GRAVE_OWNERS.lock() {
+        if let Some(entry) = owners.iter_mut().find(|(handle, _)| *handle == grave) {
+            entry.1 = worm_id;
+        } else {
+            owners.push((grave, worm_id));
+        }
+    }
+}
+
+/// The worm (team * 16 + index) whose gravestone WA has yet to make: dead
+/// (0 HP) and not paired with a grave. 0 otherwise.
+pub fn graveless_dead_worm(worm: *mut u8) -> u32 {
+    if worm.is_null() || worm_hp(worm as u32) > 0 { return 0; }
+    let id = unsafe {
+        read_i32(worm, ENT_WORM_TEAM).wrapping_mul(16).wrapping_add(read_i32(worm, WORM_INDEX))
+    } as u32;
+    let paired = GRAVE_OWNERS.lock().is_ok_and(|owners| owners.iter().any(|&(_, owner)| owner == id));
+    if id == 0 || paired { 0 } else { id }
+}
+
+pub fn grave_identity(grave: u32) -> u32 {
+    if grave == 0 { return 0; }
+    unsafe { if read_i32(grave as *mut u8, ENT_CLASS_TYPE) != CLASS_GRAVE { return 0; } }
+    GRAVE_OWNERS.lock().ok().and_then(|owners|
+        owners.iter().find(|(handle, _)| *handle == grave).map(|(_, id)| *id)
+    ).unwrap_or(0)
 }
 
 pub fn remember_wav(key: String, path: PathBuf) -> i32 {
@@ -92,7 +123,11 @@ pub fn resolve_sound(key: &str) -> i32 {
         let Ok(mut g) = WAVS.lock() else {
             return 0;
         };
-        let Some(wav) = g.iter_mut().find(|(k, _)| k == key || k.ends_with(key)).map(|(_, w)| w) else {
+        let Some(wav) = g
+            .iter_mut()
+            .find(|(k, _)| k == key || k.ends_with(key))
+            .map(|(_, w)| w)
+        else {
             return 0;
         };
         if wav.loaded {
@@ -139,7 +174,7 @@ unsafe fn landscape_method(slot: usize, expected: u32) -> Result<(*mut u8, u32),
         return Err("terrain cut: landscape unavailable".into());
     }
     let table = *(land as *const u32);
-    if table != rb(LANDSCAPE_VTABLE) {
+    if table != crate::wa::address("LANDSCAPE_VTABLE") {
         return Err(format!(
             "terrain cut: unexpected landscape vtable {table:#x}"
         ));
@@ -148,7 +183,7 @@ unsafe fn landscape_method(slot: usize, expected: u32) -> Result<(*mut u8, u32),
     if method == 0 {
         return Err(format!("terrain cut: landscape method {slot} is null"));
     }
-    if method != rb(expected) {
+    if method != expected {
         static REPORTED: [AtomicBool; 4] = [const { AtomicBool::new(false) }; 4];
         if !REPORTED[slot & 3].swap(true, Ordering::Relaxed) {
             log_line(&format!(
@@ -166,7 +201,7 @@ pub fn land_dig(x: i32, y: i32, radius: i32) -> Result<(), String> {
         return Err("terrain cut: radius must be 1..200 pixels".into());
     }
     unsafe {
-        let (land, method) = landscape_method(2, LANDSCAPE_APPLY_EXPLOSION)?;
+        let (land, method) = landscape_method(2, crate::wa::address("LANDSCAPE_WRITE_RADIUS"))?;
         let cut: unsafe extern "thiscall" fn(*mut u8, i32, i32, i32) =
             std::mem::transmute(method as usize);
         cut(land, radius, x >> 16, y >> 16);
@@ -180,7 +215,7 @@ pub fn land_cut(shape: i32, x: i32, y: i32) -> Result<(), String> {
         return Err("terrain cut: only drill and torch shapes are supported".into());
     }
     unsafe {
-        let (land, method) = landscape_method(3, LANDSCAPE_MASK)?;
+        let (land, method) = landscape_method(3, crate::wa::address("LANDSCAPE_WRITE_MASK_ID"))?;
         let mask = *((land.add(LANDSCAPE_SHAPES + shape as usize * 4)) as *const u32);
         if mask == 0 {
             return Err(format!("terrain cut: stock shape {shape} is not loaded"));
@@ -194,14 +229,86 @@ pub fn land_cut(shape: i32, x: i32, y: i32) -> Result<(), String> {
 
 pub fn trace_fixed(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)> {
     let grid = live_grid()?;
-    let hit = trace_pixels(
-        x0 >> 16,
-        y0 >> 16,
-        x1 >> 16,
-        y1 >> 16,
-        |x, y| grid.solid_px(x, y),
-    )?;
+    let hit = trace_pixels(x0 >> 16, y0 >> 16, x1 >> 16, y1 >> 16, |x, y| {
+        grid.solid_px(x, y)
+    })?;
     Some((hit.0 << 16, hit.1 << 16))
+}
+
+fn electrical_targets(include_graves: bool) -> Vec<u32> {
+    let root = unsafe { session_root_ptr() };
+    if root.is_null() { return Vec::new(); }
+    let mut out = Vec::new();
+    let mut q = VecDeque::new();
+    q.push_back(root);
+    let mut visited = 0;
+    while let Some(node) = q.pop_front() {
+        visited += 1;
+        if node.is_null() || visited > MAX_WALK { break; }
+        unsafe {
+            let class = read_i32(node, ENT_CLASS_TYPE);
+            if matches!(class, CLASS_WORM | CLASS_MINE | CLASS_CRATE | CLASS_OIL)
+                || (include_graves && class == CLASS_GRAVE) {
+                if class != CLASS_WORM || worm_hp(node as u32) > 0 { out.push(node as u32); }
+            }
+            let count = (read_i32(node, ENT_CHILDREN_WATERMARK) as usize).min(MAX_CHILDREN);
+            let children = read_i32(node, ENT_CHILDREN_DATA) as *const u32;
+            if !children.is_null() {
+                for i in 0..count {
+                    let child = *children.add(i);
+                    if child != 0 { q.push_back(child as *mut u8); }
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn electrical_nearby(x: i32, y: i32, radius_px: i32, graves: bool) -> Vec<u32> {
+    if !(1..=1000).contains(&radius_px) { return Vec::new(); }
+    let radius = radius_px as i128 * 65536;
+    electrical_targets(graves).into_iter().filter(|&handle| unsafe {
+        let object = handle as *mut u8;
+        let dx = read_i32(object, ENT_POS_X) as i128 - x as i128;
+        let dy = read_i32(object, ENT_POS_Y) as i128 - y as i128;
+        dx * dx + dy * dy <= radius * radius
+    }).collect()
+}
+
+/// Terrain plus electrical target classes, in WA entity traversal order.
+/// Uses integer projection for peer-stable ties and returns the nearest hit.
+pub fn electrical_trace(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32, u32)> {
+    let dx = x1 as i128 - x0 as i128;
+    let dy = y1 as i128 - y0 as i128;
+    if dx.abs() > 10000 * 65536 || dy.abs() > 10000 * 65536 { return None; }
+    let length2 = dx * dx + dy * dy;
+    if length2 == 0 { return None; }
+    let land = trace_fixed(x0, y0, x1, y1);
+    let mut best = land.map(|(x, y)|
+        ((x as i128 - x0 as i128) * dx + (y as i128 - y0 as i128) * dy).max(0)
+    ).unwrap_or(length2);
+    let mut hit = land.map(|(x, y)| (x, y, 0));
+    for handle in electrical_targets(true) {
+        unsafe {
+            let object = handle as *mut u8;
+            let ox = read_i32(object, ENT_POS_X);
+            let oy = read_i32(object, ENT_POS_Y);
+            let px = ox as i128 - x0 as i128;
+            let py = oy as i128 - y0 as i128;
+            let along = px * dx + py * dy;
+            if along <= 0 || along >= best { continue; }
+            let radius_px = match read_i32(object, ENT_CLASS_TYPE) {
+                CLASS_WORM => 6, CLASS_GRAVE => 8, CLASS_MINE => 5, _ => 9,
+            };
+            let cross = px * dy - py * dx;
+            let radius = radius_px as i128 * 65536;
+            if cross * cross <= radius * radius * length2 {
+                best = along;
+                hit = Some((ox, oy, handle));
+            }
+        }
+    }
+    hit
 }
 
 pub fn map_size_px() -> (i32, i32) {
@@ -244,10 +351,22 @@ pub fn latch_entity_view(display: usize, clip: usize) {
     unsafe {
         VIEW_CLIP_X.store(*(clip as *const i32), Ordering::Relaxed);
         VIEW_CLIP_Y.store(*((clip + 4) as *const i32), Ordering::Relaxed);
-        VIEW_CAM_X.store(*((display + DISPLAY_VIEW_X) as *const i32), Ordering::Relaxed);
-        VIEW_CAM_Y.store(*((display + DISPLAY_VIEW_Y) as *const i32), Ordering::Relaxed);
-        VIEW_SURF_W.store(*((display + DISPLAY_WIDTH) as *const i32), Ordering::Relaxed);
-        VIEW_SURF_H.store(*((display + DISPLAY_HEIGHT) as *const i32), Ordering::Relaxed);
+        VIEW_CAM_X.store(
+            *((display + DISPLAY_VIEW_X) as *const i32),
+            Ordering::Relaxed,
+        );
+        VIEW_CAM_Y.store(
+            *((display + DISPLAY_VIEW_Y) as *const i32),
+            Ordering::Relaxed,
+        );
+        VIEW_SURF_W.store(
+            *((display + DISPLAY_WIDTH) as *const i32),
+            Ordering::Relaxed,
+        );
+        VIEW_SURF_H.store(
+            *((display + DISPLAY_HEIGHT) as *const i32),
+            Ordering::Relaxed,
+        );
     }
     VIEW_XFORM.store(true, Ordering::Relaxed);
 }
@@ -501,9 +620,11 @@ pub fn hold_turn_timer() {
     if root.is_null() {
         return;
     }
-    let Some((timer, display)) = FROZEN_TURN.lock().ok().and_then(|g| {
-        g.as_ref().map(|f| (f.timer, f.display))
-    }) else {
+    let Some((timer, display)) = FROZEN_TURN
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|f| (f.timer, f.display)))
+    else {
         return;
     };
     unsafe {
@@ -519,8 +640,7 @@ fn mouse_down() -> bool {
 
 fn key_down(vk: i32) -> bool {
     unsafe {
-        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000
-            != 0
+        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000 != 0
     }
 }
 
@@ -603,7 +723,7 @@ pub fn draw_random() -> Option<u32> {
     if !advance_rng_verified() {
         return None;
     }
-    let f = rb(GAME_WORLD_ADVANCE_RNG) as u32;
+    let f = crate::wa::address("GAME_WORLD_ADVANCE_RNG") as u32;
     let args = [world as u32, f];
     let out: u32;
     unsafe {
@@ -623,22 +743,15 @@ pub fn draw_random() -> Option<u32> {
     Some(out)
 }
 
-/// Check the prologue once, the way `render_queue` checks its dispatcher.
-/// Calling a hardcoded address on a build whose layout moved would corrupt
-/// the game; refusing to draw only costs the pack its randomness.
+/// Validate the live entry once. A prior module's supported jump is callable.
 fn advance_rng_verified() -> bool {
     match RNG_OK.load(Ordering::Relaxed) {
         0 => {
-            let addr = rb(GAME_WORLD_ADVANCE_RNG) as *const u8;
-            let found = unsafe { std::slice::from_raw_parts(addr, ADVANCE_RNG_PROLOGUE.len()) };
-            let ok = found == ADVANCE_RNG_PROLOGUE;
+            let result = crate::wa::check_callable("GAME_WORLD_ADVANCE_RNG");
+            let ok = result.is_ok();
             RNG_OK.store(if ok { 2 } else { 1 }, Ordering::Relaxed);
-            if !ok {
-                log_error(&format!(
-                    "GameWorld__AdvanceRNG at {addr:?} does not start with the \
-                     verified prologue (found {found:02x?}); wa.random() is \
-                     disabled rather than calling into the wrong place"
-                ));
+            if let Err(e) = result {
+                log_error(&format!("wa.random() disabled: {e}"));
             }
             ok
         }
@@ -1001,6 +1114,157 @@ pub fn worm_hp(handle: u32) -> i32 {
     }
 }
 
+/// The same shared health row PX's SetWormHealth changes. Only live worms may
+/// be healed; resurrection has its own path and must rebuild an entity.
+pub fn heal_worm(handle: u32, amount: i32) -> i32 {
+    if handle == 0 || amount <= 0 || amount > 10000 {
+        return worm_hp(handle);
+    }
+    unsafe {
+        let worm = handle as *mut u8;
+        if read_i32(worm, ENT_CLASS_TYPE) != CLASS_WORM { return 0; }
+        let world = read_i32(worm, ENT_WORLD) as *mut u8;
+        if world.is_null() { return 0; }
+        let team = read_i32(worm, ENT_WORM_TEAM);
+        let idx = read_i32(worm, WORM_INDEX);
+        if !(1..=MAX_TEAMS as i32).contains(&team) || !(1..=MAX_WORMS_PER_TEAM as i32).contains(&idx) {
+            return 0;
+        }
+        let off = ARENA_WORM_HP + team as usize * WORLD_TEAM_STRIDE + idx as usize * ARENA_WORM_STRIDE;
+        let current = read_i32(world, off);
+        if current <= 0 { return current; }
+        let next = current.saturating_add(amount);
+        write_i32(world, off, next);
+        next
+    }
+}
+
+/// Arm a settled stock mine using MineEntity's own fuse/trigger fields. WA's
+/// FrameFinish handler continues its beep, dud and explosion paths.
+pub fn arm_mine(handle: u32, fuse_ms: i32) -> bool {
+    if handle == 0 || !(0..=10_000).contains(&fuse_ms) { return false; }
+    unsafe {
+        let mine = handle as *mut u8;
+        if read_i32(mine, ENT_CLASS_TYPE) != CLASS_MINE
+            || read_i32(mine, 0x120) <= 0 // special mines cannot trigger
+            || read_i32(mine, 0x128) != 0 // already triggered
+            || read_i32(mine, 0x11C) > 0 { return false; }
+        write_i32(mine, 0x118, fuse_ms);
+        write_i32(mine, 0x128, 1);
+        write_i32(mine, 0x12C, fuse_ms / 250);
+        true
+    }
+}
+
+pub fn mine_fuse(handle: u32) -> i32 {
+    if handle == 0 { return 0; }
+    unsafe {
+        let mine = handle as *mut u8;
+        if read_i32(mine, ENT_CLASS_TYPE) != CLASS_MINE { return 0; }
+        read_i32(mine, 0x118)
+    }
+}
+
+/// Send WA's SpecialImpact to a crate or oil drum. The target owns its normal
+/// damage and detonation path, including knockback and weapon attribution.
+pub fn hit_object(handle: u32, from: u32, damage: i32, vx: i32, vy: i32) -> bool {
+    if handle == 0 || !(1..=1000).contains(&damage) { return false; }
+    unsafe {
+        let target = handle as *mut u8;
+        if !matches!(read_i32(target, ENT_CLASS_TYPE), CLASS_CRATE | CLASS_OIL) { return false; }
+        // PX sends a 0x408-byte M_GUNEXP buffer with flag 0. Stock oil drums
+        // then take the direct-trigger path; crates receive the damage field.
+        let mut data = [0i32; 0x408 / 4];
+        data[1] = read_i32(target, ENT_POS_X);
+        data[2] = read_i32(target, ENT_POS_Y);
+        data[3] = vx;
+        data[4] = vy;
+        data[HIT_AMOUNT / 4] = damage;
+        data[HIT_TEAM / 4] = if from == 0 { 0 } else { read_i32(from as *mut u8, ENT_WORM_TEAM) };
+        let vtable = *(target as *const *const u32);
+        if vtable.is_null() { return false; }
+        let message: unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut u8) =
+            std::mem::transmute(*vtable.add(2) as usize);
+        message(target, from, MSG_HIT, 0x408, data.as_mut_ptr() as *mut u8);
+        true
+    }
+}
+
+/// Revive the worm tied to a gravestone. The pack binds graves to stable worm
+/// IDs at death; WA's CrossEntity itself does not store that identity. This
+/// uses the same allocator, setup slot and WormEntity constructor as
+/// TeamEntity::Constructor in WA 3.8.1 (verified against OpenWA's bridge),
+/// then removes the consumed grave through its own vtable.
+pub fn revive_grave(grave_handle: u32, worm_id: u32, health: i32) -> u32 {
+    if grave_handle == 0 || !(1..=1000).contains(&health) { return 0; }
+    if grave_identity(grave_handle) != worm_id { return 0; }
+    let team = worm_id / 16;
+    let index = worm_id % 16;
+    if !(1..=MAX_TEAMS).contains(&team) || !(1..=MAX_WORMS_PER_TEAM).contains(&index) { return 0; }
+    unsafe {
+        let grave = grave_handle as *mut u8;
+        if read_i32(grave, ENT_CLASS_TYPE) != CLASS_GRAVE { return 0; }
+        let world = read_i32(grave, ENT_WORLD) as *mut u8;
+        if world.is_null() || world != session_world_ptr() { return 0; }
+        let parent = team_entity(team as i32);
+        if parent.is_null() { return 0; }
+        let shared = read_i32(grave, ENT_SHARED_DATA) as *mut u8;
+        if shared.is_null() || shared_lookup(shared, worm_id, SHARED_KEY_WORM).is_some() { return 0; }
+
+        let info = read_i32(world, GAME_WORLD_GAME_INFO) as *mut u8;
+        if info.is_null() { return 0; }
+        // GameInfo::team_records starts at +0x450; each team record is 0xBB8,
+        // and its eight 0x28-byte GameInfoWormSetup slots start at +0xA74.
+        let record = info.add(0x450 + (team as usize - 1) * 0xBB8);
+        if index > *record.add(0xBB4) as u32 { return 0; }
+        let setup = record.add(0xA74 + (index as usize - 1) * 0x28);
+        let malloc: unsafe extern "C" fn(usize) -> *mut u8 =
+            std::mem::transmute(crate::wa::address("WA_MALLOC") as usize);
+        let worm = malloc(0x41C);
+        if worm.is_null() { return 0; }
+        std::ptr::write_bytes(worm, 0, 0x3FC);
+
+        // The constructor may append the worm to TeamEntity's selection
+        // roster. An existing dead worm remains in that roster, so restore it
+        // if it was already present rather than leaving a duplicate turn.
+        let roster_count = read_i32(parent, 0x218).clamp(0, 100) as usize;
+        let already_listed = (0..roster_count)
+            .any(|i| read_i32(parent, 0x88 + i * 4) == index as i32);
+        let ctor: unsafe extern "stdcall" fn(*mut u8, *mut u8, u32, u32, *mut u8) -> *mut u8 =
+            std::mem::transmute(crate::wa::address("WORM_ENTITY_CTOR") as usize);
+        let built = ctor(worm, parent, team, index, setup);
+        if built.is_null() || read_i32(worm, ENT_CLASS_TYPE) != CLASS_WORM { return 0; }
+        if already_listed {
+            write_i32(parent, 0x218, roster_count as i32);
+        }
+
+        let x = read_i32(grave, ENT_POS_X);
+        let y = read_i32(grave, ENT_POS_Y).saturating_sub(5 << 16);
+        write_i32(worm, ENT_POS_X, x);
+        write_i32(worm, ENT_POS_Y, y);
+        write_i32(worm, ENT_SPEED_X, 0);
+        write_i32(worm, ENT_SPEED_Y, 0);
+        let hp = ARENA_WORM_HP + team as usize * WORLD_TEAM_STRIDE
+            + index as usize * ARENA_WORM_STRIDE;
+        write_i32(world, hp, health);
+        // TeamArena::logical_teams[team-1].eliminated_flag. A revived last
+        // worm must put its team back into selection and score calculations.
+        write_i32(world, GAME_WORLD_TEAM_ARENA + 8
+            + (team as usize - 1) * WORLD_TEAM_STRIDE + 0x4FC, 0);
+
+        let vtable = *(grave as *const *const u32);
+        if !vtable.is_null() {
+            let free: unsafe extern "thiscall" fn(*mut u8, u32) -> *mut u8 =
+                std::mem::transmute(*vtable.add(1) as usize);
+            free(grave, 1);
+        }
+        if let Ok(mut owners) = GRAVE_OWNERS.lock() {
+            owners.retain(|(handle, _)| *handle != grave_handle);
+        }
+        worm as u32
+    }
+}
+
 /// Team ammo for `slot`. `None` is a read. `Add` leaves infinite (`-1`)
 /// alone; `Set` overwrites it. See `lua_host::AmmoChange`.
 pub fn ammo(handle: u32, slot: u32, change: Option<lua_host::AmmoChange>) -> i32 {
@@ -1058,7 +1322,10 @@ unsafe fn ammo_row(arena: *mut u8, team: u32) -> Option<usize> {
     if arena.is_null() || team == 0 || team > MAX_TEAMS {
         return None;
     }
-    let alliance = read_i32(arena, TEAM_ARENA_ALLIANCE + team as usize * WORLD_TEAM_STRIDE);
+    let alliance = read_i32(
+        arena,
+        TEAM_ARENA_ALLIANCE + team as usize * WORLD_TEAM_STRIDE,
+    );
     if alliance < 0 || alliance >= MAX_TEAMS as i32 {
         return None;
     }
@@ -1078,7 +1345,7 @@ unsafe fn write_ammo(arena: *mut u8, team: u32, slot: u32, ammo: i32) {
 /// `WormEntity__StartFiring` — EAX=this. Power bar starts at 0 and grows while held.
 unsafe fn start_firing(worm: *mut u8) {
     write_i32(worm, WORM_WEAPONS_ENABLED, 1);
-    let f = rb(WORM_START_FIRING) as u32;
+    let f = crate::wa::address("WORM_START_FIRING") as u32;
     let args = [worm as u32, f];
     core::arch::asm!(
         "push esi",
@@ -1098,7 +1365,7 @@ unsafe fn start_firing(worm: *mut u8) {
 unsafe fn release_shot(worm: *mut u8) {
     write_i32(worm, WORM_WEAPONS_ENABLED, 1);
     type MsgFn = unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut u8);
-    let f: MsgFn = std::mem::transmute(rb(WORM_HANDLE_MESSAGE) as usize);
+    let f: MsgFn = std::mem::transmute(crate::wa::address("WORM_HANDLE_MESSAGE") as usize);
     f(
         worm,
         worm as u32,
@@ -1132,7 +1399,7 @@ unsafe fn clear_delay(arena: *mut u8, team: u32, slot: u32) {
 }
 
 unsafe fn get_ammo(arena: *mut u8, team: u32, slot: u32) -> i32 {
-    let f = rb(TEAM_GET_AMMO) as u32;
+    let f = crate::wa::address("TEAM_GET_AMMO") as u32;
     let args = [team, arena as u32, slot, f];
     let ret: i32;
     core::arch::asm!(
@@ -1151,7 +1418,7 @@ unsafe fn get_ammo(arena: *mut u8, team: u32, slot: u32) -> i32 {
 }
 
 unsafe fn add_ammo(arena: *mut u8, team: u32, slot: u32, amount: i32) {
-    let f = rb(TEAM_ADD_AMMO) as u32;
+    let f = crate::wa::address("TEAM_ADD_AMMO") as u32;
     let args = [team, amount as u32, slot, arena as u32, f];
     core::arch::asm!(
         "push esi",
@@ -1169,7 +1436,7 @@ unsafe fn add_ammo(arena: *mut u8, team: u32, slot: u32, amount: i32) {
 }
 
 unsafe fn select_weapon(worm: *mut u8, slot: u32, ammo: i32) {
-    let f = rb(WORM_SELECT_WEAPON) as u32;
+    let f = crate::wa::address("WORM_SELECT_WEAPON") as u32;
     let args = [worm as u32, ammo as u32, slot, f];
     core::arch::asm!(
         "push esi",
@@ -1538,7 +1805,7 @@ pub fn retreat_ms() -> i32 {
 }
 
 unsafe fn session_root_ptr() -> *mut u8 {
-    let slot = rb(G_GAME_SESSION) as *const *mut u8;
+    let slot = crate::wa::address("G_GAME_SESSION") as *const *mut u8;
     if slot.is_null() {
         return std::ptr::null_mut();
     }
@@ -1594,7 +1861,7 @@ unsafe fn dssound_load_wav(this: *mut u8, slot: i32, path: *const i8) -> bool {
     if this.is_null() || path.is_null() {
         return false;
     }
-    let f = rb(DS_SOUND_LOAD_WAV) as u32;
+    let f = crate::wa::address("DS_SOUND_LOAD_WAV") as u32;
     let args = [this as u32, slot as u32, path as u32, f];
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let ret: u32;
@@ -1626,7 +1893,7 @@ unsafe fn play_sound_local(entity: *mut u8, id: i32, flags: i32, volume: i32, pi
     if entity.is_null() {
         return;
     }
-    let f = rb(PLAY_SOUND_LOCAL) as u32;
+    let f = crate::wa::address("PLAY_SOUND_LOCAL") as u32;
     let args = [
         entity as u32,
         pitch as u32,

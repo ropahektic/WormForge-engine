@@ -22,9 +22,7 @@
 //! n-th dword of that half, at +0x22C, as WA's constructor copies it into a
 //! pellet's active block (+0x2D4) and OpenWA numbers it (`render_data`).
 
-use crate::rebase::rb;
 use game::entity::read_i32;
-use minhook::MinHook;
 use std::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -33,9 +31,9 @@ static ORIG_CLUSTERS: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 /// Hook `MissileEntity__CreateClusters` (0x5096A0).
 pub fn install() -> Result<(), String> {
-    let target = rb(game::offsets::MISSILE_CREATE_CLUSTERS) as *mut c_void;
+    let target = crate::wa::address("MISSILE_CREATE_CLUSTERS") as *mut c_void;
     let tr = unsafe {
-        MinHook::create_hook(target, clusters_hook as *mut c_void)
+        crate::wa::create_hook(target, clusters_hook as *mut c_void)
             .map_err(|e| format!("MinHook CreateClusters: {e:?}"))?
     };
     ORIG_CLUSTERS.store(tr, Ordering::SeqCst);

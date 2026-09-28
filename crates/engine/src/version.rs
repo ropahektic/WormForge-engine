@@ -1,8 +1,5 @@
-use crate::rebase::rb;
-use game::offsets::STR_VERSION_381;
-
 pub fn check_381() -> Result<(), String> {
-    let addr = rb(STR_VERSION_381) as *const u8;
+    let addr = crate::wa::address("STR_VERSION_381") as *const u8;
     if addr.is_null() {
         return Err("STR_VERSION_381 is null".into());
     }

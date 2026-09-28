@@ -53,6 +53,12 @@ pub const WORM_RELEASE_WEAPON: u32 = 0x0051_C010;
 pub const WORM_TURN_ACTIVE: usize = 0x104;
 /// WormEntity.weapons_enabled (+0x28C). ReleaseWeapon no-ops if 0.
 pub const WORM_WEAPONS_ENABLED: usize = 0x28C;
+/// A repeat-fire weapon's shots: fired so far, and to fire. While fired is
+/// below to-fire, WA's repeat-fire step (0x5182B1) counts down the delay at
+/// +0x298 and then fires again (SetState 0x69). Project X's nShooted and
+/// nShoots (its CWorm fields sit 0x10 higher).
+pub const WORM_SHOTS_FIRED: usize = 0x290;
+pub const WORM_SHOTS_TO_FIRE: usize = 0x294;
 /// WormEntity.selected_weapon_ammo (+0x174).
 pub const WORM_SELECTED_AMMO: usize = 0x174;
 /// WormEntity.active_weapon_entry (+0x36C) — `&WeaponTable[selected]`.
@@ -665,6 +671,10 @@ pub const CLASS_MISSILE: i32 = 11;
 pub const CLASS_CRATE: i32 = 15;
 pub const CLASS_WORM: i32 = 18;
 pub const CLASS_OIL: i32 = 30;
+/// WA CrossEntity, the gravestone left by a dead worm.
+pub const CLASS_GRAVE: i32 = 21;
+/// WormEntity::Constructor(this, team parent, team, worm, setup), WA 3.8.1.
+pub const WORM_ENTITY_CTOR: u32 = 0x0050_BFB0;
 /// The landscape (ClassType 28, 0x1C). It takes part in WA's entity
 /// contacts, so a worm touching down reaches `wa.on.contact` with it.
 pub const CLASS_LAND: i32 = 28;

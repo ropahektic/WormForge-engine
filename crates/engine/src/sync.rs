@@ -15,15 +15,14 @@ use game::entity::read_i32;
 use game::hash::Fnv;
 use game::offsets::{
     ACTOR_PHASE, ACTOR_SPRITE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y, GAME_RUNTIME_WORLD,
-    GAME_WORLD_FRAME_COUNTER, GAME_WORLD_GAME_RNG, GAME_WORLD_NET_SESSION,
-    GAME_WORLD_RNG_STATE_1, GAME_WORLD_RNG_STATE_2,
+    GAME_WORLD_FRAME_COUNTER, GAME_WORLD_GAME_RNG, GAME_WORLD_NET_SESSION, GAME_WORLD_RNG_STATE_1,
+    GAME_WORLD_RNG_STATE_2,
 };
 use game::sync_input::{self, InputSample};
-use minhook::MinHook;
 use std::ffi::c_void;
 use std::fmt::Write as _;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
+use std::sync::Mutex;
 
 /// Last frame we hashed, so a repeated or rewound counter is visible.
 static LAST_FRAME: AtomicU64 = AtomicU64::new(u64::MAX);
@@ -170,7 +169,11 @@ unsafe fn push_modset_slice(buffer: *mut BufferObject) -> bool {
         if tx.sent > data_records {
             log_line(&format!(
                 "sync modset tx: announced {} ({} bytes)",
-                if tx.fingerprint.is_empty() { "<no packs>" } else { tx.fingerprint.as_str() },
+                if tx.fingerprint.is_empty() {
+                    "<no packs>"
+                } else {
+                    tx.fingerprint.as_str()
+                },
                 bytes.len()
             ));
             return true;
@@ -232,20 +235,22 @@ fn receive_modset(tag: u32, sender: u32, word: u32) {
             Some(diff) => {
                 log_error(&format!(
                     "sync modset MISMATCH with peer {sender:08x}: {diff} (yours: {}; peer: {})",
-                    if local.is_empty() { "<no packs>" } else { &local },
-                    if remote.is_empty() { "<no packs>" } else { &remote }
+                    if local.is_empty() {
+                        "<no packs>"
+                    } else {
+                        &local
+                    },
+                    if remote.is_empty() {
+                        "<no packs>"
+                    } else {
+                        &remote
+                    }
                 ));
                 crate::modloader::peer_report(&format!("PEER MISMATCH - {diff}"));
             }
         }
     }
 }
-
-const PROCESS_INPUT: u32 = 0x0053_05e0;
-const DISPATCH_INPUT_MSG: u32 = 0x0053_0f80;
-const ENCODE_INPUT_MSG: u32 = 0x0056_48b0;
-const DECODE_INPUT_MSG: u32 = 0x0056_4ea0;
-const SERIALIZE_STATE: u32 = 0x0053_2330;
 
 static ORIGINAL_PROCESS_INPUT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_DISPATCH_INPUT_MSG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -962,20 +967,13 @@ unsafe extern "C" fn decode_input_hook() {
 }
 
 unsafe fn create_hook(
-    va: u32,
-    expected: &[u8],
+    symbol: &str,
     detour: *mut c_void,
     original: &AtomicPtr<c_void>,
-    name: &str,
 ) -> Result<(), String> {
-    let target = crate::rebase::rb(va) as *mut c_void;
-    if std::slice::from_raw_parts(target as *const u8, expected.len()) != expected {
-        return Err(format!(
-            "sync transport {name}: WA bytes differ at {va:#010x}"
-        ));
-    }
-    let trampoline = MinHook::create_hook(target, detour)
-        .map_err(|e| format!("sync transport {name}: {e:?}"))?;
+    let target = crate::wa::address(symbol) as *mut c_void;
+    let trampoline = crate::wa::create_hook(target, detour)
+        .map_err(|e| format!("sync transport {symbol}: {e:?}"))?;
     original.store(trampoline, Ordering::SeqCst);
     Ok(())
 }
@@ -984,56 +982,40 @@ unsafe fn create_hook(
 /// active in networked matches; the build feature controls only diagnostics.
 /// A live sender's network peers still need WormForge because stock WA does
 /// not know message kind 0x80.
-pub(crate) fn install(catalog: &re_catalog::Catalog) -> Result<(), String> {
-    let encode_input_msg = catalog
-        .function_va("EncodeInputMessage")
-        .unwrap_or(ENCODE_INPUT_MSG);
-    let decode_input_msg = catalog
-        .function_va("DecodeInputMessage")
-        .unwrap_or(DECODE_INPUT_MSG);
+pub(crate) fn install() -> Result<(), String> {
     unsafe {
         create_hook(
-            PROCESS_INPUT,
-            &[0x81, 0xec, 0x0c, 0x04, 0x00, 0x00, 0x53, 0x56, 0x8b, 0xf0],
+            "PROCESS_INPUT",
             process_input_hook as *mut c_void,
             &ORIGINAL_PROCESS_INPUT,
-            "process input",
         )?;
         create_hook(
-            DISPATCH_INPUT_MSG,
-            &[0x81, 0xec, 0x08, 0x04, 0x00, 0x00, 0x53],
+            "DISPATCH_INPUT_MSG",
             dispatch_input_hook as *mut c_void,
             &ORIGINAL_DISPATCH_INPUT_MSG,
-            "dispatch input",
         )?;
         create_hook(
-            encode_input_msg,
-            &[0x8b, 0x44, 0x24, 0x08, 0x83, 0xf8, 0x74],
+            "ENCODE_INPUT_MSG",
             encode_input_hook as *mut c_void,
             &ORIGINAL_ENCODE_INPUT_MSG,
-            "input encoder",
         )?;
         create_hook(
-            decode_input_msg,
-            &[0x55, 0x8b, 0xec, 0x83, 0xe4, 0xf8, 0x8b, 0x55, 0x18],
+            "DECODE_INPUT_MSG",
             decode_input_hook as *mut c_void,
             &ORIGINAL_DECODE_INPUT_MSG,
-            "input decoder",
         )?;
-        if diagnostics_enabled() {
+        if diagnostics_enabled() && crate::wa::try_address("SERIALIZE_STATE").is_some() {
             create_hook(
-                SERIALIZE_STATE,
-                &[0x33, 0xc0, 0x53, 0x8b, 0x5c, 0x24, 0x0c],
+                "SERIALIZE_STATE",
                 serialize_state_hook as *mut c_void,
                 &ORIGINAL_SERIALIZE_STATE,
-                "state serializer diagnostic",
             )?;
         }
     }
     log_line(
         "synchronized input enabled (provisional kind 0x80, change-driven 12-byte records); network peers require WormForge",
     );
-    if diagnostics_enabled() {
+    if diagnostics_enabled() && crate::wa::try_address("SERIALIZE_STATE").is_some() {
         log_line(
             "sync diagnostics build enabled; hashing simulation state and sending checkpoints",
         );

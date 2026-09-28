@@ -1,0 +1,773 @@
+# Generated from stock WA 3.8.1; VAs are documentation only, never runtime fallbacks.
+# ?? masks branch displacements and PE relocation operands.
+# Revalidate patterns and ABI before adding support for another WA build.
+
+[[locator]]
+name = "APPLY_EXPLOSION_KNOCK"
+reference_va = 0x004ff390
+section = ".text"
+pattern = "8B 47 2C 83 EC 10 53 8B 5C 24 1C 55 8B 6C 24 1C 56 8B B0 F0 05 00 00 0F AF F3 83 C6 02 C1 E6 11"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "APPLY_PROJECTILE_GRAVITY"
+reference_va = 0x004fcb30
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 51 53 56 8B 75 08 57 8B F9 8B 87 2C 02 00 00 F7 6E 60 8B D8 0F AC D3 10 C1 FA"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "CONSTRUCT_SPRITE"
+reference_va = 0x004faa30
+section = ".text"
+pattern = "89 48 04 33 C9 C7 00 ?? ?? ?? ?? C7 40 40 08 00 00 00 89 48 48 89 48 4C 89 48 44 89 48 3C 89 48"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "CREATE_EXPLOSION"
+reference_va = 0x00548080
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 81 EC 08 04 00 00 8B 55 08 89 4C 24 08 8B 4D 10 89 54 24 0C 8B 55 14 89 4C 24"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "CREATE_WEAPON_PROJECTILE"
+reference_va = 0x0051e0f0
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 56 8B F1 8B 46 2C 8B 88 A4 72"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "DECODE_INPUT_MSG"
+reference_va = 0x00564ea0
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 8B 55 18 83 EC 08 53 8B 5D 08 85 DB 57 8B F8 77 ?? 83 C8 FF 5F 5B 8B E5 5D C2"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "DISPATCH_INPUT_MSG"
+reference_va = 0x00530f80
+section = ".text"
+pattern = "81 EC 08 04 00 00 53 8B 9C 24 14 04 00 00 55 8B AC 24 14 04 00 00 56 57 33 FF 39 BD 70 02 00 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "DISPLAY_GET_SPRITE_INFO"
+reference_va = 0x00523500
+section = ".text"
+pattern = "8B 44 24 04 8D 50 FF 81 FA FE 03 00 00 77 ?? 8B 94 81 08 10 00 00 85 D2 56 74 ?? 8B 44 24 10 8B"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "DISPLAY_SHADER_CLEANUP"
+required = false
+reference_va = 0x0059cd70
+section = ".text"
+pattern = "56 8B F1 8B 86 88 00 00 00 57 33 FF 3B C7 74 ?? 8B 08 8B 51 08 50 FF D2 89 BE 88 00 00 00 8B 86"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "DISPLAY_SHADER_FOG_DRAW"
+required = false
+reference_va = 0x0059cf9d
+section = ".text"
+pattern = "8B F3 8B C7 E8 ?? ?? ?? ?? 5E 5F 8B C3 5B 83 C4 0C C2 04 00 CC CC CC CC CC CC CC CC CC CC CC CC"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "DISPLAY_SHADER_PRESENT"
+required = false
+reference_va = 0x0059cde0
+section = ".text"
+pattern = "83 EC 0C 53 57 8D 44 24 08 8B F9 50 8B C7 8B DA E8 ?? ?? ?? ?? 8B 44 24 08 3B 05 ?? ?? ?? ?? 74"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "DS_SOUND_LOAD_WAV"
+reference_va = 0x00573ff0
+section = ".text"
+pattern = "83 EC 34 83 79 08 00 53 55 56 57 89 4C 24 14 0F 84 ?? ?? ?? ?? 8B 44 24 48 8D 50 FF 81 FA F2 01"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "ENCODE_INPUT_MSG"
+reference_va = 0x005648b0
+section = ".text"
+pattern = "8B 44 24 08 83 F8 74 53 8B 5C 24 14 55 56 8B 74 24 10 57 8B 7C 24 1C 88 01 0F 87 ?? ?? ?? ?? 0F"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "FIRE_WEAPON_DISPATCH"
+reference_va = 0x0051ee60
+section = ".text"
+pattern = "56 8B 74 24 08 C7 46 3C 00 00 00 00 8B 50 30 83 C2 FF 83 FA 03 57 0F 87 ?? ?? ?? ?? FF 24 95 34"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "GAME_ENGINE_SHUTDOWN"
+reference_va = 0x0056dcd0
+section = ".text"
+pattern = "57 8B 3D ?? ?? ?? ?? 83 BF B8 00 00 00 00 C7 47 24 00 00 00 00 74 ?? E8 ?? ?? ?? ?? 8B 8F B4 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "GAME_RENDER_WAIT_CALL"
+required = false
+reference_va = 0x0053448b
+section = ".text"
+pattern = "E8 ?? ?? ?? ?? 8B C7 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 57 E8 ?? ?? ?? ?? 5F 5E 5D 5B 8B E5 5D C3"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "GAME_WORLD_ADVANCE_RNG"
+reference_va = 0x0053f320
+section = ".text"
+pattern = "8B 81 CC 05 00 00 03 81 EC 45 00 00 69 C0 0D 66 19 00 05 5F F3 6E 3C 89 81 EC 45 00 00 C3 CC CC"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "GFX_HANDLER_LOAD_SPRITES"
+reference_va = 0x00570b50
+section = ".text"
+pattern = "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 53 55 8B 6C 24 1C 33 DB 39 5C 24"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "G_GAME_SESSION"
+reference_va = 0x007a0884
+section = ".text"
+pattern = "75 49 80 3D ?? ?? ?? ?? 00 74 29 A1 ?? ?? ?? ?? 85 C0 74 0A 83 78 2C 00 75 04 33 C0 EB 05 B8 01 00 00 00 33 C9 85 C0 0F"
+derive = "abs32"
+operand = 12
+target_section = ".data"
+
+[[locator]]
+name = "G_REPLAY_PREFIX"
+reference_va = 0x0087d3f8
+section = ".text"
+pattern = "00 C6 44 24 18 11 E8 D5 92 02 00 BE ?? ?? ?? ?? E8 BB 59 02 00 8B 4C 24 0C 8B C7 5F 5E C7 05 ?? ?? ?? ?? FF FF FF FF 64"
+derive = "abs32"
+operand = 12
+target_section = ".data"
+
+[[locator]]
+name = "INIT_WEAPON_TABLE"
+reference_va = 0x0053cab0
+section = ".text"
+pattern = "53 55 8B 6C 24 0C 8B 85 88 04 00 00 8B 88 10 05 00 00 56 57 68 B0 80 00 00 33 DB 53 51 E8 5E CE"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "LANDSCAPE_WRITE_MASK_ID"
+reference_va = 0x0057ccf0
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 83 EC 0C 8B 45 08 53 8B 5D 0C 56 57 8B F9 8B B4 87 88 00 00 00 8B 45 10 2B 46"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "LANDSCAPE_WRITE_RADIUS"
+reference_va = 0x0057c820
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 83 EC 78 53 8B"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MINE_ENTITY_CTOR"
+reference_va = 0x00506660
+section = ".text"
+pattern = "6A FF 64 A1 00 00 00 00 68 ?? ?? ?? ?? 50 8B 44 24 14 64 89 25 00 00 00 00 53 8B 5C 24 14 55 8B 6C 24 24 56 57 6A 02 6A 0A 50 53 E8 ?? ?? ?? ??"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MINE_ENTITY_DTOR"
+reference_va = 0x00506ab0
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 57 8B F9 89 7C 24 04 C7 07 E8"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MINE_EXPLODE"
+reference_va = 0x00507110
+section = ".text"
+pattern = "56 8B F0 8B 86 44 01 00 00 8B 8E 24 01 00 00 50 8B 86 84 00 00 00 6A 00 51 8B 8E 88 00 00 00 6A"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MINE_PICK_SPRITE"
+reference_va = 0x00506e60
+section = ".text"
+pattern = "8B 51 2C 8B 81 98 00 00 00 F7 AA 50 81 00 00 0F AC D0 10 03 81 8C 00 00 00 55 8B 6C 24 08 C1 FA"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MINE_PROXIMITY_SCAN"
+reference_va = 0x00507140
+section = ".text"
+pattern = "83 EC 08 8B 88 88 00 00 00 8B 50 2C 53 8B 9A 28 05 00 00 55 8B A8 84 00 00 00 56 57 89 4C 24 14"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MISSILE_CTOR"
+reference_va = 0x00507d10
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 0C 04 00 00 8B 84 24 20 04"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MISSILE_DETONATE"
+reference_va = 0x00509ac0
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 51 53 8B 5D 0C 56 57 8B F8 83 BF EC 02 00 00 4A 75 ?? 6A 05 B8 00 00 01 00 6A"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MISSILE_HANDLE_MESSAGE"
+reference_va = 0x0050b400
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 81 EC 1C 04 00 00 53 8B D9 83 BB 00 01 00 00 00 56 57 8D BB E8 02 00 00 74 ??"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MISSILE_VTABLE"
+reference_va = 0x00664438
+section = ".text"
+pattern = "00 8B 45 2C 05 28 46 00 00 C7 45 00 ?? ?? ?? ?? 83 80 7C 2C 00 00 07 C7 45 20 0B 00 00 00 8B 06 3B C3 74 29 55 33 C9 8D"
+derive = "abs32"
+operand = 12
+target_section = ".rdata"
+
+[[locator]]
+name = "PLAY_SOUND_LOCAL"
+reference_va = 0x004fdfe0
+section = ".text"
+pattern = "8B 54 24 08 56 50 8B 44 24 0C 51 52 50 8B CF 8D B7 E8 00 00 00 E8 ?? ?? ?? ?? 85 C0 74 ?? 8B 57"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "PROCESS_INPUT"
+reference_va = 0x005305e0
+section = ".text"
+pattern = "81 EC 0C 04 00 00 53 56 8B F0 33 DB 39 9E 70 02 00 00 74 ?? 38 9E 90 04 00 00 75 ?? 8B 86 64 02"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "PROCESS_SPRITE"
+reference_va = 0x004fab80
+section = ".text"
+pattern = "51 8B 54 24 08 53 55 8B 2D ?? ?? ?? ?? 56 8D 72 04 83 C6 04 57 8B F8 8B 46 FC 01 05 ?? ?? ?? ??"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "RENDER_ESC_MENU_OVERLAY"
+required = false
+reference_va = 0x00535000
+section = ".text"
+pattern = "83 EC 0C 53 55 56 8B F0 8B 86 88 04 00 00 8B 80 AC 77 00 00 8B 8E 40 04 00 00 99 2B C2 57 8B F8"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "REPLAY_LOADER"
+reference_va = 0x00462df0
+section = ".text"
+pattern = "55 8D 6C 24 90 83 EC 70 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 10"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "RQ_COMPARE"
+reference_va = 0x00542330
+section = ".text"
+pattern = "8B 44 24 04 8B 08 8B 54 24 08 8B 02 8B 49 04 2B 48 04 8B C1 C3 CC CC CC CC CC CC CC CC CC CC CC"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "RQ_DISPATCH"
+required = false
+reference_va = 0x00542350
+section = ".text"
+pattern = "83 EC 1C 53 55 8B 6C 24 28 56 57 8B F0 8B 86 04 00 01 00 68 ?? ?? ?? ?? 6A 04 50 8D 8E 08 00 01"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "RQ_DRAW_SPRITE_LOCAL"
+reference_va = 0x00542060
+section = ".text"
+pattern = "8B 91 04 00 01 00 81 FA 00 08 00 00 56 57 8B 7C 24 10 8B F0 7D ?? 8B 01 83 C0 E8 78 ?? 89 01 8D 44 08 04 89 84 91 08 00 01 00 8B 91 04 00 01 00 8B 84 91 08 00 01 00 83 C2 01 85 C0 89 91 04 00 01 00 74 ?? 8B 4C 24 0C 8B 54 24 14 81 E7 00 00 FF FF 89 48 04 8B 4C 24 18 81 E6 00 00 FF FF C7 00 05 00 00 00 89 78 08 89 70 0C 89 50 10 89 48 14 5F 5E C2 10 00 CC CC CC CC CC CC CC CC CC CC"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "SERIALIZE_STATE"
+required = false
+reference_va = 0x00532330
+section = ".text"
+pattern = "33 C0 53 8B 5C 24 0C 89 43 0C 89 43 08 55 8B 6C 24 0C 89 43 20 89 43 1C 8B 85 88 04 00 00 8B 48"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "SET_TEXTBOX_TEXT"
+required = false
+reference_va = 0x004fb070
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 8B 44 24 18 64 89 25 00 00 00 00 83 EC 10 53 8B 5C 24"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "STRIKE_FIRE"
+reference_va = 0x0051e2c0
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 8B 44 24 14 53 55 56 57 33 C9"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "STR_VERSION_381"
+reference_va = 0x00641c60
+section = ".text"
+pattern = "39 6B 00 00 8B 0D ?? ?? ?? ?? 56 68 ?? ?? ?? ?? 50 8B F9 68 ?? ?? ?? ?? 75 0C 51 FF 15 ?? ?? ?? ?? 83 C4 14 EB 5E 6A FF"
+derive = "abs32"
+operand = 12
+target_section = ".rdata"
+
+[[locator]]
+name = "STUB_NOOP"
+reference_va = 0x004aa060
+section = ".text"
+pattern = "C3 CC CC CC CC CC CC CC CC CC CC CC CC CC CC CC 55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 34 53 55"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "STUB_RETURNS0"
+reference_va = 0x00545780
+section = ".text"
+pattern = "33 C0 C3 CC CC CC CC CC CC CC CC CC CC CC CC CC F6 44 24 04 01 56 8B F1 C7 06 ?? ?? ?? ?? 74 ??"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "STUB_RETURNS1"
+reference_va = 0x00592a50
+section = ".text"
+pattern = "B8 01 00 00 00 C3 CC CC CC CC CC CC CC CC CC CC 8B 44 24 04 56 50 8B F1 E8 ?? ?? ?? ?? C7 06 E8"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "TEAM_ADD_AMMO"
+reference_va = 0x00522640
+section = ".text"
+pattern = "8B 4C 24 04 69 C0 1C 05 00 00 8B 44 08 04 69 C0 8E 00 00 00 03 44 24 08 8D 84 81 B4 1E 00 00 8B"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "TEAM_GET_AMMO"
+reference_va = 0x005225e0
+section = ".text"
+pattern = "8B C8 69 C9 1C 05 00 00 8B 4C 31 04 69 C9 8E 00 00 00 57 8D 3C 11 83 BC BE D0 1F 00 00 00 74 ??"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "TEAM_MSG_HANDLER"
+reference_va = 0x00557310
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 48 07 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WA_MALLOC"
+reference_va = 0x005c0ae3
+section = ".text"
+pattern = "E9 ?? ?? ?? ?? E9 ?? ?? ?? ?? 83 79 04 00 7E ?? 8B 01 6A 01 FF 50 04 C3 8B 01 FF 60 10 55 8B EC"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WA_QSORT"
+reference_va = 0x005d7890
+section = ".text"
+pattern = "81 EC 00 01 00 00 53 8B 9C 24 08 01 00 00 85 DB 56 8B B4 24 10 01 00 00 75 ?? 85 F6 74 ?? E8 6C"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORLD_ENTITY_CTOR"
+reference_va = 0x004fed50
+section = ".text"
+pattern = "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 8B 44 24 14 64 89 25 00 00 00 00 8B 48 2C 53 56 57 8B"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORLD_ENTITY_TRY_MOVE"
+reference_va = 0x004fe070
+section = ".text"
+pattern = "8B 4E 34 8B 96 DC 00 00 00 8B 46 2C 8B 80 28 05 00 00 53 8B 5C 24 08 51 52 57 53 56 50 E8 3E D9"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORLD_ENTITY_VTABLE"
+reference_va = 0x006641f8
+section = ".text"
+pattern = "00 33 C0 89 44 24 14 8B 4F 2C C7 07 ?? ?? ?? ?? C7 87 E8 00 00 00 ?? ?? ?? ?? 89 BF F8 00 00 00 89 8F EC 00 00 00 C6 44"
+derive = "abs32"
+operand = 12
+target_section = ".rdata"
+
+[[locator]]
+name = "WORLD_ROOT_HANDLE_MESSAGE"
+reference_va = 0x0055dc00
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 81 EC 14 08 00 00 53 8B 5D 0C 56 8D 43 FE 83 F8 7B 57 8B F1 0F 87 ?? ?? ?? ??"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_CALC_SPRITE"
+reference_va = 0x00512e80
+section = ".text"
+pattern = "51 8B 8E 88 00 00 00 8B 54 24 0C 53 8B 5C 24 14 55 8B 6C 24 10 57 8B F8 8B 86 84 00 00 00 89 0A"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_AIM_CURSOR"
+reference_va = 0x0051d680
+section = ".text"
+pattern = "83 EC 30 83 BE 70 01 00 00 00 53 55 57 0F 84 ?? ?? ?? ?? 83 BE 68 02 00 00 00 0F 84 ?? ?? ?? ??"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_ARROW"
+reference_va = 0x00513a90
+section = ".text"
+pattern = "83 EC 14 83 7E 44 78 0F 85 ?? ?? ?? ?? 53 8B 9E 88 00 00 00 55 57 8B BE 84 00 00 00 8D 44 24 18"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_CROSSHAIR"
+reference_va = 0x005197d0
+section = ".text"
+pattern = "83 EC 08 83 BF 58 02 00 00 00 53 55 56 0F 84 ?? ?? ?? ?? 8B 87 84 00 00 00 A3 ?? ?? ?? ?? 8B 8F"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_CURSOR"
+reference_va = 0x005103a0
+section = ".text"
+pattern = "53 8B 98 C4 01 00 00 85 DB 74 ?? 8B 88 58 01 00 00 85 C9 8B 50 2C 56 8B B0 84 00 00 00 57 8B B8"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_HEALTH"
+reference_va = 0x00510260
+section = ".text"
+pattern = "83 EC 10 8B 86 84 00 00 00 8B 8E 88 00 00 00 53 89 44 24 10 8B 86 58 01 00 00 85 C0 55 8B AE 0C"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_HUD"
+reference_va = 0x0050fdc0
+section = ".text"
+pattern = "81 EC 28 01 00 00 8B 86 0C 01 00 00 8B 4E 2C 33 D2 89 44 24 14 8B 41 24 89 44 24 04 39 90 80 F3"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_NAME"
+reference_va = 0x0050fb50
+section = ".text"
+pattern = "83 EC 18 8B 86 98 03 00 00 85 C0 53 55 8B AE B0 01 00 00 57 89 6C 24 10 89 44 24 14 0F 84 56 01"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_OFFMAP"
+reference_va = 0x0050f900
+section = ".text"
+pattern = "83 EC 38 53 8B 5C 24 40 8B 43 2C 55 56 8B B3 88 00 00 00 C7 44 24 24 00 00 00 00 8B 88 9C 77 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_SPRITE"
+reference_va = 0x0050fcd0
+section = ".text"
+pattern = "83 EC 10 56 8B F0 8D 44 24 08 50 8D 4C 24 14 51 8D 54 24 14 52 8D 44 24 10 E8 ?? ?? ?? ?? 8B 86"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_DRAW_TURN"
+reference_va = 0x0050f810
+section = ".text"
+pattern = "53 55 8B A9 80 03 00 00 85 ED 56 57 0F 84 ?? ?? ?? ?? 8B B9 84 03 00 00 2B FD 8B C7 BA CC 0C 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_HANDLE_MESSAGE"
+reference_va = 0x00510b40
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 81 EC 34 08 00 00 53 8B D9 8B 83 84 00 00 00 8B 8B 88 00 00 00 8B 93 90 00 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_SELECT_WEAPON"
+reference_va = 0x0051ae50
+section = ".text"
+pattern = "83 EC 20 83 BF 58 02 00 00 00 53 55 8B 6C 24 2C 56 74 ?? 8B 47 2C 8B 48 24 8B 81 78 D7 00 00 83"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_SET_STATE"
+reference_va = 0x0050e850
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 83 EC 14 53 56 8B D9 57 8B 7B 2C 8B 47 24 33 C9 38 88 CE D9 00 00 74 ?? 81 7D"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_ENTITY_CTOR"
+reference_va = 0x0050bfb0
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 14 8B 44 24 28 53 55 8B 6C 24 2C 56 57"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_START_FIRING"
+reference_va = 0x0051b7f0
+section = ".text"
+pattern = "81 EC A4 03 00 00 53 55 56 8B F0 8B 46 44 57 8B BE 6C 03 00 00 33 DB 83 E8 6E 89 7C 24 14 89 5C"
+derive = "match"
+target_section = ".text"
+
+
+# Additional 3.8.1 locations used by current WormForge-engine main.
+
+[[locator]]
+name = "CLIENT_ENDSCREEN_HANDLE_PACKET"
+required = false
+reference_va = 0x004bd400
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 83 EC 08 56 8B 75 08 0F B7 06 83 C0 E7 83 F8 10 57 8B F9 0F 87 6F 01 00 00 0F"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "CLIENT_LOBBY_HANDLE_PACKET"
+required = false
+reference_va = 0x004c0790
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 83 EC 24 53 8B 5D 0C 83 FB 02 56 8B F1 57 89 74 24 10 0F 82 B8 0E 00 00 8B 7D"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "CPLAYERS_OK_TO_START_NET_GAME"
+required = false
+reference_va = 0x0046ad10
+section = ".text"
+pattern = "51 80 BF 08 57 00 00 01 7D 04 33 C0 59 C3 80 BF 06 57 00 00 01 7C F3 33 D2 38 97 48 07 00 00 89"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "G_CLIENT_LINK"
+required = false
+reference_va = 0x00857a3c
+section = ".text"
+pattern = "80 3C D5 ?? ?? ?? ?? 00 75 29 8B 15 ?? ?? ?? ?? 89 44 24 0C 6A 08 8D 44 24 0C 50 8B 42 34 B9 ?? ?? ?? ?? 66"
+derive = "abs32"
+operand = 12
+target_section = ".data"
+
+[[locator]]
+name = "G_CPLAYERS"
+required = false
+reference_va = 0x008779d8
+section = ".text"
+pattern = "A4 E8 80 A8 16 00 8B 75 08 EB 5C B9 ?? ?? ?? ?? E8 E7 3D 00 00 69 C0 7B 0D 00 00 0F BE 80 ?? ?? ?? ?? 8B C8"
+derive = "abs32"
+operand = 12
+target_section = ".data"
+
+[[locator]]
+name = "G_HOST_SESSION"
+required = false
+reference_va = 0x007c0ed4
+section = ".text"
+pattern = "24 2C FF D2 6A 0C 8D 44 24 28 50 B8 ?? ?? ?? ?? E8 5E 98 0D 00 8B 17 8B 82 70 01 00 00 8B CF FF D0 B8 ?? ??"
+derive = "abs32"
+operand = 12
+target_section = ".data"
+
+[[locator]]
+name = "HOST_ENDSCREEN_HANDLE_PACKET"
+required = false
+reference_va = 0x004ac0d0
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 20 53 55 56 8B 74 24 40 0F"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "HOST_LOBBY_HANDLE_PACKET"
+required = false
+reference_va = 0x004b6290
+section = ".text"
+pattern = "83 EC 10 8B 44 24 1C 83 F8 02 53 8B D9 89 5C 24 04 0F 82 3B 08 00 00 55 8B 6C 24 20 0F B7 4D 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "LANDSCAPE_VTABLE"
+reference_va = 0x0066b208
+section = ".text"
+pattern = "24 34 01 00 00 00 00 00 00 C7 45 00 ?? ?? ?? ?? C7 85 04 09 00 00 01 00 00 00 89 8D 00 09 00 00 8B 11 8B 42"
+derive = "abs32"
+operand = 12
+target_section = ".rdata"
+
+[[locator]]
+name = "LOBBY_DISPLAY_MESSAGE"
+required = false
+reference_va = 0x00493cb0
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 83 EC 30 53 56 57 E8 FB 36 13 00 33 C9"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "LOBBY_LIST_UPDATE_READY"
+required = false
+reference_va = 0x00482700
+section = ".text"
+pattern = "53 8B 99 14 01 00 00 33 D2 85 DB 0F 8E A7 00 00 00 3B D3 56 57 7C 04 33 C0 EB 2B 3B 91 14 01 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "LOBBY_NET_LIST_UPDATE_READY"
+required = false
+reference_va = 0x004c1e90
+section = ".text"
+pattern = "55 56 33 F6 80 3D ?? ?? ?? ?? 00 8B E9 0F 8E BA 00 00 00 57 8B 95 14 01 00 00 3B F2 7C 04 33 C9"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MISSILE_CREATE_CLUSTERS"
+reference_va = 0x005096a0
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 1C 04 00 00 53 55 57 33 C9"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "MISSILE_FREE"
+reference_va = 0x00508330
+section = ".text"
+pattern = "56 8B F1 E8 B8 03 00 00 F6 44 24 08 01 74 09 56 E8 A3 87 0B 00 83 C4 04 8B C6 5E C2 04 00 CC CC"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "OPTIONS_CONFIG"
+reference_va = 0x007c03d0
+section = ".text"
+pattern = "B8 01 00 00 00 EB 02 33 C0 F6 D8 B9 ?? ?? ?? ?? 1B C0 83 E0 03 83 C0 01 50 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? E8"
+derive = "abs32"
+operand = 12
+target_section = ".data"
+
+[[locator]]
+name = "OPTIONS_READ_INT"
+reference_va = 0x005cc5d2
+section = ".text"
+pattern = "55 8B EC 51 51 83 79 54 00 56 74 46 FF 75 08 E8 A6 FF FF FF 8B F0 85 F6 75 05 8B 45 10 EB 45 57"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "STR_OPTIONS"
+reference_va = 0x00650cb8
+section = ".text"
+pattern = "E0 03 83 C0 01 50 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? E8 F0 3B 10 00 6A 01 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? B9 ?? ??"
+derive = "abs32"
+operand = 12
+target_section = ".rdata"
+
+[[locator]]
+name = "STR_RENDERER"
+reference_va = 0x0065e4bc
+section = ".text"
+pattern = "?? ?? 1B C0 83 E0 03 83 C0 01 50 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? E8 F0 3B 10 00 6A 01 68 ?? ?? ?? ?? 68 ?? ??"
+derive = "abs32"
+operand = 12
+target_section = ".rdata"
+
+[[locator]]
+name = "WEAPON_HOLD_SHEET"
+reference_va = 0x0051c060
+section = ".text"
+pattern = "8B 48 30 83 C1 FF 83 F9 03 0F 87 CA 01 00 00 FF 24 8D ?? ?? ?? ?? 8B 48 34 83 C1 FF 83 F9 0B 0F"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "WORM_ON_CONTACT"
+reference_va = 0x0050d9a0
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 83 EC 0C 53 56 57 8B F9 8B 57 2C 8B 42 24 83 B8 B4 D9 00 00 00 75 18 8B 4D 0C"
+derive = "match"
+target_section = ".text"
