@@ -553,10 +553,16 @@ wa.weapons.replace({
         let claim = &scripts.resolved.applied[0];
         assert_eq!(claim.slot, StockWeapon::HolyGrenade);
         assert_eq!(claim.params.name.as_deref(), Some("Hellish Hand-Grenade"));
-        assert_eq!(claim.params.copy_from, None);
-        let wep = claim.params.wep.as_ref().expect("PX's weapon file");
-        assert_eq!(wep.name, "Hellish Hand-Grenade");
-        assert_eq!(wep.path, "hellish.wep");
+        assert_eq!(claim.params.copy_from, Some(StockWeapon::HolyGrenade));
+        assert!(claim.params.wep.is_none(), "firing is copy_from + patch, not a .wep file");
+        assert!(
+            claim.params.patch.iter().any(|&(off, v)| off == 0x50 && v == 70),
+            "damage 70 from the hellish patch"
+        );
+        assert!(
+            claim.params.patch.iter().any(|&(off, v)| off == 0xF0 && v == 2),
+            "CreateFire1 on detonation"
+        );
         match &claim.params.panel_icon {
             Some(weapons::PanelIcon::File { path, width, height, .. }) => {
                 assert_eq!(path, "sprites/hhh_ico.png");
@@ -598,11 +604,14 @@ wa.weapons.replace({
         // The scheme's record for the girder slot is the Baseball Bat:
         // a special weapon, subtype 2, as WA's own bat.
         let bat = claim(StockWeapon::Girder);
-        let wep = bat.params.wep.as_ref().unwrap();
-        assert_eq!(wep.name, "Baseball Bat");
+        assert_eq!(bat.params.copy_from, Some(StockWeapon::Girder));
+        assert!(bat.params.wep.is_none());
         assert_eq!(bat.params.name.as_deref(), Some("Baseball Bat"));
-        assert_eq!((wep.fire_type(), i32::from_le_bytes(wep.record[0x34..0x38].try_into().unwrap())), (4, 2));
-        assert_eq!(
+        // Subtype 2, as WA's own bat (stock girder is 17).
+        assert!(
+            bat.params.patch.iter().any(|&(off, v)| off == 0x34 && v == 2),
+            "subtype_param baseball bat"
+        );        assert_eq!(
             bat.params.panel_icon,
             Some(weapons::PanelIcon::Stock(StockWeapon::BaseballBat))
         );

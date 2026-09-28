@@ -320,7 +320,7 @@ mod tests {
     use game::offsets::{WEAPON_DAMAGE, WEAPON_DEFINED, WEAPON_GRAVITY_PCT};
 
     fn hellish() -> Wep {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../mods/examples/hellish_grenade/hellish.wep");
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/hellish.wep");
         parse_wep("hellish.wep", &std::fs::read(path).unwrap()).unwrap()
     }
 
@@ -432,7 +432,7 @@ mod tests {
         assert!(parse_wep("x.wep", b"WEPFILE\0").unwrap_err().contains("not a Project X"));
         let mut bytes = std::fs::read(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../mods/examples/hellish_grenade/hellish.wep"
+            "/tests/fixtures/hellish.wep"
         ))
         .unwrap();
         bytes[4 + WEAPON_FIRE_TYPE] = 9;
