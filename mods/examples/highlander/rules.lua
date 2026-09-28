@@ -4340,6 +4340,9 @@ do
       return
     end
     wa.land.stamp{ sprite = "sprites/javelin/stamp", frame = orientation(vx, vy), x = ev.x, y = ev.y }
-    wa.sound.play(ev.worm, "sounds/javelin_impact.wav")
+    -- PX plays it unplaced. On the turn's worm: an explosion's ev.worm is the
+    -- missile's owner, which need not be a worm and has no sound of its own.
+    local shooter = current_worm()
+    if shooter then wa.sound.play(shooter, "sounds/javelin_impact.wav") end
   end
 end

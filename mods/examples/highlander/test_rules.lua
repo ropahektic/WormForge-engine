@@ -262,6 +262,8 @@ local function new_match(opts)
     },
     sound = {
       play = function(target, name)
+        M.sound_targets = M.sound_targets or {}
+        M.sound_targets[#M.sound_targets + 1] = target
         M.sounds[#M.sounds + 1] = name
         -- A pack WAV plays only once an entry registers it (`sounds`);
         -- otherwise the engine plays nothing, without a word.
@@ -2019,7 +2021,8 @@ do
   local function impact(vx, vy)
     id = id + 1
     M.missile({ weapon = "prod", id = id, phase = "pre", vx = vx, vy = vy })
-    spec.on_explode({ x = 100 * P, y = 100 * P, missile = id, worm = owner })
+    -- WA's explosion reports the missile's owner, which is not a worm.
+    spec.on_explode({ x = 100 * P, y = 100 * P, missile = id, worm = { owner_object = true } })
   end
   local a, b = worms[2], worms[3]
   a.x, a.y, b.x, b.y = 119 * P, 119 * P, 100 * P, 100 * P
@@ -2061,7 +2064,8 @@ do
       and stamp.x == 100 * P and stamp.y == 100 * P
   end
   check("cardinals, ratio bins and clamps choose PX's centered 60px stamp", good)
-  check("sticking plays the registered impact sound", M.sounds[#M.sounds] == "sounds/javelin_impact.wav")
+  check("sticking plays the registered impact sound on the turn's worm, never the missile's owner",
+    M.sounds[#M.sounds] == "sounds/javelin_impact.wav" and M.sound_targets[#M.sound_targets] == owner)
   local n = #M.stamps
   M.draw()
   check("drawing never writes terrain", #M.stamps == n)
