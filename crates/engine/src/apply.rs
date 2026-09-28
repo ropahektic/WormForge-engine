@@ -5,7 +5,7 @@ use crate::sprite::{self, SpriteRef};
 use crate::world;
 use game::offsets::{
     GAME_RUNTIME_WORLD, GAME_SESSION_RUNTIME, GAME_WORLD_DISPLAY, GAME_WORLD_PANEL_IMG,
-    GAME_WORLD_WEAPON_TABLE, G_GAME_SESSION,
+    GAME_WORLD_WEAPON_TABLE,
 };
 use game::weapon::{snapshot_table, write_entry, WeaponEntry};
 use lua_host::{mods_root_from, run_mods};
@@ -680,7 +680,7 @@ pub fn retarget_sprites(slot: usize, body: i32, cluster: Option<i32>) -> Result<
 /// The live GameWorld, read the way `after_init_weapon_table` got the one
 /// `copy_panel_icon` wrote into: `GameRuntime.world`.
 unsafe fn runtime_world() -> *mut u8 {
-    let slot = crate::rebase::rb(G_GAME_SESSION) as *const *mut u8;
+    let slot = crate::wa::address("G_GAME_SESSION") as *const *mut u8;
     if slot.is_null() || (*slot).is_null() {
         return std::ptr::null_mut();
     }

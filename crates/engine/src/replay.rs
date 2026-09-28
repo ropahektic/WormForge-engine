@@ -24,7 +24,7 @@ use crate::log::{wa_directory, wormforge_dir, BUILD_ID};
 use crate::{log_error, log_line};
 use game::entity::read_i32;
 use game::offsets::{
-    GAME_WORLD_FRAME_COUNTER, GAME_WORLD_RECORDED_FRAME, G_REPLAY_PREFIX, REPLAY_ACTIVE,
+    GAME_WORLD_FRAME_COUNTER, GAME_WORLD_RECORDED_FRAME,  REPLAY_ACTIVE,
     REPLAY_INPUT_PATH, REPLAY_OUTPUT_PATH, REPLAY_PATH_CAPACITY,
 };
 use assets::Collection;
@@ -781,7 +781,7 @@ fn append_capped(writer: &mut BufWriter<File>, size: &mut u64, bytes: &[u8]) -> 
 }
 
 unsafe fn replay_prefix() -> usize {
-    crate::rebase::rb(G_REPLAY_PREFIX) as usize
+    crate::wa::address("G_REPLAY_PREFIX") as usize
 }
 
 unsafe fn output_path() -> Option<PathBuf> {

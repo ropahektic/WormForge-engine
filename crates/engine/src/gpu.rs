@@ -28,7 +28,6 @@
 //! 0.30 ms, so there is no need to track dirty rectangles.
 
 use crate::{log_error, log_line, render_queue::Queue};
-use minhook::MinHook;
 use std::{
     ffi::c_void,
     sync::{
@@ -532,14 +531,11 @@ pub unsafe fn present(device: *mut c_void) {
                     if verts.is_empty() {
                         continue;
                     }
-                    if wf_gpu_mask(frame.width as u32, frame.height as u32, mask.as_ptr())
-                        == 0
-                    {
+                    if wf_gpu_mask(frame.width as u32, frame.height as u32, mask.as_ptr()) == 0 {
                         warn("coverage mask upload failed");
                         return;
                     }
-                    if wf_gpu_draw(verts.as_ptr() as *const c_void, verts.len() as u32) == 0
-                    {
+                    if wf_gpu_draw(verts.as_ptr() as *const c_void, verts.len() as u32) == 0 {
                         warn("sprite draw failed");
                     }
                 }
@@ -930,9 +926,9 @@ unsafe extern "C" fn rq_draw_hook() {
 }
 
 pub fn install_rq_draw() -> Result<(), String> {
-    let addr = crate::rebase::rb(game::offsets::RQ_DRAW_SPRITE_LOCAL) as *mut c_void;
+    let addr = crate::wa::address("RQ_DRAW_SPRITE_LOCAL") as *mut c_void;
     let trampoline = unsafe {
-        MinHook::create_hook(addr, rq_draw_hook as *mut c_void)
+        crate::wa::create_hook(addr, rq_draw_hook as *mut c_void)
             .map_err(|e| format!("RQ_DrawSpriteLocal hook: {e:?}"))?
     };
     ORIG_RQ_DRAW.store(trampoline, Ordering::SeqCst);

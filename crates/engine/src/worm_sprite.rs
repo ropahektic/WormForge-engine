@@ -19,7 +19,7 @@
 //! these outputs even when GetSpriteInfo(0) fails, so stack garbage can enter
 //! its serialized simulation state.
 
-use crate::{log_line, rebase::rb, sprite};
+use crate::{log_line, sprite};
 use game::{
     entity::read_i32,
     offsets::{
@@ -27,8 +27,6 @@ use game::{
         WORM_SLOPE_DIR, WORM_STATE,
     },
 };
-use minhook::MinHook;
-use re_catalog::Catalog;
 use std::{
     ffi::c_void,
     sync::{
@@ -395,9 +393,18 @@ fn expand_aim_claims(poses: &[(i32, i32)]) -> Vec<(i32, i32)> {
     out.push((LINK, p));
     out.push((LINK_U, u));
     out.push((LINK_D, d));
-    let throw = poses.iter().find(|(pose, _)| *pose == THROW).map(|(_, id)| *id);
-    let throw_u = poses.iter().find(|(pose, _)| *pose == THROW_U).map(|(_, id)| *id);
-    let throw_d = poses.iter().find(|(pose, _)| *pose == THROW_D).map(|(_, id)| *id);
+    let throw = poses
+        .iter()
+        .find(|(pose, _)| *pose == THROW)
+        .map(|(_, id)| *id);
+    let throw_u = poses
+        .iter()
+        .find(|(pose, _)| *pose == THROW_U)
+        .map(|(_, id)| *id);
+    let throw_d = poses
+        .iter()
+        .find(|(pose, _)| *pose == THROW_D)
+        .map(|(_, id)| *id);
     out.push((THROW, throw.unwrap_or(p)));
     out.push((THROW_U, throw_u.unwrap_or(u)));
     out.push((THROW_D, throw_d.unwrap_or(d)));
@@ -490,38 +497,17 @@ unsafe fn team_sheet(worm: *mut u8, slot: usize, pose: i32, sheet: i32) -> i32 {
         .unwrap_or(sheet)
 }
 
-pub fn install(catalog: &Catalog) -> Result<(), String> {
-    let va = catalog
-        .function_va("WormEntity__calc_sprite")
-        .ok_or("missing WormEntity__calc_sprite catalog entry")?;
-    let original = unsafe {
-        MinHook::create_hook(rb(va) as *mut c_void, calc_sprite_hook as *mut c_void)
-            .map_err(|e| format!("worm sprite hook: {e:?}"))?
-    };
-    ORIGINAL.store(original, Ordering::SeqCst);
-    let info_va = catalog
-        .function_va("DisplayGfx__GetSpriteInfo")
-        .ok_or("missing DisplayGfx__GetSpriteInfo catalog entry")?;
-    let info = rb(info_va) as *mut c_void;
-    // 3.8.1: MOV EAX,[ESP+4]; LEA EDX,[EAX-1]. The unsigned range
-    // check immediately following rejects ID 0 without touching outputs.
-    let expected = [0x8b, 0x44, 0x24, 0x04, 0x8d, 0x50, 0xff];
-    unsafe {
-        if std::slice::from_raw_parts(info as *const u8, expected.len()) != expected {
-            return Err(format!("sprite info: WA bytes differ at {info_va:#010x}"));
-        }
-        let trampoline = MinHook::create_hook(info, sprite_info_hook as *mut c_void)
-            .map_err(|e| format!("sprite info hook: {e:?}"))?;
-        ORIGINAL_SPRITE_INFO.store(trampoline, Ordering::SeqCst);
+pub fn install() -> Result<(), String> {
+    for (name, detour, original) in [
+        ("WORM_CALC_SPRITE", calc_sprite_hook as *mut c_void, &ORIGINAL),
+        ("DISPLAY_GET_SPRITE_INFO", sprite_info_hook as *mut c_void, &ORIGINAL_SPRITE_INFO),
+        ("WEAPON_HOLD_SHEET", hold_sheet_hook as *mut c_void, &ORIGINAL_HOLD),
+    ] {
+        let trampoline = unsafe {
+            crate::wa::create_hook(crate::wa::address(name) as *mut c_void, detour)?
+        };
+        original.store(trampoline, Ordering::SeqCst);
     }
-    let hold_va = catalog
-        .function_va("Weapon__hold_sheet")
-        .ok_or("missing Weapon__hold_sheet catalog entry")?;
-    let hold = unsafe {
-        MinHook::create_hook(rb(hold_va) as *mut c_void, hold_sheet_hook as *mut c_void)
-            .map_err(|e| format!("hold sheet hook: {e:?}"))?
-    };
-    ORIGINAL_HOLD.store(hold, Ordering::SeqCst);
     log_line("worm sprite wrap and deterministic empty-sprite metadata installed");
     Ok(())
 }

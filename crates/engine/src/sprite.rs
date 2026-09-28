@@ -5,12 +5,10 @@
 //! usable — real fix waits on Edlud's render PR. Never steal map slots.
 
 use crate::log_line;
-use crate::rebase::rb;
 use game::offsets::{
-    CONSTRUCT_SPRITE, CUSTOM_SPRITE_SENTINEL, CUSTOM_SPRITE_SLOT_MAX, CUSTOM_SPRITE_SLOT_MIN,
-    DISPLAY_GAME_LAYER, DISPLAY_LAYER_CONTEXTS, DISPLAY_LAYER_VISIBILITY, DISPLAY_SPRITE_BANKS,
-    DISPLAY_SPRITE_CACHE, DISPLAY_SPRITE_LAYERS, DISPLAY_SPRITE_PTRS, MISSILE_ANIM_PHASE,
-    MISSILE_RENDER_SPRITE, PROCESS_SPRITE,
+    CUSTOM_SPRITE_SENTINEL, CUSTOM_SPRITE_SLOT_MAX, CUSTOM_SPRITE_SLOT_MIN, DISPLAY_GAME_LAYER,
+    DISPLAY_LAYER_CONTEXTS, DISPLAY_LAYER_VISIBILITY, DISPLAY_SPRITE_BANKS, DISPLAY_SPRITE_CACHE,
+    DISPLAY_SPRITE_LAYERS, DISPLAY_SPRITE_PTRS, MISSILE_ANIM_PHASE, MISSILE_RENDER_SPRITE,
 };
 use gfx::{encode_spr, spr_key, FeetPlatform, OpaqueMask, SpriteStrip};
 use std::sync::Mutex;
@@ -629,10 +627,7 @@ unsafe fn palette_ctx(display: *mut u8) -> (*mut u8, u32) {
 
 /// Exact / free-list / nearest onto live colours. Rewrites `.spr` RGB only so
 /// ProcessSprite's MapColor hits; never overwrites map palette slots.
-unsafe fn wash_spr_palette(
-    pal_ctx: *mut u8,
-    spr: &mut [u8],
-) -> Result<(u32, u32, u32), String> {
+unsafe fn wash_spr_palette(pal_ctx: *mut u8, spr: &mut [u8]) -> Result<(u32, u32, u32), String> {
     if spr.len() < 12 {
         return Err("truncated .spr".into());
     }
@@ -743,9 +738,8 @@ unsafe fn nearest_live_colour(ctx: *mut u8, rgb: u32) -> Option<u32> {
                 continue;
             }
             let [r, g, b] = rgb_at(ctx, slot);
-            let dist = (g as i32 - tg).abs() * 5
-                + (b as i32 - tb).abs() * 2
-                + (r as i32 - tr).abs() * 3;
+            let dist =
+                (g as i32 - tg).abs() * 5 + (b as i32 - tb).abs() * 2 + (r as i32 - tr).abs() * 3;
             if dist == 0 {
                 return Some(slot);
             }
@@ -826,7 +820,7 @@ unsafe fn rgb_at(ctx: *mut u8, slot: u32) -> [u8; 3] {
 }
 
 unsafe fn construct_sprite(sprite: *mut u8, cache: *mut u8) {
-    let f = rb(CONSTRUCT_SPRITE) as usize;
+    let f = crate::wa::address("CONSTRUCT_SPRITE") as usize;
     unsafe {
         core::arch::asm!(
             "call {f}",
@@ -841,7 +835,7 @@ unsafe fn construct_sprite(sprite: *mut u8, cache: *mut u8) {
 }
 
 unsafe fn process_sprite(sprite: *mut u8, pal_ctx: *mut u8, raw: *mut u8) -> u32 {
-    let f = rb(PROCESS_SPRITE) as usize;
+    let f = crate::wa::address("PROCESS_SPRITE") as usize;
     let ret: u32;
     unsafe {
         core::arch::asm!(
@@ -859,7 +853,6 @@ unsafe fn process_sprite(sprite: *mut u8, pal_ctx: *mut u8, raw: *mut u8) -> u32
     }
     ret
 }
-
 
 // ---------------------------------------------------------------------------
 // GPU sheets
@@ -952,9 +945,7 @@ pub fn is_gpu_sheet(id: u32) -> bool {
 
 /// Atlas rectangles and animation properties for a GPU sheet.
 #[allow(clippy::type_complexity)]
-pub fn gpu_frame(
-    id: u32,
-) -> Option<(impl Fn(usize) -> Option<render::SheetRect>, usize, bool)> {
+pub fn gpu_frame(id: u32) -> Option<(impl Fn(usize) -> Option<render::SheetRect>, usize, bool)> {
     let sheets = GPU_SHEETS.lock().ok()?;
     let sheet = sheets.iter().find(|s| (s.id as u32) == id)?;
     let frames = sheet.frames.clone();
@@ -982,7 +973,11 @@ pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) 
 
     if let Ok(mut g) = GPU_SHEETS.lock() {
         g.retain(|s| s.id != id);
-        g.push(GpuSheet { id, frames: rects, looping: strip.looping });
+        g.push(GpuSheet {
+            id,
+            frames: rects,
+            looping: strip.looping,
+        });
     }
     if let Some(feet) = strip.feet_platform() {
         if let Ok(mut g) = SPRITE_FEET.lock() {

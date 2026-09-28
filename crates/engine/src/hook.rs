@@ -3,13 +3,8 @@ use crate::apply::{after_init_weapon_table, on_gfx_ready};
 use crate::hud;
 use crate::log::{log_error, log_line, panic_text};
 use crate::physics;
-use crate::rebase::rb;
-use game::offsets::{
-    GAME_ENGINE_SHUTDOWN, GAME_RUNTIME_DISPLAY, GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY,
-    GFX_HANDLER_LOAD_SPRITES, INIT_WEAPON_TABLE, REPLAY_LOADER,
-};
+use game::offsets::{GAME_RUNTIME_DISPLAY, GAME_RUNTIME_WORLD, GAME_WORLD_DISPLAY};
 use minhook::MinHook;
-use re_catalog::Catalog;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
@@ -21,58 +16,54 @@ static ORIGINAL_SHUTDOWN: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut(
 static ORIGINAL_REPLAY_LOADER: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 pub fn install() -> Result<(), String> {
-    let catalog = Catalog::builtin()?;
-    let va = catalog
-        .function_va("InitWeaponTable")
-        .unwrap_or(INIT_WEAPON_TABLE);
-    let target = rb(va) as *mut c_void;
-    let trampoline = unsafe {
-        MinHook::create_hook(target, init_weapon_table_hook as *mut c_void)
-            .map_err(|e| format!("MinHook create: {e:?}"))?
-    };
-    ORIGINAL.store(trampoline, Ordering::SeqCst);
+    let result = install_inner();
+    if result.is_err() {
+        crate::wa::rollback_hooks();
+    }
+    result
+}
 
-    let ls = rb(GFX_HANDLER_LOAD_SPRITES) as *mut c_void;
-    let ls_tr = unsafe {
-        MinHook::create_hook(ls, load_sprites_hook as *mut c_void)
-            .map_err(|e| format!("MinHook LoadSprites: {e:?}"))?
-    };
-    ORIGINAL_LS.store(ls_tr, Ordering::SeqCst);
+fn install_inner() -> Result<(), String> {
+    for (name, detour, original) in [
+        ("INIT_WEAPON_TABLE", init_weapon_table_hook as *mut c_void, &ORIGINAL),
+        ("GFX_HANDLER_LOAD_SPRITES", load_sprites_hook as *mut c_void, &ORIGINAL_LS),
+        ("GAME_ENGINE_SHUTDOWN", shutdown_hook as *mut c_void, &ORIGINAL_SHUTDOWN),
+        ("REPLAY_LOADER", replay_loader_hook as *mut c_void, &ORIGINAL_REPLAY_LOADER),
+    ] {
+        let target = crate::wa::address(name) as *mut c_void;
+        let trampoline = unsafe { crate::wa::create_hook(target, detour) }?;
+        original.store(trampoline, Ordering::SeqCst);
+    }
 
-    let shutdown = rb(GAME_ENGINE_SHUTDOWN) as *mut c_void;
-    let shutdown_tr = unsafe {
-        MinHook::create_hook(shutdown, shutdown_hook as *mut c_void)
-            .map_err(|e| format!("MinHook GameEngine::Shutdown: {e:?}"))?
-    };
-    ORIGINAL_SHUTDOWN.store(shutdown_tr, Ordering::SeqCst);
-
-    let replay_loader = rb(REPLAY_LOADER) as *mut c_void;
-    let replay_loader_tr = unsafe {
-        MinHook::create_hook(replay_loader, replay_loader_hook as *mut c_void)
-            .map_err(|e| format!("MinHook ReplayLoader: {e:?}"))?
-    };
-    ORIGINAL_REPLAY_LOADER.store(replay_loader_tr, Ordering::SeqCst);
-
-    physics::install(&catalog)?;
-    hud::install(&catalog)?;
-    actor::install(&catalog)?;
-    crate::worm_sprite::install(&catalog)?;
-    crate::mine::install(&catalog)?;
-    crate::missile_boom::install(&catalog)?;
+    physics::install()?;
+    actor::install()?;
+    crate::worm_sprite::install()?;
+    crate::mine::install()?;
+    crate::missile_boom::install()?;
     crate::particles::install()?;
     crate::contact::install()?;
-    crate::shader::install(&catalog)?;
-    crate::render_queue::install()?;
-    crate::gpu::install_rq_draw()?;
-    crate::sync::install(&catalog)?;
-    // Optional: a lobby these hooks cannot read only loses asset sync.
-    if let Err(e) = crate::lobby::install(&catalog) {
-        log_error(&format!("lobby ready-bulb hooks unavailable: {e}"));
-    } else if let Err(e) = crate::transfer::install(&catalog) {
-        log_error(&format!("lobby transfer unavailable: {e}"));
+    crate::shader::install()?;
+    let checkpoint = crate::wa::hook_checkpoint();
+    if let Err(e) = crate::render_queue::install() {
+        crate::wa::rollback_to(checkpoint);
+        log_error(&format!("render queue feature disabled: {e}"));
+    }
+    let checkpoint = crate::wa::hook_checkpoint();
+    if let Err(e) = crate::gpu::install_rq_draw() {
+        crate::wa::rollback_to(checkpoint);
+        log_error(&format!("GPU sprite feature disabled: {e}"));
+    }
+    crate::sync::install()?;
+    let checkpoint = crate::wa::hook_checkpoint();
+    if let Err(e) = crate::lobby::install().and_then(|_| crate::transfer::install()) {
+        crate::wa::rollback_to(checkpoint);
+        log_error(&format!("lobby asset sync unavailable: {e}"));
     }
     unsafe {
         MinHook::enable_all_hooks().map_err(|e| format!("MinHook enable: {e:?}"))?;
+    }
+    if let Err(e) = hud::install() {
+        log_error(&format!("HUD overlay disabled: {e}"));
     }
     Ok(())
 }
@@ -205,9 +196,6 @@ unsafe extern "C" fn after_load_sprites(runtime: *mut u8) {
         on_gfx_ready(display);
     }));
     if let Err(p) = result {
-        log_error(&format!(
-            "panic after LoadSprites: {}",
-            panic_text(p)
-        ));
+        log_error(&format!("panic after LoadSprites: {}", panic_text(p)));
     }
 }

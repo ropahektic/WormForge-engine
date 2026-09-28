@@ -11,23 +11,20 @@
 //! - `gravity_after` edits velocity (extra bounce, stickiness, spin kicks)
 
 use crate::log_line;
-use crate::rebase::rb;
 use game::entity::{is_missile, read_cm_forces, read_i32, read_motion, write_i32, write_motion, write_scales};
 use game::offsets::{
-    APPLY_PROJECTILE_GRAVITY, CUSTOM_SPRITE_SENTINEL, CUSTOM_SPRITE_SLOT_MIN, ENT_MOVED, ENT_POS_X,
+     CUSTOM_SPRITE_SENTINEL, CUSTOM_SPRITE_SLOT_MIN, ENT_MOVED, ENT_POS_X,
     ENT_POS_Y, ENT_SPEED_X, ENT_SPEED_Y, ENT_WORM_TEAM, HIT_AMOUNT, HIT_TEAM, MISSILE_ALT_BANK_SPRITE,
-    MISSILE_FREE, MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
+      MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
     MISSILE_RENDER_SPRITE, MISSILE_SHOOT_PELLET, MISSILE_RENDER_SPRITE_ALT, MISSILE_TYPE, MISSILE_TYPE_HOMING,
-    MISSILE_VTABLE, MISSILE_WEAPON_ALT_SPRITE,
+     MISSILE_WEAPON_ALT_SPRITE,
     MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE,
     MSG_START_TURN,
-    WORM_DRAW_AIM_CURSOR, WORM_DRAW_ARROW, WORM_DRAW_CROSSHAIR, WORM_DRAW_CURSOR, WORM_DRAW_HEALTH,
-    WORM_DRAW_HUD, WORM_DRAW_NAME, WORM_DRAW_OFFMAP, WORM_DRAW_SPRITE, WORM_DRAW_TURN,
-    WORM_SHOW_CURSOR, WORM_FACING, WORM_HANDLE_MESSAGE, WORM_SET_STATE, WORM_STATE,
-    WORM_STATE_AIRBORNE, WORLD_ROOT_HANDLE_MESSAGE, WORLD_ROOT_TURN_ENDED,
+
+
+    WORM_SHOW_CURSOR, WORM_FACING,   WORM_STATE,
+    WORM_STATE_AIRBORNE,  WORLD_ROOT_TURN_ENDED,
 };
-use minhook::MinHook;
-use re_catalog::Catalog;
 use std::ffi::c_void;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
@@ -170,7 +167,7 @@ pub fn set_worm_state(handle: u32, state: u32) {
         return;
     }
     unsafe {
-        let f: SetStateFn = std::mem::transmute(rb(WORM_SET_STATE) as usize);
+        let f: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
         f(handle as *mut u8, state);
     }
 }
@@ -180,7 +177,7 @@ pub fn drop_carry(handle: u32) {
     if handle != 0 {
         unsafe {
             write_i32(handle as *mut u8, ENT_MOVED, 1);
-            let f: SetStateFn = std::mem::transmute(rb(WORM_SET_STATE) as usize);
+            let f: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
             f(handle as *mut u8, WORM_STATE_AIRBORNE);
         }
     }
@@ -240,115 +237,99 @@ pub fn worm_hidden(handle: u32) -> bool {
         .unwrap_or(false)
 }
 
-pub fn install(catalog: &Catalog) -> Result<(), String> {
-    let g = catalog
-        .function_va("CollisionManager__apply_projectile_gravity")
-        .unwrap_or(APPLY_PROJECTILE_GRAVITY);
-    let m = catalog
-        .function_va("MissileEntity__HandleMessage")
-        .unwrap_or(MISSILE_HANDLE_MESSAGE);
-    let free = catalog
-        .function_va("MissileEntity__Free")
-        .unwrap_or(MISSILE_FREE);
-    let w = catalog
-        .function_va("WormEntity__HandleMessage")
-        .unwrap_or(WORM_HANDLE_MESSAGE);
-
+pub fn install() -> Result<(), String> {
     unsafe {
         ORIG_GRAVITY.store(
-            MinHook::create_hook(rb(g) as *mut c_void, gravity_hook as *mut c_void)
+            crate::wa::create_hook(crate::wa::address("APPLY_PROJECTILE_GRAVITY") as *mut c_void, gravity_hook as *mut c_void)
                 .map_err(|e| format!("gravity hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_MISSILE.store(
-            MinHook::create_hook(rb(m) as *mut c_void, missile_hook as *mut c_void)
+            crate::wa::create_hook(crate::wa::address("MISSILE_HANDLE_MESSAGE") as *mut c_void, missile_hook as *mut c_void)
                 .map_err(|e| format!("missile hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_MISSILE_FREE.store(
-            MinHook::create_hook(rb(free) as *mut c_void, missile_free_hook as *mut c_void)
+            crate::wa::create_hook(crate::wa::address("MISSILE_FREE") as *mut c_void, missile_free_hook as *mut c_void)
                 .map_err(|e| format!("missile free hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_WORM.store(
-            MinHook::create_hook(rb(w) as *mut c_void, worm_hook as *mut c_void)
+            crate::wa::create_hook(crate::wa::address("WORM_HANDLE_MESSAGE") as *mut c_void, worm_hook as *mut c_void)
                 .map_err(|e| format!("worm hook: {e:?}"))?,
             Ordering::SeqCst,
         );
-        let root = catalog
-            .function_va("WorldRootEntity__HandleMessage")
-            .unwrap_or(WORLD_ROOT_HANDLE_MESSAGE);
         ORIG_ROOT.store(
-            MinHook::create_hook(rb(root) as *mut c_void, root_hook as *mut c_void)
+            crate::wa::create_hook(crate::wa::address("WORLD_ROOT_HANDLE_MESSAGE") as *mut c_void, root_hook as *mut c_void)
                 .map_err(|e| format!("world-root hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_DRAW.store(
-            MinHook::create_hook(
-                rb(WORM_DRAW_SPRITE) as *mut c_void,
+            crate::wa::create_hook(
+                crate::wa::address("WORM_DRAW_SPRITE") as *mut c_void,
                 draw_hook as *mut c_void,
             )
             .map_err(|e| format!("draw-sprite hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_NAME.store(
-            MinHook::create_hook(rb(WORM_DRAW_NAME) as *mut c_void, name_hook as *mut c_void)
+            crate::wa::create_hook(crate::wa::address("WORM_DRAW_NAME") as *mut c_void, name_hook as *mut c_void)
                 .map_err(|e| format!("draw-name hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_HUD.store(
-            MinHook::create_hook(rb(WORM_DRAW_HUD) as *mut c_void, hud_hook as *mut c_void)
+            crate::wa::create_hook(crate::wa::address("WORM_DRAW_HUD") as *mut c_void, hud_hook as *mut c_void)
                 .map_err(|e| format!("draw-hud hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_HEALTH.store(
-            MinHook::create_hook(
-                rb(WORM_DRAW_HEALTH) as *mut c_void,
+            crate::wa::create_hook(
+                crate::wa::address("WORM_DRAW_HEALTH") as *mut c_void,
                 health_hook as *mut c_void,
             )
             .map_err(|e| format!("draw-health hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_CURSOR.store(
-            MinHook::create_hook(
-                rb(WORM_DRAW_CURSOR) as *mut c_void,
+            crate::wa::create_hook(
+                crate::wa::address("WORM_DRAW_CURSOR") as *mut c_void,
                 cursor_hook as *mut c_void,
             )
             .map_err(|e| format!("draw-cursor hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_OFFMAP.store(
-            MinHook::create_hook(
-                rb(WORM_DRAW_OFFMAP) as *mut c_void,
+            crate::wa::create_hook(
+                crate::wa::address("WORM_DRAW_OFFMAP") as *mut c_void,
                 offmap_hook as *mut c_void,
             )
             .map_err(|e| format!("draw-offmap hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_TURN.store(
-            MinHook::create_hook(rb(WORM_DRAW_TURN) as *mut c_void, turn_hook as *mut c_void)
+            crate::wa::create_hook(crate::wa::address("WORM_DRAW_TURN") as *mut c_void, turn_hook as *mut c_void)
                 .map_err(|e| format!("draw-turn hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_ARROW.store(
-            MinHook::create_hook(
-                rb(WORM_DRAW_ARROW) as *mut c_void,
+            crate::wa::create_hook(
+                crate::wa::address("WORM_DRAW_ARROW") as *mut c_void,
                 arrow_hook as *mut c_void,
             )
             .map_err(|e| format!("draw-arrow hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_AIM_CURSOR.store(
-            MinHook::create_hook(
-                rb(WORM_DRAW_AIM_CURSOR) as *mut c_void,
+            crate::wa::create_hook(
+                crate::wa::address("WORM_DRAW_AIM_CURSOR") as *mut c_void,
                 aim_cursor_hook as *mut c_void,
             )
             .map_err(|e| format!("draw-aim-cursor hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_CROSSHAIR.store(
-            MinHook::create_hook(
-                rb(WORM_DRAW_CROSSHAIR) as *mut c_void,
+            crate::wa::create_hook(
+                crate::wa::address("WORM_DRAW_CROSSHAIR") as *mut c_void,
                 crosshair_hook as *mut c_void,
             )
             .map_err(|e| format!("draw-crosshair hook: {e:?}"))?,
@@ -360,7 +341,7 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
 }
 
 fn missile_vt() -> u32 {
-    rb(MISSILE_VTABLE)
+    crate::wa::address("MISSILE_VTABLE")
 }
 
 fn with_cm_forces(cm: *mut u8, mut m: game::entity::Motion) -> game::entity::Motion {
@@ -766,9 +747,7 @@ pub fn hit_worm(target: u32, from: u32, amount: i32) {
         data[2] = y;
         data[HIT_AMOUNT / 4] = amount;
         data[HIT_TEAM / 4] = by;
-        crate::hurt::synthetic(|| {
-            worm_hook(this, from, MSG_HIT, 0, data.as_mut_ptr() as *mut u8)
-        });
+        crate::hurt::synthetic(|| worm_hook(this, from, MSG_HIT, 0, data.as_mut_ptr() as *mut u8));
         write_i32(this, ENT_POS_X, x);
         write_i32(this, ENT_POS_Y, y);
         write_i32(this, ENT_SPEED_X, vx);

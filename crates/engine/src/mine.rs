@@ -5,16 +5,11 @@
 //! stealing this path.
 
 use crate::log::{log_error, log_line};
-use crate::rebase::rb;
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
-    CREATE_EXPLOSION, ENT_GRAVITY_SCALE, GAME_WORLD_WEAPON_TABLE, MINE_BOUNCE_X, MINE_BOUNCE_Y,
-    MINE_ENTITY_CTOR, MINE_ENTITY_DTOR, MINE_EXPLODE, MINE_PICK_SPRITE, MINE_PROXIMITY_SCAN,
-    MINE_SPRITE_OFF, MINE_SPRITE_ON, MINE_WIND, STOCK_WEAPON_COUNT, WEAPON_ENTRY_SIZE,
-    WEAPON_FIRE_PARAMS,
+    ENT_GRAVITY_SCALE, GAME_WORLD_WEAPON_TABLE, MINE_BOUNCE_X, MINE_BOUNCE_Y, MINE_SPRITE_OFF,
+    MINE_SPRITE_ON, MINE_WIND, STOCK_WEAPON_COUNT, WEAPON_ENTRY_SIZE, WEAPON_FIRE_PARAMS,
 };
-use minhook::MinHook;
-use re_catalog::Catalog;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Mutex;
@@ -102,49 +97,52 @@ pub fn set_sprite(slot: usize, sprite: i32) {
     }
 }
 
-pub fn install(catalog: &Catalog) -> Result<(), String> {
-    let ctor = catalog
-        .function_va("MineEntity__ctor")
-        .unwrap_or(MINE_ENTITY_CTOR);
-    let dtor = catalog
-        .function_va("MineEntity__dtor_inner")
-        .unwrap_or(MINE_ENTITY_DTOR);
-    let pick = catalog
-        .function_va("MineEntity__pick_sprite")
-        .unwrap_or(MINE_PICK_SPRITE);
-    let boom = catalog
-        .function_va("MineEntity__explode")
-        .unwrap_or(MINE_EXPLODE);
-    let scan = catalog
-        .function_va("MineEntity__proximity_scan")
-        .unwrap_or(MINE_PROXIMITY_SCAN);
+pub fn install() -> Result<(), String> {
     unsafe {
         ORIG_CTOR.store(
-            MinHook::create_hook(rb(ctor) as *mut c_void, ctor_hook as *mut c_void)
-                .map_err(|e| format!("mine ctor hook: {e:?}"))?,
+            crate::wa::create_hook(
+                crate::wa::address("MINE_ENTITY_CTOR") as *mut c_void,
+                ctor_hook as *mut c_void,
+            )
+            .map_err(|e| format!("mine ctor hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_DTOR.store(
-            MinHook::create_hook(rb(dtor) as *mut c_void, dtor_hook as *mut c_void)
-                .map_err(|e| format!("mine dtor hook: {e:?}"))?,
+            crate::wa::create_hook(
+                crate::wa::address("MINE_ENTITY_DTOR") as *mut c_void,
+                dtor_hook as *mut c_void,
+            )
+            .map_err(|e| format!("mine dtor hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_PICK.store(
-            MinHook::create_hook(rb(pick) as *mut c_void, pick_hook as *mut c_void)
-                .map_err(|e| format!("mine pick hook: {e:?}"))?,
+            crate::wa::create_hook(
+                crate::wa::address("MINE_PICK_SPRITE") as *mut c_void,
+                pick_hook as *mut c_void,
+            )
+            .map_err(|e| format!("mine pick hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_BOOM.store(
-            MinHook::create_hook(rb(boom) as *mut c_void, boom_hook as *mut c_void)
-                .map_err(|e| format!("mine explode hook: {e:?}"))?,
+            crate::wa::create_hook(
+                crate::wa::address("MINE_EXPLODE") as *mut c_void,
+                boom_hook as *mut c_void,
+            )
+            .map_err(|e| format!("mine explode hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_SCAN.store(
-            MinHook::create_hook(rb(scan) as *mut c_void, scan_hook as *mut c_void)
-                .map_err(|e| format!("mine scan hook: {e:?}"))?,
+            crate::wa::create_hook(
+                crate::wa::address("MINE_PROXIMITY_SCAN") as *mut c_void,
+                scan_hook as *mut c_void,
+            )
+            .map_err(|e| format!("mine scan hook: {e:?}"))?,
             Ordering::SeqCst,
         );
-        EXPLODE.store(rb(CREATE_EXPLOSION) as *mut c_void, Ordering::SeqCst);
+        EXPLODE.store(
+            crate::wa::address("CREATE_EXPLOSION") as *mut c_void,
+            Ordering::SeqCst,
+        );
     }
     log_line("mine wraps: ctor, dtor, pick_sprite, explode, proximity");
     Ok(())
@@ -157,11 +155,7 @@ fn tune_for_slot(slot: usize) -> Option<MineTune> {
 
 fn live_mine(this: *mut u8) -> Option<LiveMine> {
     let key = this as u32;
-    LIVE.lock()
-        .ok()?
-        .iter()
-        .find(|m| m.handle == key)
-        .cloned()
+    LIVE.lock().ok()?.iter().find(|m| m.handle == key).cloned()
 }
 
 fn live_tune(this: *mut u8) -> Option<MineTune> {

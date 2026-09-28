@@ -27,14 +27,11 @@
 //! a stray packet there must not reach the game's own packet parser.
 
 use crate::log::{log_error as log_error_raw, log_line as log_line_raw, panic_text, wa_directory, wormforge_dir, BUILD_ID};
-use crate::rebase::rb;
 use game::entity::read_i32;
-use minhook::MinHook;
 use netsync::download::{Download, Event};
 use netsync::proto::{self, Message, State};
 use netsync::store::Served;
 use netsync::{Manifest, FrozenFile};
-use re_catalog::Catalog;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::path::PathBuf;
@@ -182,52 +179,35 @@ type HostEndHandlerFn = unsafe extern "thiscall" fn(*mut u8, i32, *const u8, usi
 type SendFn = unsafe extern "thiscall" fn(*mut u8, *const u8, usize) -> i32;
 
 // WA 3.8.1 bytes after the first ones, from wkTerrainSync's signatures.
-const HOST_BYTES: &[Option<u8>] = &[
-    None, None, None, None, None, None, None, Some(0x83), Some(0xF8), Some(0x02), Some(0x53),
-    Some(0x8B), Some(0xD9), Some(0x89), Some(0x5C), Some(0x24), Some(0x04), Some(0x0F), Some(0x82),
-];
-// The end screens', from the same signatures.
-const HOST_END_BYTES: &[Option<u8>] = &[
-    None, None, None, None, None, None, None, Some(0x64), Some(0xA1), None, None, None, None,
-    Some(0x50), Some(0x64), Some(0x89), Some(0x25), None, None, None, None, Some(0x83), Some(0xEC),
-    Some(0x20), Some(0x53), Some(0x55), Some(0x56), Some(0x8B), Some(0x74), Some(0x24), Some(0x40),
-];
-const CLIENT_END_BYTES: &[Option<u8>] = &[
-    None, None, None, None, None, None, Some(0x83), Some(0xEC), Some(0x08), Some(0x56), Some(0x8B),
-    Some(0x75), Some(0x08), Some(0x0F), Some(0xB7), Some(0x06),
-];
-const CLIENT_BYTES: &[Option<u8>] = &[
-    None, None, None, None, None, None, Some(0x83), Some(0xEC), Some(0x24), Some(0x53), Some(0x8B),
-    Some(0x5D), Some(0x0C), Some(0x83), Some(0xFB), Some(0x02),
-];
-
-pub fn install(catalog: &Catalog) -> Result<(), String> {
-    let host = catalog.global_va("G_HOST_SESSION").ok_or("missing G_HOST_SESSION")?;
-    let link = catalog.global_va("G_CLIENT_LINK").ok_or("missing G_CLIENT_LINK")?;
-    let host_handler = crate::lobby::target(catalog, "HostLobby__HandlePacket", HOST_BYTES)?;
-    let client_handler = crate::lobby::target(catalog, "ClientLobby__HandlePacket", CLIENT_BYTES)?;
-    let host_end = crate::lobby::target(catalog, "HostEndscreen__HandlePacket", HOST_END_BYTES)?;
-    let client_end = crate::lobby::target(catalog, "ClientEndscreen__HandlePacket", CLIENT_END_BYTES)?;
+pub fn install() -> Result<(), String> {
+    let host = crate::wa::try_address("G_HOST_SESSION").ok_or("missing G_HOST_SESSION locator")?;
+    let link = crate::wa::try_address("G_CLIENT_LINK").ok_or("missing G_CLIENT_LINK locator")?;
+    let host_handler = crate::lobby::target("HOST_LOBBY_HANDLE_PACKET")?;
+    let client_handler = crate::lobby::target("CLIENT_LOBBY_HANDLE_PACKET")?;
+    let host_end = crate::lobby::target("HOST_ENDSCREEN_HANDLE_PACKET")?;
+    let client_end = crate::lobby::target("CLIENT_ENDSCREEN_HANDLE_PACKET")?;
     unsafe {
-        let tr = MinHook::create_hook(host_handler, host_packet_hook as *mut c_void)
+        let tr = crate::wa::create_hook(host_handler, host_packet_hook as *mut c_void)
             .map_err(|e| format!("host lobby packet hook: {e:?}"))?;
         ORIGINAL_HOST.store(tr, Ordering::SeqCst);
-        let tr = MinHook::create_hook(client_handler, client_packet_hook as *mut c_void)
+        let tr = crate::wa::create_hook(client_handler, client_packet_hook as *mut c_void)
             .map_err(|e| format!("client lobby packet hook: {e:?}"))?;
         ORIGINAL_CLIENT.store(tr, Ordering::SeqCst);
-        let tr = MinHook::create_hook(host_end, host_end_packet_hook as *mut c_void)
+        let tr = crate::wa::create_hook(host_end, host_end_packet_hook as *mut c_void)
             .map_err(|e| format!("host end-screen packet hook: {e:?}"))?;
         ORIGINAL_HOST_END.store(tr, Ordering::SeqCst);
-        let tr = MinHook::create_hook(client_end, client_end_packet_hook as *mut c_void)
+        let tr = crate::wa::create_hook(client_end, client_end_packet_hook as *mut c_void)
             .map_err(|e| format!("client end-screen packet hook: {e:?}"))?;
         ORIGINAL_CLIENT_END.store(tr, Ordering::SeqCst);
     }
-    HOST_SESSION.store(rb(host), Ordering::SeqCst);
-    CLIENT_LINK.store(rb(link), Ordering::SeqCst);
-    // Its first bytes are wkFOW's hook when that module is loaded, so only the
-    // address is taken from the catalog; showing a note is optional.
-    if let Some(va) = catalog.function_va("Lobby__DisplayMessage") {
-        DISPLAY.store(rb(va), Ordering::SeqCst);
+    HOST_SESSION.store(host, Ordering::SeqCst);
+    CLIENT_LINK.store(link, Ordering::SeqCst);
+    // Another module may already own its entry; call through the WA entry.
+    if crate::wa::try_address("LOBBY_DISPLAY_MESSAGE").is_some() {
+        match crate::wa::check_callable("LOBBY_DISPLAY_MESSAGE") {
+            Ok(address) => DISPLAY.store(address, Ordering::SeqCst),
+            Err(error) => log_error_raw(&format!("lobby message display unavailable: {error}")),
+        }
     }
     log_line(&format!("lobby transfer installed (packet type {:#06x}, protocol {})", proto::PACKET_ID, proto::PROTOCOL));
     Ok(())

@@ -2,7 +2,6 @@
 //! (Jelly CTask children), PlaySoundLocal, stock SelectWeapon / StartFiring.
 
 use crate::log::{log_error, log_line};
-use crate::rebase::rb;
 use game::entity::{read_i32, write_i32};
 use game::latch::FrameLatch;
 use game::offsets::*;
@@ -124,7 +123,11 @@ pub fn resolve_sound(key: &str) -> i32 {
         let Ok(mut g) = WAVS.lock() else {
             return 0;
         };
-        let Some(wav) = g.iter_mut().find(|(k, _)| k == key || k.ends_with(key)).map(|(_, w)| w) else {
+        let Some(wav) = g
+            .iter_mut()
+            .find(|(k, _)| k == key || k.ends_with(key))
+            .map(|(_, w)| w)
+        else {
             return 0;
         };
         if wav.loaded {
@@ -171,7 +174,7 @@ unsafe fn landscape_method(slot: usize, expected: u32) -> Result<(*mut u8, u32),
         return Err("terrain cut: landscape unavailable".into());
     }
     let table = *(land as *const u32);
-    if table != rb(LANDSCAPE_VTABLE) {
+    if table != crate::wa::address("LANDSCAPE_VTABLE") {
         return Err(format!(
             "terrain cut: unexpected landscape vtable {table:#x}"
         ));
@@ -180,7 +183,7 @@ unsafe fn landscape_method(slot: usize, expected: u32) -> Result<(*mut u8, u32),
     if method == 0 {
         return Err(format!("terrain cut: landscape method {slot} is null"));
     }
-    if method != rb(expected) {
+    if method != expected {
         static REPORTED: [AtomicBool; 4] = [const { AtomicBool::new(false) }; 4];
         if !REPORTED[slot & 3].swap(true, Ordering::Relaxed) {
             log_line(&format!(
@@ -198,7 +201,7 @@ pub fn land_dig(x: i32, y: i32, radius: i32) -> Result<(), String> {
         return Err("terrain cut: radius must be 1..200 pixels".into());
     }
     unsafe {
-        let (land, method) = landscape_method(2, LANDSCAPE_APPLY_EXPLOSION)?;
+        let (land, method) = landscape_method(2, crate::wa::address("LANDSCAPE_WRITE_RADIUS"))?;
         let cut: unsafe extern "thiscall" fn(*mut u8, i32, i32, i32) =
             std::mem::transmute(method as usize);
         cut(land, radius, x >> 16, y >> 16);
@@ -212,7 +215,7 @@ pub fn land_cut(shape: i32, x: i32, y: i32) -> Result<(), String> {
         return Err("terrain cut: only drill and torch shapes are supported".into());
     }
     unsafe {
-        let (land, method) = landscape_method(3, LANDSCAPE_MASK)?;
+        let (land, method) = landscape_method(3, crate::wa::address("LANDSCAPE_WRITE_MASK_ID"))?;
         let mask = *((land.add(LANDSCAPE_SHAPES + shape as usize * 4)) as *const u32);
         if mask == 0 {
             return Err(format!("terrain cut: stock shape {shape} is not loaded"));
@@ -226,13 +229,9 @@ pub fn land_cut(shape: i32, x: i32, y: i32) -> Result<(), String> {
 
 pub fn trace_fixed(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)> {
     let grid = live_grid()?;
-    let hit = trace_pixels(
-        x0 >> 16,
-        y0 >> 16,
-        x1 >> 16,
-        y1 >> 16,
-        |x, y| grid.solid_px(x, y),
-    )?;
+    let hit = trace_pixels(x0 >> 16, y0 >> 16, x1 >> 16, y1 >> 16, |x, y| {
+        grid.solid_px(x, y)
+    })?;
     Some((hit.0 << 16, hit.1 << 16))
 }
 
@@ -352,10 +351,22 @@ pub fn latch_entity_view(display: usize, clip: usize) {
     unsafe {
         VIEW_CLIP_X.store(*(clip as *const i32), Ordering::Relaxed);
         VIEW_CLIP_Y.store(*((clip + 4) as *const i32), Ordering::Relaxed);
-        VIEW_CAM_X.store(*((display + DISPLAY_VIEW_X) as *const i32), Ordering::Relaxed);
-        VIEW_CAM_Y.store(*((display + DISPLAY_VIEW_Y) as *const i32), Ordering::Relaxed);
-        VIEW_SURF_W.store(*((display + DISPLAY_WIDTH) as *const i32), Ordering::Relaxed);
-        VIEW_SURF_H.store(*((display + DISPLAY_HEIGHT) as *const i32), Ordering::Relaxed);
+        VIEW_CAM_X.store(
+            *((display + DISPLAY_VIEW_X) as *const i32),
+            Ordering::Relaxed,
+        );
+        VIEW_CAM_Y.store(
+            *((display + DISPLAY_VIEW_Y) as *const i32),
+            Ordering::Relaxed,
+        );
+        VIEW_SURF_W.store(
+            *((display + DISPLAY_WIDTH) as *const i32),
+            Ordering::Relaxed,
+        );
+        VIEW_SURF_H.store(
+            *((display + DISPLAY_HEIGHT) as *const i32),
+            Ordering::Relaxed,
+        );
     }
     VIEW_XFORM.store(true, Ordering::Relaxed);
 }
@@ -609,9 +620,11 @@ pub fn hold_turn_timer() {
     if root.is_null() {
         return;
     }
-    let Some((timer, display)) = FROZEN_TURN.lock().ok().and_then(|g| {
-        g.as_ref().map(|f| (f.timer, f.display))
-    }) else {
+    let Some((timer, display)) = FROZEN_TURN
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|f| (f.timer, f.display)))
+    else {
         return;
     };
     unsafe {
@@ -627,8 +640,7 @@ fn mouse_down() -> bool {
 
 fn key_down(vk: i32) -> bool {
     unsafe {
-        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000
-            != 0
+        windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000 != 0
     }
 }
 
@@ -711,7 +723,7 @@ pub fn draw_random() -> Option<u32> {
     if !advance_rng_verified() {
         return None;
     }
-    let f = rb(GAME_WORLD_ADVANCE_RNG) as u32;
+    let f = crate::wa::address("GAME_WORLD_ADVANCE_RNG") as u32;
     let args = [world as u32, f];
     let out: u32;
     unsafe {
@@ -731,22 +743,15 @@ pub fn draw_random() -> Option<u32> {
     Some(out)
 }
 
-/// Check the prologue once, the way `render_queue` checks its dispatcher.
-/// Calling a hardcoded address on a build whose layout moved would corrupt
-/// the game; refusing to draw only costs the pack its randomness.
+/// Validate the live entry once. A prior module's supported jump is callable.
 fn advance_rng_verified() -> bool {
     match RNG_OK.load(Ordering::Relaxed) {
         0 => {
-            let addr = rb(GAME_WORLD_ADVANCE_RNG) as *const u8;
-            let found = unsafe { std::slice::from_raw_parts(addr, ADVANCE_RNG_PROLOGUE.len()) };
-            let ok = found == ADVANCE_RNG_PROLOGUE;
+            let result = crate::wa::check_callable("GAME_WORLD_ADVANCE_RNG");
+            let ok = result.is_ok();
             RNG_OK.store(if ok { 2 } else { 1 }, Ordering::Relaxed);
-            if !ok {
-                log_error(&format!(
-                    "GameWorld__AdvanceRNG at {addr:?} does not start with the \
-                     verified prologue (found {found:02x?}); wa.random() is \
-                     disabled rather than calling into the wrong place"
-                ));
+            if let Err(e) = result {
+                log_error(&format!("wa.random() disabled: {e}"));
             }
             ok
         }
@@ -1213,7 +1218,8 @@ pub fn revive_grave(grave_handle: u32, worm_id: u32, health: i32) -> u32 {
         let record = info.add(0x450 + (team as usize - 1) * 0xBB8);
         if index > *record.add(0xBB4) as u32 { return 0; }
         let setup = record.add(0xA74 + (index as usize - 1) * 0x28);
-        let malloc: unsafe extern "C" fn(usize) -> *mut u8 = std::mem::transmute(rb(WA_MALLOC) as usize);
+        let malloc: unsafe extern "C" fn(usize) -> *mut u8 =
+            std::mem::transmute(crate::wa::address("WA_MALLOC") as usize);
         let worm = malloc(0x41C);
         if worm.is_null() { return 0; }
         std::ptr::write_bytes(worm, 0, 0x3FC);
@@ -1225,7 +1231,7 @@ pub fn revive_grave(grave_handle: u32, worm_id: u32, health: i32) -> u32 {
         let already_listed = (0..roster_count)
             .any(|i| read_i32(parent, 0x88 + i * 4) == index as i32);
         let ctor: unsafe extern "stdcall" fn(*mut u8, *mut u8, u32, u32, *mut u8) -> *mut u8 =
-            std::mem::transmute(rb(WORM_ENTITY_CTOR) as usize);
+            std::mem::transmute(crate::wa::address("WORM_ENTITY_CTOR") as usize);
         let built = ctor(worm, parent, team, index, setup);
         if built.is_null() || read_i32(worm, ENT_CLASS_TYPE) != CLASS_WORM { return 0; }
         if already_listed {
@@ -1316,7 +1322,10 @@ unsafe fn ammo_row(arena: *mut u8, team: u32) -> Option<usize> {
     if arena.is_null() || team == 0 || team > MAX_TEAMS {
         return None;
     }
-    let alliance = read_i32(arena, TEAM_ARENA_ALLIANCE + team as usize * WORLD_TEAM_STRIDE);
+    let alliance = read_i32(
+        arena,
+        TEAM_ARENA_ALLIANCE + team as usize * WORLD_TEAM_STRIDE,
+    );
     if alliance < 0 || alliance >= MAX_TEAMS as i32 {
         return None;
     }
@@ -1336,7 +1345,7 @@ unsafe fn write_ammo(arena: *mut u8, team: u32, slot: u32, ammo: i32) {
 /// `WormEntity__StartFiring` — EAX=this. Power bar starts at 0 and grows while held.
 unsafe fn start_firing(worm: *mut u8) {
     write_i32(worm, WORM_WEAPONS_ENABLED, 1);
-    let f = rb(WORM_START_FIRING) as u32;
+    let f = crate::wa::address("WORM_START_FIRING") as u32;
     let args = [worm as u32, f];
     core::arch::asm!(
         "push esi",
@@ -1356,7 +1365,7 @@ unsafe fn start_firing(worm: *mut u8) {
 unsafe fn release_shot(worm: *mut u8) {
     write_i32(worm, WORM_WEAPONS_ENABLED, 1);
     type MsgFn = unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut u8);
-    let f: MsgFn = std::mem::transmute(rb(WORM_HANDLE_MESSAGE) as usize);
+    let f: MsgFn = std::mem::transmute(crate::wa::address("WORM_HANDLE_MESSAGE") as usize);
     f(
         worm,
         worm as u32,
@@ -1390,7 +1399,7 @@ unsafe fn clear_delay(arena: *mut u8, team: u32, slot: u32) {
 }
 
 unsafe fn get_ammo(arena: *mut u8, team: u32, slot: u32) -> i32 {
-    let f = rb(TEAM_GET_AMMO) as u32;
+    let f = crate::wa::address("TEAM_GET_AMMO") as u32;
     let args = [team, arena as u32, slot, f];
     let ret: i32;
     core::arch::asm!(
@@ -1409,7 +1418,7 @@ unsafe fn get_ammo(arena: *mut u8, team: u32, slot: u32) -> i32 {
 }
 
 unsafe fn add_ammo(arena: *mut u8, team: u32, slot: u32, amount: i32) {
-    let f = rb(TEAM_ADD_AMMO) as u32;
+    let f = crate::wa::address("TEAM_ADD_AMMO") as u32;
     let args = [team, amount as u32, slot, arena as u32, f];
     core::arch::asm!(
         "push esi",
@@ -1427,7 +1436,7 @@ unsafe fn add_ammo(arena: *mut u8, team: u32, slot: u32, amount: i32) {
 }
 
 unsafe fn select_weapon(worm: *mut u8, slot: u32, ammo: i32) {
-    let f = rb(WORM_SELECT_WEAPON) as u32;
+    let f = crate::wa::address("WORM_SELECT_WEAPON") as u32;
     let args = [worm as u32, ammo as u32, slot, f];
     core::arch::asm!(
         "push esi",
@@ -1796,7 +1805,7 @@ pub fn retreat_ms() -> i32 {
 }
 
 unsafe fn session_root_ptr() -> *mut u8 {
-    let slot = rb(G_GAME_SESSION) as *const *mut u8;
+    let slot = crate::wa::address("G_GAME_SESSION") as *const *mut u8;
     if slot.is_null() {
         return std::ptr::null_mut();
     }
@@ -1852,7 +1861,7 @@ unsafe fn dssound_load_wav(this: *mut u8, slot: i32, path: *const i8) -> bool {
     if this.is_null() || path.is_null() {
         return false;
     }
-    let f = rb(DS_SOUND_LOAD_WAV) as u32;
+    let f = crate::wa::address("DS_SOUND_LOAD_WAV") as u32;
     let args = [this as u32, slot as u32, path as u32, f];
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let ret: u32;
@@ -1884,7 +1893,7 @@ unsafe fn play_sound_local(entity: *mut u8, id: i32, flags: i32, volume: i32, pi
     if entity.is_null() {
         return;
     }
-    let f = rb(PLAY_SOUND_LOCAL) as u32;
+    let f = crate::wa::address("PLAY_SOUND_LOCAL") as u32;
     let args = [
         entity as u32,
         pitch as u32,

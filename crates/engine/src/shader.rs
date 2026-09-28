@@ -2,11 +2,9 @@
 //! The queue captures color/coverage independently of the shared palette. The
 //! final draw uses it only when upload succeeds; all failures retain stock art.
 
+use crate::log_error;
 #[cfg(debug_assertions)]
 use crate::log_line;
-use crate::{log_error, rebase::rb};
-use minhook::MinHook;
-use re_catalog::Catalog;
 use std::{
     ffi::c_void,
     sync::atomic::{AtomicPtr, AtomicU32, AtomicUsize, Ordering},
@@ -41,10 +39,6 @@ static RENDERER: AtomicUsize = AtomicUsize::new(0);
 /// WA's `Renderer` option (Options section, registry or INI as WA itself is
 /// set up), read with WA's own reader, `COptions`'s int getter: a thiscall on
 /// its config object taking (section, name, default).
-const OPTIONS_READ_INT: u32 = 0x005C_C5D2;
-const OPTIONS_CONFIG: u32 = 0x007C_03D0;
-const STR_OPTIONS: u32 = 0x0065_0CB8;
-const STR_RENDERER: u32 = 0x0065_E4BC;
 /// The one renderer the GPU path draws with: its vtable (0x6767F8, built by
 /// the case-4 constructor 0x59D020 in the frontend's renderer switch at
 /// 0x4E829D) holds `Display__D3D9ShaderPresent`.
@@ -55,17 +49,17 @@ pub const RENDERER_D3D9_SHADER: i32 = 4;
 pub fn renderer_setting() -> Option<i32> {
     unsafe {
         let text = |va: u32, s: &[u8]| {
-            std::slice::from_raw_parts(rb(va) as *const u8, s.len()) == s
+            std::slice::from_raw_parts(va as *const u8, s.len()) == s
         };
-        if !text(STR_OPTIONS, b"Options\0") || !text(STR_RENDERER, b"Renderer\0") {
+        if !text(crate::wa::address("STR_OPTIONS"), b"Options\0") || !text(crate::wa::address("STR_RENDERER"), b"Renderer\0") {
             return None;
         }
         type ReadInt = unsafe extern "thiscall" fn(*mut u8, *const u8, *const u8, i32) -> i32;
-        let read: ReadInt = std::mem::transmute(rb(OPTIONS_READ_INT) as usize);
+        let read: ReadInt = std::mem::transmute(crate::wa::address("OPTIONS_READ_INT") as usize);
         let v = read(
-            rb(OPTIONS_CONFIG) as *mut u8,
-            rb(STR_OPTIONS) as *const u8,
-            rb(STR_RENDERER) as *const u8,
+            crate::wa::address("OPTIONS_CONFIG") as *mut u8,
+            crate::wa::address("STR_OPTIONS") as *const u8,
+            crate::wa::address("STR_RENDERER") as *const u8,
             -1,
         );
         (v >= 0).then_some(v)
@@ -261,61 +255,35 @@ unsafe extern "C" fn shader_draw_hook() {
 /// Never fails the caller: a build without these sites, or a MinHook refusal,
 /// means the shader path is unavailable and everything that depends on it stays
 /// switched off. That is a supported configuration, not an error.
-pub fn install(catalog: &Catalog) -> Result<(), String> {
-    // Present + Cleanup are required for the GPU atlas path. FogDraw is only
-    // used by the legacy truecolor mid-draw bind; skip it if the site differs.
-    let required: [(&str, &[u8], *mut c_void, &AtomicPtr<c_void>); 2] = [
-        (
-            "Display__D3D9ShaderPresent",
-            &[0x83, 0xec, 0x0c, 0x53, 0x57, 0x8d, 0x44, 0x24, 0x08],
-            shader_present_hook as _,
-            &ORIG_PRESENT,
-        ),
-        (
-            "Display__D3D9ShaderResourcesCleanup",
-            &[0x56, 0x8b, 0xf1, 0x8b, 0x86, 0x88, 0, 0, 0],
-            shader_cleanup_hook as _,
-            &ORIG_CLEANUP,
-        ),
+pub fn install() -> Result<(), String> {
+    let required = [
+        ("DISPLAY_SHADER_PRESENT", shader_present_hook as *mut c_void, &ORIG_PRESENT),
+        ("DISPLAY_SHADER_CLEANUP", shader_cleanup_hook as *mut c_void, &ORIG_CLEANUP),
     ];
-    let mut installed = Vec::new();
-    for (name, bytes, detour, original) in required {
-        let result = (|| {
-            let va = catalog
-                .function_va(name)
-                .ok_or_else(|| format!("missing {name}"))?;
-            let target = rb(va) as *mut c_void;
-            if unsafe { std::slice::from_raw_parts(target as *const u8, bytes.len()) } != bytes {
-                return Err(format!(
-                    "{name} bytes differ or another module owns the hook \
-                     (a WormKit module such as wkFOW hooks the same D3D9 sites; \
-                     remove it to use GPU sprites)"
-                ));
+    if required.iter().any(|(name, _, _)| crate::wa::try_address(name).is_none()) {
+        log_error("gpu present hook disabled: shader signatures unavailable");
+        return Ok(());
+    }
+    let checkpoint = crate::wa::hook_checkpoint();
+    for (name, detour, original) in required {
+        let target = crate::wa::address(name) as *mut c_void;
+        match unsafe { crate::wa::create_hook(target, detour) } {
+            Ok(trampoline) => {
+                original.store(trampoline, Ordering::SeqCst);
             }
-            let trampoline = unsafe { MinHook::create_hook(target, detour) }
-                .map_err(|e| format!("{name}: {e:?}"))?;
-            original.store(trampoline, Ordering::SeqCst);
-            installed.push(target);
-            Ok::<(), String>(())
-        })();
-        if let Err(e) = result {
-            for target in installed {
-                let _ = unsafe { MinHook::remove_hook(target) };
+            Err(e) => {
+                crate::wa::rollback_to(checkpoint);
+                log_error(&format!("gpu present hook disabled: {e}; GPU sprites will not draw"));
+                return Ok(());
             }
-            log_error(&format!(
-                "gpu present hook disabled: {e}; GPU sprites will not draw"
-            ));
-            return Ok(());
         }
     }
     // Optional FogDraw (truecolor bind site)
-    if let Some(va) = catalog.function_va("Display__D3D9ShaderFogDraw") {
-        let target = rb(va) as *mut c_void;
-        let bytes: &[u8] = &[0x8b, 0xf3, 0x8b, 0xc7, 0xe8];
-        if unsafe { std::slice::from_raw_parts(target as *const u8, bytes.len()) } == bytes {
-            if let Ok(trampoline) = unsafe { MinHook::create_hook(target, shader_draw_hook as _) } {
-                ORIG_DRAW.store(trampoline, Ordering::SeqCst);
-            }
+    if let Some(target) = crate::wa::try_address("DISPLAY_SHADER_FOG_DRAW") {
+        if let Ok(trampoline) =
+            unsafe { crate::wa::create_hook(target as *mut c_void, shader_draw_hook as _) }
+        {
+            ORIG_DRAW.store(trampoline, Ordering::SeqCst);
         }
     }
     crate::log_line("shader renderer GPU present/cleanup hooks installed");

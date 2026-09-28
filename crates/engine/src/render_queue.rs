@@ -2,10 +2,9 @@
 //! This is the complete queue, unlike WorldRoot's RenderScene callback which
 //! can run before other producers. Layout/ABI checked against local WA.exe.
 
+use crate::log_error;
 #[cfg(debug_assertions)]
 use crate::log_line;
-use crate::{log_error, rebase::rb};
-use minhook::MinHook;
 use std::{
     ffi::c_void,
     sync::{
@@ -62,8 +61,8 @@ impl Queue {
     pub unsafe fn ordered(&self) -> Vec<Command> {
         type Compare = unsafe extern "C" fn(*const c_void, *const c_void) -> i32;
         type Sort = unsafe extern "C" fn(*mut c_void, usize, usize, Compare);
-        let sort: Sort = std::mem::transmute(rb(0x005d_7890));
-        let cmp: Compare = std::mem::transmute(rb(0x0054_2330));
+        let sort: Sort = std::mem::transmute(crate::wa::address("WA_QSORT"));
+        let cmp: Compare = std::mem::transmute(crate::wa::address("RQ_COMPARE"));
         let mut pointers: Vec<u32> = self.commands.iter().map(|c| c.address as u32).collect();
         sort(pointers.as_mut_ptr() as _, pointers.len(), 4, cmp);
         pointers
@@ -212,13 +211,14 @@ unsafe extern "C" fn call_original(_queue: usize, _display: usize, _clip: usize)
 }
 
 pub fn install() -> Result<(), String> {
-    let addr = rb(0x0054_2350) as *mut c_void;
-    let expected = [0x83, 0xec, 0x1c, 0x53, 0x55, 0x8b, 0x6c, 0x24, 0x28];
-    if unsafe { std::slice::from_raw_parts(addr as *const u8, expected.len()) } != expected {
-        log_error("queue dispatcher bytes differ; depth/truecolor hook disabled");
-        return Ok(());
+    if crate::wa::try_address("WA_QSORT").is_none()
+        || crate::wa::try_address("RQ_COMPARE").is_none()
+    {
+        return Err("queue sorting signatures unavailable".into());
     }
-    let trampoline = unsafe { MinHook::create_hook(addr, hook as *mut c_void) }
+    let addr = crate::wa::try_address("RQ_DISPATCH")
+        .ok_or("queue dispatcher signature unavailable")? as *mut c_void;
+    let trampoline = unsafe { crate::wa::create_hook(addr, hook as *mut c_void) }
         .map_err(|e| format!("render queue hook: {e:?}"))?;
     ORIGINAL.store(trampoline, Ordering::SeqCst);
     #[cfg(debug_assertions)]
