@@ -373,7 +373,8 @@ fn with_cm_forces(cm: *mut u8, mut m: game::entity::Motion) -> game::entity::Mot
 unsafe extern "thiscall" fn gravity_hook(cm: *mut u8, entity: *mut u8) {
     let missile = unsafe { is_missile(entity, missile_vt()) };
     if missile {
-        if let Some(m) = unsafe { read_motion(entity) } {
+        if let Some(mut m) = unsafe { read_motion(entity) } {
+            m.id = crate::missile_boom::missile_id(entity);
             let m = with_cm_forces(cm, m);
             if let Ok(before) = lua_host::gravity_before(m) {
                 unsafe { write_scales(entity, &before) };
@@ -386,7 +387,8 @@ unsafe extern "thiscall" fn gravity_hook(cm: *mut u8, entity: *mut u8) {
         unsafe { f(cm, entity) };
     }
     if missile {
-        if let Some(m) = unsafe { read_motion(entity) } {
+        if let Some(mut m) = unsafe { read_motion(entity) } {
+            m.id = crate::missile_boom::missile_id(entity);
             let m = with_cm_forces(cm, m);
             if let Ok(after) = lua_host::gravity_after(m) {
                 unsafe { write_motion(entity, &after) };
@@ -432,7 +434,9 @@ unsafe extern "thiscall" fn missile_hook(
 /// `wa.on.missile_frame`: its motion, and the sprite WA draws it with
 /// (`m.sprite`, +0x2EC), written back when a pack changes them.
 unsafe fn missile_frame_hook(this: *mut u8, msg: u32, phase: &str) {
-    if let Some(m) = unsafe { read_motion(this) } {
+    if let Some(mut m) = unsafe { read_motion(this) } {
+        // The missile's lockstep id, not its address (`missile_boom::missile_id`).
+        m.id = crate::missile_boom::missile_id(this);
         let weapon = crate::missile_boom::weapon_of(this);
         let before = unsafe { read_i32(this, MISSILE_RENDER_SPRITE) };
         let mask_before = unsafe { read_i32(this, game::offsets::ENT_COLLISION_MASK) };
