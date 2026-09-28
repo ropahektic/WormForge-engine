@@ -1503,31 +1503,73 @@ fn draw_ribbon_fn(lua: &Lua) -> Result<Function, String> {
             let colour = p.get::<Option<i64>>("color")?.unwrap_or(0xFFFF_FFFF) as u32;
             data.push((x as f32, y as f32, width as f32, colour, u as f32));
         }
-        for pair in data.windows(2) {
-            let (x0, y0, w0, c0, u0) = pair[0];
-            let (x1, y1, w1, c1, u1) = pair[1];
-            let dx = x1 - x0;
-            let dy = y1 - y0;
-            let length = dx.hypot(dy);
-            if length <= f32::EPSILON { continue; }
-            let nx = -dy / length;
-            let ny = dx / length;
-            let a = (x0 + nx * w0 * 0.5, y0 + ny * w0 * 0.5);
-            let b = (x1 + nx * w1 * 0.5, y1 + ny * w1 * 0.5);
-            let c = (x1 - nx * w1 * 0.5, y1 - ny * w1 * 0.5);
-            let d = (x0 - nx * w0 * 0.5, y0 - ny * w0 * 0.5);
+        let frame = spec.get::<Option<u32>>("frame")?.unwrap_or(0);
+        for (corners, colours, uvs) in ribbon_quads(&data) {
             dispatch::push_draw_quad(dispatch::DrawQuad {
-                corners: [a, b, c, d],
-                colours: [c0, c1, c1, c0],
-                uvs: [(u0, 0.0), (u1, 0.0), (u1, 1.0), (u0, 1.0)],
+                corners,
+                colours,
+                uvs,
                 sprite,
-                frame: spec.get::<Option<u32>>("frame")?.unwrap_or(0),
+                frame,
                 additive,
                 depth,
             });
         }
         Ok(())
     }).map_err(|e| e.to_string())
+}
+
+type RibbonQuad = ([(f32, f32); 4], [u32; 4], [(f32, f32); 4]);
+
+/// The quads of a ribbon through `points` (x, y, full width, colour, u).
+/// Each point has one normal, the average of the sections either side of it,
+/// and the sections on both sides share its two corners, so the strip bends
+/// without a kink or a gap at the joints (as Project X's `pxtexbeam` does).
+/// Points at the same place as the one before are skipped.
+fn ribbon_quads(points: &[(f32, f32, f32, u32, f32)]) -> Vec<RibbonQuad> {
+    let mut pts: Vec<(f32, f32, f32, u32, f32)> = Vec::with_capacity(points.len());
+    for &p in points {
+        if pts.last().is_none_or(|q| (p.0 - q.0).hypot(p.1 - q.1) > f32::EPSILON) {
+            pts.push(p);
+        }
+    }
+    if pts.len() < 2 {
+        return Vec::new();
+    }
+    // Each section's unit normal.
+    let section: Vec<(f32, f32)> = pts
+        .windows(2)
+        .map(|w| {
+            let (dx, dy) = (w[1].0 - w[0].0, w[1].1 - w[0].1);
+            let length = dx.hypot(dy);
+            (-dy / length, dx / length)
+        })
+        .collect();
+    // Each point's: its one section's at the ends, else the two averaged.
+    let normal: Vec<(f32, f32)> = (0..pts.len())
+        .map(|i| {
+            let before = section[i.saturating_sub(1)];
+            let after = section[i.min(section.len() - 1)];
+            let (nx, ny) = (before.0 + after.0, before.1 + after.1);
+            let length = nx.hypot(ny);
+            if length <= f32::EPSILON { after } else { (nx / length, ny / length) }
+        })
+        .collect();
+    let side = |i: usize, sign: f32| {
+        let (x, y, w, ..) = pts[i];
+        (x + sign * normal[i].0 * w * 0.5, y + sign * normal[i].1 * w * 0.5)
+    };
+    (0..pts.len() - 1)
+        .map(|i| {
+            let (c0, u0) = (pts[i].3, pts[i].4);
+            let (c1, u1) = (pts[i + 1].3, pts[i + 1].4);
+            (
+                [side(i, 1.0), side(i + 1, 1.0), side(i + 1, -1.0), side(i, -1.0)],
+                [c0, c1, c1, c0],
+                [(u0, 0.0), (u1, 0.0), (u1, 1.0), (u0, 1.0)],
+            )
+        })
+        .collect()
 }
 
 /// `wa.draw.random()`: 0 <= r < 1, for looks only (flicker, jitter). A
@@ -1553,6 +1595,30 @@ fn draw_random_fn(lua: &Lua) -> Result<Function, String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn ribbon_sections_share_their_corners_at_a_bend() {
+        // Right 10, then down 10: a right-angle bend at (10, 0).
+        let quads = ribbon_quads(&[
+            (0.0, 0.0, 4.0, 1, 0.0),
+            (10.0, 0.0, 4.0, 2, 0.5),
+            (10.0, 0.0, 4.0, 2, 0.5), // a repeat, skipped
+            (10.0, 10.0, 2.0, 3, 1.0),
+        ]);
+        assert_eq!(quads.len(), 2);
+        let (first, second) = (quads[0].0, quads[1].0);
+        // The joint's two corners are the same in both sections.
+        assert_eq!((first[1], first[2]), (second[0], second[3]));
+        // Across the joint: the full width, along the averaged normal.
+        let (a, b) = (first[1], first[2]);
+        assert!(((a.0 - b.0).hypot(a.1 - b.1) - 4.0).abs() < 1e-4);
+        assert!((a.0 - 10.0 + 2.0 / 2f32.sqrt()).abs() < 1e-4 && (a.1 - 2.0 / 2f32.sqrt()).abs() < 1e-4);
+        // The far end: its own section's normal, its own width.
+        assert_eq!((second[1], second[2]), ((9.0, 10.0), (11.0, 10.0)));
+        assert_eq!(quads[1].1, [2, 3, 3, 2]);
+        assert_eq!(quads[1].2, [(0.5, 0.0), (1.0, 0.0), (1.0, 1.0), (0.5, 1.0)]);
+    }
+
     use super::*;
 
     fn ctx(mod_id: &str) -> BindContext {
