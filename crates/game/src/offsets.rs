@@ -329,6 +329,13 @@ pub const TEAM_OWNER_MACHINE: usize = 0x40;
 /// set per machine by `InitTeamsFromLobby`: 0 the host, 1.. the clients).
 pub const GAME_WORLD_GAME_INFO: usize = 0x24;
 pub const GAME_INFO_LOCAL_MACHINE: usize = 0xD9DC;
+/// GameInfo: the match's gravity, 16.16, from the scheme. Every frame
+/// `TurnManager__ProcessFrame` (0x55FDA0, at 0x5603CF) sets the collision
+/// manager's gravity to it times `GAME_WORLD_GRAVITY_PCT` / 100.
+pub const GAME_INFO_GRAVITY: usize = 0xD9A8;
+/// GameWorld: the gravity percentage that recompute uses: 50 while a team's
+/// low gravity is on, else 100.
+pub const GAME_WORLD_GRAVITY_PCT: usize = 0x5F4;
 /// TeamEntity selected weapon slot (`+0x60`).
 pub const TEAM_SELECTED_WEAPON: usize = 0x60;
 /// TeamEntity colour index (`+0x50`). Stock land cursor sprite is
@@ -409,6 +416,10 @@ pub const MSG_HIT: u32 = 0x4B;
 pub const MSG_COMMIT_HEALTH: u32 = 0x44;
 /// Bazooka-style blast (`Explosion`).
 pub const MSG_EXPLOSION: u32 = 0x1C;
+/// SetWind: WA's wind change (RandomiseWind), data[0] the wind, 16.16.
+pub const MSG_SET_WIND: u32 = 0x54;
+/// The shared-data key WA's wind change sends it to.
+pub const SHARED_KEY_WIND: u32 = 0x14;
 /// Shot contact (`ProjectileImpact`) — same payload as explosion.
 pub const MSG_IMPACT: u32 = 0x76;
 

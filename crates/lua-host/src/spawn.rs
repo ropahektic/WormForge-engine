@@ -608,6 +608,11 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
             t.set("sprint", m & 32 != 0)?;
             t.set("q", m & 64 != 0)?;
             t.set("space", m & 128 != 0)?;
+            // The digit key held, 0..9 (top row or keypad), or nil.
+            let digit = (m >> game::sync_input::DIGIT_SHIFT) & 0xf;
+            if digit != 0 {
+                t.set("digit", digit - 1)?;
+            }
             Ok(t)
         })
         .map_err(|e| e.to_string())?;
@@ -635,6 +640,35 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     world.set("wind", wind).map_err(|e| e.to_string())?;
+    // Changing them is simulation: both peers must do it at the same point.
+    let set_gravity = lua
+        .create_function(|_, v: i32| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external(
+                    "world.set_gravity: only valid in simulation callbacks",
+                ));
+            }
+            if let Some((g, _)) = crate::actor::native_set_forces() {
+                g(v);
+            }
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    world.set("set_gravity", set_gravity).map_err(|e| e.to_string())?;
+    let set_wind = lua
+        .create_function(|_, v: i32| {
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external(
+                    "world.set_wind: only valid in simulation callbacks",
+                ));
+            }
+            if let Some((_, w)) = crate::actor::native_set_forces() {
+                w(v);
+            }
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    world.set("set_wind", set_wind).map_err(|e| e.to_string())?;
 
     // Whether this is a networked match. There keys() and pointer() are the
     // input of the player whose turn it is, sent through WA's lockstep input

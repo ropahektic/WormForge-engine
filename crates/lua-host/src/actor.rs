@@ -215,6 +215,11 @@ pub struct ActorNative {
     /// WA's gravity and wind, (gravity, wind), 16.16: the collision
     /// manager's values, which WA's physics scale per object.
     pub forces: fn() -> (i32, i32),
+    /// Set the match's gravity, 16.16 (GameInfo +0xD9A8), which WA scales by
+    /// its low-gravity percentage into the collision manager every frame.
+    pub set_gravity: fn(i32),
+    /// Set WA's wind, 16.16, as WA's own wind change does: message 0x54.
+    pub set_wind: fn(i32),
     /// Stock SpecialImpact (msg 0x4B). No explosion. Pose restored so the worm does not move.
     pub hurt: fn(target: u32, from: u32, amount: i32),
     /// Rewrite a stock weapon slot's body sprite (and optional cluster bit) on
@@ -288,6 +293,8 @@ impl Default for ActorNative {
             ammo: |_, _, _| 0,
             cavern: || false,
             forces: || (0, 0),
+            set_gravity: |_| {},
+            set_wind: |_| {},
             hurt: |_, _, _| {},
             retarget_weapon_sprites: |_, _, _| Err("retarget not bound".into()),
             launch: |_| Err("launch not bound".into()),
@@ -1361,6 +1368,10 @@ pub fn native_cavern() -> Option<fn() -> bool> {
 
 pub fn native_forces() -> Option<fn() -> (i32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.forces)
+}
+
+pub fn native_set_forces() -> Option<(fn(i32), fn(i32))> {
+    NATIVE.lock().ok()?.as_ref().map(|n| (n.set_gravity, n.set_wind))
 }
 
 /// `worm:ammo(name)` reads, `worm:ammo(name, n)` adds, and

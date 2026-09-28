@@ -2226,6 +2226,27 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn world_sets_gravity_and_wind_only_in_the_simulation() {
+        let _host = lock_host();
+        use std::sync::atomic::{AtomicI32, Ordering};
+        static GRAVITY: AtomicI32 = AtomicI32::new(0);
+        static WIND: AtomicI32 = AtomicI32::new(0);
+        crate::bind_actor_native(crate::ActorNative {
+            set_gravity: |v| GRAVITY.store(v, Ordering::SeqCst),
+            set_wind: |v| WIND.store(v, Ordering::SeqCst),
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        assert!(lua.load("wa.world.set_wind(0x1000)").exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            lua.load("wa.world.set_gravity(0x3AE * 2); wa.world.set_wind(-0x81D)").exec().unwrap();
+        });
+        crate::bind_actor_native(crate::ActorNative::default());
+        assert_eq!((GRAVITY.load(Ordering::SeqCst), WIND.load(Ordering::SeqCst)), (0x3AE * 2, -0x81D));
+    }
+
+    #[test]
     fn world_reads_gravity_and_wind() {
         let _host = lock_host();
         crate::bind_actor_native(crate::ActorNative {
