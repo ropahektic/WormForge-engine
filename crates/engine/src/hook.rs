@@ -44,6 +44,11 @@ fn install_inner() -> Result<(), String> {
     crate::contact::install()?;
     crate::shader::install()?;
     let checkpoint = crate::wa::hook_checkpoint();
+    if let Err(e) = crate::state_trace::install() {
+        crate::wa::rollback_to(checkpoint);
+        log_error(&format!("worm state trace disabled: {e}"));
+    }
+    let checkpoint = crate::wa::hook_checkpoint();
     if let Err(e) = crate::render_queue::install() {
         crate::wa::rollback_to(checkpoint);
         log_error(&format!("render queue feature disabled: {e}"));

@@ -26,6 +26,7 @@ mod physics;
 mod rebase;
 mod replay;
 mod sprite;
+mod state_trace;
 mod queue_census;
 mod sync;
 mod transfer;
