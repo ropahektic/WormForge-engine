@@ -5,7 +5,7 @@ use crate::actor::{
     native_list_kind, native_list_worms, native_map_size, native_resolve_sprite, native_spawn,
     native_view_cam, native_water_y, ActorHandle, SpawnArgs, WorldHandle, WormHandle,
 };
-use game::offsets::{CLASS_CRATE, CLASS_MINE, CLASS_MISSILE, CLASS_OIL};
+use game::offsets::{CLASS_CRATE, CLASS_GRAVE, CLASS_MINE, CLASS_MISSILE, CLASS_OIL};
 use actors::is_cluster;
 use gfx::{is_sheet_path, sprite_key, stock_sprite_id};
 use mlua::{Function, Lua, Table, Value};
@@ -343,6 +343,7 @@ pub fn bind_world(lua: &Lua, actors: &Table, wa: &Table) -> Result<(), String> {
     bind_kind_list(lua, wa, "mines", CLASS_MINE)?;
     bind_kind_list(lua, wa, "missiles", CLASS_MISSILE)?;
     bind_kind_list(lua, wa, "oil", CLASS_OIL)?;
+    bind_kind_list(lua, wa, "graves", CLASS_GRAVE)?;
     bind_land(lua, wa)?;
     bind_world_info(lua, wa)?;
     bind_sound(lua, wa)?;
@@ -372,12 +373,30 @@ fn bind_land(lua: &Lua, wa: &Table) -> Result<(), String> {
     land.set("solid", solid).map_err(|e| e.to_string())?;
     let trace = lua
         .create_function(|lua, (x0, y0, x1, y1): (i32, i32, i32, i32)| {
+            let solid = native_land_solid();
+            let starts_solid = solid.map(|f| f(x0, y0)).unwrap_or(false);
             match native_land_trace().and_then(|f| f(x0, y0, x1, y1)) {
                 Some((x, y)) => {
                     let t = lua.create_table()?;
                     t.set("x", x)?;
                     t.set("y", y)?;
                     t.set("hit", true)?;
+                    t.set("starts_solid", starts_solid)?;
+                    // Estimate the terrain gradient at the hit pixel. The
+                    // result is a unit normal and tangent in screen space;
+                    // it is read-only and uses the same live collision grid
+                    // that the existing trace uses.
+                    if let Some(solid) = solid {
+                        let p = 0x10000;
+                        let sx = (solid(x + p, y) as i32 - solid(x - p, y) as i32) as f64;
+                        let sy = (solid(x, y + p) as i32 - solid(x, y - p) as i32) as f64;
+                        let len = sx.hypot(sy);
+                        let (nx, ny) = if len > 0.0 { (-sx / len, -sy / len) } else { (0.0, -1.0) };
+                        t.set("nx", nx)?;
+                        t.set("ny", ny)?;
+                        t.set("tx", -ny)?;
+                        t.set("ty", nx)?;
+                    }
                     Ok(Value::Table(t))
                 }
                 None => Ok(Value::Nil),
@@ -548,6 +567,34 @@ fn random_fn(lua: &Lua) -> Result<Function, String> {
 
 fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
     let world = lua.create_table().map_err(|e| e.to_string())?;
+    let nearby = lua.create_function(|lua, (x, y, radius, graves): (i32, i32, i32, bool)| {
+        if !crate::sim_context::active() {
+            return Err(mlua::Error::external("world.electrical_nearby: only from simulation callbacks"));
+        }
+        let ids = crate::actor::native_electrical_nearby()
+            .map(|f| f(x, y, radius, graves)).unwrap_or_default();
+        let out = lua.create_table()?;
+        for (i, handle) in ids.into_iter().enumerate() {
+            out.set(i + 1, crate::actor::entity_value(lua, handle).map_err(mlua::Error::external)?)?;
+        }
+        Ok(out)
+    }).map_err(|e| e.to_string())?;
+    world.set("electrical_nearby", nearby).map_err(|e| e.to_string())?;
+    let trace = lua.create_function(|lua, (x0, y0, x1, y1): (i32, i32, i32, i32)| {
+        if !crate::sim_context::active() {
+            return Err(mlua::Error::external("world.electrical_trace: only from simulation callbacks"));
+        }
+        let hit = crate::actor::native_electrical_trace().and_then(|f| f(x0, y0, x1, y1));
+        let Some((x, y, object)) = hit else { return Ok(None::<Table>); };
+        let out = lua.create_table()?;
+        out.set("x", x)?;
+        out.set("y", y)?;
+        if object != 0 {
+            out.set("obj", crate::actor::entity_value(lua, object).map_err(mlua::Error::external)?)?;
+        }
+        Ok(Some(out))
+    }).map_err(|e| e.to_string())?;
+    world.set("electrical_trace", trace).map_err(|e| e.to_string())?;
     world
         .set("sky", game::offsets::DROP_SKY_Y)
         .map_err(|e| e.to_string())?;

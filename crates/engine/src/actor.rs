@@ -187,6 +187,14 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
         body_hidden: crate::physics::body_hidden,
         equip: crate::world::equip_weapon,
         hp: crate::world::worm_hp,
+        heal: crate::world::heal_worm,
+        arm_mine: crate::world::arm_mine,
+        mine_fuse: crate::world::mine_fuse,
+        hit_object: crate::world::hit_object,
+        revive_grave: crate::world::revive_grave,
+        grave_identity: crate::world::grave_identity,
+        electrical_nearby: crate::world::electrical_nearby,
+        electrical_trace: crate::world::electrical_trace,
         ammo: crate::world::ammo,
         cavern: crate::world::is_cavern,
         forces: crate::world::forces,
@@ -2567,6 +2575,7 @@ unsafe extern "thiscall" fn actor_free(this: *mut u8, flags: u32) -> *mut u8 {
     let f: WorldFreeFn = unsafe { std::mem::transmute(orig) };
     unsafe { f(this, flags) }
 }
+
 
 /// Solid collision under the sprite's bottom opaque row.
 unsafe fn terrain_under_feet(this: *mut u8) -> bool {

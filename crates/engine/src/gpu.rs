@@ -817,6 +817,7 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
         let quad = render::Quad {
             corners: q.corners.map(screen),
             colours: q.colours.map(|c| quad_tint(c, q.additive)),
+            uvs: q.uvs,
             rect,
         };
         if quad.offscreen(w, h) {

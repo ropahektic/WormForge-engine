@@ -706,10 +706,27 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if eat {
         return;
     }
+    // WA 3.8.1 makes a dead worm's gravestone while the worm handles one of
+    // its messages, before WormEntity::Free (Project X, on 3.6.31, paired
+    // them in Free). Whatever grave appears during it is this worm's, the
+    // same on every machine: the Lightning Strike revives it by that.
+    let graveless = crate::world::graveless_dead_worm(this);
+    let graves_before = if graveless != 0 {
+        crate::world::list_kind(game::offsets::CLASS_GRAVE, 0)
+    } else {
+        Vec::new()
+    };
     let orig = ORIG_WORM.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
+    }
+    if graveless != 0 {
+        for grave in crate::world::list_kind(game::offsets::CLASS_GRAVE, 0) {
+            if !graves_before.contains(&grave) {
+                crate::world::remember_grave_owner(grave, graveless);
+            }
+        }
     }
     if hurt {
         crate::hurt::after(this, a, msg, b, c, hp_before);
