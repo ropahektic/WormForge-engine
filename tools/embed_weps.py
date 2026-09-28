@@ -36,8 +36,10 @@ PATCH_NAMES: list[tuple[str, int, bool]] = [
     ("bias", 0x4C, True),
     ("damage", 0x50, True),
     ("blast", 0x54, True),
+    ("sprite", 0x60, True),
     ("impact", 0x64, True),
     ("flight_flags", 0x68, True),
+    ("trail", 0x6C, True),
     ("gravity_pct", 0x70, True),
     ("wind_pct", 0x74, True),
     ("bounce_pct", 0x78, True),
@@ -45,12 +47,16 @@ PATCH_NAMES: list[tuple[str, int, bool]] = [
     ("friction_pct", 0x84, True),
     ("fuse_default", 0x88, True),
     ("fuse", 0x8C, True),
+    ("alt_sprite", 0x90, True),
     ("glow_enable", 0x94, True),
+    ("glow_sprite", 0x98, True),
     ("glow_time", 0x9C, True),
     ("space_control", 0xA0, True),
     ("missile_type", 0xA4, True),
     ("render_size", 0xA8, True),
+    ("burn_sprite", 0xAC, True),
     ("homing_strength", 0xB0, True),
+    ("homing_sprite", 0xB4, True),
     ("homing_turn", 0xB8, True),
     ("homing_accel", 0xBC, True),
     ("homing_speed", 0xC0, True),
@@ -71,6 +77,7 @@ PATCH_NAMES: list[tuple[str, int, bool]] = [
     ("c_sprite", 0x124, True),
     ("c_impact", 0x128, True),
     ("c_flags", 0x12C, True),
+    ("c_trail", 0x130, True),
     ("c_gravity_pct", 0x134, True),
     ("c_wind_pct", 0x138, True),
     ("c_bounce_pct", 0x13C, True),
@@ -80,7 +87,9 @@ PATCH_NAMES: list[tuple[str, int, bool]] = [
     ("c_space_control", 0x164, True),
     ("c_missile_type", 0x168, True),
     ("c_render_size", 0x16C, True),
+    ("c_burn_sprite", 0x170, True),
     ("c_homing_strength", 0x174, True),
+    ("c_homing_sprite", 0x178, True),
     ("c_homing_turn", 0x17C, True),
     ("c_homing_accel", 0x180, True),
     ("c_homing_speed", 0x184, True),
@@ -116,14 +125,15 @@ PATCH_NAMES: list[tuple[str, int, bool]] = [
 
 # WA 3.8.1's last stock sprite (crates/weapons/src/wep.rs LAST_STOCK_SPRITE).
 LAST_STOCK_SPRITE = 696
+# Where PX numbers the sprites it adds (crates/weapons/src/wep.rs PX_SPRITE_BASE).
+PX_SPRITE_BASE = 100_000
 
-# Sprite / trail ids: import/patch keeps the stock ones. The cluster's sprite
-# is the exception when it is one of WA's own (a clustlet, the skunk): the
-# bits need it, and patch() keeps a PX-only id stock anyway.
-SPRITE_OFFSETS = {
-    0x60, 0x90, 0x98, 0xAC, 0xB4, 0x6C, 0xDC, 0xE0, 0xE4,
-    0x124, 0x130, 0x170, 0x178,
-}
+# The fields whose PX-only ids import() leaves stock (wep.rs SPRITE_FIELDS and
+# STRIKE_SPRITE_FIELDS): WA cannot draw them; the pack's art draws those.
+# Every other id a record names is one of WA's own and is patched in, as
+# import() took it: the Banana Express's bananas, the Mortar Strike's shells.
+SPRITE_FIELDS = {0x60, 0x64, 0x68, 0xDC, 0xE0, 0xE4, 0x124, 0x178}
+STRIKE_SPRITE_FIELDS = {0x74, 0x7C, 0x138, 0x140}
 
 
 def patchable(off: int) -> bool:
@@ -215,6 +225,19 @@ def names_for_weapon(ft: int, fm: int) -> list[tuple[str, int, bool]]:
     return ordered
 
 
+def keeps_stock(wep: bytes, name: str, off: int, v: int, strike: bool) -> bool:
+    """import()'s keep_stock_sprites: a PX-only id, or no flight sprite on a
+    projectile, leaves the slot's own. A PX-only id in any other sprite or
+    trail field stays stock too (import() let those through)."""
+    if off in SPRITE_FIELDS or (strike and off in STRIKE_SPRITE_FIELDS):
+        if v >= PX_SPRITE_BASE:
+            return True
+        flies = i32(wep, 0xA4) != 0
+        return off == 0x60 and v == 0 and flies and not strike
+    drawn = name.endswith("_sprite") or name.endswith("trail")
+    return drawn and PX_SPRITE_BASE <= v < 2 * PX_SPRITE_BASE
+
+
 def diff_patch(stock: bytes, wep: bytes) -> list[tuple[str, int]]:
     ft = i32(wep, WEAPON_FIRE_TYPE)
     fm = i32(wep, 0x38)
@@ -228,11 +251,13 @@ def diff_patch(stock: bytes, wep: bytes) -> list[tuple[str, int]]:
                 by_off[abs_off] = (name, wv)
             continue
         # Strike plane sprite sits at 0x38 (named fire_method in the table).
-        if abs_off in SPRITE_OFFSETS or (strike and abs_off == 0x38):
+        if strike and abs_off == 0x38:
             continue
         if not patchable(abs_off) or abs_off in by_off:
             continue
         wv, sv = i32(wep, abs_off), i32(stock, abs_off)
+        if keeps_stock(wep, name, abs_off, wv, strike):
+            continue
         if wv != sv:
             by_off[abs_off] = (name, wv)
     return [by_off[o] for o in sorted(by_off)]
