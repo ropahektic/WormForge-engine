@@ -54,6 +54,17 @@ pub fn remember_grave_owner(grave: u32, worm_id: u32) {
     }
 }
 
+/// The worm (team * 16 + index) whose gravestone WA has yet to make: dead
+/// (0 HP) and not paired with a grave. 0 otherwise.
+pub fn graveless_dead_worm(worm: *mut u8) -> u32 {
+    if worm.is_null() || worm_hp(worm as u32) > 0 { return 0; }
+    let id = unsafe {
+        read_i32(worm, ENT_WORM_TEAM).wrapping_mul(16).wrapping_add(read_i32(worm, WORM_INDEX))
+    } as u32;
+    let paired = GRAVE_OWNERS.lock().is_ok_and(|owners| owners.iter().any(|&(_, owner)| owner == id));
+    if id == 0 || paired { 0 } else { id }
+}
+
 pub fn grave_identity(grave: u32) -> u32 {
     if grave == 0 { return 0; }
     unsafe { if read_i32(grave as *mut u8, ENT_CLASS_TYPE) != CLASS_GRAVE { return 0; } }

@@ -669,7 +669,6 @@ pub const CLASS_OIL: i32 = 30;
 pub const CLASS_GRAVE: i32 = 21;
 /// WormEntity::Constructor(this, team parent, team, worm, setup), WA 3.8.1.
 pub const WORM_ENTITY_CTOR: u32 = 0x0050_BFB0;
-pub const WORM_ENTITY_FREE: u32 = 0x0050_C7E0;
 /// The landscape (ClassType 28, 0x1C). It takes part in WA's entity
 /// contacts, so a worm touching down reaches `wa.on.contact` with it.
 pub const CLASS_LAND: i32 = 28;
