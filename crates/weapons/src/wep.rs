@@ -220,6 +220,11 @@ const PATCH_NAMES: &[PatchName] = &[
     PatchName { name: "c_bias", off: 0x110, slab: true },
     PatchName { name: "c_damage", off: 0x114, slab: true },
     PatchName { name: "c_blast", off: 0x118, slab: true },
+    // How many sprites from `c_sprite` the bits take in turn: a bit's is
+    // c_sprite + (its index - 1) % c_sprite_count (the MissileEntity
+    // constructor, 0x507E70). 0 on a slot whose stock weapon has no bits, so
+    // a record that makes bits must set it, or WA divides by zero.
+    PatchName { name: "c_sprite_count", off: 0x120, slab: true },
     PatchName { name: "c_sprite", off: 0x124, slab: true },
     PatchName { name: "c_impact", off: 0x128, slab: true },
     PatchName { name: "c_flags", off: 0x12C, slab: true },
@@ -425,6 +430,13 @@ mod tests {
         assert!(check_patch(0x1D0, 1).unwrap_err().contains("not a weapon field"), "past the entry");
         assert!(check_patch(-4, 1).is_err());
         assert!(check_patch(0x30, 9).unwrap_err().contains("fire type 9"));
+    }
+
+    #[test]
+    fn a_cluster_sprite_count_is_named_and_shifts_on_a_strike() {
+        // The divisor the MissileEntity constructor takes a bit's sprite by.
+        assert_eq!(patch_offset_for_name("c_sprite_count", false), Ok(0x120));
+        assert_eq!(patch_offset_for_name("c_sprite_count", true), Ok(0x134));
     }
 
     #[test]

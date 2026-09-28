@@ -2,7 +2,7 @@
 
 [Public Front + Weapon editor](https://ropahektic.github.io/WormForge/)
 
-**What the engine can do** (dated, filterable): [Capabilities matrix](https://ropahektic.github.io/WormForge/capabilities.html)
+**What the engine can do**: [Capabilities matrix](https://ropahektic.github.io/WormForge/capabilities.html)
 
 Coding agent? Start with [contributing-with-an-agent.md](contributing-with-an-agent.md) and the matrix — do not treat this README as a feature list.
 
