@@ -1,3 +1,37 @@
+# Project X 0.8.0.3066 EObjState entries from its bundled editor pxdata.pxd.
+# These are 28 distinct values with 30 names for WA 3.6.31, not verified
+# names for WA 3.8.1. The two duplicated values below are conflicting entries
+# in that database; do not treat them as confirmed aliases or rename our
+# runtime state constants from this list alone.
+# 0x65 WS_IDLE
+# 0x66 WS_WALKING
+# 0x67 WS_AIMING
+# 0x68 WS_SETPOWER
+# 0x69 WS_FIRED
+# 0x6A WS_FIRECONT
+# 0x6B WS_FIREPUNCH, WS_REPEATFIRE
+# 0x6E WS_DRILLING
+# 0x6F WS_TELEPORTING
+# 0x70 WS_SHOOTINGROPE
+# 0x71 WS_BLOWTORCH
+# 0x73 WS_AFTERROPE
+# 0x75 WS_SUICIDEBOMBER
+# 0x76 WS_POING
+# 0x77 WS_JUMPPREPARE
+# 0x78 WS_JETPACK
+# 0x79 WS_JUMP
+# 0x7B WS_ROPING
+# 0x7C WS_BUNGEE
+# 0x7D WS_PARACHUTE
+# 0x7E WS_SLIDING
+# 0x7F WS_FLYING2
+# 0x80 WS_FLYING
+# 0x81 WS_POWERFLY
+# 0x82 WS_DEATH
+# 0x85 WS_SINKING
+# 0x86 WS_FROZEN
+# 0x87 WS_CONTROL_WEAPON, WS_DEAD
+
 [[function]]
 va = 0x00510B40
 name = "WormEntity__HandleMessage"
