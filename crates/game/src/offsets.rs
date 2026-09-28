@@ -352,6 +352,15 @@ pub const STUB_RETURNS0: u32 = 0x0054_5780;
 pub const STUB_RETURNS1: u32 = 0x0059_2A50;
 pub const STUB_NOOP: u32 = 0x004A_A060;
 pub const SET_TEXTBOX_TEXT: u32 = 0x004F_B070;
+/// Textbox: its style row (0 small, 1 standard, 2 medium fonts), which
+/// `SetTextboxText` multiplies by 10 into its font table (0x6A9020) with the
+/// call's font index; and its cached scale, -1 to make the next call redraw
+/// (the cache compares the text, font index, colours and scale, not the style).
+pub const TEXTBOX_STYLE: usize = 0x8;
+pub const TEXTBOX_CACHED_SCALE: usize = 0x130;
+/// The small fonts' style row: font index 6 is `smlwht1.fnt`, 7 pixels high,
+/// half the HUD's (the world textbox is style 2, `medwht1.fnt`).
+pub const TEXTBOX_STYLE_SMALL: i32 = 0;
 pub const RENDER_WAITING_FOR_PEERS: u32 = 0x0053_4F20;
 pub const GAME_RENDER_WAIT_CALL: u32 = 0x0053_448B;
 pub const MISSILE_VTABLE: u32 = 0x0066_4438;

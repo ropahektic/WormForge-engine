@@ -604,7 +604,7 @@ fn with_lua<T>(f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
         let Some(lua) = guard.as_ref() else {
             return Err("no lua state".into());
         };
-        crate::sim_context::with_sim(|| f(lua))
+        crate::perf::time(|| crate::sim_context::with_sim(|| f(lua)))
     })
 }
 

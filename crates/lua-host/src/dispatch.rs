@@ -123,11 +123,13 @@ fn with_lua_impl<T>(
         let Some(lua) = guard.as_ref() else {
             return Err("no lua state".into());
         };
-        if simulation {
-            crate::sim_context::with_sim(|| f(lua))
-        } else {
-            f(lua)
-        }
+        crate::perf::time(|| {
+            if simulation {
+                crate::sim_context::with_sim(|| f(lua))
+            } else {
+                f(lua)
+            }
+        })
     })
 }
 

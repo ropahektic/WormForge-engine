@@ -172,6 +172,45 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     msg.set("IMPACT", 0x76).map_err(|e| e.to_string())?;
     wa.set("msg", msg).map_err(|e| e.to_string())?;
 
+    // `wa.perf.enable{ counter = true, profile = true }`: this machine's FPS
+    // counter and profiler. With no table, both. Nothing is readable back.
+    let perf = lua.create_table().map_err(|e| e.to_string())?;
+    let enable = lua
+        .create_function(|_, opts: Option<Table>| {
+            let flags = match opts {
+                None => crate::PerfFlags { counter: true, profile: true },
+                Some(t) => {
+                    let mut flags = crate::PerfFlags::default();
+                    for pair in t.pairs::<Value, Value>() {
+                        let (k, v) = pair?;
+                        let on = match v {
+                            Value::Boolean(b) => b,
+                            _ => {
+                                return Err(mlua::Error::external(
+                                    "wa.perf.enable: counter and profile take true or false",
+                                ))
+                            }
+                        };
+                        match k.as_str().as_deref() {
+                            Some("counter") => flags.counter = on,
+                            Some("profile") => flags.profile = on,
+                            _ => {
+                                return Err(mlua::Error::external(
+                                    "wa.perf.enable: unknown option (counter, profile)",
+                                ))
+                            }
+                        }
+                    }
+                    flags
+                }
+            };
+            crate::perf::enable(flags);
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    perf.set("enable", enable).map_err(|e| e.to_string())?;
+    wa.set("perf", perf).map_err(|e| e.to_string())?;
+
     let hooks = lua.create_table().map_err(|e| e.to_string())?;
     for name in [
         "gravity_before",

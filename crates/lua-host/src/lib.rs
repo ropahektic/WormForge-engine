@@ -7,10 +7,12 @@
 mod actor;
 mod api;
 mod dispatch;
+mod perf;
 mod sandbox;
 mod sim_context;
 mod spawn;
 
+pub use perf::{perf_flags, take_lua_time, PerfFlags};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
     weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
@@ -50,6 +52,7 @@ pub struct MatchScripts {
 
 pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
     actor::reset();
+    perf::reset();
     let lua = sandbox::new_lua()?;
     let logs = Rc::new(RefCell::new(Vec::new()));
     let claims = Rc::new(RefCell::new(Vec::new()));
@@ -2223,6 +2226,38 @@ wa.weapons.replace({
         });
         crate::weapon_select(p.on_select_id, 0x22, 9).unwrap();
         assert_eq!(OWNER.with(|c| c.get()), 0x22);
+    }
+
+    #[test]
+    fn a_pack_turns_on_the_perf_counter_and_profiler() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-perf");
+        let _ = std::fs::remove_dir_all(&root);
+        let manifest = |id: &str| {
+            format!("id = \"{id}\"\napi_version = 1\nentry = \"weapons.lua\"\n")
+        };
+        let counter = pack(
+            &root.join("c"),
+            "p.counter",
+            &manifest("p.counter"),
+            "wa.perf.enable({ counter = true })",
+        );
+        run_mods(&[counter]).unwrap();
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: false });
+        let both = pack(&root.join("b"), "p.both", &manifest("p.both"), "wa.perf.enable()");
+        run_mods(&[both]).unwrap();
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: true });
+        let none = pack(&root.join("n"), "p.none", &manifest("p.none"), "");
+        run_mods(&[none]).unwrap();
+        assert_eq!(perf_flags(), PerfFlags::default(), "a new match's packs decide afresh");
+        let typo = pack(
+            &root.join("t"),
+            "p.typo",
+            &manifest("p.typo"),
+            "wa.perf.enable({ countr = true })",
+        );
+        assert!(run_mods(&[typo]).is_err(), "an unknown option is an error");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
