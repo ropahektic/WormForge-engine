@@ -435,6 +435,20 @@ fn bind_land(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     land.set("cut", cut).map_err(|e| e.to_string())?;
+    let stamp = lua.create_function(|lua, spec: Table| {
+        if !crate::sim_context::active() {
+            return Err(mlua::Error::external("land.stamp: only valid in simulation callbacks"));
+        }
+        let name: String = spec.get("sprite")?;
+        let frame: u32 = spec.get::<Option<u32>>("frame")?.unwrap_or(0);
+        let x: i32 = spec.get("x")?;
+        let y: i32 = spec.get("y")?;
+        let (id, ..) = resolve_sprite_name(lua, &name)?;
+        crate::actor::native_land_stamp()
+            .ok_or_else(|| mlua::Error::external("land.stamp: native stamp not bound"))?(id, frame, x, y)
+            .map_err(mlua::Error::external)
+    }).map_err(|e| e.to_string())?;
+    land.set("stamp", stamp).map_err(|e| e.to_string())?;
     wa.set("land", land).map_err(|e| e.to_string())?;
     Ok(())
 }

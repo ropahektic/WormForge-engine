@@ -771,3 +771,12 @@ section = ".text"
 pattern = "55 8B EC 83 E4 F8 83 EC 0C 53 56 57 8B F9 8B 57 2C 8B 42 24 83 B8 B4 D9 00 00 00 75 18 8B 4D 0C"
 derive = "match"
 target_section = ".text"
+
+[[locator]]
+name = "LANDSCAPE_STAMP"
+reference_va = 0x0057ce30
+section = ".text"
+pattern = "83 EC 18 8B 44 24 24 8B 50 18 53 55 8B E9 8B 48 14 8B 44 24 30 85 C0 56 57 89 4C 24 18 89 54 24 14"
+derive = "match"
+target_section = ".text"
+required = false

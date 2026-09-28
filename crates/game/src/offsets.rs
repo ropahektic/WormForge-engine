@@ -642,6 +642,8 @@ pub const LANDSCAPE_PLOT_SCRATCH: usize = 0x0D0;
 pub const LANDSCAPE_COLLISION: usize = 0x914;
 /// 8bpp fill / picture. Soil-coloured mass can remain after a blast. Not walk.
 pub const LANDSCAPE_TERRAIN_IMAGE: usize = 0x910;
+/// Landscape display used to read the terrain palette.
+pub const LANDSCAPE_DISPLAY: usize = 0x900;
 /// Destruct / soil overlay paint. Walk in front of it.
 pub const LANDSCAPE_SOIL: usize = 0x91C;
 /// WA 3.8.1 Landscape vtable and its terrain-cutting entries.
