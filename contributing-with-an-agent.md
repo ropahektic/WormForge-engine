@@ -109,10 +109,12 @@ Leave the root README alone unless asked. List a new example in `mods/examples/R
 pack sheet's frame, centered at the 16.16 position. Simulation callbacks only.
 Frames are zero-based and must exist (no wrapping); dimensions must be 1..256
 pixels. Source alpha below 128 leaves the land unchanged. Opaque pixels,
-including black, become solid. Colours use the nearest existing in-use terrain
-palette entry without changing that palette. The native terrain path clips the
-stamp and updates collision, soil, rollback storage and redraws. Source pixels
-are retained for GPU sheets too, independent of drawing and device reset.
+including black, become solid. Colours are the nearest of those the terrain
+picture already holds, so every machine writes the same pixels; the palette is
+never changed. The stamp goes through WA's own girder routine
+(Landscape::plot), which clips it and updates collision, the terrain picture,
+the soil layer, rollback storage and redraws. Source pixels are retained for
+GPU sheets too, independent of drawing and device reset.
 
 `object:hit(damage, vx, vy, "projectile")` uses stock projectile impact handling
 for mines, crates and oil drums. Omitting the fourth argument keeps the existing

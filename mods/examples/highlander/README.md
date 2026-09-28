@@ -495,9 +495,7 @@ the impact through WA's mine handler. The active worm has PX's 25-pixel fallback
 If nothing is hit, `wa.land.stamp` embeds one of the 32 oriented 60×60 frames
 into actual terrain. It stays solid, can be walked on and destroyed, and needs
 no persistent actor. PX's ratio-based orientation bins are preserved. The
-stamp uses source alpha and WA's existing terrain colours; airborne art uses
-GPU sheets. Terrain writes and target selection run only during simulation.
-
-Test manually on open and cavern maps: thrust each object type, stick at all
-four map edges, walk on and explode the stuck javelin, and repeat in a two-peer
-match and replay. Native routine fixture tests do not replace this game check.
+stamp uses source alpha and the colours the terrain already holds; airborne
+art uses GPU sheets. Terrain writes and target selection run only during
+simulation. The impact sound plays on the turn's worm (PX plays it unplaced):
+an explosion's `ev.worm` is the missile's owner, not necessarily a worm.
