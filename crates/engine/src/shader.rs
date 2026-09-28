@@ -232,6 +232,7 @@ unsafe extern "C" fn after_shader_present() {
     crate::truecolor::restore();
     let renderer = RENDERER.load(Ordering::SeqCst);
     if renderer != 0 && is_ready() {
+        let _perf = crate::perf::probe(crate::perf::Section::Present);
         let _ = std::panic::catch_unwind(|| {
             crate::gpu::present(*((renderer + OFF_DEVICE) as *const *mut c_void));
         });
