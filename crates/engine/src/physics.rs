@@ -435,11 +435,15 @@ unsafe fn missile_frame_hook(this: *mut u8, msg: u32, phase: &str) {
     if let Some(m) = unsafe { read_motion(this) } {
         let weapon = crate::missile_boom::weapon_of(this);
         let before = unsafe { read_i32(this, MISSILE_RENDER_SPRITE) };
-        let mut sprite = before;
-        if let Ok(after) = lua_host::missile_frame(m, msg, phase, weapon, &mut sprite) {
+        let mask_before = unsafe { read_i32(this, game::offsets::ENT_COLLISION_MASK) };
+        let (mut sprite, mut mask) = (before, mask_before);
+        if let Ok(after) = lua_host::missile_frame(m, msg, phase, weapon, &mut sprite, &mut mask) {
             unsafe { write_motion(this, &after) };
             if sprite != before {
                 unsafe { write_i32(this, MISSILE_RENDER_SPRITE, sprite) };
+            }
+            if mask != mask_before {
+                unsafe { write_i32(this, game::offsets::ENT_COLLISION_MASK, mask) };
             }
         }
     }

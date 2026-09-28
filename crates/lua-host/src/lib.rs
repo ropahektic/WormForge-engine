@@ -1433,6 +1433,7 @@ wa.on.missile_frame(function(m)
   if m.weapon == "longbow" then m.vx = 1
   elseif m.weapon == nil then m.vx = 2 end
   if m.weapon == "super_banana" and m.sprite == 51 then m.sprite = 0 end
+  if m.weapon == "cluster_bomb" and m.collision_mask == 0x400000 then m.collision_mask = 0x40007C end
 end)
 "#,
         );
@@ -1442,13 +1443,20 @@ end)
             id: 1, class_type: 0, damp: 0, wind_scale: 0, gravity_scale: 0, moved: 0,
             x: 0, y: 0, vx: 0, vy: 0, cm_gravity: 0, cm_wind: 0,
         };
+        let mut mask = 0x400000;
         let mut sprite = 48;
-        assert_eq!(missile_frame(m, 2, "pre", Some(15), &mut sprite).unwrap().vx, 1, "slot 15 is the longbow");
-        assert_eq!(missile_frame(m, 2, "pre", None, &mut sprite).unwrap().vx, 2, "no slot is nil");
+        assert_eq!(missile_frame(m, 2, "pre", Some(15), &mut sprite, &mut mask).unwrap().vx, 1, "slot 15 is the longbow");
+        assert_eq!(missile_frame(m, 2, "pre", None, &mut sprite, &mut mask).unwrap().vx, 2, "no slot is nil");
         assert_eq!(sprite, 48, "left alone");
         let mut sprite = 51;
-        missile_frame(m, 2, "pre", Some(42), &mut sprite).unwrap();
+        missile_frame(m, 2, "pre", Some(42), &mut sprite, &mut mask).unwrap();
         assert_eq!(sprite, 0, "m.sprite = 0 hides it");
+        // Project X's Swim Suit: a missile in the water also hits worms.
+        assert_eq!(mask, 0x400000, "left alone");
+        let mut mask = 0x400000;
+        let mut sprite = 1;
+        missile_frame(m, 2, "pre", Some(7), &mut sprite, &mut mask).unwrap();
+        assert_eq!(mask, 0x40007C);
     }
 
     #[test]
