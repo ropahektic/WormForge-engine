@@ -9,7 +9,7 @@ use game::offsets::{
     CLASS_MINE, WORM_INDEX,
     CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE,
+    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_SINKING, ENT_COLLISION_MASK,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -875,6 +875,19 @@ impl UserData for WormHandle {
                 Ok(())
             });
         }
+        // Which collision layers the worm collides with (WA's +0x34, Project
+        // X's ColGroup): a bit per layer. Bit 22 (0x400000), the landscape's,
+        // is also what WA's water acts on (0x4FDE20): without it a worm in the
+        // water neither sinks nor drowns.
+        fields.add_field_method_get("collision_mask", |_, this| {
+            Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, ENT_COLLISION_MASK) } })
+        });
+        fields.add_field_method_set("collision_mask", |_, this, v: i64| {
+            if this.0 != 0 {
+                unsafe { write_i32(this.0 as *mut u8, ENT_COLLISION_MASK, v as u32 as i32) };
+            }
+            Ok(())
+        });
         // The worm's own move requests (WA's, from lockstep input), unlike
         // wa.world.keys(), the keyboard of the player whose turn it is.
         fields.add_field_method_get("keys", |lua, this| {
@@ -1260,16 +1273,22 @@ pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
         WORM_STATE_JETPACKING => "jetpacking",
         WORM_STATE_PARACHUTING => "parachuting",
         WORM_STATE_AIRBORNE => "sliding",
+        WORM_STATE_BUNGEE => "bungee",
+        WORM_STATE_SINKING => "sinking",
         _ => return None,
     })
 }
 
 /// The states `worm:set_state` may enter: the ones a script ends a move
-/// with. Entering an action state from outside would skip WA's fire path.
+/// with, and the two Project X's Swim Suit holds a worm in (a bungee's, to
+/// swim; sinking, when the suit gives out). Entering an action state from
+/// outside would skip WA's fire path.
 pub(crate) fn settable_worm_state(name: &str) -> Option<u32> {
     match name {
         "standing" => Some(WORM_STATE_STANDING),
         "sliding" => Some(WORM_STATE_AIRBORNE),
+        "bungee" => Some(WORM_STATE_BUNGEE),
+        "sinking" => Some(WORM_STATE_SINKING),
         _ => None,
     }
 }
@@ -1588,6 +1607,11 @@ mod tests {
         // Not guessed: 0x7B's setup is Batroping, whatever it was called.
         assert_eq!(worm_state_name(0x7B), None);
         assert_eq!(settable_worm_state("sliding"), Some(0x7E));
+        // Project X's Swim Suit: a bungee's state to swim, sinking when the
+        // suit gives out; and both read back by name.
+        assert_eq!(settable_worm_state("bungee"), Some(0x7C));
+        assert_eq!(settable_worm_state("sinking"), Some(0x7F));
+        assert_eq!((worm_state_name(0x7C), worm_state_name(0x7F)), (Some("bungee"), Some("sinking")));
         assert_eq!(settable_worm_state("standing"), Some(0x65));
         assert_eq!(settable_worm_state("jetpacking"), None);
     }

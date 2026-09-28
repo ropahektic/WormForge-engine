@@ -74,6 +74,12 @@ pub const WORM_STATE_JETPACKING: u32 = 0x78;
 /// setup_Parachuting; also entered directly by WormEntity__fire_parachute
 /// (0x51A680), from TryFireWeaponSpecial and the aiming handler.
 pub const WORM_STATE_PARACHUTING: u32 = 0x7D;
+/// `setup_Bungeing` (SetState's table at 0x50F484): hanging from a bungee.
+/// Project X's Swim Suit holds a swimming worm here (WS_BUNGEE).
+pub const WORM_STATE_BUNGEE: u32 = 0x7C;
+/// Drowning: WA's hurt handler enters it for water damage (kind 1); Project
+/// X's WS_SINKING.
+pub const WORM_STATE_SINKING: u32 = 0x7F;
 /// Jet pack fuel (16.16), drained by WormEntity__handle_JetPacking by the
 /// thrust / 10 each frame; 0 is unlimited, and running out sets 0x65.
 pub const WORM_JET_FUEL: usize = 0x220;
