@@ -23,7 +23,7 @@ use crate::log_line;
 use game::entity::read_i32;
 use game::offsets::{
     DISPLAY_LAYER_CONTEXTS, GAME_RUNTIME_WORLD, GAME_SESSION_RUNTIME, GAME_WORLD_DISPLAY,
-    GAME_WORLD_PANEL_IMG, G_GAME_SESSION,
+    GAME_WORLD_PANEL_IMG,
 };
 use gfx::icon::{self, PaletteColour};
 use std::sync::Mutex;
@@ -306,7 +306,7 @@ pub fn restore() {
 }
 
 unsafe fn runtime_world() -> *mut u8 {
-    let slot = crate::rebase::rb(G_GAME_SESSION) as *const *mut u8;
+    let slot = crate::wa::address("G_GAME_SESSION") as *const *mut u8;
     if slot.is_null() || (*slot).is_null() {
         return std::ptr::null_mut();
     }

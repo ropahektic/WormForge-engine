@@ -1,19 +1,18 @@
 //! Presentation-only text overlay after stock GameRender wait CALL.
 
 use crate::log_line;
-use crate::rebase::rb;
 use game::offsets::{
-    DISPLAY_VIEW_X, DISPLAY_VIEW_Y, DISPLAY_VT_DRAW_SCALED, GAME_RENDER_WAIT_CALL,
-    GAME_RUNTIME_WORLD, GAME_SESSION_RUNTIME, GAME_WORLD_DISPLAY, GAME_WORLD_TEXTBOX,
-    G_GAME_SESSION, RENDER_WAITING_FOR_PEERS, SET_TEXTBOX_TEXT,
+    DISPLAY_VIEW_X, DISPLAY_VIEW_Y, DISPLAY_VT_DRAW_SCALED, GAME_RUNTIME_WORLD,
+    GAME_SESSION_RUNTIME, GAME_WORLD_DISPLAY, GAME_WORLD_TEXTBOX,
 };
 use lua_host::run_hud;
 use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
 use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE};
+use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
 const PATCH_LEN: usize = 5;
-const EXPECTED: [u8; 5] = [0xE8, 0x90, 0x0A, 0x00, 0x00];
 
 static ORIG: AtomicUsize = AtomicUsize::new(0);
 static WARNED: AtomicBool = AtomicBool::new(false);
@@ -41,28 +40,56 @@ type DrawScaledFn = unsafe extern "thiscall" fn(
     flags: u32,
 );
 
-pub fn install(_catalog: &re_catalog::Catalog) -> Result<(), String> {
-    let site = rb(GAME_RENDER_WAIT_CALL) as usize;
+pub fn install() -> Result<(), String> {
+    if crate::wa::try_address("SET_TEXTBOX_TEXT").is_none() {
+        return Err("HUD text function signature unavailable".into());
+    }
+    if crate::wa::try_address("GAME_RENDER_WAIT_CALL").is_none() {
+        return Err("HUD call-site signature unavailable".into());
+    }
+    let site = crate::wa::check_code_pattern("GAME_RENDER_WAIT_CALL")? as usize;
     unsafe {
         let mut cur = [0u8; PATCH_LEN];
         std::ptr::copy_nonoverlapping(site as *const u8, cur.as_mut_ptr(), PATCH_LEN);
-        if cur != EXPECTED {
+        if cur[0] != 0xE8 {
             log_line(&format!(
-                "HUD call-site bytes {cur:02X?} — skip overlay (not fatal)"
+                "HUD call-site opcode {cur:02X?} — skip overlay (not fatal)"
             ));
             return Ok(());
         }
-        ORIG.store(rb(RENDER_WAITING_FOR_PEERS) as usize, Ordering::SeqCst);
+        let previous = (site as u32)
+            .wrapping_add(5)
+            .wrapping_add(i32::from_le_bytes(cur[1..5].try_into().unwrap()) as u32);
+        if !crate::wa::executable(previous) {
+            log_line(&format!(
+                "HUD call target {previous:#010x} is not executable — skip overlay"
+            ));
+            return Ok(());
+        }
+        ORIG.store(previous as usize, Ordering::SeqCst);
         let hook = hooked_render_waiting as *const () as usize;
         let rel = (hook as isize - (site as isize + 5)) as i32;
         let mut patch = [0u8; PATCH_LEN];
         patch[0] = 0xE8;
         patch[1..5].copy_from_slice(&rel.to_le_bytes());
         let mut old = 0u32;
-        if VirtualProtect(site as *const _, PATCH_LEN, PAGE_EXECUTE_READWRITE, &mut old) == 0 {
+        if VirtualProtect(
+            site as *const _,
+            PATCH_LEN,
+            PAGE_EXECUTE_READWRITE,
+            &mut old,
+        ) == 0
+        {
             return Err("HUD VirtualProtect failed".into());
         }
         std::ptr::copy_nonoverlapping(patch.as_ptr(), site as *mut u8, PATCH_LEN);
+        if FlushInstructionCache(GetCurrentProcess(), site as *const _, PATCH_LEN) == 0 {
+            std::ptr::copy_nonoverlapping(cur.as_ptr(), site as *mut u8, PATCH_LEN);
+            let _ = FlushInstructionCache(GetCurrentProcess(), site as *const _, PATCH_LEN);
+            let mut ignored = 0u32;
+            let _ = VirtualProtect(site as *const _, PATCH_LEN, old, &mut ignored);
+            return Err("HUD FlushInstructionCache failed".into());
+        }
         let mut ign = 0u32;
         let _ = VirtualProtect(site as *const _, PATCH_LEN, old, &mut ign);
     }
@@ -110,7 +137,7 @@ fn flush_hud() {
 
 pub(crate) fn resolve_world() -> Option<usize> {
     unsafe {
-        let session = *(rb(G_GAME_SESSION) as *const usize);
+        let session = *(crate::wa::address("G_GAME_SESSION") as *const usize);
         if session == 0 {
             return None;
         }
@@ -135,7 +162,8 @@ fn blit_line(world: usize, screen_x: i32, screen_y: i32, text: &str) -> bool {
         };
         let mut w = 0i32;
         let mut h = 0i32;
-        let set_text: SetTextboxTextFn = std::mem::transmute(rb(SET_TEXTBOX_TEXT) as usize);
+        let set_text: SetTextboxTextFn =
+            std::mem::transmute(crate::wa::address("SET_TEXTBOX_TEXT") as usize);
         let bm = set_text(
             textbox as *mut u8,
             c.as_ptr() as *const u8,

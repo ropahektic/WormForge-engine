@@ -12,17 +12,11 @@
 //! there stays one contact path.
 
 use crate::log::{log_error, log_line};
-use crate::rebase::rb;
 use game::entity::read_i32;
 use game::offsets::{ENT_SPEED_X, ENT_SPEED_Y};
-use minhook::MinHook;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Mutex;
-
-const WORM_ON_CONTACT: u32 = 0x0050_D9A0;
-/// push ebp; mov ebp, esp; and esp, -8; sub esp, 0xC
-const WORM_ON_CONTACT_PROLOGUE: [u8; 9] = [0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8, 0x83, 0xEC, 0x0C];
 
 type OnContactFn = unsafe extern "thiscall" fn(*mut u8, *mut u8, u32) -> u32;
 
@@ -30,14 +24,8 @@ static ORIG: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static PENDING: Mutex<Vec<lua_host::Contact>> = Mutex::new(Vec::new());
 
 pub fn install() -> Result<(), String> {
-    let target = rb(WORM_ON_CONTACT) as *mut c_void;
-    let head = unsafe { std::slice::from_raw_parts(target as *const u8, WORM_ON_CONTACT_PROLOGUE.len()) };
-    if head != WORM_ON_CONTACT_PROLOGUE {
-        log_error("worm contact hook disabled: WormEntity__OnWormPush bytes differ; wa.on.contact will not fire");
-        return Ok(());
-    }
-    let trampoline = unsafe { MinHook::create_hook(target, on_contact_hook as *mut c_void) }
-        .map_err(|e| format!("worm contact hook: {e:?}"))?;
+    let target = crate::wa::address("WORM_ON_CONTACT") as *mut c_void;
+    let trampoline = unsafe { crate::wa::create_hook(target, on_contact_hook as *mut c_void) }?;
     ORIG.store(trampoline, Ordering::SeqCst);
     log_line("worm contact hook installed (wa.on.contact)");
     Ok(())

@@ -33,12 +33,13 @@ mod shader;
 pub mod render_queue;
 mod gpu;
 mod version;
+mod wa;
 mod world;
 mod worm_sprite;
 mod zip;
 
 pub use log::{attach_console, error_log_path, log_error, log_line, log_path, panic_text};
-pub use rebase::{init_rebase, rb, wa_base};
+pub use rebase::{init_rebase, wa_base};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -59,7 +60,13 @@ pub fn start() {
     unsafe {
         rebase::init_rebase();
     }
-    log_line(&format!("WA base {:#010x} delta {}", wa_base(), rebase::delta()));
+    log_line(&format!("WA base {:#010x}", wa_base()));
+    if let Err(e) = wa::init() {
+        log_error(&format!(
+            "refusing to hook: WA signature resolution failed: {e}"
+        ));
+        return;
+    }
     match version::check_381() {
         Ok(()) => log_line("WA version string is 3.8.1"),
         Err(e) => {
@@ -70,10 +77,12 @@ pub fn start() {
     match hook::install() {
         Ok(()) => {
             log_line("hooks installed");
-            // Recordings a crash left unfinished get their trailer now.
             replay::recover_pending();
         }
-        Err(e) => log_error(&format!("hook install failed: {e}")),
+        Err(e) => {
+            log_error(&format!("hook install failed: {e}"));
+            return;
+        }
     }
     modloader::start();
 }

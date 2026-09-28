@@ -4,17 +4,16 @@
 //! Native code runs those primitives. It does not ship a hidden drop weapon.
 
 use crate::log::{log_error, log_line, panic_text};
-use crate::rebase::rb;
 use crate::sprite;
 use game::entity::{read_i32, write_i32};
 use game::offsets::*;
 use lua_host::SpawnArgs;
-use minhook::MinHook;
-use re_catalog::Catalog;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
-use weapons::{ActorSpawn, AttachedSpawn, ClusterHoming, ClusterSpec, ScreenBlit, SpawnFrom, SpriteOrigin};
+use weapons::{
+    ActorSpawn, AttachedSpawn, ClusterHoming, ClusterSpec, ScreenBlit, SpawnFrom, SpriteOrigin,
+};
 
 type StrikeFireFn = unsafe extern "system" fn(*mut u8, *mut u8, *mut u8);
 type CreateProjFn = unsafe extern "thiscall" fn(*mut u8, *mut u8, *mut u8);
@@ -108,30 +107,29 @@ struct DeferredEmit {
 /// Actor ids, handed out in spawn order. Starts at 1 so 0 can mean "none".
 static NEXT_SEQ: AtomicU32 = AtomicU32::new(1);
 
-pub fn install(catalog: &Catalog) -> Result<(), String> {
+pub fn install() -> Result<(), String> {
     build_vtable();
-    let va = catalog.function_va("FireWeapon__StrikeFire").unwrap_or(STRIKE_FIRE);
     let trampoline = unsafe {
-        MinHook::create_hook(rb(va) as *mut c_void, strike_fire_hook as *mut c_void)
-            .map_err(|e| format!("StrikeFire hook: {e:?}"))?
+        crate::wa::create_hook(
+            crate::wa::address("STRIKE_FIRE") as *mut c_void,
+            strike_fire_hook as *mut c_void,
+        )
+        .map_err(|e| format!("StrikeFire hook: {e:?}"))?
     };
     ORIG_STRIKE.store(trampoline, Ordering::SeqCst);
 
     let dispatch_tr = unsafe {
-        MinHook::create_hook(
-            rb(FIRE_WEAPON_DISPATCH) as *mut c_void,
+        crate::wa::create_hook(
+            crate::wa::address("FIRE_WEAPON_DISPATCH") as *mut c_void,
             fire_weapon_dispatch_hook as *mut c_void,
         )
         .map_err(|e| format!("FireWeapon dispatch hook: {e:?}"))?
     };
     ORIG_FIRE_DISPATCH.store(dispatch_tr, Ordering::SeqCst);
 
-    let create_va = catalog
-        .function_va("FireWeapon__CreateWeaponProjectile")
-        .unwrap_or(CREATE_WEAPON_PROJECTILE);
     let create_tr = unsafe {
-        MinHook::create_hook(
-            rb(create_va) as *mut c_void,
+        crate::wa::create_hook(
+            crate::wa::address("CREATE_WEAPON_PROJECTILE") as *mut c_void,
             create_proj_hook as *mut c_void,
         )
         .map_err(|e| format!("CreateWeaponProjectile hook: {e:?}"))?
@@ -141,8 +139,8 @@ pub fn install(catalog: &Catalog) -> Result<(), String> {
     // Land-cursor click (team msg 0x32) is eaten at its source for eat_fire
     // slots: no planted X, no reset_cursor, no worm FireWeapon / turn end.
     let team_tr = unsafe {
-        MinHook::create_hook(
-            rb(TEAM_MSG_HANDLER) as *mut c_void,
+        crate::wa::create_hook(
+            crate::wa::address("TEAM_MSG_HANDLER") as *mut c_void,
             team_msg_hook as *mut c_void,
         )
         .map_err(|e| format!("TeamEntity message hook: {e:?}"))?
@@ -249,13 +247,7 @@ fn turn_worm() -> *mut u8 {
 /// `eat_fire` slot runs the pack's `on_click` and is NOT forwarded: WA never
 /// plants the X, never resets the cursor (MOVE stays → cursor keeps moving),
 /// and the worm never fires (no launch anim, no turn end).
-unsafe extern "thiscall" fn team_msg_hook(
-    this: *mut u8,
-    a: u32,
-    msg: u32,
-    b: u32,
-    data: *mut i32,
-) {
+unsafe extern "thiscall" fn team_msg_hook(this: *mut u8, a: u32, msg: u32, b: u32, data: *mut i32) {
     if msg == TEAM_MSG_CURSOR_CLICK && !this.is_null() && !data.is_null() {
         let team = unsafe { read_i32(this, TEAM_INDEX) };
         if unsafe { *data } == team {
@@ -297,13 +289,7 @@ unsafe extern "thiscall" fn team_msg_hook(
     }
 }
 
-pub fn claim_drop(
-    slot: usize,
-    sprite: i32,
-    delta: u32,
-    spawn: Option<ActorSpawn>,
-    click_id: u32,
-) {
+pub fn claim_drop(slot: usize, sprite: i32, delta: u32, spawn: Option<ActorSpawn>, click_id: u32) {
     if let Ok(mut g) = DROPS.lock() {
         g.retain(|c| c.slot != slot);
         g.push(DropClaim {
@@ -316,13 +302,7 @@ pub fn claim_drop(
     }
 }
 
-pub fn claim_fire(
-    slot: usize,
-    sprite: i32,
-    delta: u32,
-    spawn: Option<ActorSpawn>,
-    fire_id: u32,
-) {
+pub fn claim_fire(slot: usize, sprite: i32, delta: u32, spawn: Option<ActorSpawn>, fire_id: u32) {
     if let Ok(mut g) = FIRES.lock() {
         g.retain(|c| c.slot != slot);
         g.push(FireClaim {
@@ -430,14 +410,14 @@ fn fire_for_slot(slot: usize) -> Option<FireClaim> {
 
 fn build_vtable() {
     VTABLE.get_or_init(|| {
-        let src = rb(WORLD_ENTITY_VTABLE) as *const usize;
+        let src = crate::wa::address("WORLD_ENTITY_VTABLE") as *const usize;
         let mut vt = [0usize; WORLD_ENTITY_VTABLE_SLOTS];
         unsafe {
             std::ptr::copy_nonoverlapping(src, vt.as_mut_ptr(), 20);
         }
-        let ret0 = rb(STUB_RETURNS0) as usize;
-        let ret1 = rb(STUB_RETURNS1) as usize;
-        let noop = rb(STUB_NOOP) as usize;
+        let ret0 = crate::wa::address("STUB_RETURNS0") as usize;
+        let ret1 = crate::wa::address("STUB_RETURNS1") as usize;
+        let noop = crate::wa::address("STUB_NOOP") as usize;
         let s16 = vt[16];
         let s19 = vt[19];
         for slot in vt.iter_mut() {
@@ -603,11 +583,7 @@ unsafe extern "C" fn fire_weapon_click_only_eat(
     1
 }
 
-unsafe extern "thiscall" fn create_proj_hook(
-    worm: *mut u8,
-    fire_params: *mut u8,
-    ctx: *mut u8,
-) {
+unsafe extern "thiscall" fn create_proj_hook(worm: *mut u8, fire_params: *mut u8, ctx: *mut u8) {
     let spawned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         try_lua_projectile(worm, ctx)
     }));
@@ -762,16 +738,14 @@ fn cursor_xy(worm: *mut u8, ctx: *mut u8) -> (i32, i32) {
         return (px, py);
     }
     if !ctx.is_null() {
-        return (
-            unsafe { read_i32(ctx, CTX_CURSOR_X) },
-            unsafe { read_i32(ctx, CTX_CURSOR_Y) },
-        );
+        return (unsafe { read_i32(ctx, CTX_CURSOR_X) }, unsafe {
+            read_i32(ctx, CTX_CURSOR_Y)
+        });
     }
     if !worm.is_null() {
-        return (
-            unsafe { read_i32(worm, WORM_CURSOR_X) },
-            unsafe { read_i32(worm, WORM_CURSOR_Y) },
-        );
+        return (unsafe { read_i32(worm, WORM_CURSOR_X) }, unsafe {
+            read_i32(worm, WORM_CURSOR_Y)
+        });
     }
     (0, 0)
 }
@@ -797,7 +771,7 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         "LuaActor spawn sprite {} x={:#x} y={:#x} vx={:#x} vy={:#x} origin={:?} explode={:?}",
         body.sprite, body.x, body.y, body.vx, body.vy, spawn.origin, spawn.explode
     ));
-    let malloc: CrtMallocFn = std::mem::transmute(rb(WA_MALLOC) as usize);
+    let malloc: CrtMallocFn = std::mem::transmute(crate::wa::address("WA_MALLOC") as usize);
     let this = malloc(LUA_ACTOR_SIZE);
     if this.is_null() {
         return Err("malloc failed".into());
@@ -814,7 +788,7 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     write_i32(this, ACTOR_DEPTH, 0x0019_0000);
 
     let parent = physics_parent(owner).unwrap_or(owner);
-    let ctor: WorldCtorFn = std::mem::transmute(rb(WORLD_ENTITY_CTOR) as usize);
+    let ctor: WorldCtorFn = std::mem::transmute(crate::wa::address("WORLD_ENTITY_CTOR") as usize);
     ctor(this, parent, COLLISION_LAYER_MISSILE, 0);
 
     let vt = VTABLE.get().ok_or("vtable missing")?;
@@ -880,12 +854,13 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     write_i32(this, ACTOR_DEAD, 0);
     // Identity that survives being looked at from another machine. Assigned
     // in spawn order, which is reproducible; the address is not.
-    write_i32(this, ACTOR_SEQ, NEXT_SEQ.fetch_add(1, Ordering::SeqCst) as i32);
+    write_i32(
+        this,
+        ACTOR_SEQ,
+        NEXT_SEQ.fetch_add(1, Ordering::SeqCst) as i32,
+    );
     write_i32(this, ACTOR_OWNER, owner as i32);
-    let (dmg, boom) = spawn
-        .explode
-        .map(|e| (e.damage, e.id))
-        .unwrap_or((0, 0));
+    let (dmg, boom) = spawn.explode.map(|e| (e.damage, e.id)).unwrap_or((0, 0));
     write_i32(this, ACTOR_DAMAGE, dmg);
     write_i32(this, ACTOR_BOOM_ID, boom);
     write_i32(
@@ -1104,9 +1079,8 @@ unsafe fn tick(this: *mut u8) {
         return;
     }
     let flags = read_i32(this, ACTOR_FLAGS);
-    let auto_phys = (flags
-        & (ACTOR_FLAG_GRAVITY | ACTOR_FLAG_COLLIDE_TERRAIN | ACTOR_FLAG_COLLIDE_WORMS))
-        != 0;
+    let auto_phys =
+        (flags & (ACTOR_FLAG_GRAVITY | ACTOR_FLAG_COLLIDE_TERRAIN | ACTOR_FLAG_COLLIDE_WORMS)) != 0;
     // CM message 1 already ran update_0 (stock gravity + rope) on this body.
     // Homemade pos+=vel / a second gravity leaf made the arc twice as fast.
     apply_cluster_homing(this);
@@ -1128,8 +1102,7 @@ unsafe fn tick(this: *mut u8) {
     if auto_phys {
         let collide_t = (flags & ACTOR_FLAG_COLLIDE_TERRAIN) != 0;
         let was_contact = read_i32(this, ACTOR_CONTACT) != 0;
-        let on_terrain =
-            collide_t && (terrain_under_feet(this) || read_i32(this, ENT_SETTLE) > 0);
+        let on_terrain = collide_t && (terrain_under_feet(this) || read_i32(this, ENT_SETTLE) > 0);
         land_now = on_terrain && !was_contact;
         left_ground = !on_terrain && was_contact;
         write_i32(this, ACTOR_CONTACT, if on_terrain { 1 } else { 0 });
@@ -1171,7 +1144,9 @@ unsafe fn tick(this: *mut u8) {
         return;
     }
     let sprite_id = read_i32(this, ACTOR_SPRITE);
-    if (flags & ACTOR_FLAG_CURSOR) != 0 && (SPRITE_CURSOR_R..SPRITE_CURSOR_R + 6).contains(&sprite_id) {
+    if (flags & ACTOR_FLAG_CURSOR) != 0
+        && (SPRITE_CURSOR_R..SPRITE_CURSOR_R + 6).contains(&sprite_id)
+    {
         ease_cursor_phase(this);
     } else if (flags & ACTOR_FLAG_LOOP) != 0 {
         advance_anim(this);
@@ -1259,13 +1234,7 @@ unsafe fn blit(this: *mut u8) {
 }
 
 #[allow(dead_code)]
-pub(crate) unsafe fn enqueue_sprite(
-    world: *mut u8,
-    x: i32,
-    y: i32,
-    sprite: u32,
-    anim: u32,
-) {
+pub(crate) unsafe fn enqueue_sprite(world: *mut u8, x: i32, y: i32, sprite: u32, anim: u32) {
     if world.is_null() {
         return;
     }
@@ -1285,7 +1254,8 @@ unsafe fn apply_gravity(this: *mut u8) {
     if cm.is_null() {
         return;
     }
-    let g: ApplyGravityFn = std::mem::transmute(rb(APPLY_PROJECTILE_GRAVITY) as usize);
+    let g: ApplyGravityFn =
+        std::mem::transmute(crate::wa::address("APPLY_PROJECTILE_GRAVITY") as usize);
     g(cm, this);
 }
 
@@ -1295,9 +1265,7 @@ unsafe fn step_move(this: *mut u8, collide_terrain: bool, _collide_worms: bool) 
     let y = read_i32(this, ENT_POS_Y).wrapping_add(read_i32(this, ENT_SPEED_Y));
     write_i32(this, ENT_POS_X, x);
     write_i32(this, ENT_POS_Y, y);
-    let bounce_pct = cluster_get(this as u32)
-        .map(|c| c.bounce_pct)
-        .unwrap_or(0);
+    let bounce_pct = cluster_get(this as u32).map(|c| c.bounce_pct).unwrap_or(0);
     let on_terrain = collide_terrain && terrain_under_feet(this);
     if on_terrain && bounce_pct > 0 {
         return bounce_step(this, bounce_pct);
@@ -1712,7 +1680,7 @@ unsafe fn apply_explosion_knock(this: *mut u8, data: *mut u8) {
         read_i32(data, 0x10) as u32,
         read_i32(data, 4) as u32,
         read_i32(data, 8) as u32,
-        rb(APPLY_EXPLOSION_KNOCK),
+        crate::wa::address("APPLY_EXPLOSION_KNOCK"),
     ];
     core::arch::asm!(
         "push edi",
@@ -2114,7 +2082,15 @@ pub fn draw_puffs(entity: *mut u8) {
     for p in g.iter() {
         let anim = (p.age as u32) << 12;
         unsafe {
-            draw_sprite_local(rq, 0x0005_0001, p.x, p.y, p.sprite as u32, anim, std::ptr::null_mut());
+            draw_sprite_local(
+                rq,
+                0x0005_0001,
+                p.x,
+                p.y,
+                p.sprite as u32,
+                anim,
+                std::ptr::null_mut(),
+            );
         }
     }
 }
@@ -2342,7 +2318,7 @@ unsafe fn worm_tables(from: *mut u8) -> (*mut u8, *mut u8) {
 }
 
 unsafe fn session_shared_world() -> (*mut u8, *mut u8) {
-    let slot = rb(G_GAME_SESSION) as *const *mut u8;
+    let slot = crate::wa::address("G_GAME_SESSION") as *const *mut u8;
     if slot.is_null() {
         return (std::ptr::null_mut(), std::ptr::null_mut());
     }
@@ -2591,7 +2567,7 @@ unsafe fn terrain_under_feet(this: *mut u8) -> bool {
 
 #[allow(dead_code)]
 unsafe fn try_move(this: *mut u8, x: i32, y: i32) -> u32 {
-    let f = rb(WORLD_ENTITY_TRY_MOVE) as u32;
+    let f = crate::wa::address("WORLD_ENTITY_TRY_MOVE") as u32;
     let args = [this as u32, y as u32, x as u32, f];
     let ret: u32;
     // Pin in EBX: `in(reg)` can pick ESI, then `mov esi,[p]` makes `{p}+12` read this+12 (often 0 → EIP 0).
@@ -2631,7 +2607,7 @@ unsafe fn draw_sprite_local(
     if crate::gpu::intercept(layer, x, y, sprite, anim, actor) {
         return;
     }
-    let f = rb(RQ_DRAW_SPRITE_LOCAL) as u32;
+    let f = crate::wa::address("RQ_DRAW_SPRITE_LOCAL") as u32;
     let args = [queue as u32, layer, x as u32, y as u32, sprite, anim, f];
     core::arch::asm!(
         "mov eax, dword ptr [ebx + 12]",
@@ -2657,7 +2633,7 @@ unsafe fn create_explosion(
     caller_flag: u32,
     owner_id: u32,
 ) {
-    let f = rb(CREATE_EXPLOSION) as u32;
+    let f = crate::wa::address("CREATE_EXPLOSION") as u32;
     let args = [
         sender as u32,
         explosion_id,

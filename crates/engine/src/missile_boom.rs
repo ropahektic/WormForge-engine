@@ -4,7 +4,6 @@
 
 use crate::log::{log_error, log_line};
 use crate::mine;
-use crate::rebase::rb;
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
     MISSILE_ALT_BANK_SPRITE, MISSILE_HANDLE_MESSAGE, MISSILE_HOMING_SPRITE_A,
@@ -15,17 +14,13 @@ use game::offsets::{
     FIRE_SPRITE, GAME_WORLD_OBJECT_POOL, GAME_WORLD_WEAPON_TABLE, MISSILE_ENTITY_SIZE,
     MISSILE_ENTITY_ZEROED, OBJECT_POOL_LIMIT, OBJECT_POOL_MISSILE, SHOOT_DESC_SIZE, SHOOT_FUSE,
     SHOOT_SETTLE, SHOOT_TARGET_X, SHOOT_TARGET_Y, SHOOT_TEAM, SHOOT_VX, SHOOT_VY, SHOOT_WORM,
-    SHOOT_X, SHOOT_Y, WA_MALLOC, WEAPON_FIRE_PARAMS, WORM_INDEX,
+    SHOOT_X, SHOOT_Y,  WEAPON_FIRE_PARAMS, WORM_INDEX,
 };
 use std::collections::HashMap;
-use minhook::MinHook;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
 use std::sync::Mutex;
 use weapons::AttachedSpawn;
-
-const MISSILE_CTOR: u32 = 0x0050_7D10;
-const MISSILE_DETONATE: u32 = 0x0050_9AC0;
 
 /// Body graphic banks the missile ctor seeds from the weapon table. Rewriting
 /// these after ctor changes flight without touching WeaponEntry+0x60, which
@@ -175,16 +170,16 @@ fn apply_flight_sprite(entity: *mut u8, sprite: i32) {
     }
 }
 
-pub fn install(_catalog: &re_catalog::Catalog) -> Result<(), String> {
+pub fn install() -> Result<(), String> {
     unsafe {
         ORIG_CTOR.store(
-            MinHook::create_hook(rb(MISSILE_CTOR) as *mut c_void, ctor_hook as *mut c_void)
+            crate::wa::create_hook(crate::wa::address("MISSILE_CTOR") as *mut c_void, ctor_hook as *mut c_void)
                 .map_err(|e| format!("missile ctor hook: {e:?}"))?,
             Ordering::SeqCst,
         );
         ORIG_BOOM.store(
-            MinHook::create_hook(
-                rb(MISSILE_DETONATE) as *mut c_void,
+            crate::wa::create_hook(
+                crate::wa::address("MISSILE_DETONATE") as *mut c_void,
                 boom_hook as *mut c_void,
             )
             .map_err(|e| format!("missile detonate hook: {e:?}"))?,
@@ -397,13 +392,13 @@ pub fn launch(args: &lua_host::LaunchArgs) -> Result<u32, String> {
         let parent = crate::actor::physics_parent(owner).ok_or("weapons.launch: no physics parent")?;
 
         let malloc: unsafe extern "C" fn(usize) -> *mut u8 =
-            std::mem::transmute(rb(WA_MALLOC) as usize);
+            std::mem::transmute(crate::wa::address("WA_MALLOC") as usize);
         let missile = malloc(MISSILE_ENTITY_SIZE);
         if missile.is_null() {
             return Err("weapons.launch: malloc failed".into());
         }
         std::ptr::write_bytes(missile, 0, MISSILE_ENTITY_ZEROED);
-        let ctor: CtorFn = std::mem::transmute(rb(MISSILE_CTOR) as usize);
+        let ctor: CtorFn = std::mem::transmute(crate::wa::address("MISSILE_CTOR") as usize);
         LAUNCH_SLOT.store(slot as i32, Ordering::SeqCst);
         let p = ctor(missile, parent as u32, fire_params, desc.as_ptr() as *mut u8);
         LAUNCH_SLOT.store(-1, Ordering::SeqCst);
