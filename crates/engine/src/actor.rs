@@ -772,17 +772,19 @@ unsafe fn try_lua_projectile(worm: *mut u8, ctx: *mut u8) -> bool {
 }
 
 fn cursor_xy(worm: *mut u8, ctx: *mut u8) -> (i32, i32) {
-    // Land cursor is the live Teleport/strike aim point. Worm +0x2E0/+0x2E4
-    // stay stale (wkAimbot CURSOR.md) — do not prefer them.
+    // The fire context's target is WA's own click, carried in its lockstep:
+    // exactly where the player clicked, the same on every machine. The synced
+    // pointer can lag behind it (only syncing once asked for), so it is the
+    // fallback. Worm +0x2E0/+0x2E4 can be stale (wkAimbot CURSOR.md).
+    if !ctx.is_null() {
+        let (x, y) = unsafe { (read_i32(ctx, CTX_CURSOR_X), read_i32(ctx, CTX_CURSOR_Y)) };
+        if x != 0 || y != 0 {
+            return (x, y);
+        }
+    }
     let (px, py, _) = crate::world::pointer();
     if px != 0 || py != 0 {
         return (px, py);
-    }
-    if !ctx.is_null() {
-        return (
-            unsafe { read_i32(ctx, CTX_CURSOR_X) },
-            unsafe { read_i32(ctx, CTX_CURSOR_Y) },
-        );
     }
     if !worm.is_null() {
         return (
