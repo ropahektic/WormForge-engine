@@ -361,7 +361,8 @@ pub const TEAM_CURSOR_PHASE_END: i32 = 0x9FFB;
 pub const TEAM_CURSOR_MARK: usize = 0x3E0;
 pub const STRIKE_FIRE: u32 = 0x0051_E2C0;
 /// `FireWeapon` type switch (EAX=weapon entry, stack worm, ECX=ctx). RET 4.
-/// After StrikeFire it sets `worm+0x3C` (ENT_ACTIVE) — click-only packs must eat here.
+/// FireWeapon clears `worm+0x3C` (ENT_ACTIVE) on entry and restores it after
+/// dispatch; hooks that swallow dispatch must restore it themselves.
 pub const FIRE_WEAPON_DISPATCH: u32 = 0x0051_EE60;
 pub const CREATE_WEAPON_PROJECTILE: u32 = 0x0051_E0F0;
 pub const WORLD_ENTITY_CTOR: u32 = 0x004F_ED50;
