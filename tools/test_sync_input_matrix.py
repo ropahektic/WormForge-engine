@@ -57,6 +57,13 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(self.inspect(log), [])
         self.assertEqual(self.compare(log, matrix.parse(complete_log())), [])
 
+    def test_current_recorder_line_starts_a_round(self):
+        # Builds since the replay trailer log "recording", not "pending".
+        log = complete_log().replace(
+            "replay recorder: pending test.WF_WAgame",
+            "replay recorder: recording test.WAgame (streams in x)")
+        self.assertEqual(self.inspect(matrix.parse(log)), [])
+
     def test_missing_key_is_reported(self):
         failures = self.inspect(matrix.parse(complete_log(include_w=False)))
         self.assertTrue(any("W" in failure for failure in failures))

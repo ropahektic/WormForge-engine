@@ -48,7 +48,7 @@ A weapon is usually a **LuaActor**: `wa.weapons.replace` then `on_click` / `on_f
 
 - Positions / speeds are WA **16.16** integers (`0x10000` = 1 pixel).
 - Space is shoot (hold to charge bazooka-type, release to fire). Enter / Backspace are `wa.msg.JUMP` / `JUMP_UP`. `wa.world.keys().jump` is W (POOZ), not Space.
-- Sim on messages both peers already see. HUD does not write physics. `keys()` / `pointer()` are synchronized in networked games: every peer reads the input of the player whose turn it is (the other player's keys never steer it); every peer must run the same WormForge build.
+- Sim on messages both peers already see. HUD does not write physics: the engine refuses it. Every write that reaches the simulation (a worm's or actor's `x y vx vy`, `facing` `fuel` `gravity` `wind` `collision_mask` `visible` `body_visible`, `carry` `drop` `equip` `hurt`, an ammo change, `wa.actors.spawn`, `a:explode` / `a:despawn`, and the older sim-only verbs) errors outside a simulation callback, and `wa.random` errors in `wa.on.draw` and `wa.on.hud`. `keys()` / `pointer()` are synchronized in networked games: every peer reads the input of the player whose turn it is (the other player's keys never steer it); every peer must run the same WormForge build.
 - No `math.random`, no clock, no filesystem from Lua. Assets stay inside the pack.
 - Iterate a table's keys with `wa.sorted(t)` when the order reaches the sim: `for _, k in ipairs(wa.sorted(t)) do ... t[k] ... end`. Plain `pairs()` order over string-keyed tables differs per process — keys that are actor/worm `id`s are fine, they are integers.
 - `api_version = 1`. Renaming the Lua API is a breaking change: bump it.

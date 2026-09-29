@@ -41,7 +41,7 @@ pub use format::{
     append_trailer, append_trailer_with_format, decode_checkpoints, decode_inputs,
     encode_checkpoints, encode_inputs, Checkpoint, Header, InputSample, Trailer, FOOTER_LEN,
     FORMAT_VERSION, HDR_SCHEMA, KNOWN_TAGS, LEGACY_FORMAT_VERSION, MAGIC, MAX_WF_BYTES,
-    TAG_CHK, TAG_HDR, TAG_PACK, TAG_WF,
+    RNG_WORDS_FORMAT_VERSION, TAG_CHK, TAG_HDR, TAG_PACK, TAG_WF, supported_format,
 };
 pub use pack::{
     always_embedded, asset_refs, decode as decode_pack, encode as encode_pack, encode_dedup,
@@ -79,6 +79,7 @@ mod tests {
             worms: 0xa35e_6047,
             actors: 0x57bd_1fde,
             rng_words: Some([1, 2, 3]),
+            worm_states: Some(0x1234_5678),
         }];
         let packs = vec![Pack {
             id: "synctest".into(),

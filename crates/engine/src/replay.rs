@@ -385,6 +385,12 @@ unsafe fn verify_playback_frame(player: &mut Player, world: *mut u8) {
     if actors != expected.actors {
         different.push(format!("actors {:08x}!={:08x}", actors, expected.actors));
     }
+    if let Some(states) = expected.worm_states {
+        let local = unsafe { crate::sync::hash_worm_states() };
+        if local != states {
+            different.push(format!("worm states {local:08x}!={states:08x}"));
+        }
+    }
     if !different.is_empty() {
         fail_player(
             player,
@@ -427,6 +433,7 @@ unsafe fn record_frame(recorder: &mut Recorder, world: *mut u8) -> Result<(), St
             worms,
             actors,
             rng_words: Some([game_rng, fx_rng, net_rng]),
+            worm_states: Some(unsafe { crate::sync::hash_worm_states() }),
         };
         let bytes = replay::encode_checkpoints(&[checkpoint]).map_err(|e| e.to_string())?;
         append_capped(&mut recorder.chk, &mut recorder.chk_bytes, &bytes)

@@ -36,10 +36,18 @@ use crate::error::{Error, Offset};
 /// Footer magic: the first four of the file's last 32 bytes.
 pub const MAGIC: [u8; 4] = *b"WFTR";
 /// Bump whenever any on-disk shape changes. Version 2 used one combined RNG
-/// hash; version 3 also records the gameplay, visual and network RNG words.
-/// Version 1 was the separate `.WF_WAgame` container, which is no longer read.
-pub const FORMAT_VERSION: u16 = 3;
+/// hash; version 3 also records the gameplay, visual and network RNG words;
+/// version 4 also a hash of every worm's WA state. Version 1 was the separate
+/// `.WF_WAgame` container, which is no longer read.
+pub const FORMAT_VERSION: u16 = 4;
+/// The first version with the three RNG words.
+pub const RNG_WORDS_FORMAT_VERSION: u16 = 3;
 pub const LEGACY_FORMAT_VERSION: u16 = 2;
+
+/// The versions this build reads: 2 through [`FORMAT_VERSION`].
+pub fn supported_format(format: u16) -> bool {
+    (LEGACY_FORMAT_VERSION..=FORMAT_VERSION).contains(&format)
+}
 /// The fixed footer at the very end of the file.
 pub const FOOTER_LEN: usize = 32;
 
@@ -108,6 +116,10 @@ pub struct Checkpoint {
     pub actors: u32,
     /// Version 3 records the three words separately. None for version 2.
     pub rng_words: Option<[u32; 3]>,
+    /// Version 4: a hash of every worm's WA state (+0x44), so a worm left in
+    /// another state (a softlock, a desync) is caught at the checkpoint
+    /// rather than when it has moved. None before version 4.
+    pub worm_states: Option<u32>,
 }
 
 /// Length-prefixed string, 32-bit little-endian byte length -- shared with
@@ -241,11 +253,16 @@ pub fn encode_checkpoints(cps: &[Checkpoint]) -> Result<Vec<u8>, Error> {
         put_uvar(&mut out, c.actors as u64);
         let words = c.rng_words.ok_or_else(|| Error::Malformed {
             what: WHAT_CHK,
-            detail: "version 3 checkpoint has no RNG words".into(),
+            detail: "checkpoint has no RNG words".into(),
         })?;
         for word in words {
             put_uvar(&mut out, word as u64);
         }
+        let states = c.worm_states.ok_or_else(|| Error::Malformed {
+            what: WHAT_CHK,
+            detail: "checkpoint has no worm state hash".into(),
+        })?;
+        put_uvar(&mut out, states as u64);
         check_cap(&out)?;
         prev = Some(c.frame);
     }
@@ -255,7 +272,7 @@ pub fn encode_checkpoints(cps: &[Checkpoint]) -> Result<Vec<u8>, Error> {
 /// Every stored hash and RNG word is u32 on the wire, so a wider varint is
 /// malformed rather than silently truncated.
 pub fn decode_checkpoints(bytes: &[u8], format: u16) -> Result<Vec<Checkpoint>, Error> {
-    if format != LEGACY_FORMAT_VERSION && format != FORMAT_VERSION {
+    if !supported_format(format) {
         return Err(Error::FormatVersion { found: format, supported: FORMAT_VERSION });
     }
     check_cap(bytes)?;
@@ -278,9 +295,13 @@ pub fn decode_checkpoints(bytes: &[u8], format: u16) -> Result<Vec<Checkpoint>, 
             worms: r.u32_var()?,
             actors: r.u32_var()?,
             rng_words: None,
+            worm_states: None,
         };
-        if format == FORMAT_VERSION {
+        if format >= RNG_WORDS_FORMAT_VERSION {
             checkpoint.rng_words = Some([r.u32_var()?, r.u32_var()?, r.u32_var()?]);
+        }
+        if format >= 4 {
+            checkpoint.worm_states = Some(r.u32_var()?);
         }
         out.push(checkpoint);
         prev = Some(frame);
@@ -321,7 +342,7 @@ impl<'a> Trailer<'a> {
             return Ok(None);
         }
         let format = u16::from_le_bytes([footer[4], footer[5]]);
-        if format != LEGACY_FORMAT_VERSION && format != FORMAT_VERSION {
+        if !supported_format(format) {
             return Err(Error::FormatVersion {
                 found: format,
                 supported: FORMAT_VERSION,
@@ -490,7 +511,7 @@ pub fn append_trailer_with_format(
     checkpoints: &[u8],
     format: u16,
 ) -> Result<Vec<u8>, Error> {
-    if format != LEGACY_FORMAT_VERSION && format != FORMAT_VERSION {
+    if !supported_format(format) {
         return Err(Error::FormatVersion { found: format, supported: FORMAT_VERSION });
     }
     check_cap(wf)?;
@@ -740,6 +761,37 @@ mod tests {
                 worms: 0xa326_e371,
                 actors: 0x811c_9dc5,
                 rng_words: None,
+                worm_states: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn version_three_checkpoint_has_no_worm_states() {
+        let mut chk = Vec::new();
+        put_svar(&mut chk, 50);
+        for v in [1u64, 2, 3, 4, 5, 6] {
+            put_uvar(&mut chk, v);
+        }
+        let file = append_trailer_with_format(
+            WA,
+            &Header::default(),
+            b"packs",
+            b"",
+            &chk,
+            RNG_WORDS_FORMAT_VERSION,
+        )
+        .unwrap();
+        let trailer = Trailer::find(&file).unwrap().unwrap();
+        assert_eq!(
+            decode_checkpoints(trailer.chk(), trailer.format_version()).unwrap(),
+            vec![Checkpoint {
+                frame: 50,
+                rng: 1,
+                worms: 2,
+                actors: 3,
+                rng_words: Some([4, 5, 6]),
+                worm_states: None,
             }]
         );
     }

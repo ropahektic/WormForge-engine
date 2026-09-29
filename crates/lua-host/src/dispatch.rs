@@ -33,12 +33,20 @@ pub struct DrawQuad {
 thread_local! {
     static DRAW_QUADS: RefCell<Vec<DrawQuad>> = const { RefCell::new(Vec::new()) };
     static DRAWING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static HUD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// True while `wa.on.draw` handlers run: drawing is allowed, and anything
 /// that would reach the lockstep simulation (`wa.random`) is refused.
 pub fn drawing() -> bool {
     DRAWING.with(|d| d.get())
+}
+
+/// True while `wa.on.draw` or `wa.on.hud` handlers run: render time, once
+/// per rendered frame and differently on every peer, so nothing may reach
+/// the lockstep simulation from there.
+pub fn rendering() -> bool {
+    drawing() || HUD.with(|h| h.get())
 }
 
 pub fn push_draw_quad(q: DrawQuad) {
@@ -289,6 +297,14 @@ pub fn run_hud() -> Result<Vec<HudLine>, String> {
     HUD_LINES.with(|s| s.borrow_mut().clear());
     let _ = with_lua_impl(false, |lua| {
         let list = hook_list(lua, "hud")?;
+        HUD.with(|h| h.set(true));
+        struct Done;
+        impl Drop for Done {
+            fn drop(&mut self) {
+                HUD.with(|h| h.set(false));
+            }
+        }
+        let _done = Done;
         call_each(&list, ())?;
         Ok(())
     });

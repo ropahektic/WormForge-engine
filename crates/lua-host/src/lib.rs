@@ -149,10 +149,11 @@ mod tests {
         let lua = sandbox::new_lua().unwrap();
         let ctx = test_ctx();
         api::install(&lua, &ctx).unwrap();
-        let err = lua
-            .load("return wa.actors.spawn({ sprite = 'grenade', owner = 12345 })")
-            .eval::<mlua::Value>()
-            .expect_err("a raw number must not be taken for an entity");
+        let err = sim_context::with_sim(|| {
+            lua.load("return wa.actors.spawn({ sprite = 'grenade', owner = 12345 })")
+                .eval::<mlua::Value>()
+        })
+        .expect_err("a raw number must not be taken for an entity");
         let text = err.to_string();
         assert!(
             text.contains("not a handle") || text.contains("not a number"),
@@ -2454,6 +2455,38 @@ wa.weapons.replace({
         });
         crate::bind_actor_native(crate::ActorNative::default());
         assert_eq!((GRAVITY.load(Ordering::SeqCst), WIND.load(Ordering::SeqCst)), (0x3AE * 2, -0x81D));
+    }
+
+    #[test]
+    fn simulation_writes_are_refused_at_render_time() {
+        let _host = lock_host();
+        crate::bind_actor_native(crate::ActorNative::default());
+        let root = std::env::temp_dir().join("wklua-lua-host-render-writes");
+        let _ = std::fs::remove_dir_all(&root);
+        // The HUD runs once per rendered frame, differently on every peer:
+        // a draw from WA's RNG or a spawn there would desync the match.
+        let pack = pack(
+            &root.join("r"),
+            "r.render",
+            r#"
+id = "r.render"
+api_version = 1
+entry = "weapons.lua"
+"#,
+            r#"
+wa.on.hud(function()
+  local _, random = pcall(wa.random, 1, 6)
+  local _, spawn = pcall(wa.actors.spawn, { sprite = "grenade" })
+  wa.hud.line(tostring(random), 0, 0)
+  wa.hud.line(tostring(spawn), 0, 0)
+end)
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        park_lua(scripts.lua);
+        let lines: Vec<String> = run_hud().unwrap().into_iter().map(|l| l.text).collect();
+        assert!(lines[0].contains("wa.on.hud"), "wa.random in the HUD: {}", lines[0]);
+        assert!(lines[1].contains("simulation callback"), "a spawn in the HUD: {}", lines[1]);
     }
 
     #[test]
