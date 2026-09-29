@@ -45,7 +45,7 @@ fn run() -> Result<(), String> {
 
 fn inspect(trailer: &Trailer<'_>) -> Result<(), String> {
     let header = trailer.header();
-    println!("format:       {}", replay::FORMAT_VERSION);
+    println!("format:       {}", trailer.format_version());
     println!("WA version:   {}", header.wa_version);
     println!("wkLua build:  {}", header.build_hash);
     println!("modset:       {}", header.modset);
@@ -54,7 +54,8 @@ fn inspect(trailer: &Trailer<'_>) -> Result<(), String> {
     let pack_bytes = trailer.pack();
     let packs = decode_pack(pack_bytes).map_err(|e| e.to_string())?;
     let inputs = decode_inputs(trailer.wf()).map_err(|e| e.to_string())?;
-    let checkpoints = decode_checkpoints(trailer.chk()).map_err(|e| e.to_string())?;
+    let checkpoints = decode_checkpoints(trailer.chk(), trailer.format_version())
+        .map_err(|e| e.to_string())?;
     let files: usize = packs.iter().map(|p| p.files.len()).sum();
     let refs = replay::asset_refs(&packs).len();
 

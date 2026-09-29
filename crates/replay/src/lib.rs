@@ -38,9 +38,10 @@ pub mod pack;
 
 pub use error::{tag_str, Error, Offset};
 pub use format::{
-    append_trailer, decode_checkpoints, decode_inputs, encode_checkpoints, encode_inputs,
-    Checkpoint, Header, InputSample, Trailer, FOOTER_LEN, FORMAT_VERSION, HDR_SCHEMA, KNOWN_TAGS,
-    MAGIC, MAX_WF_BYTES, TAG_CHK, TAG_HDR, TAG_PACK, TAG_WF,
+    append_trailer, append_trailer_with_format, decode_checkpoints, decode_inputs,
+    encode_checkpoints, encode_inputs, Checkpoint, Header, InputSample, Trailer, FOOTER_LEN,
+    FORMAT_VERSION, HDR_SCHEMA, KNOWN_TAGS, LEGACY_FORMAT_VERSION, MAGIC, MAX_WF_BYTES,
+    TAG_CHK, TAG_HDR, TAG_PACK, TAG_WF,
 };
 pub use pack::{
     always_embedded, asset_refs, decode as decode_pack, encode as encode_pack, encode_dedup,
@@ -77,6 +78,7 @@ mod tests {
             rng: 0x6af2_2799,
             worms: 0xa35e_6047,
             actors: 0x57bd_1fde,
+            rng_words: Some([1, 2, 3]),
         }];
         let packs = vec![Pack {
             id: "synctest".into(),
@@ -100,7 +102,7 @@ mod tests {
         assert_eq!(t.header(), &header);
         assert_eq!(t.wa_prefix(), b"WAGAME BYTES", "WA's bytes verbatim");
         assert_eq!(decode_inputs(t.wf()).unwrap(), inputs);
-        assert_eq!(decode_checkpoints(t.chk()).unwrap(), chk);
+        assert_eq!(decode_checkpoints(t.chk(), t.format_version()).unwrap(), chk);
         assert_eq!(decode_pack(t.pack()).unwrap(), packs);
     }
 

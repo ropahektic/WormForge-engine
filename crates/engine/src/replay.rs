@@ -73,6 +73,9 @@ struct Player {
     checkpoints: Vec<Checkpoint>,
     next_input: usize,
     next_checkpoint: usize,
+    rng_drift_logged: bool,
+    fx_drift_logged: bool,
+    net_drift_logged: bool,
     failure: Option<String>,
 }
 
@@ -113,6 +116,21 @@ pub fn playback_mods_root() -> Option<PathBuf> {
         State::Playback(player) => Some(player.mods_root.clone()),
         _ => None,
     }
+}
+
+/// Some replay launch paths bypass the hooked ReplayLoader. Recover from the
+/// frontend replay path before InitGraphic chooses which packs to load.
+pub fn recover_playback_at_mod_load() -> Result<(), String> {
+    if PLAYBACK_ACTIVE.load(Ordering::Acquire) {
+        return Ok(());
+    }
+    let prefix = unsafe { replay_prefix() } as *mut u8;
+    if prefix.is_null() || unsafe { prefix.add(REPLAY_ACTIVE).read() } == 0 {
+        return Ok(());
+    }
+    log_line("replay player: ReplayLoader hook was bypassed; checking replay at InitGraphic");
+    unsafe { redirect_playback(prefix) }?;
+    Ok(())
 }
 
 /// Called before WA's mode-1 `ReplayLoader`. Returns false for an ordinary
@@ -172,7 +190,8 @@ pub unsafe fn redirect_playback(prefix: *mut u8) -> Result<bool, String> {
     let references = replay::asset_refs(&packs).len();
     let packs = resolve_assets(packs, header.collection_version)?;
     let inputs = replay::decode_inputs(trailer.wf()).map_err(|e| e.to_string())?;
-    let checkpoints = replay::decode_checkpoints(trailer.chk()).map_err(|e| e.to_string())?;
+    let checkpoints = replay::decode_checkpoints(trailer.chk(), trailer.format_version())
+        .map_err(|e| e.to_string())?;
 
     {
         let mut state = STATE.lock().unwrap_or_else(|p| p.into_inner());
@@ -198,6 +217,9 @@ pub unsafe fn redirect_playback(prefix: *mut u8) -> Result<bool, String> {
         checkpoints,
         next_input: 0,
         next_checkpoint: 0,
+        rng_drift_logged: false,
+        fx_drift_logged: false,
+        net_drift_logged: false,
         failure: None,
     };
     log_line(&format!(
@@ -337,8 +359,25 @@ unsafe fn verify_playback_frame(player: &mut Player, world: *mut u8) {
     }
     let (rng, worms, actors) = crate::sync::checkpoint(world);
     let mut different = Vec::new();
-    if rng != expected.rng {
-        different.push(format!("rng {:08x}!={:08x}", rng, expected.rng));
+    if let Some([game, fx, net]) = expected.rng_words {
+        let (local_game, local_fx, local_net) = unsafe { crate::sync::rng_words(world) };
+        if local_game != game {
+            different.push(format!("game RNG {local_game:08x}!={game:08x}"));
+        }
+        if local_fx != fx && !player.fx_drift_logged {
+            log_line(&format!("replay player: visual RNG drift at frame {frame}: {local_fx:08x}!={fx:08x}"));
+            player.fx_drift_logged = true;
+        }
+        if local_net != net && !player.net_drift_logged {
+            log_line(&format!("replay player: network RNG drift at frame {frame}: {local_net:08x}!={net:08x}"));
+            player.net_drift_logged = true;
+        }
+    } else if rng != expected.rng && !player.rng_drift_logged {
+        log_line(&format!(
+            "replay player: version 2 combined RNG drift at frame {frame}: {rng:08x}!={:08x}; gameplay RNG cannot be isolated",
+            expected.rng
+        ));
+        player.rng_drift_logged = true;
     }
     if worms != expected.worms {
         different.push(format!("worms {:08x}!={:08x}", worms, expected.worms));
@@ -381,11 +420,13 @@ unsafe fn record_frame(recorder: &mut Recorder, world: *mut u8) -> Result<(), St
 
     if frame % CHECKPOINT_EVERY == 0 {
         let (rng, worms, actors) = crate::sync::checkpoint(world);
+        let (game_rng, fx_rng, net_rng) = unsafe { crate::sync::rng_words(world) };
         let checkpoint = Checkpoint {
             frame,
             rng,
             worms,
             actors,
+            rng_words: Some([game_rng, fx_rng, net_rng]),
         };
         let bytes = replay::encode_checkpoints(&[checkpoint]).map_err(|e| e.to_string())?;
         append_capped(&mut recorder.chk, &mut recorder.chk_bytes, &bytes)
@@ -514,18 +555,21 @@ fn unique_suffix() -> u128 {
 /// `key=value` lines: the `.WAgame` the trailer belongs on, and its header.
 fn write_note(wa_path: &Path, header: &Header) -> String {
     format!(
-        "target={}\nwa_version={}\nbuild_hash={}\nmodset={}\ncollection_version={}\n",
+        "target={}\nwa_version={}\nbuild_hash={}\nmodset={}\ncollection_version={}\nformat_version={}\n",
         wa_path.display(),
         header.wa_version,
         header.build_hash,
         header.modset,
-        header.collection_version
+        header.collection_version,
+        replay::FORMAT_VERSION
     )
 }
 
-fn read_note(text: &str) -> Result<(PathBuf, Header), String> {
+fn read_note(text: &str) -> Result<(PathBuf, Header, u16), String> {
     let mut target = None;
     let mut header = Header::default();
+    // Notes created before version 3 have no format_version line.
+    let mut format = replay::LEGACY_FORMAT_VERSION;
     for line in text.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -540,10 +584,15 @@ fn read_note(text: &str) -> Result<(PathBuf, Header), String> {
                     .parse()
                     .map_err(|_| format!("bad collection_version {value:?}"))?
             }
+            "format_version" => {
+                format = value
+                    .parse()
+                    .map_err(|_| format!("bad format_version {value:?}"))?
+            }
             _ => {}
         }
     }
-    Ok((target.ok_or("note names no target")?, header))
+    Ok((target.ok_or("note names no target")?, header, format))
 }
 
 /// Append a pending recording's trailer to its `.WAgame` and remove the
@@ -552,14 +601,14 @@ fn read_note(text: &str) -> Result<(PathBuf, Header), String> {
 fn finalise(dir: &Path) -> Result<PathBuf, String> {
     let note = std::fs::read_to_string(dir.join(PENDING_NOTE))
         .map_err(|e| format!("{}: {e}", dir.display()))?;
-    let (target, header) = read_note(&note)?;
+    let (target, header, format) = read_note(&note)?;
     let pack = read_all(&dir.join(PENDING_PACK))?;
     let wf = read_all(&dir.join(PENDING_WF))?;
     let chk = read_all(&dir.join(PENDING_CHK))?;
     // Decode before publishing: catches a torn stream even when every
     // individual append succeeded.
     replay::decode_inputs(&wf).map_err(|e| e.to_string())?;
-    replay::decode_checkpoints(&chk).map_err(|e| e.to_string())?;
+    replay::decode_checkpoints(&chk, format).map_err(|e| e.to_string())?;
     let wa = read_all(&target)?;
     if Trailer::find(&wa).map_err(|e| format!("{}: {e}", target.display()))?.is_some() {
         // Finalised already; the crash came between the replace and the
@@ -569,7 +618,7 @@ fn finalise(dir: &Path) -> Result<PathBuf, String> {
             target.display()
         ));
     } else {
-        let file = replay::append_trailer(&wa, &header, &pack, &wf, &chk)
+        let file = replay::append_trailer_with_format(&wa, &header, &pack, &wf, &chk, format)
             .map_err(|e| e.to_string())?;
         game::overwrite::write(&target, &file).map_err(|e| format!("{}: {e}", target.display()))?;
     }
