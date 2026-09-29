@@ -244,6 +244,7 @@ local function new_match(opts)
     graves = { all = function() return M.graves end },
     inventory = inventory_api(),
     land = {
+      stamp = function(spec) M.stamps = M.stamps or {}; M.stamps[#M.stamps + 1] = spec end,
       cut = function(spec)
         M.cuts = M.cuts or {}
         M.cuts[#M.cuts + 1] = spec
@@ -260,8 +261,11 @@ local function new_match(opts)
       random = function() return 0.5 end,
     },
     sound = {
-      play = function(target, name)
+      play = function(target, name, flags)
+        M.sound_targets = M.sound_targets or {}
+        M.sound_targets[#M.sound_targets + 1] = target
         M.sounds[#M.sounds + 1] = name
+        M.sound_flags[#M.sound_flags + 1] = flags
         -- A pack WAV plays only once an entry registers it (`sounds`);
         -- otherwise the engine plays nothing, without a word.
         if type(name) == "string" then
@@ -355,7 +359,7 @@ local function new_match(opts)
       end,
     },
   }
-  M.quads, M.ribbons, M.sounds, M.trace_hit, M.draws = {}, {}, {}, nil, nil
+  M.quads, M.ribbons, M.sounds, M.sound_flags, M.trace_hit, M.draws = {}, {}, {}, {}, nil, nil
   M.mines, M.crates, M.oil, M.graves = {}, {}, {}, {}
   dofile("mods/examples/highlander/rules.lua")
 end
@@ -454,7 +458,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("52 slots replaced, each once", #replaced == 52 and not dupes, tostring(#replaced))
+  check("53 slots replaced, each once", #replaced == 53 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -474,11 +478,15 @@ do
   end
   local own_file = true
   for slot, spec in pairs(by_slot) do
-    if slot == "earthquake" or slot == "napalm_strike" or slot == "uzi" then
+    if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi" or slot == "prod" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
-  check("the lightning and Laser Gun slots use scheme records; others copy stock", own_file)
+  check("the lightning, Super Tele, Laser Gun and Javelin slots use scheme records; others copy stock", own_file)
+  check("Super Tele owns the teleport cursor and click dispatch",
+    by_slot.teleport and by_slot.teleport.on_select.cursor
+      and type(by_slot.teleport.on_click) == "function"
+      and by_slot.teleport.panel_icon == "sprites/super_tele/icon.png")
   check("Lightning Strike claims the stock land cursor and click dispatch",
     by_slot.napalm_strike and by_slot.napalm_strike.on_select.cursor
       and type(by_slot.napalm_strike.on_click) == "function")
@@ -1510,6 +1518,67 @@ do
   check("another slot's parachute is left alone", w.gravity == P)
 end
 
+print("automatic parachute: only the equipped weapon opens")
+do
+  new_match()
+  frame()
+  local P = 0x10000
+  local w = worm(16)
+  w.weapon, w.state, w.x, w.y, w.vx, w.vy, w.turn =
+    "bungee", "sliding", 100 * P, 50 * P, 0, P, true
+  M.spawned, M.sounds = {}, {}
+  M.message(w, wa.msg.FRAME_FINISH)
+  -- WA has replaced the selected slot with stock Parachute while opening.
+  w.weapon, w.state = "parachute", "parachuting"
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("equipped balloon owns the auto opening despite WA's slot change",
+    w.gravity == -P and M.spawned[1] and M.spawned[1].sprite == "sprites/balloon/balloon")
+  local glider = false
+  for _, a in ipairs(M.spawned) do
+    if a.sprite == "sprites/hang_glider/glider" then glider = true end
+  end
+  check("equipped balloon does not start the glider", not glider)
+
+  new_match()
+  frame()
+  w = worm(16)
+  w.weapon, w.state, w.x, w.y, w.vx, w.vy, w.turn =
+    "parachute", "sliding", 100 * P, 50 * P, 0, P, true
+  w.keys = {}
+  M.spawned = {}
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.weapon, w.state = "none", "parachuting"
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("equipped glider owns its auto opening",
+    M.spawned[1] and M.spawned[1].sprite == "sprites/hang_glider/glider" and w.gravity == P)
+
+  new_match()
+  frame()
+  w = worm(16)
+  w.weapon, w.state, w.x, w.y, w.vx, w.vy, w.turn =
+    "shotgun", "sliding", 100 * P, 50 * P, 0, P, true
+  M.spawned = {}
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("another equipped weapon keeps falling", w.state == "sliding" and #M.spawned == 0)
+  -- Even an unexpected stock parachute state must not turn into either mod.
+  w.weapon, w.state = "none", "parachuting"
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("another equipped weapon claims neither parachute replacement", #M.spawned == 0)
+
+  new_match()
+  frame()
+  w = worm(16)
+  w.weapon, w.state, w.x, w.y, w.vx, w.vy, w.turn =
+    "parachute", "sliding", 100 * P, 50 * P, 0, P, true
+  M.spawned = {}
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.weapon = "shotgun"
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.weapon, w.state = "none", "parachuting"
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("putting the glider away removes its automatic claim", #M.spawned == 0)
+end
+
 print("hang-glider: PX's glider on WA's parachute")
 do
   new_match()
@@ -1550,8 +1619,10 @@ do
   M.message(w, wa.msg.FRAME_FINISH)
   check("closed: the sound, the art gone, the body back, no pack-away",
     M.sounds[#M.sounds]:find("hangclose") and art.dead and w.body_visible == true and #M.spawned == 1)
-  -- Up again (the weapon was the glider), then a landing on its feet.
-  w.state = "parachuting"
+  -- Equip the glider again for the next opening, then land on its feet.
+  w.weapon = "parachute"
+  M.message(w, wa.msg.FRAME_FINISH)
+  w.state, w.weapon = "parachuting", "none"
   M.message(w, wa.msg.FRAME_FINISH)
   w.state = "standing"
   M.message(w, wa.msg.FRAME_FINISH)
@@ -1814,9 +1885,73 @@ do
   check("steps through all sixteen frames", shown[0] and shown[15])
 end
 
+print("Super Tele: frozen click, 50-frame delay, three cuts and cavern ceiling")
+do
+  local P = 0x10000
+  new_match()
+  local spec
+  for _, r in ipairs(replaced) do if r.weapon == "teleport" then spec = r end end
+  local w = worm(16)
+  w.x, w.y, w.hp = 40 * P, 70 * P, 100
+  local target_x, target_y = 190 * P + 1234, 100 * P + 2345
+  spec.on_click({ worm = w, x = target_x, y = target_y })
+  local marker = M.spawned[#M.spawned]
+  check("target marker stays at the frozen click position",
+    marker.sprite == "markerr" and marker.x == target_x and marker.y == target_y and not marker.dead)
+  check("click confirms target with PX sound and flags",
+    w.state ~= "teleporting" and M.sounds[1] == 68 and M.sound_flags[1] == 0)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("the next frame enters WA's teleport pose and plays PX's start sound",
+    w.state == "teleporting" and M.sounds[2] == 67 and M.sound_flags[2] == 0)
+  for _ = 1, 49 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("worm and marker remain in place for 49 frames after starting",
+    w.x == 40 * P and w.y == 70 * P and not M.digs and not marker.dead)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("frame 50 arrives at the saved target and removes its marker",
+    w.x == target_x and w.y == target_y and marker.dead)
+  local cuts = M.digs or {}
+  check("arrival cuts three overlapping holes at and above the destination",
+    #cuts == 3 and cuts[1].x == target_x and cuts[1].y == target_y
+      and cuts[2].y == target_y - 10 * P and cuts[3].y == target_y - 22 * P
+      and cuts[1].radius == 12 and cuts[2].radius == 12 and cuts[3].radius == 12)
+  for _ = 1, 5 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("arrival runs once", #M.digs == 3)
+
+  new_match({ cavern = true })
+  spec = nil
+  for _, r in ipairs(replaced) do if r.weapon == "teleport" then spec = r end end
+  w = worm(16)
+  spec.on_click({ worm = w, x = 50 * P, y = 2 * P })
+  for _ = 1, 51 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("cavern clicks stay at least 19 pixels below the ceiling", w.y == 19 * P)
+
+  new_match()
+  spec = nil
+  for _, r in ipairs(replaced) do if r.weapon == "teleport" then spec = r end end
+  w = worm(16)
+  w.x, w.y = 40 * P, 70 * P
+  spec.on_click({ worm = w, x = 200 * P, y = 150 * P })
+  marker = M.spawned[#M.spawned]
+  w.hp = 0
+  for _ = 1, 50 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("a dead worm is never moved or carved in and its marker is removed",
+    w.x == 40 * P and w.y == 70 * P and not M.digs and marker.dead)
+end
+
 print("lightning strike: warning, hit, grave identity and copied hand")
 do
   local P = 0x10000
+  new_match()
+  local click
+  for _, spec in ipairs(replaced) do
+    if spec.weapon == "napalm_strike" then click = spec.on_click; break end
+  end
+  local jumper = worm(16)
+  jumper.turn, jumper.weapon = true, "napalm_strike"
+  jumper.state = "prefiring"
+  click({ worm=jumper, x=100*P, y=100*P })
+  check("click releases WA's prefiring pose so Jump can run", jumper.state == "standing")
+
   new_match()
   local by_slot = {}
   for _, spec in ipairs(replaced) do by_slot[spec.weapon] = spec end
@@ -1997,6 +2132,83 @@ do
   spec.on_explode({ worm=owner, x=0, y=0 })
   tick(1)
   check("terrain trace can redirect the arc", #M.spawned > 0 and not M.spawned[#M.spawned].dead)
+  -- An explosion WA reports without a worm: the turn's worm owns the arc's
+  -- driver, not the exploding grenade (which lends no collision helper).
+  spec, owner = setup()
+  for _, w in ipairs(worms) do w.turn = false end
+  owner.turn = true
+  M.spawned = {}
+  spec.on_explode({ x=0, y=0 })
+  check("an explosion without a worm: the turn's worm owns the arc", M.spawned[1] and M.spawned[1].owner == owner)
+end
+
+print("Javelin: ordered thrusts and terrain stamps")
+do
+  new_match()
+  local spec
+  for _, r in ipairs(replaced) do if r.weapon == "prod" then spec = r end end
+  check("prod uses Javelin's record and GPU art", spec.wep == "weps/prod.wep"
+    and spec.params.gpu_prefix == "sprites/javelin/" and type(spec.on_explode) == "function")
+  local P = 0x10000
+  local owner = worms[1]
+  owner.x, owner.y, owner.turn = 1000 * P, 1000 * P, true
+  local nearby = {}
+  wa.world.electrical_nearby = function(x, y, r, graves)
+    assert(r == 29 and not graves)
+    return nearby
+  end
+  local id = 0
+  local function impact(vx, vy)
+    id = id + 1
+    M.missile({ weapon = "prod", id = id, phase = "pre", vx = vx, vy = vy })
+    -- WA's explosion reports the missile's owner, which is not a worm.
+    spec.on_explode({ x = 100 * P, y = 100 * P, missile = id, worm = { owner_object = true } })
+  end
+  local a, b = worms[2], worms[3]
+  a.x, a.y, b.x, b.y = 119 * P, 119 * P, 100 * P, 100 * P
+  nearby = { a, b }
+  impact(8 * P, -4 * P)
+  check("first target wins, including square corners outside a 20px circle", a.hp == 80 and b.hp == 100)
+  check("worm thrust uses quarter incoming velocity", a.vx == 2 * P and a.vy == -P)
+  check("hitting an object never stamps", M.stamps == nil)
+  a.x, a.y = 120 * P, 100 * P
+  nearby = { a }
+  impact(P, 0)
+  check("20px boundary is excluded", a.hp == 80 and #M.stamps == 1)
+  nearby = {}
+  owner.x, owner.y = 124 * P, 124 * P
+  impact(-7, 7)
+  check("active worm has PX's 25px fallback and truncates towards zero", owner.hp == 80
+    and owner.vx == -1 and owner.vy == 1 and #M.stamps == 1)
+  owner.x, owner.y = 125 * P, 100 * P
+  impact(0, 0)
+  check("25px fallback boundary is excluded; zero speed points up", owner.hp == 80 and M.stamps[2].frame == 0)
+  owner.x, owner.y = 1000 * P, 1000 * P
+  for _, kind in ipairs({"mine", "crate", "oil"}) do
+    local o = { kind = kind, x = 100 * P, y = 100 * P }
+    function o:hit(damage, vx, vy, mode) self.hit_args = { damage, vx, vy, mode } end
+    nearby = { o }
+    impact(-8 * P, 4 * P)
+    check(kind .. " receives 20 projectile damage and thrust", o.hit_args[1] == 20
+      and o.hit_args[2] == -4 * P and o.hit_args[3] == 2 * P and o.hit_args[4] == "projectile"
+      and o.vx == -2 * P and o.vy == P and #M.stamps == 2)
+  end
+  nearby = {}
+  local cases = { {0,-1,0}, {1,0,8}, {0,1,16}, {-1,0,24}, {1,-1,3}, {1,1,11},
+    {-1,1,19}, {-1,-1,27}, {100,-1,7}, {1,100,15}, {-100,1,23}, {-1,-100,31} }
+  local good = true
+  for _, c in ipairs(cases) do
+    impact(c[1] * P, c[2] * P)
+    local stamp = M.stamps[#M.stamps]
+    good = good and stamp.frame == c[3] and stamp.sprite == "sprites/javelin/stamp"
+      and stamp.x == 100 * P and stamp.y == 100 * P
+  end
+  check("cardinals, ratio bins and clamps choose PX's centered 60px stamp", good)
+  check("sticking plays the registered impact sound on the turn's worm, never the missile's owner",
+    M.sounds[#M.sounds] == "sounds/javelin_impact.wav" and M.sound_targets[#M.sound_targets] == owner)
+  local n = #M.stamps
+  M.draw()
+  check("drawing never writes terrain", #M.stamps == n)
 end
 
 print("pack sounds: every WAV registered")

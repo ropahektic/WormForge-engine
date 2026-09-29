@@ -164,7 +164,7 @@ pub fn solid_fixed(x: i32, y: i32) -> bool {
 /// exact address there made every cut fail on those machines only, while the
 /// others dug: a desync. Calling what WA would call keeps every client on the
 /// same chain, whatever is installed.
-unsafe fn landscape_method(slot: usize, expected: u32) -> Result<(*mut u8, u32), String> {
+pub(crate) unsafe fn landscape_method(slot: usize, expected: u32) -> Result<(*mut u8, u32), String> {
     let world = session_world_ptr();
     if world.is_null() {
         return Err("terrain cut: no active world".into());
@@ -1165,16 +1165,19 @@ pub fn mine_fuse(handle: u32) -> i32 {
     }
 }
 
-/// Send WA's SpecialImpact to a crate or oil drum. The target owns its normal
+/// Send WA's SpecialImpact to a mine, crate or oil drum. The target owns its normal
 /// damage and detonation path, including knockback and weapon attribution.
-pub fn hit_object(handle: u32, from: u32, damage: i32, vx: i32, vy: i32) -> bool {
+pub fn hit_object(handle: u32, from: u32, damage: i32, vx: i32, vy: i32, projectile: bool) -> bool {
     if handle == 0 || !(1..=1000).contains(&damage) { return false; }
     unsafe {
         let target = handle as *mut u8;
-        if !matches!(read_i32(target, ENT_CLASS_TYPE), CLASS_CRATE | CLASS_OIL) { return false; }
+        if !matches!(read_i32(target, ENT_CLASS_TYPE), CLASS_MINE | CLASS_CRATE | CLASS_OIL) { return false; }
         // PX sends a 0x408-byte M_GUNEXP buffer with flag 0. Stock oil drums
         // then take the direct-trigger path; crates receive the damage field.
         let mut data = [0i32; 0x408 / 4];
+        // Projectile impacts use stock flag 3; electrical direct hits keep flag 0.
+        // Mines receive this through their handler and discard HP damage themselves.
+        data[0] = if projectile { 3 } else { 0 };
         data[1] = read_i32(target, ENT_POS_X);
         data[2] = read_i32(target, ENT_POS_Y);
         data[3] = vx;
@@ -1888,9 +1891,31 @@ unsafe fn dssound_load_wav(this: *mut u8, slot: i32, path: *const i8) -> bool {
     }
 }
 
+/// Whether `entity` carries the sound emitter WA's WorldEntity constructor
+/// embeds at +0xE8 (0x4FED8A), the one PlaySoundLocal calls through. A
+/// missile's owner, for one, has none: a pack that played a sound on an
+/// explosion's `ev.worm` made WA call through garbage. Without the locator
+/// the check cannot be made and every entity passes, as before it.
+unsafe fn has_sound_emitter(entity: *mut u8) -> bool {
+    match crate::wa::try_address("SOUND_EMITTER_VTABLE") {
+        Some(vtable) => read_i32(entity, ENT_SOUND_EMITTER) as u32 == vtable,
+        None => true,
+    }
+}
+
 /// PlaySoundLocal (0x4FDFE0): EAX=pitch, ECX=volume, EDI=entity, stack id+flags, RET 8.
 unsafe fn play_sound_local(entity: *mut u8, id: i32, flags: i32, volume: i32, pitch: i32) {
     if entity.is_null() {
+        return;
+    }
+    if !has_sound_emitter(entity) {
+        static REPORTED: AtomicBool = AtomicBool::new(false);
+        if !REPORTED.swap(true, Ordering::Relaxed) {
+            log_error(&format!(
+                "sound.play: {:#x} is not a game entity (no sound emitter); not played",
+                entity as u32
+            ));
+        }
         return;
     }
     let f = crate::wa::address("PLAY_SOUND_LOCAL") as u32;

@@ -361,7 +361,8 @@ pub const TEAM_CURSOR_PHASE_END: i32 = 0x9FFB;
 pub const TEAM_CURSOR_MARK: usize = 0x3E0;
 pub const STRIKE_FIRE: u32 = 0x0051_E2C0;
 /// `FireWeapon` type switch (EAX=weapon entry, stack worm, ECX=ctx). RET 4.
-/// After StrikeFire it sets `worm+0x3C` (ENT_ACTIVE) — click-only packs must eat here.
+/// FireWeapon clears `worm+0x3C` (ENT_ACTIVE) on entry and restores it after
+/// dispatch; hooks that swallow dispatch must restore it themselves.
 pub const FIRE_WEAPON_DISPATCH: u32 = 0x0051_EE60;
 pub const CREATE_WEAPON_PROJECTILE: u32 = 0x0051_E0F0;
 pub const WORLD_ENTITY_CTOR: u32 = 0x004F_ED50;
@@ -415,6 +416,9 @@ pub const ENT_BLAST_MASS: usize = 0xCC;
 /// WorldEntity explosion-damage accumulator; subclasses consume and clear it.
 pub const ENT_DAMAGE_ACCUM: usize = 0xD4;
 pub const ENT_HELPER: usize = 0xDC;
+/// The sound emitter every WorldEntity embeds (vtable set at 0x4FED8A);
+/// PlaySoundLocal calls through it.
+pub const ENT_SOUND_EMITTER: usize = 0xE8;
 pub const ENT_WORM_TEAM: usize = 0xFC;
 
 pub const MSG_FRAME_FINISH: u32 = 0x2;
@@ -642,6 +646,8 @@ pub const LANDSCAPE_PLOT_SCRATCH: usize = 0x0D0;
 pub const LANDSCAPE_COLLISION: usize = 0x914;
 /// 8bpp fill / picture. Soil-coloured mass can remain after a blast. Not walk.
 pub const LANDSCAPE_TERRAIN_IMAGE: usize = 0x910;
+/// Landscape display used to read the terrain palette.
+pub const LANDSCAPE_DISPLAY: usize = 0x900;
 /// Destruct / soil overlay paint. Walk in front of it.
 pub const LANDSCAPE_SOIL: usize = 0x91C;
 /// WA 3.8.1 Landscape vtable and its terrain-cutting entries.
