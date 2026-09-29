@@ -16,14 +16,17 @@ local state_names = {
   [0x70] = "FIRING_ROPE",
   [0x71] = "TORCHING",
   [0x73] = "ROPE ROLL",
+  [0x76] = "GETUP", -- after losing control
   [0x77] = "PREPARE_JUMP / JUMPPREPARE", -- both names were given for 0x77
   [0x78] = "JETPACK",
   [0x79] = "JUMP",
-  [0x7A] = "JUMPDOWN",
+  [0x7A] = "JUMPDOWN", -- msg=0x0C: normal; msg=0x02: from parachute
   [0x7B] = "ROPING",
   [0x7D] = "PARACHUTE",
   [0x7E] = "falling with control",
   [0x7F] = "loss of control / sliding",
+  [0x80] = "HIT", -- brief response to fall damage or a gunshot before loss of control
+  [0x81] = "HIT_FLYING", -- blasted away by an explosion
 }
 
 local function state_name(worm, state)
