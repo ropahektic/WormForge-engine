@@ -102,3 +102,20 @@ Draw primitives belong in the DLL. Named FX (lightning, fire) belong in Lua. No 
 Sprites: pack PNG strip (`sprite_columns`), GIF, frame folder, or a Gfx.dir stem (`missile`, `grenade`, `uzihit`, …) plus aliases `bazooka`/`holy`/`mine`/`cursor`. Map palette applies. Sounds: pack WAV on the overlay, or a stock index.
 
 Leave the root README alone unless asked. List a new example in `mods/examples/README.md`.
+
+### Adding terrain
+
+`wa.land.stamp{ sprite = "sprites/sheet", frame = 0, x, y }` adds a registered
+pack sheet's frame, centered at the 16.16 position. Simulation callbacks only.
+Frames are zero-based and must exist (no wrapping); dimensions must be 1..256
+pixels. Source alpha below 128 leaves the land unchanged. Opaque pixels,
+including black, become solid. Colours are the nearest of those the terrain
+picture already holds, so every machine writes the same pixels; the palette is
+never changed. The stamp goes through WA's own girder routine
+(Landscape::plot), which clips it and updates collision, the terrain picture,
+the soil layer, rollback storage and redraws. Source pixels are retained for
+GPU sheets too, independent of drawing and device reset.
+
+`object:hit(damage, vx, vy, "projectile")` uses stock projectile impact handling
+for mines, crates and oil drums. Omitting the fourth argument keeps the existing
+direct-hit behavior. Mines apply their own stock rules for impact and damage.

@@ -61,6 +61,8 @@ pub struct RgbaSheet {
     #[allow(dead_code)]
     pub looping: bool,
     pub frames: Vec<Vec<u8>>,
+    // Source alpha is gameplay data for land.stamp, independent of the GPU atlas.
+    pub terrain_frames: Vec<gfx::RgbaFrame>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -511,6 +513,7 @@ fn remember_rgba(id: i32, strip: &SpriteStrip) {
             w,
             h,
             looping: strip.looping,
+            terrain_frames: terrain_frames(strip),
             frames,
         });
     }
@@ -1005,6 +1008,7 @@ pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) 
             // keyed on RGBA_SHEETS still find the sheet. Anything that needs
             // a frame COUNT must use frame_count(), which checks GPU_SHEETS
             // first for exactly this reason.
+            terrain_frames: terrain_frames(strip),
             frames: Vec::new(),
         });
     }
@@ -1064,4 +1068,19 @@ mod sheet_id_tests {
         assert_eq!(draw_phase(sheet | SPRITE_REVERSE, 0), 0x1_0000, "a one-shot sheet starts on its last frame");
         assert_eq!(draw_phase(sheet | SPRITE_REVERSE, 0x1_0000), 0);
     }
+}
+
+// Only bounded frames can be stamped. Keep their source pixels even for GPU
+// sheets; a device reset or render callback must never change terrain writes.
+fn terrain_frames(strip: &SpriteStrip) -> Vec<gfx::RgbaFrame> {
+    if strip.frames.iter().all(|f| (1..=256).contains(&f.width) && (1..=256).contains(&f.height)) {
+        strip.frames.clone()
+    } else { Vec::new() }
+}
+
+pub fn terrain_frame(id: i32, frame: u32) -> Result<gfx::RgbaFrame, String> {
+    let sheets = RGBA_SHEETS.lock().map_err(|_| "land.stamp: sprite store unavailable")?;
+    let sheet = sheets.iter().find(|s| s.id == id).ok_or("land.stamp: unknown sheet")?;
+    sheet.terrain_frames.get(frame as usize).cloned()
+        .ok_or_else(|| "land.stamp: frame out of range or sheet exceeds 256x256".into())
 }

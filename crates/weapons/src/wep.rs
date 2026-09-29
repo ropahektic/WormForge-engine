@@ -477,6 +477,7 @@ mod tests {
             ("earthquake", "Electric Grenade", 1),
             ("napalm_strike", "Lightning Strike", 3),
             ("teleport", "Super Tele", 3),
+            ("prod", "Javelin", 1),
         ] {
             let path = root.join(format!("{slot}.wep"));
             let bytes = std::fs::read(&path).unwrap();

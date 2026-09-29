@@ -519,10 +519,13 @@ wa.weapons.replace({
     fn land_verbs_reach_native_only_during_simulation() {
         let _guard = lock_host();
         thread_local! {
+            static STAMP: std::cell::Cell<Option<(i32, u32, i32, i32)>> = const { std::cell::Cell::new(None) };
             static CUT: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
             static DIG: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
         }
         actor::bind_actor_native(actor::ActorNative {
+            resolve_sprite: |_| Some((10001, 0, 60, 60)),
+            land_stamp: |id, frame, x, y| { STAMP.with(|c| c.set(Some((id, frame, x, y)))); Ok(()) },
             land_cut: |shape, x, y| { CUT.with(|c| c.set(Some((shape, x, y)))); Ok(()) },
             land_dig: |x, y, radius| { DIG.with(|c| c.set(Some((x, y, radius)))); Ok(()) },
             ..Default::default()
@@ -530,11 +533,16 @@ wa.weapons.replace({
         let lua = sandbox::new_lua().unwrap();
         api::install(&lua, &test_ctx()).unwrap();
         let cut = "wa.land.cut{ x = 0x12340000, y = 0x56780000, shape = 'torch', facing = 1, angle = 0 }";
+        let stamp = "wa.land.stamp{ sprite = 'sprites/javelin/stamp', frame = 31, x = -65536, y = 131072 }";
+        assert!(lua.load(stamp).exec().is_err());
         assert!(lua.load(cut).exec().is_err());
         sim_context::with_sim(|| {
+            lua.load(stamp).exec().unwrap();
+            assert!(lua.load(stamp.replace("frame = 31", "frame = -1")).exec().is_err());
             lua.load(cut).exec().unwrap();
             lua.load("wa.land.dig{ x = 0x10000, y = 0x20000, radius = 12 }").exec().unwrap();
         });
+        STAMP.with(|c| assert_eq!(c.get(), Some((10001, 31, -65536, 131072))));
         CUT.with(|c| assert_eq!(c.get(), Some((10, 0x12340000, 0x56780000))));
         DIG.with(|c| assert_eq!(c.get(), Some((0x10000, 0x20000, 12))));
     }
@@ -599,8 +607,13 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 52);
+        assert_eq!(applied.len(), 53);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
+        let javelin = claim(StockWeapon::Prod);
+        assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
+        assert!(javelin.params.wep.is_some());
+        assert!(javelin.params.on_explode_id != 0);
+
         // The scheme's record for the girder slot is the Baseball Bat:
         // a special weapon, subtype 2, as WA's own bat.
         let bat = claim(StockWeapon::Girder);

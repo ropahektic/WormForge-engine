@@ -164,6 +164,7 @@ pub fn install() -> Result<(), String> {
         land_solid: crate::world::solid_fixed,
         land_dig: crate::world::land_dig,
         land_cut: crate::world::land_cut,
+        land_stamp: crate::terrain::stamp,
         land_trace: crate::world::trace_fixed,
         map_size: crate::world::map_size_px,
         view_cam: crate::world::view_cam,
