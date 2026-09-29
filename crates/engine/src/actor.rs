@@ -842,9 +842,22 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     write_i32(this, ENT_SPEED_X, body.vx);
     write_i32(this, ENT_SPEED_Y, body.vy);
     if read_i32(this, ENT_HELPER) == 0 {
-        let helper = read_i32(owner, ENT_HELPER);
+        // The actor sits in the missile collision layer, where WA tests every
+        // moving missile against each entity's +0xDC (0x4FBD4B); a null one
+        // crashes it. An owner without one (an exploding missile, say) lends
+        // none, so take a live worm's: they all share the same.
+        let mut helper = read_i32(owner, ENT_HELPER);
+        if helper == 0 {
+            helper = list_worms_pub(0)
+                .into_iter()
+                .map(|w| read_i32(w as *mut u8, ENT_HELPER))
+                .find(|&h| h != 0)
+                .unwrap_or(0);
+        }
         if helper != 0 {
             write_i32(this, ENT_HELPER, helper);
+        } else {
+            log_error("LuaActor spawned without a collision helper: no worm lends one");
         }
     }
     write_i32(this, ACTOR_MAGIC, LUA_ACTOR_MAGIC as i32);
