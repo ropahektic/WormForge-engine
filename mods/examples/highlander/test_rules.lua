@@ -1828,12 +1828,14 @@ do
   w.x, w.y, w.hp = 40 * P, 70 * P, 100
   local target_x, target_y = 190 * P + 1234, 100 * P + 2345
   spec.on_click({ worm = w, x = target_x, y = target_y })
-  check("click enters WA's teleport pose and plays PX's start sound",
+  check("FireWeapon only arms the teleport", w.state ~= "teleporting" and #M.sounds == 0)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("the next frame enters WA's teleport pose and plays PX's start sound",
     w.state == "teleporting" and M.sounds[#M.sounds] == 67)
   for _ = 1, 49 do M.message(w, wa.msg.FRAME_FINISH) end
-  check("worm remains at its origin through frame 49", w.x == 40 * P and w.y == 70 * P and not M.digs)
+  check("worm remains at its origin for 49 frames after starting", w.x == 40 * P and w.y == 70 * P and not M.digs)
   M.message(w, wa.msg.FRAME_FINISH)
-  check("frame 50 uses the exact saved click position", w.x == target_x and w.y == target_y)
+  check("frame 50 after starting uses the exact saved click position", w.x == target_x and w.y == target_y)
   local cuts = M.digs or {}
   check("arrival cuts three overlapping holes at and above the destination",
     #cuts == 3 and cuts[1].x == target_x and cuts[1].y == target_y
@@ -1847,7 +1849,7 @@ do
   for _, r in ipairs(replaced) do if r.weapon == "teleport" then spec = r end end
   w = worm(16)
   spec.on_click({ worm = w, x = 50 * P, y = 2 * P })
-  for _ = 1, 50 do M.message(w, wa.msg.FRAME_FINISH) end
+  for _ = 1, 51 do M.message(w, wa.msg.FRAME_FINISH) end
   check("cavern clicks stay at least 19 pixels below the ceiling", w.y == 19 * P)
 
   new_match()

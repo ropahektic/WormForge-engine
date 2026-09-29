@@ -3785,8 +3785,9 @@ end)
 wa.on.death(on_death)
 
 -- --------------------------------------------------------------- Super Tele
--- PX's FireFinal begins WA's teleport pose, and its M_FRAME moves the worm
--- 50 frames later. Keep the click from WA's fire context: the live pointer
+-- PX's FireFinal arms the teleport, the next M_FRAME starts its pose and
+-- sound, and M_FRAME moves the worm 50 frames after that. Keep the click
+-- from WA's fire context: the live pointer
 -- may have moved by the time the worm arrives. Mask 4 is approximated by
 -- three overlapping round cuts, centred where PX places them.
 fires.teleports = {} -- worm id -> frozen target and elapsed frames
@@ -3796,9 +3797,7 @@ fires.super_tele_click = function(ev)
   if worm.hp <= 0 then return end
   local y = ev.y
   if wa.world.cavern() and y < 19 * 0x10000 then y = 19 * 0x10000 end
-  fires.teleports[worm.id] = { x = ev.x, y = y, frames = 0 }
-  worm:set_state("teleporting")
-  wa.sound.play(worm, 67) -- PX's teleport start
+  fires.teleports[worm.id] = { x = ev.x, y = y, frames = 0, pending = true }
 end
 
 wa.on.worm_message(function(worm, msg)
@@ -3806,6 +3805,14 @@ wa.on.worm_message(function(worm, msg)
   local tele = fires.teleports[worm.id]
   if not tele then return end
   if worm.hp <= 0 then fires.teleports[worm.id] = nil; return end
+  if tele.pending then
+    tele.pending = false
+    -- WA's teleport setup clears its activity flag. Do this after the
+    -- Lua-handled FireWeapon return restores that flag, as PX's M_FRAME does.
+    worm:set_state("teleporting")
+    wa.sound.play(worm, 67) -- PX's teleport start
+    return
+  end
   tele.frames = tele.frames + 1
   if tele.frames < 50 then return end
   fires.teleports[worm.id] = nil
