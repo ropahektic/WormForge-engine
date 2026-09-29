@@ -6,7 +6,7 @@
 //!   trailer:
 //!     u16 section count, u16 reserved (0)
 //!     count x ( tag[4], u32 offset, u32 len )   offsets from trailer start
-//!     section bodies: hdr, pack, wf, chk
+//!     section bodies: hdr, pack, wf, chk (v3 chk adds separate RNG words)
 //!   footer, 32 bytes:
 //!     "WFTR", u16 format, u16 flags, u64 trailer_len, u32 crc32(trailer),
 //!     u32 wa_len, 8 reserved bytes (0)
@@ -35,10 +35,11 @@ use crate::error::{Error, Offset};
 
 /// Footer magic: the first four of the file's last 32 bytes.
 pub const MAGIC: [u8; 4] = *b"WFTR";
-/// Bump whenever any on-disk shape changes -- readers refuse other values
-/// with [`Error::FormatVersion`] rather than guessing (gap D6). 1 was the
-/// separate `.WF_WAgame` container, which is no longer read.
-pub const FORMAT_VERSION: u16 = 2;
+/// Bump whenever any on-disk shape changes. Version 2 used one combined RNG
+/// hash; version 3 also records the gameplay, visual and network RNG words.
+/// Version 1 was the separate `.WF_WAgame` container, which is no longer read.
+pub const FORMAT_VERSION: u16 = 3;
+pub const LEGACY_FORMAT_VERSION: u16 = 2;
 /// The fixed footer at the very end of the file.
 pub const FOOTER_LEN: usize = 32;
 
@@ -100,9 +101,13 @@ pub struct InputSample {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Checkpoint {
     pub frame: i64,
+    /// Version 2's combined hash. Retained for diagnostics; it includes
+    /// client-local FX and network RNG, so it cannot prove replay divergence.
     pub rng: u32,
     pub worms: u32,
     pub actors: u32,
+    /// Version 3 records the three words separately. None for version 2.
+    pub rng_words: Option<[u32; 3]>,
 }
 
 /// Length-prefixed string, 32-bit little-endian byte length -- shared with
@@ -234,15 +239,25 @@ pub fn encode_checkpoints(cps: &[Checkpoint]) -> Result<Vec<u8>, Error> {
         put_uvar(&mut out, c.rng as u64);
         put_uvar(&mut out, c.worms as u64);
         put_uvar(&mut out, c.actors as u64);
+        let words = c.rng_words.ok_or_else(|| Error::Malformed {
+            what: WHAT_CHK,
+            detail: "version 3 checkpoint has no RNG words".into(),
+        })?;
+        for word in words {
+            put_uvar(&mut out, word as u64);
+        }
         check_cap(&out)?;
         prev = Some(c.frame);
     }
     Ok(out)
 }
 
-/// The three hashes are u32 on the wire as everywhere else, so a wider
-/// varint means the file is not what it claims to be.
-pub fn decode_checkpoints(bytes: &[u8]) -> Result<Vec<Checkpoint>, Error> {
+/// Every stored hash and RNG word is u32 on the wire, so a wider varint is
+/// malformed rather than silently truncated.
+pub fn decode_checkpoints(bytes: &[u8], format: u16) -> Result<Vec<Checkpoint>, Error> {
+    if format != LEGACY_FORMAT_VERSION && format != FORMAT_VERSION {
+        return Err(Error::FormatVersion { found: format, supported: FORMAT_VERSION });
+    }
     check_cap(bytes)?;
     let mut r = Body::new(bytes, WHAT_CHK);
     let mut out = Vec::new();
@@ -257,12 +272,17 @@ pub fn decode_checkpoints(bytes: &[u8]) -> Result<Vec<Checkpoint>, Error> {
                 });
             }
         }
-        out.push(Checkpoint {
+        let mut checkpoint = Checkpoint {
             frame,
             rng: r.u32_var()?,
             worms: r.u32_var()?,
             actors: r.u32_var()?,
-        });
+            rng_words: None,
+        };
+        if format == FORMAT_VERSION {
+            checkpoint.rng_words = Some([r.u32_var()?, r.u32_var()?, r.u32_var()?]);
+        }
+        out.push(checkpoint);
         prev = Some(frame);
     }
     Ok(out)
@@ -283,6 +303,7 @@ struct Section {
 /// later accessors are only slice lookups.
 pub struct Trailer<'a> {
     file: &'a [u8],
+    format: u16,
     wa_len: usize,
     trailer: &'a [u8],
     sections: Vec<Section>,
@@ -300,7 +321,7 @@ impl<'a> Trailer<'a> {
             return Ok(None);
         }
         let format = u16::from_le_bytes([footer[4], footer[5]]);
-        if format != FORMAT_VERSION {
+        if format != LEGACY_FORMAT_VERSION && format != FORMAT_VERSION {
             return Err(Error::FormatVersion {
                 found: format,
                 supported: FORMAT_VERSION,
@@ -329,6 +350,7 @@ impl<'a> Trailer<'a> {
         let (sections, header) = parse_directory(trailer)?;
         Ok(Some(Self {
             file,
+            format,
             wa_len,
             trailer,
             sections,
@@ -344,6 +366,10 @@ impl<'a> Trailer<'a> {
 
     pub fn header(&self) -> &Header {
         &self.header
+    }
+
+    pub fn format_version(&self) -> u16 {
+        self.format
     }
 
     pub fn require_wa_version(&self, supported: &str) -> Result<(), Error> {
@@ -452,6 +478,21 @@ pub fn append_trailer(
     wf: &[u8],
     checkpoints: &[u8],
 ) -> Result<Vec<u8>, Error> {
+    append_trailer_with_format(wa, header, packs, wf, checkpoints, FORMAT_VERSION)
+}
+
+/// Used to finalise a pending version 2 recording after this build upgrades.
+pub fn append_trailer_with_format(
+    wa: &[u8],
+    header: &Header,
+    packs: &[u8],
+    wf: &[u8],
+    checkpoints: &[u8],
+    format: u16,
+) -> Result<Vec<u8>, Error> {
+    if format != LEGACY_FORMAT_VERSION && format != FORMAT_VERSION {
+        return Err(Error::FormatVersion { found: format, supported: FORMAT_VERSION });
+    }
     check_cap(wf)?;
     check_cap(checkpoints)?;
     let wa_len = u32::try_from(wa.len()).map_err(|_| Error::ContainerTooLarge {
@@ -492,7 +533,7 @@ pub fn append_trailer(
     }
     let crc = crc32(&out[wa.len()..]);
     out.extend_from_slice(&MAGIC);
-    out.extend_from_slice(&FORMAT_VERSION.to_le_bytes());
+    out.extend_from_slice(&format.to_le_bytes());
     out.extend_from_slice(&0u16.to_le_bytes()); // flags
     out.extend_from_slice(&total.to_le_bytes());
     out.extend_from_slice(&crc.to_le_bytes());
@@ -671,6 +712,36 @@ mod tests {
                 supported: FORMAT_VERSION
             })
         ));
+    }
+
+    #[test]
+    fn version_two_checkpoint_keeps_its_combined_rng() {
+        let mut chk = Vec::new();
+        put_svar(&mut chk, 100);
+        put_uvar(&mut chk, 0x5e7f_422f);
+        put_uvar(&mut chk, 0xa326_e371);
+        put_uvar(&mut chk, 0x811c_9dc5);
+        let file = append_trailer_with_format(
+            WA,
+            &Header::default(),
+            b"packs",
+            b"",
+            &chk,
+            LEGACY_FORMAT_VERSION,
+        )
+        .unwrap();
+        let trailer = Trailer::find(&file).unwrap().unwrap();
+        assert_eq!(trailer.format_version(), LEGACY_FORMAT_VERSION);
+        assert_eq!(
+            decode_checkpoints(trailer.chk(), trailer.format_version()).unwrap(),
+            vec![Checkpoint {
+                frame: 100,
+                rng: 0x5e7f_422f,
+                worms: 0xa326_e371,
+                actors: 0x811c_9dc5,
+                rng_words: None,
+            }]
+        );
     }
 
     #[test]

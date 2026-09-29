@@ -61,6 +61,10 @@ pub fn on_gfx_ready(display: *mut u8) {
     crate::queue_census::finish();
     crate::sync::finish();
     crate::replay::finish_recording();
+    if let Err(e) = crate::replay::recover_playback_at_mod_load() {
+        log_error(&format!("WormForge replay refused at InitGraphic: {e}"));
+        return;
+    }
     world::clear_input_latch();
     crate::gpu::clear();
     crate::truecolor::clear();

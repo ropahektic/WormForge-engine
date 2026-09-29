@@ -1023,7 +1023,7 @@ pub(crate) fn install() -> Result<(), String> {
     Ok(())
 }
 
-unsafe fn rng_words(world: *mut u8) -> (u32, u32, u32) {
+pub(crate) unsafe fn rng_words(world: *mut u8) -> (u32, u32, u32) {
     (
         read_i32(world, GAME_WORLD_GAME_RNG) as u32,
         read_i32(world, GAME_WORLD_RNG_STATE_1) as u32,
