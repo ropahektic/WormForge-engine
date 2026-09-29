@@ -724,6 +724,15 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
 /// Stock SpecialImpact (0x4B) through the hurt wrap. Knockback is undone so
 /// pending HP still queues; a standing worm commits the floating number now,
 /// a moving one waits until stock ends its momentum.
+///
+/// Only a worm standing idle, or holding one of the turn's controlled
+/// states, gets its state back. Any other stays in the Hurt state (0x80)
+/// WA's hit set it in, and WA flies it on at its own speed, lands it and
+/// commits its damage. Writing a physics state back skips SetState's setup
+/// and leaves WA's landing steps stuck: a falling worm (0x7E) was parked in
+/// 0x7A with no speed, in mid-air, and a landing one (0x7F) in 0x76, for
+/// good, so the turn never ended (seen under the Highlander's Laser Gun,
+/// which cuts the ground from under the worms it burns).
 pub fn hit_worm(target: u32, from: u32, amount: i32) {
     if target == 0 || amount <= 0 {
         return;
@@ -753,13 +762,21 @@ pub fn hit_worm(target: u32, from: u32, amount: i32) {
         write_i32(this, ENT_SPEED_X, vx);
         write_i32(this, ENT_SPEED_Y, vy);
         let hp = crate::world::worm_hp(target);
-        if hp > 0 {
+        if hp > 0 && !airborne && restores_after_hit(state) {
             write_i32(this, WORM_STATE, state);
         }
         if !airborne && hp < hp0 {
             worm_hook(this, from, MSG_COMMIT_HEALTH, 0, std::ptr::null_mut());
         }
     }
+}
+
+/// The states a hit worm may be put back in (see `hit_worm`): standing idle
+/// (0x65), and the turn worm's own (0x66-0x6B active and firing, charging,
+/// weapon selected, aiming). Physics and landing states are WA's.
+fn restores_after_hit(state: i32) -> bool {
+    use game::offsets::{WORM_STATE_AIMING, WORM_STATE_CHARGING};
+    matches!(state as u32, 0x65..=0x6B | WORM_STATE_CHARGING | 0x77 | WORM_STATE_AIMING)
 }
 
 fn apply_carry(this: *mut u8) {
