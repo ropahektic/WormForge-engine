@@ -607,7 +607,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 53);
+        assert_eq!(applied.len(), 54);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
