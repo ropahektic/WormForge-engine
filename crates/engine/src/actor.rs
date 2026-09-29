@@ -452,8 +452,8 @@ fn build_vtable() {
 
 unsafe extern "system" fn strike_fire_hook(worm: *mut u8, fire_params: *mut u8, ctx: *mut u8) {
     // Spawn-style drop claims still eat here (caller sets ENT_ACTIVE afterward).
-    // Click-only claims are eaten in fire_weapon_dispatch_hook so ENT_ACTIVE
-    // is never set (that bit starts the stock "launch attack" anim).
+    // Click-only claims are eaten in fire_weapon_dispatch_hook. FireWeapon
+    // clears ENT_ACTIVE on entry, so that hook restores it before returning.
     let slot = if worm.is_null() {
         usize::MAX
     } else {
@@ -486,7 +486,7 @@ unsafe extern "system" fn strike_fire_hook(worm: *mut u8, fire_params: *mut u8, 
 }
 
 /// EAX=weapon entry, ECX=ctx, `[esp+4]`=worm, `RET 4`.
-/// Click-only cursor packs: run Lua and return without setting `ENT_ACTIVE`.
+/// Click-only cursor packs: run Lua and return without stock StrikeFire.
 #[unsafe(naked)]
 unsafe extern "C" fn fire_weapon_dispatch_hook() {
     core::arch::naked_asm!(
@@ -569,7 +569,7 @@ unsafe extern "C" fn fire_weapon_click_only_eat(
     if eat_fire {
         crate::log::log_line(&format!("FireWeapon EAT(eat_fire) slot={slot}"));
         unsafe {
-            write_i32(worm, ENT_ACTIVE, 0);
+            write_i32(worm, ENT_ACTIVE, 1);
         }
         return 1;
     }
@@ -586,6 +586,9 @@ unsafe extern "C" fn fire_weapon_click_only_eat(
             if let Err(e) = lua_host::weapon_fire(fire.fire_id, worm as u32, slot as i32, x, y, 0, 0) {
                 log_error(&format!("on_fire: {e}"));
             }
+            // Stock FireWeapon restores this after dispatch. We return before
+            // that instruction, so do the same for a Lua-handled shot.
+            unsafe { write_i32(worm, ENT_ACTIVE, 1) };
             return 1;
         }
     }
@@ -604,7 +607,7 @@ unsafe extern "C" fn fire_weapon_click_only_eat(
     }));
     crate::world::reset_strike_cursors();
     unsafe {
-        write_i32(worm, ENT_ACTIVE, 0);
+        write_i32(worm, ENT_ACTIVE, 1);
     }
     1
 }
@@ -843,9 +846,22 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     write_i32(this, ENT_SPEED_X, body.vx);
     write_i32(this, ENT_SPEED_Y, body.vy);
     if read_i32(this, ENT_HELPER) == 0 {
-        let helper = read_i32(owner, ENT_HELPER);
+        // The actor sits in the missile collision layer, where WA tests every
+        // moving missile against each entity's +0xDC (0x4FBD4B); a null one
+        // crashes it. An owner without one (an exploding missile, say) lends
+        // none, so take a live worm's: they all share the same.
+        let mut helper = read_i32(owner, ENT_HELPER);
+        if helper == 0 {
+            helper = list_worms_pub(0)
+                .into_iter()
+                .map(|w| read_i32(w as *mut u8, ENT_HELPER))
+                .find(|&h| h != 0)
+                .unwrap_or(0);
+        }
         if helper != 0 {
             write_i32(this, ENT_HELPER, helper);
+        } else {
+            log_error("LuaActor spawned without a collision helper: no worm lends one");
         }
     }
     write_i32(this, ACTOR_MAGIC, LUA_ACTOR_MAGIC as i32);

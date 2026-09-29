@@ -291,6 +291,9 @@ pub fn patch_offset_for_name(name: &str, strike: bool) -> Result<usize, String> 
 }
 
 /// Stock slots whose table entry is fire type 3 (strike plane + munition slab).
+/// The MB Bomb and the Donkey are strikes too: a patch that left their slab
+/// fields unshifted wrote `damage` over the bombs' collision class (+0x50),
+/// and WA crashed releasing the first one.
 pub fn stock_is_strike(slot: crate::stock::StockWeapon) -> bool {
     use crate::stock::StockWeapon::*;
     matches!(
@@ -300,8 +303,10 @@ pub fn stock_is_strike(slot: crate::stock::StockWeapon) -> bool {
             | MailStrike
             | MineStrike
             | MoleSquadron
+            | MbBomb
             | SheepStrike
             | CarpetBomb
+            | Donkey
     )
 }
 
@@ -440,6 +445,19 @@ mod tests {
     }
 
     #[test]
+    fn every_stock_fire_type_3_slot_is_a_strike() {
+        // WA 3.8.1's table: nine slots are fire type 3.
+        use crate::stock::StockWeapon::*;
+        for slot in [
+            AirStrike, NapalmStrike, MailStrike, MineStrike, MoleSquadron, MbBomb, SheepStrike,
+            CarpetBomb, Donkey,
+        ] {
+            assert!(stock_is_strike(slot), "{slot:?}");
+        }
+        assert!(!stock_is_strike(Bazooka));
+    }
+
+    #[test]
     fn other_files_are_refused() {
         assert!(parse_wep("x.wep", b"WEPFILE\0").unwrap_err().contains("not a Project X"));
         let mut bytes = std::fs::read(concat!(
@@ -452,12 +470,13 @@ mod tests {
     }
 
     #[test]
-    fn highlander_scripted_records_are_scheme_weapons() {
+    fn highlander_full_scheme_records_are_valid() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../mods/examples/highlander/weps");
         for (slot, name, fire_type) in [
             ("earthquake", "Electric Grenade", 1),
             ("napalm_strike", "Lightning Strike", 3),
+            ("teleport", "Super Tele", 3),
             ("prod", "Javelin", 1),
         ] {
             let path = root.join(format!("{slot}.wep"));

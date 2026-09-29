@@ -91,6 +91,13 @@ local PORTED = {
 -- tools/px_split_strip.py. Where PX draws the worm's hold at run time with
 -- its sprite builder (p_sprite_builder), so does the pack (PX_HOLDS below).
 local PX_ART = {
+  { -- Super Tele: the PX record is a type-3 cursor weapon on teleport's slot.
+    weapon = "teleport",
+    wep = "weps/teleport.wep",
+    panel_icon = "sprites/super_tele/icon.png",
+    on_select = { cursor = true },
+    on_click = function(ev) fires.super_tele_click(ev) end,
+  },
   { -- Javelin: stock flight, direct thrust or a permanent terrain stamp.
     weapon = "prod", wep = "weps/prod.wep",
     panel_icon = "sprites/javelin/icon.png",
@@ -150,7 +157,12 @@ local PX_ART = {
     params = { gpu_prefix = "sprites/" },
     -- Click-only dispatch keeps the strike's cursor and turn handling.
     on_select = { cursor = true },
-    on_click = function(ev) lightning_click(ev) end,
+    on_click = function(ev)
+      lightning_click(ev)
+      -- WA's click-only FireWeapon has no stock finish: PreFiring would keep
+      -- the worm in its handoff pose and prevent the next jump.
+      if ev.worm.state == "prefiring" then ev.worm:set_state("standing") end
+    end,
   },
   { -- Double Bazooka: a second shell carries on from where the first
     -- explodes (its section below). Held as a plain bazooka: the pack's
@@ -583,10 +595,15 @@ local WEP_PATCH = {
     k_count = 4,
     k_spacing = 30,
     collision_radius = 4331582,
+    bias = 0,
     damage = 100,
+    sprite = 52,
     flight_flags = 466,
+    trail = 20,
     gravity_pct = 260,
+    friction_pct = 70,
     fuse = 10000,
+    alt_sprite = 75,
     detonation = 1,
     cluster_count = 5,
     cluster_speed = 30,
@@ -599,6 +616,7 @@ local WEP_PATCH = {
     c_sprite_count = 1,
     c_impact = 2,
     c_flags = 260,
+    c_trail = 15,
     c_gravity_pct = 160,
     c_wind_pct = 50,
     c_bounce_pct = 100,
@@ -606,7 +624,9 @@ local WEP_PATCH = {
     c_fuse = 10000,
     c_missile_type = 2,
     c_render_size = 4194368,
+    c_burn_sprite = 50,
     c_homing_strength = 50,
+    c_homing_sprite = 113,
   },
   aqua_sheep = {
     requires_aiming = 0,
@@ -617,6 +637,7 @@ local WEP_PATCH = {
     fuse_default = 8000,
     fuse = 8000,
     render_size = 137342,
+    burn_sprite = 0,
   },
   banana_bomb = {
     requires_aiming = 0,
@@ -627,12 +648,16 @@ local WEP_PATCH = {
     blast = 50,
     impact = 5,
     flight_flags = 0,
+    trail = 100,
     gravity_pct = 145,
     friction_pct = 116,
     fuse_default = 0,
+    alt_sprite = 126,
     missile_type = 0,
     render_size = 4325376,
+    burn_sprite = 7,
     homing_strength = 99,
+    homing_sprite = 126,
     homing_arm = 50,
     cluster_speed = 37,
     cluster_power = 35,
@@ -646,7 +671,9 @@ local WEP_PATCH = {
     c_wind_pct = 0,
     c_friction_pct = 116,
     c_fuse = 0,
+    c_burn_sprite = 7,
     c_homing_strength = 99,
+    c_homing_sprite = 126,
     c_homing_arm = 15,
     power_pct = 50,
     weight2 = 0,
@@ -665,6 +692,7 @@ local WEP_PATCH = {
     blast = 40,
     impact = 1,
     flight_flags = 251,
+    trail = 40,
     gravity_pct = 150,
     wind_pct = 50,
     bounce_pct = 100,
@@ -672,7 +700,9 @@ local WEP_PATCH = {
     fuse = 9000,
     missile_type = 2,
     render_size = 4373598,
+    burn_sprite = 60,
     homing_strength = 50,
+    homing_sprite = 30,
     homing_turn = 8,
     detonation = 1,
     cluster_count = 6,
@@ -685,6 +715,7 @@ local WEP_PATCH = {
     c_sprite_count = 1,
     c_impact = 5,
     c_flags = 252,
+    c_trail = 40,
     c_gravity_pct = 120,
     c_bounce_pct = 100,
     c_friction_pct = 100,
@@ -692,12 +723,15 @@ local WEP_PATCH = {
     c_missile_type = 2,
     c_render_size = 4200512,
     c_homing_strength = 100,
+    c_homing_sprite = 113,
     weight2 = 70,
   },
   bazooka = {
     requires_aiming = 0,
     uses_turn = 0,
     blast = 20,
+    trail = 20,
+    burn_sprite = 0,
   },
   blow_torch = {
     uses_turn = 0,
@@ -712,14 +746,20 @@ local WEP_PATCH = {
     retreat = 3000,
     k_count = 3,
     k_spacing = 30,
+    bias = 10,
     blast = 40,
     impact = 1,
     flight_flags = 251,
+    trail = 35,
     gravity_pct = 150,
+    friction_pct = 120,
     render_size = 4439166,
+    burn_sprite = 60,
     homing_strength = 50,
+    homing_sprite = 30,
     homing_accel = 0,
     homing_kind = 0,
+    homing_arm = 0,
     detonation = 1,
     cluster_count = 6,
     cluster_speed = 40,
@@ -731,6 +771,7 @@ local WEP_PATCH = {
     c_sprite_count = 1,
     c_impact = 5,
     c_flags = 252,
+    c_trail = 40,
     c_gravity_pct = 120,
     c_bounce_pct = 100,
     c_friction_pct = 100,
@@ -761,15 +802,19 @@ local WEP_PATCH = {
     m_proximity = 2,
     m_fuse = 5,
     m_damage = 100,
+    sprite = 173,
     impact = 6,
     flight_flags = 131,
     gravity_pct = 100,
     wind_pct = 50,
     bounce_pct = 100,
     friction_pct = 100,
+    alt_sprite = 65578,
     missile_type = 3,
     render_size = 4331646,
+    burn_sprite = 4331646,
     homing_strength = 100,
+    homing_sprite = 4,
     homing_kind = 15,
     homing_arm = 120,
     homing_time = 43,
@@ -789,7 +834,9 @@ local WEP_PATCH = {
     c_fuse = 10000,
     c_missile_type = 3,
     c_render_size = 4331646,
+    c_burn_sprite = 4331646,
     c_homing_strength = 100,
+    c_homing_sprite = 4,
     c_homing_kind = 15,
     c_homing_arm = 120,
     c_homing_time = 43,
@@ -805,6 +852,7 @@ local WEP_PATCH = {
     m_proximity = 2,
     m_fuse = 5,
     m_damage = 100,
+    sprite = 166,
     impact = 6,
     flight_flags = 131,
     gravity_pct = 100,
@@ -813,10 +861,13 @@ local WEP_PATCH = {
     friction_pct = 100,
     fuse_default = 5000,
     fuse = 5000,
+    alt_sprite = 65575,
     space_control = 1,
     missile_type = 3,
     render_size = 4331646,
+    burn_sprite = 4331646,
     homing_strength = 50,
+    homing_sprite = 8,
     homing_kind = 15,
     homing_arm = 75,
     homing_time = 40,
@@ -829,6 +880,7 @@ local WEP_PATCH = {
     c_sprite = 152,
     c_impact = 6,
     c_flags = 80,
+    c_trail = 50,
     c_gravity_pct = 50,
     c_wind_pct = 50,
     c_bounce_pct = 100,
@@ -838,7 +890,9 @@ local WEP_PATCH = {
     c_space_control = 1,
     c_missile_type = 4,
     c_render_size = 50,
+    c_burn_sprite = 50,
     c_homing_strength = 65574,
+    c_homing_sprite = 158,
     c_homing_turn = 159,
     c_homing_accel = 160,
     c_homing_speed = 160,
@@ -873,9 +927,12 @@ local WEP_PATCH = {
     bias = 0,
     damage = 0,
     blast = 0,
+    sprite = 0,
     fuse_default = 0,
     fuse = 2000000,
+    glow_sprite = 39,
     missile_type = 0,
+    burn_sprite = 152,
     homing_strength = 6,
     homing_kind = 2,
     homing_arm = 1,
@@ -888,12 +945,14 @@ local WEP_PATCH = {
     c_sprite_count = 1,
     c_impact = 1,
     c_flags = 80,
+    c_trail = 50,
     c_gravity_pct = 50,
     c_wind_pct = 50,
     c_friction_pct = 100,
     c_fuse_default = 4000,
     c_fuse = 4000,
     c_missile_type = 4,
+    c_homing_sprite = 467,
     c_homing_turn = 467,
     c_homing_accel = 467,
     c_homing_speed = 467,
@@ -908,6 +967,7 @@ local WEP_PATCH = {
     h_delay = 0,
     h_range = 4398206,
     h_damage = 18,
+    sprite = 50,
     h_kind = 7,
     weight2 = 20,
   },
@@ -917,6 +977,9 @@ local WEP_PATCH = {
     damage = 70,
     blast = 80,
     flight_flags = 8,
+    trail = 20,
+    glow_sprite = 154,
+    homing_sprite = 161,
     detonation = 2,
     cluster_count = 150,
     cluster_speed = 70,
@@ -932,7 +995,9 @@ local WEP_PATCH = {
     fuse = 9000,
     missile_type = 2,
     render_size = 4194304,
+    burn_sprite = 1,
     homing_strength = 0,
+    homing_sprite = 0,
     homing_turn = 8,
     homing_accel = 0,
     homing_speed = 0,
@@ -955,9 +1020,12 @@ local WEP_PATCH = {
     gravity_pct = 0,
     wind_pct = 0,
     fuse = 9000,
+    alt_sprite = 157,
     missile_type = 0,
     render_size = 4194304,
+    burn_sprite = 1,
     homing_strength = 0,
+    homing_sprite = 0,
     homing_turn = 8,
     homing_accel = 0,
     homing_speed = 0,
@@ -972,13 +1040,16 @@ local WEP_PATCH = {
     c_sprite_count = 1,
     c_impact = 1,
     c_flags = 249,
+    c_trail = 28,
     c_gravity_pct = 125,
     c_bounce_pct = 99,
     c_friction_pct = 100,
     c_fuse = 7000,
     c_missile_type = 2,
     c_render_size = 4398206,
+    c_burn_sprite = 60,
     c_homing_strength = 60,
+    c_homing_sprite = 56,
   },
   invisibility = {
     requires_aiming = 0,
@@ -1006,14 +1077,18 @@ local WEP_PATCH = {
     blast = 28,
     impact = 2,
     flight_flags = 453,
+    trail = 40,
     gravity_pct = 180,
     wind_pct = 50,
     bounce_pct = 100,
     friction_pct = 110,
     fuse = 10000,
+    alt_sprite = 122,
     missile_type = 2,
     render_size = 1077936192,
+    burn_sprite = 80,
     homing_strength = 80,
+    homing_sprite = 83,
   },
   low_gravity = {
     retreat = -1,
@@ -1035,12 +1110,16 @@ local WEP_PATCH = {
     collision_radius = 0,
     damage = 0,
     blast = 20,
+    sprite = 53,
     flight_flags = 131,
     fuse_default = 5000,
     fuse = 0,
+    alt_sprite = 0,
     missile_type = 2,
     render_size = 4331614,
+    burn_sprite = 0,
     homing_strength = 100,
+    homing_sprite = 113,
     homing_turn = 8,
     homing_accel = 0,
     homing_speed = 0,
@@ -1059,6 +1138,7 @@ local WEP_PATCH = {
     c_sprite = 54,
     c_impact = 1,
     c_flags = 131,
+    c_trail = 20,
     c_gravity_pct = 100,
     c_wind_pct = 50,
     c_bounce_pct = 100,
@@ -1067,6 +1147,7 @@ local WEP_PATCH = {
     c_missile_type = 2,
     c_render_size = 4331614,
     c_homing_strength = 100,
+    c_homing_sprite = 113,
     c_homing_turn = 8,
     power_pct = 25,
     weight2 = 70,
@@ -1079,17 +1160,27 @@ local WEP_PATCH = {
     k_spacing = 45,
     h_delay = 1200,
     collision_radius = 4331646,
+    bias = 25,
     blast = 55,
+    sprite = 175,
     impact = 3,
     flight_flags = 0,
+    trail = 50,
     bounce_pct = 95,
+    bounce_extra = 0,
+    friction_pct = 25,
     fuse = 12000,
+    alt_sprite = 65587,
     missile_type = 1,
+    burn_sprite = 175,
     homing_strength = 1,
+    homing_sprite = 134,
     homing_turn = 25,
     homing_accel = 40,
     homing_speed = 50,
     homing_kind = 1,
+    homing_arm = 2400,
+    homing_time = 1000,
     detonation = 1,
     cluster_count = 18,
     cluster_speed = 15,
@@ -1105,6 +1196,7 @@ local WEP_PATCH = {
     c_fuse = 10000,
     c_missile_type = 2,
     c_render_size = 137282,
+    c_burn_sprite = 20,
     c_homing_strength = 20,
     c_homing_turn = 8,
     power_pct = 50,
@@ -1120,15 +1212,21 @@ local WEP_PATCH = {
     collision_radius = 0,
     damage = 80,
     blast = 70,
+    sprite = 51,
     impact = 1,
     flight_flags = 131,
+    trail = 0,
     gravity_pct = 100,
     wind_pct = 50,
     bounce_pct = 100,
+    bounce_extra = 0,
     fuse_default = 3000,
     fuse = 10000,
+    space_control = 1,
     render_size = 4398718,
+    burn_sprite = 60,
     homing_strength = 100,
+    homing_sprite = 111,
     detonation = 1,
     cluster_count = 5,
     cluster_speed = 45,
@@ -1148,7 +1246,9 @@ local WEP_PATCH = {
     c_fuse = 9000,
     c_missile_type = 2,
     c_render_size = 204414,
+    c_burn_sprite = 60,
     c_homing_strength = 100,
+    c_homing_sprite = 111,
     c_homing_turn = 8,
     power_pct = 50,
   },
@@ -1169,8 +1269,11 @@ local WEP_PATCH = {
     bounce_pct = 100,
     friction_pct = 100,
     fuse = 3000,
+    alt_sprite = 65602,
     missile_type = 2,
     render_size = 4331614,
+    burn_sprite = 30,
+    homing_sprite = 113,
     homing_turn = 8,
     cluster_count = 5,
     cluster_speed = 33,
@@ -1189,6 +1292,7 @@ local WEP_PATCH = {
     c_friction_pct = 100,
     c_fuse = 7770,
     c_missile_type = 2,
+    c_burn_sprite = 1,
     c_homing_turn = 8,
     weight2 = 100,
   },
@@ -1218,15 +1322,19 @@ local WEP_PATCH = {
     collision_radius = 137340,
     damage = 110,
     blast = 40,
+    sprite = 245,
     impact = 2,
     flight_flags = 0,
     gravity_pct = 0,
     friction_pct = 85,
     fuse = 20000,
+    alt_sprite = 0,
     space_control = 0,
     missile_type = 4,
     render_size = 50,
+    burn_sprite = 50,
     homing_strength = 65574,
+    homing_sprite = 245,
     homing_turn = 246,
     homing_accel = 247,
     homing_speed = 248,
@@ -1240,11 +1348,15 @@ local WEP_PATCH = {
     h_delay = 110,
     collision_radius = 135228,
     blast = 37,
+    sprite = 245,
     impact = 2,
     flight_flags = 0,
+    trail = 0,
     gravity_pct = 0,
+    friction_pct = 90,
     fuse_default = 3000,
     fuse = 5000,
+    homing_sprite = 245,
     homing_turn = 246,
     homing_accel = 247,
     homing_speed = 248,
@@ -1256,6 +1368,7 @@ local WEP_PATCH = {
     spread = 0,
     collision_radius = 170110,
     flight_flags = 250,
+    trail = 40,
     gravity_pct = 120,
     friction_pct = 125,
     cluster_count = 7,
@@ -1266,10 +1379,12 @@ local WEP_PATCH = {
     c_blast = 25,
     c_impact = 1,
     c_flags = 0,
+    c_trail = 2,
     c_gravity_pct = 600,
     c_wind_pct = 0,
     c_missile_type = 1,
     c_homing_strength = 1,
+    c_homing_sprite = 608,
     c_homing_turn = 6,
     c_homing_accel = 500,
     c_homing_kind = 1,
@@ -1288,6 +1403,7 @@ local WEP_PATCH = {
     bias = 10,
     damage = 100,
     blast = 50,
+    sprite = 50,
     impact = 1,
     flight_flags = 131,
     gravity_pct = 100,
@@ -1298,6 +1414,7 @@ local WEP_PATCH = {
     missile_type = 2,
     render_size = 4331614,
     homing_strength = 100,
+    homing_sprite = 113,
     homing_turn = 8,
     weight2 = 70,
   },
@@ -1309,6 +1426,7 @@ local WEP_PATCH = {
     fire_method = 3,
     spread = 50,
     flight_flags = 135,
+    trail = 50,
     fuse = 6000,
     homing_time = 65,
     cluster_count = 20,
@@ -1328,8 +1446,11 @@ local WEP_PATCH = {
     impact = 2,
     friction_pct = 70,
     fuse_default = 0,
+    alt_sprite = 50,
     missile_type = 2,
     render_size = 1078074494,
+    burn_sprite = 98,
+    homing_sprite = 111,
     detonation = 1,
     cluster_count = 48,
     cluster_speed = 1,
@@ -1337,6 +1458,7 @@ local WEP_PATCH = {
     cluster_spread = 45,
     c_sprite_count = 1,
     c_flags = 249,
+    c_trail = 1,
     c_gravity_pct = 20,
     c_wind_pct = 50,
     c_bounce_pct = 65,
@@ -1344,6 +1466,7 @@ local WEP_PATCH = {
     c_fuse = 2000,
     c_missile_type = 2,
     c_render_size = 2,
+    c_burn_sprite = 10,
     c_homing_strength = 10,
   },
   sheep_launcher = {
@@ -1354,12 +1477,15 @@ local WEP_PATCH = {
     collision_radius = 0,
     damage = 100,
     blast = 50,
+    sprite = 64,
     impact = 1,
+    trail = 20,
     gravity_pct = 50,
     wind_pct = 0,
     fuse = 9000,
     space_control = 0,
     render_size = 4194430,
+    burn_sprite = 50,
     homing_strength = 30,
     homing_accel = 50,
     homing_kind = 100,
@@ -1375,6 +1501,7 @@ local WEP_PATCH = {
     h_delay = 10,
     bias = 10,
     h_range = 4365438,
+    sprite = 75,
   },
   skunk = {
     requires_aiming = 0,
@@ -1385,13 +1512,17 @@ local WEP_PATCH = {
     m_damage = 110,
     m_blast = 43,
     flight_flags = 80,
+    trail = 10,
     gravity_pct = 30,
     bounce_pct = 101,
     friction_pct = 90,
     fuse_default = 0,
     fuse = 15000,
+    alt_sprite = 88,
     render_size = 1078139998,
+    burn_sprite = 0,
     homing_strength = 110,
+    homing_sprite = 20,
     homing_turn = 25,
     homing_accel = 50,
     homing_speed = 88,
@@ -1413,7 +1544,9 @@ local WEP_PATCH = {
     c_space_control = 0,
     c_missile_type = 0,
     c_render_size = 0,
+    c_burn_sprite = 0,
     c_homing_strength = 0,
+    c_homing_sprite = 0,
     c_homing_kind = 0,
     c_homing_arm = 0,
     c_homing_time = 0,
@@ -1438,9 +1571,12 @@ local WEP_PATCH = {
     c_collision_radius = 137342,
     c_bias = 1,
     c_blast = 20,
+    c_trail = 20,
     c_fuse = 2000,
     c_space_control = 0,
     c_render_size = 4331614,
+    c_burn_sprite = 0,
+    c_homing_sprite = 113,
     power_pct = 25,
     weight2 = 70,
   },
@@ -2616,7 +2752,9 @@ local BASKET_DEPTH = 0x10000
 -- team colour shows at full strength.
 local TEAM_RGB = { 0xFF8080, 0x0096FF, 0x00D000, 0xFFFF40, 0xE800E8, 0x50FFFF }
 
-local balloons = {} -- worm id -> { active, gravity, ticks, last_weapon, balloon, basket }
+-- Also records the weapon equipped before WA changes the visible slot while
+-- opening a parachute, for both the balloon and glider handlers.
+local balloons = {} -- worm id -> { active, gravity, ticks, equipped_weapon, balloon, basket }
 
 local function balloon_of(worm)
   local b = balloons[worm.id]
@@ -2647,20 +2785,17 @@ end
 local function balloon_frame(worm)
   local b = balloon_of(worm)
   local state = worm.state
-  -- FireFinal(Hot Air Balloon): WA opens its parachute straight away and
-  -- clears the selection as it does ("none"), so it is the one the worm had
-  -- the frame before.
-  local weapon = worm.weapon
-  if weapon == nil or weapon == "none" then
-    weapon = b.last_weapon
-  end
+  -- WA may change the selected slot to Parachute (or none) as Bungee fires.
+  -- The weapon equipped before that transition identifies the auto trigger;
+  -- an unrelated parachute opening must not become a Hot Air Balloon.
+  local equipped = b.equipped_weapon
   if not b.active and state == "parachuting" and not b.was_parachuting
-      and weapon == "bungee" then
+      and equipped == "bungee" then
     b.active, b.ticks = true, 0
     balloon_sound(worm, "inflate", 3)
   end
   b.was_parachuting = state == "parachuting"
-  b.last_weapon = worm.weapon
+  if state ~= "parachuting" then b.equipped_weapon = worm.weapon end
   if b.active then
     if state == "parachuting" and worm.turn and worm.y < wa.world.water() then
       worm.gravity = b.gravity
@@ -2856,24 +2991,29 @@ local function glider_think(worm, g)
 end
 
 local function glider_frame(worm)
-  -- Only worms that have held the Hang-Glider.
+  local state = worm.state
+  local b = balloons[worm.id]
+  local equipped = b and b.equipped_weapon
+  if b and b.active then
+    local g = gliders[worm.id]
+    if g then g.enabled = false end
+    return
+  end
+  -- A glider may have auto-opened and cleared its selected slot before its
+  -- first frame. The slot equipped before opening is authoritative.
   local g = gliders[worm.id]
   if not g then
-    if worm.weapon ~= "parachute" then
+    if (state == "parachuting" and equipped ~= "parachute")
+        or (state ~= "parachuting" and worm.weapon ~= "parachute") then
       return
     end
     g = glider_of(worm)
   end
-  local state = worm.state
   local P = 0x10000
   if state ~= "parachuting" then
     -- Which parachute the worm opens next: PX checks the weapon only while
     -- the worm is not already under one.
-    if worm.weapon == "parachute" then
-      g.enabled = true
-    elseif worm.weapon == "bungee" then
-      g.enabled = false -- the Hot Air Balloon
-    end
+    g.enabled = worm.weapon == "parachute"
     if g.deployed then
       g.deployed = false
       glider_drop_art(worm, g)
@@ -2902,6 +3042,7 @@ local function glider_frame(worm)
     g.sx, g.sy = worm.vx / P, worm.vy / P
     return
   end
+  g.enabled = equipped == "parachute"
   if not g.enabled then
     return -- a plain parachute, or the balloon
   end
@@ -3797,6 +3938,58 @@ end)
 
 wa.on.death(on_death)
 
+-- --------------------------------------------------------------- Super Tele
+-- PX's FireFinal arms the teleport, the next M_FRAME starts its pose and
+-- sound, and M_FRAME moves the worm 50 frames after that. Keep the click
+-- from WA's fire context: the live pointer
+-- may have moved by the time the worm arrives. Mask 4 is approximated by
+-- three overlapping round cuts, centred where PX places them.
+fires.teleports = {} -- worm id -> frozen target and elapsed frames
+
+fires.super_tele_click = function(ev)
+  local worm = ev.worm
+  if worm.hp <= 0 then return end
+  local y = ev.y
+  if wa.world.cavern() and y < 19 * 0x10000 then y = 19 * 0x10000 end
+  local previous = fires.teleports[worm.id]
+  if previous and previous.marker then previous.marker:despawn() end
+  -- FireWeapon clears WA's planted X for click-only weapons. Keep a fixed
+  -- stock planted-X marker at the saved target until the worm arrives instead.
+  local marker = wa.actors.spawn({
+    owner = worm, x = ev.x, y = y, sprite = "markerr",
+    gravity = false, collide = false, drown = false, loop = true,
+  })
+  fires.teleports[worm.id] = { x = ev.x, y = y, frames = 0, pending = true, marker = marker }
+  wa.sound.play(worm, 68, 0) -- PX's M_SETTARGET confirmation
+end
+
+wa.on.worm_message(function(worm, msg)
+  if msg ~= wa.msg.FRAME_FINISH then return end
+  local tele = fires.teleports[worm.id]
+  if not tele then return end
+  if worm.hp <= 0 then
+    tele.marker:despawn()
+    fires.teleports[worm.id] = nil
+    return
+  end
+  if tele.pending then
+    tele.pending = false
+    -- WA's teleport setup clears its activity flag. Do this after the
+    -- Lua-handled FireWeapon return restores that flag, as PX's M_FRAME does.
+    worm:set_state("teleporting")
+    wa.sound.play(worm, 67, 0) -- PX's teleport start
+    return
+  end
+  tele.frames = tele.frames + 1
+  if tele.frames < 50 then return end
+  tele.marker:despawn()
+  fires.teleports[worm.id] = nil
+  worm.x, worm.y = tele.x, tele.y
+  for _, rise in ipairs({ 0, 10, 22 }) do
+    wa.land.dig({ x = tele.x, y = tele.y - rise * 0x10000, radius = 12 })
+  end
+end)
+
 -- --------------------------------------------------------- electrical weapons
 -- PX's lightningstrike.txt and tazer.txt share these target classes and beam
 -- textures. Only gameplay advances in the actor brains. Drawing below may run
@@ -4119,7 +4312,9 @@ electric_grenade_explode = function(ev)
     burst_x = ev.x, burst_y = ev.y, sound_age = 0 }
   if ev.worm then arc.ignore[target_key(ev.worm)] = true end
   arcs[#arcs + 1] = arc
-  local driver = effect_actor(ev.x, ev.y, ev.worm, function(a)
+  -- An explosion without a worm would leave the driver owned by the exploding
+  -- grenade: the turn's worm owns it then, as every other effect's.
+  local driver = effect_actor(ev.x, ev.y, ev.worm or current_worm(), function(a)
     arc.sound_age = arc.sound_age + 1
     if arc.life > 0 and arc.sound_age % 46 == 0 then
       wa.sound.play(a, "sounds/lightning/tazer_loop.wav")

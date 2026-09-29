@@ -1044,12 +1044,12 @@ impl UserData for WormHandle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        // `worm:set_state("sliding" | "standing")`, through WA's own SetState.
+        // `worm:set_state(...)`, through WA's own SetState.
         // A lockstep write: only from a simulation callback.
         methods.add_method("set_state", |_, this, name: String| {
             let state = settable_worm_state(&name).ok_or_else(|| {
                 mlua::Error::external(format!(
-                    "worm:set_state: {name:?} is not a state a script may enter; valid: sliding, standing"
+                    "worm:set_state: {name:?} is not a state a script may enter; valid: sliding, standing, bungee, sinking, teleporting"
                 ))
             })?;
             if !crate::sim_context::active() {
@@ -1360,15 +1360,16 @@ pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
 }
 
 /// The states `worm:set_state` may enter: the ones a script ends a move
-/// with, and the two Project X's Swim Suit holds a worm in (a bungee's, to
-/// swim; sinking, when the suit gives out). Entering an action state from
-/// outside would skip WA's fire path.
+/// with, the two Project X's Swim Suit holds a worm in, and teleporting for
+/// Super Tele's stock vanishing animation. Other action states would skip
+/// WA's fire path.
 pub(crate) fn settable_worm_state(name: &str) -> Option<u32> {
     match name {
         "standing" => Some(WORM_STATE_STANDING),
         "sliding" => Some(WORM_STATE_AIRBORNE),
         "bungee" => Some(WORM_STATE_BUNGEE),
         "sinking" => Some(WORM_STATE_SINKING),
+        "teleporting" => Some(WORM_STATE_TELEPORTING),
         _ => None,
     }
 }
@@ -1723,6 +1724,7 @@ mod tests {
         // suit gives out; and both read back by name.
         assert_eq!(settable_worm_state("bungee"), Some(0x7C));
         assert_eq!(settable_worm_state("sinking"), Some(0x7F));
+        assert_eq!(settable_worm_state("teleporting"), Some(0x6F));
         assert_eq!((worm_state_name(0x7C), worm_state_name(0x7F)), (Some("bungee"), Some("sinking")));
         assert_eq!(settable_worm_state("standing"), Some(0x65));
         assert_eq!(settable_worm_state("jetpacking"), None);
