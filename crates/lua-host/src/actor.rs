@@ -944,6 +944,16 @@ impl UserData for WormHandle {
             }
             Ok(worm_state_name(unsafe { read_i32(this.0 as *mut u8, WORM_STATE) } as u32))
         });
+        // Diagnostics: keep the raw value even when `state` has no name yet.
+        fields.add_field_method_get("state_id", |_, this| {
+            if this.0 == 0 {
+                return Ok(None);
+            }
+            Ok(Some(unsafe { read_i32(this.0 as *mut u8, WORM_STATE) } as u32))
+        });
+        fields.add_field_method_get("state_address", |_, this| {
+            Ok((this.0 != 0).then(|| this.0.wrapping_add(WORM_STATE as u32)))
+        });
         fields.add_field_method_get("team", |_, this| {
             if this.0 == 0 {
                 return Ok(0i32);
