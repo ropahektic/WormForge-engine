@@ -3797,24 +3797,38 @@ fires.super_tele_click = function(ev)
   if worm.hp <= 0 then return end
   local y = ev.y
   if wa.world.cavern() and y < 19 * 0x10000 then y = 19 * 0x10000 end
-  fires.teleports[worm.id] = { x = ev.x, y = y, frames = 0, pending = true }
+  local previous = fires.teleports[worm.id]
+  if previous and previous.marker then previous.marker:despawn() end
+  -- FireWeapon clears WA's planted X for click-only weapons. Keep a fixed
+  -- stock cursor at the saved target until the worm arrives instead.
+  local marker = wa.actors.spawn({
+    owner = worm, x = ev.x, y = y, sprite = "cursor",
+    gravity = false, collide = false, drown = false, loop = true,
+  })
+  fires.teleports[worm.id] = { x = ev.x, y = y, frames = 0, pending = true, marker = marker }
+  wa.sound.play(worm, 68, 0) -- PX's M_SETTARGET confirmation
 end
 
 wa.on.worm_message(function(worm, msg)
   if msg ~= wa.msg.FRAME_FINISH then return end
   local tele = fires.teleports[worm.id]
   if not tele then return end
-  if worm.hp <= 0 then fires.teleports[worm.id] = nil; return end
+  if worm.hp <= 0 then
+    tele.marker:despawn()
+    fires.teleports[worm.id] = nil
+    return
+  end
   if tele.pending then
     tele.pending = false
     -- WA's teleport setup clears its activity flag. Do this after the
     -- Lua-handled FireWeapon return restores that flag, as PX's M_FRAME does.
     worm:set_state("teleporting")
-    wa.sound.play(worm, 67) -- PX's teleport start
+    wa.sound.play(worm, 67, 0) -- PX's teleport start
     return
   end
   tele.frames = tele.frames + 1
   if tele.frames < 50 then return end
+  tele.marker:despawn()
   fires.teleports[worm.id] = nil
   worm.x, worm.y = tele.x, tele.y
   for _, rise in ipairs({ 0, 10, 22 }) do

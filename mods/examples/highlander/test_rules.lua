@@ -260,8 +260,9 @@ local function new_match(opts)
       random = function() return 0.5 end,
     },
     sound = {
-      play = function(target, name)
+      play = function(target, name, flags)
         M.sounds[#M.sounds + 1] = name
+        M.sound_flags[#M.sound_flags + 1] = flags
         -- A pack WAV plays only once an entry registers it (`sounds`);
         -- otherwise the engine plays nothing, without a word.
         if type(name) == "string" then
@@ -355,7 +356,7 @@ local function new_match(opts)
       end,
     },
   }
-  M.quads, M.ribbons, M.sounds, M.trace_hit, M.draws = {}, {}, {}, nil, nil
+  M.quads, M.ribbons, M.sounds, M.sound_flags, M.trace_hit, M.draws = {}, {}, {}, {}, nil, nil
   M.mines, M.crates, M.oil, M.graves = {}, {}, {}, {}
   dofile("mods/examples/highlander/rules.lua")
 end
@@ -1828,14 +1829,20 @@ do
   w.x, w.y, w.hp = 40 * P, 70 * P, 100
   local target_x, target_y = 190 * P + 1234, 100 * P + 2345
   spec.on_click({ worm = w, x = target_x, y = target_y })
-  check("FireWeapon only arms the teleport", w.state ~= "teleporting" and #M.sounds == 0)
+  local marker = M.spawned[#M.spawned]
+  check("target marker stays at the frozen click position",
+    marker.sprite == "cursor" and marker.x == target_x and marker.y == target_y and not marker.dead)
+  check("click confirms target with PX sound and flags",
+    w.state ~= "teleporting" and M.sounds[1] == 68 and M.sound_flags[1] == 0)
   M.message(w, wa.msg.FRAME_FINISH)
   check("the next frame enters WA's teleport pose and plays PX's start sound",
-    w.state == "teleporting" and M.sounds[#M.sounds] == 67)
+    w.state == "teleporting" and M.sounds[2] == 67 and M.sound_flags[2] == 0)
   for _ = 1, 49 do M.message(w, wa.msg.FRAME_FINISH) end
-  check("worm remains at its origin for 49 frames after starting", w.x == 40 * P and w.y == 70 * P and not M.digs)
+  check("worm and marker remain in place for 49 frames after starting",
+    w.x == 40 * P and w.y == 70 * P and not M.digs and not marker.dead)
   M.message(w, wa.msg.FRAME_FINISH)
-  check("frame 50 after starting uses the exact saved click position", w.x == target_x and w.y == target_y)
+  check("frame 50 arrives at the saved target and removes its marker",
+    w.x == target_x and w.y == target_y and marker.dead)
   local cuts = M.digs or {}
   check("arrival cuts three overlapping holes at and above the destination",
     #cuts == 3 and cuts[1].x == target_x and cuts[1].y == target_y
@@ -1858,9 +1865,11 @@ do
   w = worm(16)
   w.x, w.y = 40 * P, 70 * P
   spec.on_click({ worm = w, x = 200 * P, y = 150 * P })
+  marker = M.spawned[#M.spawned]
   w.hp = 0
   for _ = 1, 50 do M.message(w, wa.msg.FRAME_FINISH) end
-  check("a dead worm is never moved or carved in", w.x == 40 * P and w.y == 70 * P and not M.digs)
+  check("a dead worm is never moved or carved in and its marker is removed",
+    w.x == 40 * P and w.y == 70 * P and not M.digs and marker.dead)
 end
 
 print("lightning strike: warning, hit, grave identity and copied hand")
