@@ -415,6 +415,9 @@ pub const ENT_BLAST_MASS: usize = 0xCC;
 /// WorldEntity explosion-damage accumulator; subclasses consume and clear it.
 pub const ENT_DAMAGE_ACCUM: usize = 0xD4;
 pub const ENT_HELPER: usize = 0xDC;
+/// The sound emitter every WorldEntity embeds (vtable set at 0x4FED8A);
+/// PlaySoundLocal calls through it.
+pub const ENT_SOUND_EMITTER: usize = 0xE8;
 pub const ENT_WORM_TEAM: usize = 0xFC;
 
 pub const MSG_FRAME_FINISH: u32 = 0x2;
