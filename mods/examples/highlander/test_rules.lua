@@ -91,6 +91,18 @@ function Worm:carry(x, y) self.x, self.y, self.carried = x, y, true end
 function Worm:drop() self.carried = false end
 function Worm:clear_keys() self.keys = {} end
 function Worm:set_state(state) self.state = state end
+-- The engine's handoff verbs: what the worm looks like to the pack after.
+function Worm:take(opts)
+  opts = opts or {}
+  self.taken = { hide = opts.hide or false, turn = opts.turn or "run" }
+  if opts.hide then self.visible = false end
+end
+function Worm:release(vx, vy)
+  self.taken, self.carried = nil, false
+  if self.visible == false then self.visible = true end
+  self.state, self.vx, self.vy = "sliding", vx or 0, vy or 0
+end
+function Worm:jetpack_steer(on) self.steered = on ~= false end
 
 local function inventory_api()
   local api = {}
@@ -1803,7 +1815,7 @@ do
   local w = worm(33)
   w.turn, w.weapon, w.facing, w.body_visible = true, "ninja_rope", 1, true
   w.x, w.y, w.vx, w.vy, w.state = 100 * P, 50 * P, 0, 0, "standing"
-  function w:set_state(s) self.state = s end
+  function w:set_state() error("the Jump releases the worm; it sets no state") end
   M.spawned, M.sounds = {}, {}
   M.message(w, wa.msg.FIRE_WEAPON)
   M.message(w, wa.msg.FRAME_FINISH)
@@ -1973,8 +1985,9 @@ do
   local jumper = worm(16)
   jumper.turn, jumper.weapon = true, "napalm_strike"
   jumper.state = "prefiring"
+  function jumper:set_state() error("the engine ends a click-only fire's prefire, not the pack") end
   click({ worm=jumper, x=100*P, y=100*P })
-  check("click releases WA's prefiring pose so Jump can run", jumper.state == "standing")
+  check("click leaves ending WA's prefiring pose to the engine", jumper.state == "prefiring")
 
   new_match()
   local by_slot = {}
