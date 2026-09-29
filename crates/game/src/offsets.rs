@@ -404,6 +404,10 @@ pub const ENT_SHARED_DATA: usize = 0x24;
 pub const ENT_WORLD: usize = 0x2C;
 pub const ENT_CLASS_TYPE: usize = 0x20;
 pub const ENT_COLLISION_LAYER: usize = 0x30;
+/// The landscape's bit in an entity's collision mask (+0x34), which WA's
+/// water also acts on (0x4FDE20): a worm without it in the water neither
+/// sinks nor drowns.
+pub const COLLISION_LANDSCAPE_BIT: u32 = 0x40_0000;
 pub const ENT_COLLISION_MASK: usize = 0x34;
 pub const ENT_ACTIVE: usize = 0x3C;
 /// Parent-defaults overlay starts at entity+0x38. Damp / wind / gravity live here.

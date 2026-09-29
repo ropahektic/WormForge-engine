@@ -175,6 +175,9 @@ pub fn install() -> Result<(), String> {
         pointer: crate::world::pointer,
         carry: crate::physics::carry,
         drop_carry: crate::physics::drop_carry,
+        take: crate::physics::take,
+        release: crate::physics::release,
+        jetpack_steer: crate::physics::jetpack_steer,
         look: native_look,
         keys: crate::world::keys,
         networked: crate::world::is_networked,
@@ -609,8 +612,24 @@ unsafe extern "C" fn fire_weapon_click_only_eat(
     unsafe {
         write_i32(worm, ENT_ACTIVE, 1);
     }
+    // Eaten, the fire never reaches WA's own finish, which takes the worm out
+    // of prefiring (0x69); left there, it held its hand-off pose and could
+    // not jump again (the Lightning Strike's jump softlock). End it here for
+    // every click-only weapon, as the fire's finish would, unless the pack's
+    // on_click already moved the worm on.
+    unsafe {
+        if read_i32(worm, WORM_STATE) as u32 == WORM_STATE_PREFIRING {
+            let f: WormSetStateFn =
+                std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
+            crate::state_trace::with_cause("click-only fire end", || {
+                f(worm, WORM_STATE_STANDING)
+            });
+        }
+    }
     1
 }
+
+type WormSetStateFn = unsafe extern "thiscall" fn(*mut u8, u32);
 
 unsafe extern "thiscall" fn create_proj_hook(worm: *mut u8, fire_params: *mut u8, ctx: *mut u8) {
     let spawned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {

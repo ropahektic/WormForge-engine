@@ -24,6 +24,8 @@ use game::offsets::{
 
     WORM_SHOW_CURSOR, WORM_FACING,   WORM_STATE,
     WORM_STATE_AIRBORNE, WORM_TURN_ACTIVE, WORLD_ROOT_TURN_ENDED,
+    COLLISION_LANDSCAPE_BIT, ENT_COLLISION_MASK, MSG_JUMP, MSG_JUMP_UP, WORM_KEY_DOWN, WORM_KEY_LEFT,
+    WORM_KEY_RIGHT, WORM_KEY_UP, WORM_STATE_JETPACKING,
 };
 use std::ffi::c_void;
 use std::collections::{HashMap, HashSet};
@@ -179,11 +181,21 @@ static ORIG_ARROW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_AIM_CURSOR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_CROSSHAIR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
+/// A worm a pack holds (`worm:carry`, `worm:take`): pinned where the pack
+/// puts it each frame, after WA's own handler.
 struct Carry {
     handle: u32,
     x: i32,
     y: i32,
     facing: i32,
+    /// The turn's timer is held while it is held (`carry`, `take{turn =
+    /// "freeze"}`); a vehicle inside the turn (`take{turn = "run"}`) lets it run.
+    freeze: bool,
+    /// Taken with `worm:take`: the engine consumes its move keys and jump
+    /// messages, and its water bit is off until it is released.
+    taken: bool,
+    /// The collision mask it had when taken, restored on release.
+    mask: Option<i32>,
 }
 
 static CARRY: Mutex<Vec<Carry>> = Mutex::new(Vec::new());
@@ -201,6 +213,24 @@ fn holding() -> bool {
         .unwrap_or(false)
 }
 
+/// Some held worm holds the turn's timer.
+fn freezing() -> bool {
+    CARRY
+        .lock()
+        .ok()
+        .map(|g| g.iter().any(|c| c.freeze))
+        .unwrap_or(false)
+}
+
+/// Taken with `worm:take`: its move keys and jumps are the pack's.
+pub fn taken(handle: u32) -> bool {
+    CARRY
+        .lock()
+        .ok()
+        .map(|g| g.iter().any(|c| c.handle == handle && c.taken))
+        .unwrap_or(false)
+}
+
 pub fn drop_all() {
     let handles = CARRY
         .lock()
@@ -213,6 +243,17 @@ pub fn drop_all() {
 }
 
 type SetStateFn = unsafe extern "thiscall" fn(*mut u8, u32);
+
+/// A new match: forget every hold and steer from the last one. Its worms are
+/// gone, and a new worm may reuse an old one's address.
+pub fn clear_handoffs() {
+    if let Ok(mut g) = CARRY.lock() {
+        g.clear();
+    }
+    if let Ok(mut g) = STEERED.lock() {
+        g.clear();
+    }
+}
 
 pub fn carry(handle: u32, x: i32, y: i32) {
     if handle == 0 {
@@ -229,11 +270,149 @@ pub fn carry(handle: u32, x: i32, y: i32) {
                 x,
                 y,
                 facing,
+                freeze: true,
+                taken: false,
+                mask: None,
             });
             crate::world::freeze_turn();
         }
     }
     crate::world::hold_turn_timer();
+}
+
+/// `worm:take{ hide, turn }`: the pack owns the worm until it releases it.
+/// Built on the carry: the worm stays where it is until the pack moves it
+/// (`worm:carry(x, y)`), with no speed of its own. Its move keys and jump
+/// messages are consumed after the pack's `worm_message` hooks have read
+/// them, so WA never walks or jumps it. Its landscape/water bit is off, so a
+/// vehicle may hold it in water; release puts the bit back, and a worm
+/// released in water drowns by WA's own path (tumbling, 0x7F -> 0x76 ->
+/// 0x85 -> 0x87, seen in traces). The turn's end releases every held worm.
+pub fn take(handle: u32, hide: bool, freeze: bool) {
+    if handle == 0 {
+        return;
+    }
+    let this = handle as *mut u8;
+    let mut first_freeze = false;
+    if let Ok(mut g) = CARRY.lock() {
+        let mask = unsafe { read_i32(this, ENT_COLLISION_MASK) };
+        let slot = match g.iter_mut().position(|c| c.handle == handle) {
+            Some(i) => &mut g[i],
+            None => {
+                let (x, y, facing) = unsafe {
+                    (read_i32(this, ENT_POS_X), read_i32(this, ENT_POS_Y), read_i32(this, WORM_FACING))
+                };
+                g.push(Carry { handle, x, y, facing, freeze: false, taken: false, mask: None });
+                g.last_mut().unwrap()
+            }
+        };
+        if slot.mask.is_none() {
+            slot.mask = Some(mask);
+            unsafe {
+                write_i32(this, ENT_COLLISION_MASK, mask & !(COLLISION_LANDSCAPE_BIT as i32));
+            }
+        }
+        slot.taken = true;
+        if freeze && !slot.freeze {
+            slot.freeze = true;
+            first_freeze = true;
+        }
+    }
+    if first_freeze {
+        crate::world::freeze_turn();
+    }
+    if hide {
+        hide_worm(handle, true);
+    }
+}
+
+/// `worm:release(vx, vy)`: give the worm back to WA moving at (vx, vy).
+/// A held worm is dropped (shown again, its mask back, the turn thawed); any
+/// worm then enters falling-under-control (0x7E) through WA's own SetState,
+/// as a closed parachute does, and WA flies and lands it. The Jump, a
+/// vehicle's exit and worm_toss's throw are this.
+pub fn release(handle: u32, vx: i32, vy: i32) {
+    if handle == 0 {
+        return;
+    }
+    let held = CARRY
+        .lock()
+        .ok()
+        .map(|g| g.iter().any(|c| c.handle == handle))
+        .unwrap_or(false);
+    if held {
+        drop_held(handle, "release");
+    } else {
+        unsafe {
+            write_i32(handle as *mut u8, ENT_MOVED, 1);
+            let f: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
+            crate::state_trace::with_cause("release", || f(handle as *mut u8, WORM_STATE_AIRBORNE));
+        }
+    }
+    unsafe {
+        write_i32(handle as *mut u8, ENT_SPEED_X, vx);
+        write_i32(handle as *mut u8, ENT_SPEED_Y, vy);
+    }
+}
+
+/// Worms whose jet pack a pack steers (`worm:jetpack_steer(true)`), and
+/// whether their jet pack has run yet (it may be armed before it starts).
+static STEERED: Mutex<Vec<(u32, bool)>> = Mutex::new(Vec::new());
+
+/// `worm:jetpack_steer(on)`: while WA's jet pack runs (0x78), the engine
+/// consumes the worm's move keys after the pack's hooks read them, so WA
+/// neither thrusts nor burns fuel and the pack flies the worm with its
+/// speed and fuel. WA still owns the jet pack: its collisions, its fuel HUD
+/// and its end, when it lands the worm. It lapses when the jet pack ends.
+pub fn jetpack_steer(handle: u32, on: bool) {
+    if handle == 0 {
+        return;
+    }
+    if let Ok(mut g) = STEERED.lock() {
+        g.retain(|(h, _)| *h != handle);
+        if on {
+            g.push((handle, false));
+        }
+    }
+}
+
+/// Before WA handles a worm's message, after the pack's hooks: consume what
+/// a taken or jet-pack-steered worm's pack owns. Returns true to eat the
+/// message (a taken worm's jump).
+fn owned_input(this: *mut u8, msg: u32) -> bool {
+    if this.is_null() {
+        return false;
+    }
+    let handle = this as u32;
+    let jetpacking = unsafe { read_i32(this, WORM_STATE) } as u32 == WORM_STATE_JETPACKING;
+    let mut lapsed = false;
+    if let Ok(mut g) = STEERED.lock() {
+        if let Some(entry) = g.iter_mut().find(|(h, _)| *h == handle) {
+            if jetpacking {
+                entry.1 = true;
+                clear_move_keys(this);
+            } else if entry.1 && msg == MSG_FRAME_FINISH {
+                lapsed = true;
+            }
+        }
+    }
+    if lapsed {
+        jetpack_steer(handle, false);
+    }
+    if !taken(handle) {
+        return false;
+    }
+    if msg == MSG_JUMP || msg == MSG_JUMP_UP {
+        return true;
+    }
+    clear_move_keys(this);
+    false
+}
+
+fn clear_move_keys(this: *mut u8) {
+    for off in [WORM_KEY_UP, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT] {
+        unsafe { write_i32(this, off, 0) };
+    }
 }
 
 /// WA's own SetState on a worm, so the state's setup runs.
@@ -248,19 +427,36 @@ pub fn set_worm_state(handle: u32, state: u32) {
 }
 
 pub fn drop_carry(handle: u32) {
+    drop_held(handle, "drop_carry");
+}
+
+/// Give a held worm back: shown again, its collision mask as it was, into
+/// falling-under-control (0x7E) through SetState, and the turn thawed once no
+/// held worm freezes it.
+fn drop_held(handle: u32, cause: &'static str) {
     hide_worm(handle, false);
+    let mask = CARRY
+        .lock()
+        .ok()
+        .and_then(|g| g.iter().find(|c| c.handle == handle).and_then(|c| c.mask));
     if handle != 0 {
         unsafe {
+            if let Some(mask) = mask {
+                write_i32(handle as *mut u8, ENT_COLLISION_MASK, mask);
+            }
             write_i32(handle as *mut u8, ENT_MOVED, 1);
             let f: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
-            crate::state_trace::with_cause("drop_carry", || f(handle as *mut u8, WORM_STATE_AIRBORNE));
+            crate::state_trace::with_cause(cause, || f(handle as *mut u8, WORM_STATE_AIRBORNE));
         }
     }
-    if let Ok(mut g) = CARRY.lock() {
+    let thaw = if let Ok(mut g) = CARRY.lock() {
         g.retain(|c| c.handle != handle);
-        if g.is_empty() {
-            crate::world::thaw_turn();
-        }
+        !g.iter().any(|c| c.freeze)
+    } else {
+        false
+    };
+    if thaw {
+        crate::world::thaw_turn();
     }
 }
 
@@ -703,10 +899,18 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         unsafe { crate::replay::observe(crate::world::session_world()) };
         unsafe { crate::sync::observe(crate::world::session_world()) };
     }
+    if msg == MSG_FRAME_FINISH
+        && !this.is_null()
+        && unsafe { read_i32(this, WORLD_ROOT_TURN_ENDED) != 0 }
+    {
+        if let Ok(mut g) = STEERED.lock() {
+            g.clear();
+        }
+    }
     if !holding() {
         return;
     }
-    if msg == MSG_FRAME_FINISH || msg == MSG_RENDER_SCENE {
+    if (msg == MSG_FRAME_FINISH || msg == MSG_RENDER_SCENE) && freezing() {
         crate::world::freeze_turn();
     }
     if msg == MSG_FRAME_FINISH && !this.is_null() {
@@ -757,6 +961,8 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         eat = crate::hurt::before(this, a, msg, b, c);
     }
     eat = eat || worm_message_reporting_errors(this as u32, team, msg);
+    // After the pack's hooks (which read the keys), before WA's handler.
+    eat = eat || owned_input(this, msg);
     if msg == MSG_START_TURN {
         if let Err(e) = lua_host::turn_start(this as u32) {
             crate::log_error(&format!("turn_start: {e}"));

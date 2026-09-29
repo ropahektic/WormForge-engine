@@ -82,6 +82,11 @@ pub struct ModManifest {
     pub weapons: WeaponClaims,
     #[serde(default)]
     pub actors: ActorClaims,
+    /// `debug_worm_state = true`: the pack may call `worm:set_state`, a
+    /// debugging tool on its way out (packs hand worms over with the engine's
+    /// verbs instead). Every call is logged.
+    #[serde(default)]
+    pub debug_worm_state: bool,
 }
 
 fn default_version() -> String {

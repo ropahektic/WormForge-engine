@@ -50,6 +50,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     sprite::clear();
     world::clear_sounds();
     crate::hurt::reset();
+    crate::physics::clear_handoffs();
     actor::clear_claims();
     crate::mask_collide::clear();
     crate::worm_sprite::clear();

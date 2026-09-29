@@ -186,6 +186,12 @@ pub struct ActorNative {
     /// Pin a worm at (x,y) after stock HandleMessage this tick.
     pub carry: fn(handle: u32, x: i32, y: i32),
     pub drop_carry: fn(handle: u32),
+    /// `worm:take{ hide, turn }`: (handle, hide, freeze the turn).
+    pub take: fn(handle: u32, hide: bool, freeze: bool),
+    /// `worm:release(vx, vy)`.
+    pub release: fn(handle: u32, vx: i32, vy: i32),
+    /// `worm:jetpack_steer(on)`.
+    pub jetpack_steer: fn(handle: u32, on: bool),
     /// Switch this actor's installed sheet and reset the animation phase.
     pub look: fn(handle: u32, sprite: i32, delta: u32, w: i32, h: i32),
     /// Keyboard bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint, 64 Q, 128 Space.
@@ -293,6 +299,9 @@ impl Default for ActorNative {
             pointer: || (0, 0, false),
             carry: |_, _, _| {},
             drop_carry: |_| {},
+            take: |_, _, _| {},
+            release: |_, _, _| {},
+            jetpack_steer: |_, _| {},
             look: |_, _, _, _, _| {},
             keys: || 0,
             hide_worm: |_, _| {},
@@ -1072,9 +1081,24 @@ impl UserData for WormHandle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        // `worm:set_state(...)`, through WA's own SetState.
-        // A lockstep write: only from a simulation callback.
-        methods.add_method("set_state", |_, this, name: String| {
+        // `worm:set_state(...)`, through WA's own SetState. A debugging tool
+        // on its way out: only for a pack whose mod.toml declares
+        // `debug_worm_state = true`, every call logged. A lockstep write:
+        // only from a simulation callback.
+        methods.add_method("set_state", |lua, this, name: String| {
+            let wa: Table = lua.globals().get("wa")?;
+            let caller: String = wa.get("_mod").unwrap_or_default();
+            let allowed = match wa.get::<Value>("_debug_worm_state")? {
+                Value::Table(t) => t.get::<Option<bool>>(caller.as_str())?.unwrap_or(false),
+                _ => false,
+            };
+            if !allowed {
+                return Err(mlua::Error::external(format!(
+                    "worm:set_state is a debugging tool: {caller:?} must declare \
+                     debug_worm_state = true in its mod.toml. Hand a worm over with \
+                     worm:take / worm:release / worm:carry / worm:drop instead."
+                )));
+            }
             let state = settable_worm_state(&name).ok_or_else(|| {
                 mlua::Error::external(format!(
                     "worm:set_state: {name:?} is not a state a script may enter; valid: sliding, standing, bungee, tumbling, teleporting"
@@ -1084,6 +1108,9 @@ impl UserData for WormHandle {
                 return Err(mlua::Error::external(
                     "worm:set_state: only from a simulation callback (worm_message, a brain, ...)",
                 ));
+            }
+            if let Some(write) = native_log() {
+                write(&format!("[{caller}] worm:set_state({name:?}) (debug_worm_state)"));
             }
             if this.0 != 0 {
                 if let Some(set) = native_set_worm_state() {
@@ -1125,6 +1152,64 @@ impl UserData for WormHandle {
             }
             if let Some(drop) = native_drop_carry() {
                 drop(this.0);
+            }
+            Ok(())
+        });
+        // `worm:take{ hide = false, turn = "run" }`: the pack owns the worm
+        // until `worm:release` (or the turn's end). It stays where it is until
+        // the pack moves it with `worm:carry(x, y)`; the engine consumes its
+        // move keys and jumps (after `worm_message` hooks have read them) and
+        // turns its water off, so a vehicle may hold it in water. `hide`
+        // hides it as `worm.visible = false`; `turn = "freeze"` holds the
+        // turn's timer as `worm:carry` does, `"run"` lets it run.
+        methods.add_method("take", |_, this, opts: Option<Table>| {
+            crate::sim_context::require("worm:take")?;
+            let (hide, freeze) = match &opts {
+                None => (false, false),
+                Some(t) => {
+                    let hide = t.get::<Option<bool>>("hide")?.unwrap_or(false);
+                    let freeze = match t.get::<Option<String>>("turn")?.as_deref() {
+                        None | Some("run") => false,
+                        Some("freeze") => true,
+                        Some(other) => {
+                            return Err(mlua::Error::external(format!(
+                                "worm:take: turn is \"run\" or \"freeze\", got {other:?}"
+                            )))
+                        }
+                    };
+                    (hide, freeze)
+                }
+            };
+            if this.0 != 0 {
+                if let Some(take) = native_take() {
+                    take(this.0, hide, freeze);
+                }
+            }
+            Ok(())
+        });
+        // `worm:release(vx, vy)`: give the worm back to WA moving at (vx, vy),
+        // 16.16. A held worm is shown again and let go; any worm then falls
+        // under WA's control (as from a closed parachute), and WA flies and
+        // lands it with its own states.
+        methods.add_method("release", |_, this, (vx, vy): (Option<i32>, Option<i32>)| {
+            crate::sim_context::require("worm:release")?;
+            if this.0 != 0 {
+                if let Some(release) = native_release() {
+                    release(this.0, vx.unwrap_or(0), vy.unwrap_or(0));
+                }
+            }
+            Ok(())
+        });
+        // `worm:jetpack_steer(on)`: while WA's jet pack runs, the pack steers
+        // it (speed, fuel) and WA neither thrusts nor burns fuel from the keys;
+        // WA keeps its collisions, fuel HUD and landing. Lapses when the jet
+        // pack ends.
+        methods.add_method("jetpack_steer", |_, this, on: Option<bool>| {
+            crate::sim_context::require("worm:jetpack_steer")?;
+            if this.0 != 0 {
+                if let Some(steer) = native_jetpack_steer() {
+                    steer(this.0, on.unwrap_or(true));
+                }
             }
             Ok(())
         });
@@ -1363,6 +1448,18 @@ pub fn native_log() -> Option<fn(&str)> {
 
 pub fn native_random() -> Option<fn() -> Option<u32>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.random)
+}
+
+fn native_take() -> Option<fn(u32, bool, bool)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.take)
+}
+
+fn native_release() -> Option<fn(u32, i32, i32)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.release)
+}
+
+fn native_jetpack_steer() -> Option<fn(u32, bool)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.jetpack_steer)
 }
 
 pub fn native_set_worm_state() -> Option<fn(u32, u32)> {
