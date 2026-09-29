@@ -6,23 +6,16 @@
 //!   worm message it ran in and who asked (`cause`: our own callers tag
 //!   themselves; untagged is WA);
 //! - every change of `+0x44` made without SetState (a direct write, WA's or
-//!   ours), found when a worm message returns;
-//! - a worm that keeps one state other than standing for 250, 1000 and 5000
-//!   frames, with its position, speed and the raw fields around the state,
+//!   ours), seen at the end of the worm's frame;
+//! - a worm that keeps one state other than idle (standing, or the turn's
+//!   worm ready) for 250, 1000 and 5000 frames, with its position, speed and the raw fields around the state,
 //!   which is what a frozen worm looks like in the log.
 //!
 //! Logging only: nothing here writes to the game, so a replay traces the same
 //! on every machine and plays the same with or without it.
 //!
-//! State names are the ones known for sure; any other prints as `?` next to
-//! its number. SetState (0x50E850) has a case per state 0x64..=0x8B (jump
-//! table 0x50F484); the case's setup routine is the best lead for naming the
-//! rest: 0x65 0x516CA0 (Standing, also 0x88 and 0x8B), 0x67 0x517100, 0x69
-//! 0x517850 (PreFiring, also 0x8A), 0x6A 0x517F00, 0x6B 0x5181D0, 0x6C
-//! 0x518340 (Punching), 0x6D 0x518A50, 0x6E 0x5186A0 (Drilling), 0x6F
-//! 0x5196D0 (Teleporting), 0x70 0x519D80, 0x71 0x51A7B0, 0x74 0x51A750, 0x78
-//! 0x513980 (JetPacking), 0x7B 0x519E50, 0x7C 0x51A3B0 (Bungee), 0x7D
-//! 0x51A710 (Parachuting), 0x86 0x516B40. The others have no setup call.
+//! States print by number and by their `game::worm_state` label, which
+//! carries the evidence for each and marks a provisional one with `?`.
 
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -52,8 +45,11 @@ struct Track {
 
 static TRACKS: Mutex<Option<HashMap<u32, Track>>> = Mutex::new(None);
 
-/// Frames in one state (other than standing) after which it is logged again.
+/// Frames in one state after which it is logged again.
 const STALL_FRAMES: [i32; 3] = [250, 1000, 5000];
+/// States a worm rests in for as long as it likes: standing, and the turn's
+/// worm ready to act (`game::worm_state`).
+const IDLE: [u32; 2] = [0x65, 0x67];
 
 thread_local! {
     /// Who is calling SetState, when it is us.
@@ -62,24 +58,9 @@ thread_local! {
     static MSG: Cell<u32> = const { Cell::new(0) };
 }
 
-/// Names we are sure of. `?` for the rest: the number is what to go by.
+/// The state's debug label (`game::worm_state`), `?` for one not seen yet.
 fn name(state: u32) -> &'static str {
-    match state {
-        0x65 => "standing",
-        0x69 => "prefiring",
-        0x6C => "punching",
-        0x6E => "drilling",
-        0x6F => "teleporting",
-        0x73 => "charging",
-        0x78 => "jetpacking",
-        0x7B => "aiming",
-        0x7C => "bungee",
-        0x7D => "parachuting",
-        0x7E => "sliding",
-        0x7F => "sinking",
-        0x80 => "hurt",
-        _ => "?",
-    }
+    game::worm_state::label(state).unwrap_or("?")
 }
 
 pub fn install() -> Result<(), String> {
@@ -204,7 +185,7 @@ unsafe fn check(this: *mut u8) {
         }
         Some(t) => {
             let held = now - t.since;
-            if state != 0x65 && STALL_FRAMES.contains(&held) {
+            if !IDLE.contains(&state) && STALL_FRAMES.contains(&held) {
                 drop(g);
                 unsafe { stall(this, state, held) };
             }

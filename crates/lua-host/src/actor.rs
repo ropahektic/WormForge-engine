@@ -9,7 +9,7 @@ use game::offsets::{
     CLASS_MINE, WORM_INDEX,
     CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_SINKING, ENT_COLLISION_MASK,
+    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_TUMBLING, ENT_COLLISION_MASK,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -951,8 +951,18 @@ impl UserData for WormHandle {
             }
             Ok(Some(unsafe { read_i32(this.0 as *mut u8, WORM_STATE) } as u32))
         });
-        fields.add_field_method_get("state_address", |_, this| {
-            Ok((this.0 != 0).then(|| this.0.wrapping_add(WORM_STATE as u32)))
+        // Diagnostics: WA's state by its debug label (game::worm_state), `?`
+        // marking a provisional one. For logs, never for game logic.
+        fields.add_field_method_get("state_label", |_, this| {
+            if this.0 == 0 {
+                return Ok(None);
+            }
+            let state = unsafe { read_i32(this.0 as *mut u8, WORM_STATE) } as u32;
+            Ok(Some(
+                game::worm_state::label(state)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("{state:#x}?")),
+            ))
         });
         fields.add_field_method_get("team", |_, this| {
             if this.0 == 0 {
@@ -1059,7 +1069,7 @@ impl UserData for WormHandle {
         methods.add_method("set_state", |_, this, name: String| {
             let state = settable_worm_state(&name).ok_or_else(|| {
                 mlua::Error::external(format!(
-                    "worm:set_state: {name:?} is not a state a script may enter; valid: sliding, standing, bungee, sinking, teleporting"
+                    "worm:set_state: {name:?} is not a state a script may enter; valid: sliding, standing, bungee, tumbling, teleporting"
                 ))
             })?;
             if !crate::sim_context::active() {
@@ -1364,7 +1374,7 @@ pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
         WORM_STATE_PARACHUTING => "parachuting",
         WORM_STATE_AIRBORNE => "sliding",
         WORM_STATE_BUNGEE => "bungee",
-        WORM_STATE_SINKING => "sinking",
+        WORM_STATE_TUMBLING => "tumbling",
         _ => return None,
     })
 }
@@ -1372,13 +1382,14 @@ pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
 /// The states `worm:set_state` may enter: the ones a script ends a move
 /// with, the two Project X's Swim Suit holds a worm in, and teleporting for
 /// Super Tele's stock vanishing animation. Other action states would skip
-/// WA's fire path.
+/// WA's fire path. `"sinking"` is the old name of tumbling (0x7F), which is
+/// WA's hit state, not drowning: it stays as an alias until packs move off it.
 pub(crate) fn settable_worm_state(name: &str) -> Option<u32> {
     match name {
         "standing" => Some(WORM_STATE_STANDING),
         "sliding" => Some(WORM_STATE_AIRBORNE),
         "bungee" => Some(WORM_STATE_BUNGEE),
-        "sinking" => Some(WORM_STATE_SINKING),
+        "tumbling" | "sinking" => Some(WORM_STATE_TUMBLING),
         "teleporting" => Some(WORM_STATE_TELEPORTING),
         _ => None,
     }
@@ -1733,9 +1744,10 @@ mod tests {
         // Project X's Swim Suit: a bungee's state to swim, sinking when the
         // suit gives out; and both read back by name.
         assert_eq!(settable_worm_state("bungee"), Some(0x7C));
-        assert_eq!(settable_worm_state("sinking"), Some(0x7F));
+        assert_eq!(settable_worm_state("tumbling"), Some(0x7F));
+        assert_eq!(settable_worm_state("sinking"), Some(0x7F), "the old name stays an alias");
         assert_eq!(settable_worm_state("teleporting"), Some(0x6F));
-        assert_eq!((worm_state_name(0x7C), worm_state_name(0x7F)), (Some("bungee"), Some("sinking")));
+        assert_eq!((worm_state_name(0x7C), worm_state_name(0x7F)), (Some("bungee"), Some("tumbling")));
         assert_eq!(settable_worm_state("standing"), Some(0x65));
         assert_eq!(settable_worm_state("jetpacking"), None);
     }

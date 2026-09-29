@@ -8,6 +8,7 @@ pub mod overwrite;
 pub mod sync_input;
 pub mod team;
 pub mod weapon;
+pub mod worm_state;
 
 pub use offsets::{
     APPLY_PROJECTILE_GRAVITY, CUSTOM_SPRITE_SENTINEL, ENT_SPEED_X, ENT_SPEED_Y, ENT_WIND_SCALE,
