@@ -1831,7 +1831,7 @@ do
   spec.on_click({ worm = w, x = target_x, y = target_y })
   local marker = M.spawned[#M.spawned]
   check("target marker stays at the frozen click position",
-    marker.sprite == "cursor" and marker.x == target_x and marker.y == target_y and not marker.dead)
+    marker.sprite == "markerr" and marker.x == target_x and marker.y == target_y and not marker.dead)
   check("click confirms target with PX sound and flags",
     w.state ~= "teleporting" and M.sounds[1] == 68 and M.sound_flags[1] == 0)
   M.message(w, wa.msg.FRAME_FINISH)

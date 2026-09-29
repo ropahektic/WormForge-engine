@@ -3800,9 +3800,9 @@ fires.super_tele_click = function(ev)
   local previous = fires.teleports[worm.id]
   if previous and previous.marker then previous.marker:despawn() end
   -- FireWeapon clears WA's planted X for click-only weapons. Keep a fixed
-  -- stock cursor at the saved target until the worm arrives instead.
+  -- stock planted-X marker at the saved target until the worm arrives instead.
   local marker = wa.actors.spawn({
-    owner = worm, x = ev.x, y = y, sprite = "cursor",
+    owner = worm, x = ev.x, y = y, sprite = "markerr",
     gravity = false, collide = false, drown = false, loop = true,
   })
   fires.teleports[worm.id] = { x = ev.x, y = y, frames = 0, pending = true, marker = marker }
