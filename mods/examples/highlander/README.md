@@ -62,6 +62,17 @@ callbacks; drawing only varies presentation. A grave records its original worm
 ID when WA creates it. On revival, Highlander restores the dead worm's saved
 hand while the active worm keeps the weapons it gained at death. PX's sentry
 ownership transfer is deferred.
+
+### Super Tele
+
+Super Tele replaces the teleport slot with the scheme's type-3 cursor weapon
+and PX icon. The click position is held for 50 game frames while WA plays its
+teleport animation, then the worm moves there. Three 12-pixel terrain cuts at
+the click and 10 and 22 pixels above make room to arrive inside land. Cavern
+clicks are clamped to 19 pixels below the ceiling, as in PX. The click comes
+from WA's synchronized fire context, so the destination cannot follow a
+later mouse movement.
+
 ### WA's own weapons
 
 | Slot | Weapon | Notes |
@@ -459,7 +470,10 @@ lua mods/examples/highlander/test_rules.lua     # from the repo root
 These run `rules.lua` against a mocked WA. Ammo is stored per alliance, and
 the mock scheme has an infinite bazooka. Which row a team's writes land in is
 the engine's job, and the mock can't test it. They cover:
-- all 51 slot claims, including the two full scheme records
+- all 53 slot claims, including the Lightning Strike, Electric Grenade,
+  Laser Gun and Super Tele scheme records
+- Super Tele's exact click, 50-frame wait, three terrain cuts, cavern ceiling
+  and cancellation when its worm dies
 - strike timing, grave identity, revival and restored Highlander hand
 - tazer seeking, delayed zap, stun, mine fuse, object damage and terrain trace
 - the Fire Jump's timeline, counted from the punch, not the fire key
@@ -483,3 +497,19 @@ the engine's job, and the mock can't test it. They cover:
 
 The inventory/rule-event refactor is covered by this mock suite and still
 needs an in-game validation after deploying the matching DLL and pack.
+
+### Javelin (prod)
+
+Uses Highlander 0rang3 1.1's weapon record and the sprite-builder edition's
+12-frame hold and flight animations. Stock WA flies the projectile. On impact,
+Lua thrusts the first worm, mine, crate or oil drum in PX's strict 20-pixel
+square, with 20 damage and a quarter of the incoming velocity. Mines handle
+the impact through WA's mine handler. The active worm has PX's 25-pixel fallback.
+
+If nothing is hit, `wa.land.stamp` embeds one of the 32 oriented 60×60 frames
+into actual terrain. It stays solid, can be walked on and destroyed, and needs
+no persistent actor. PX's ratio-based orientation bins are preserved. The
+stamp uses source alpha and the colours the terrain already holds; airborne
+art uses GPU sheets. Terrain writes and target selection run only during
+simulation. The impact sound plays on the turn's worm (PX plays it unplaced):
+an explosion's `ev.worm` is the missile's owner, not necessarily a worm.

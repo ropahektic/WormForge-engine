@@ -172,6 +172,7 @@ pub struct ActorNative {
     /// WA landscape cut, with 16.16 coordinates and pixel-sized radius.
     pub land_dig: fn(x: i32, y: i32, radius: i32) -> Result<(), String>,
     /// WA landscape mask cut; shape is a validated stock mask index.
+    pub land_stamp: fn(sprite: i32, frame: u32, x: i32, y: i32) -> Result<(), String>,
     pub land_cut: fn(shape: i32, x: i32, y: i32) -> Result<(), String>,
     pub land_trace: fn(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)>,
     pub map_size: fn() -> (i32, i32),
@@ -210,7 +211,7 @@ pub struct ActorNative {
     pub heal: fn(handle: u32, amount: i32) -> i32,
     pub arm_mine: fn(handle: u32, fuse_ms: i32) -> bool,
     pub mine_fuse: fn(handle: u32) -> i32,
-    pub hit_object: fn(handle: u32, from: u32, damage: i32, vx: i32, vy: i32) -> bool,
+    pub hit_object: fn(handle: u32, from: u32, damage: i32, vx: i32, vy: i32, projectile: bool) -> bool,
     /// Rebuild the dead worm associated by the pack with a live grave.
     pub revive_grave: fn(grave: u32, worm_id: u32, health: i32) -> u32,
     pub grave_identity: fn(grave: u32) -> u32,
@@ -280,6 +281,7 @@ impl Default for ActorNative {
             resolve_sprite: |_| None,
             land_solid: |_, _| false,
             land_dig: |_, _, _| Err("land dig not bound".into()),
+            land_stamp: |_, _, _, _| Err("land stamp not bound".into()),
             land_cut: |_, _, _| Err("land cut not bound".into()),
             land_trace: |_, _, _, _| None,
             map_size: || (0, 0),
@@ -302,7 +304,7 @@ impl Default for ActorNative {
             heal: |_, _| 0,
             arm_mine: |_, _| false,
             mine_fuse: |_| 0,
-            hit_object: |_, _, _, _, _| false,
+            hit_object: |_, _, _, _, _, _| false,
             revive_grave: |_, _, _| 0,
             grave_identity: |_| 0,
             electrical_nearby: |_, _, _, _| Vec::new(),
@@ -1052,12 +1054,12 @@ impl UserData for WormHandle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        // `worm:set_state("sliding" | "standing")`, through WA's own SetState.
+        // `worm:set_state(...)`, through WA's own SetState.
         // A lockstep write: only from a simulation callback.
         methods.add_method("set_state", |_, this, name: String| {
             let state = settable_worm_state(&name).ok_or_else(|| {
                 mlua::Error::external(format!(
-                    "worm:set_state: {name:?} is not a state a script may enter; valid: sliding, standing"
+                    "worm:set_state: {name:?} is not a state a script may enter; valid: sliding, standing, bungee, sinking, teleporting"
                 ))
             })?;
             if !crate::sim_context::active() {
@@ -1181,11 +1183,16 @@ impl UserData for WorldHandle {
             }
             Ok(native_arm_mine().map(|f| f(this.0, fuse_ms)).unwrap_or(false))
         });
-        methods.add_method("hit", |_, this, (damage, vx, vy): (i32, i32, i32)| {
+        methods.add_method("hit", |_, this, (damage, vx, vy, kind): (i32, i32, i32, Option<String>)| {
             if !crate::sim_context::active() {
                 return Err(mlua::Error::external("object:hit: only from a simulation callback"));
             }
-            Ok(native_hit_object().map(|f| f(this.0, spawn_owner(), damage, vx, vy)).unwrap_or(false))
+            let projectile = match kind.as_deref().unwrap_or("direct") {
+                "direct" => false,
+                "projectile" => true,
+                _ => return Err(mlua::Error::external("object:hit: kind must be direct or projectile")),
+            };
+            Ok(native_hit_object().map(|f| f(this.0, spawn_owner(), damage, vx, vy, projectile)).unwrap_or(false))
         });
         methods.add_method("revive", |lua, this, (worm_id, health): (u32, i32)| {
             if !crate::sim_context::active() {
@@ -1363,15 +1370,16 @@ pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
 }
 
 /// The states `worm:set_state` may enter: the ones a script ends a move
-/// with, and the two Project X's Swim Suit holds a worm in (a bungee's, to
-/// swim; sinking, when the suit gives out). Entering an action state from
-/// outside would skip WA's fire path.
+/// with, the two Project X's Swim Suit holds a worm in, and teleporting for
+/// Super Tele's stock vanishing animation. Other action states would skip
+/// WA's fire path.
 pub(crate) fn settable_worm_state(name: &str) -> Option<u32> {
     match name {
         "standing" => Some(WORM_STATE_STANDING),
         "sliding" => Some(WORM_STATE_AIRBORNE),
         "bungee" => Some(WORM_STATE_BUNGEE),
         "sinking" => Some(WORM_STATE_SINKING),
+        "teleporting" => Some(WORM_STATE_TELEPORTING),
         _ => None,
     }
 }
@@ -1472,7 +1480,7 @@ fn native_mine_fuse() -> Option<fn(u32) -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.mine_fuse)
 }
 
-fn native_hit_object() -> Option<fn(u32, u32, i32, i32, i32) -> bool> {
+fn native_hit_object() -> Option<fn(u32, u32, i32, i32, i32, bool) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hit_object)
 }
 
@@ -1726,6 +1734,7 @@ mod tests {
         // suit gives out; and both read back by name.
         assert_eq!(settable_worm_state("bungee"), Some(0x7C));
         assert_eq!(settable_worm_state("sinking"), Some(0x7F));
+        assert_eq!(settable_worm_state("teleporting"), Some(0x6F));
         assert_eq!((worm_state_name(0x7C), worm_state_name(0x7F)), (Some("bungee"), Some("sinking")));
         assert_eq!(settable_worm_state("standing"), Some(0x65));
         assert_eq!(settable_worm_state("jetpacking"), None);
@@ -1818,4 +1827,8 @@ mod tests {
         assert_eq!(mask, gfx_field::TINT);
         assert_eq!(tint, 0xFFFF_8000);
     }
+}
+
+pub fn native_land_stamp() -> Option<fn(i32, u32, i32, i32) -> Result<(), String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.land_stamp)
 }

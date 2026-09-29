@@ -36,6 +36,7 @@ mod gpu;
 mod version;
 mod wa;
 mod world;
+mod terrain;
 mod worm_sprite;
 mod zip;
 
