@@ -2642,8 +2642,15 @@ do
       or wa.land.solid(x, y - BALLOON_HALF_H) or wa.land.solid(x, y + BALLOON_HALF_H)
   end
 
+  -- How many frames after popping against land the worm is watched: WA may
+  -- stand it up there, in mid-air under a ceiling.
+  local BALLOON_UNSTAND = 3
+
   -- StopBalloon: a pop, and the worm back to WA, falling with its speed.
-  local function balloon_stop(worm, b)
+  -- Against land it keeps no upward speed, and for a few frames, if WA has
+  -- stood it up, it is released again, falling: PX's balloon does the same
+  -- (WS_IDLE -> WS_SLIDING) when WA's parachute closes against the land.
+  local function balloon_stop(worm, b, against_land)
     if not b.active then
       return
     end
@@ -2652,9 +2659,11 @@ do
     if b.basket then b.basket:despawn(); b.basket = nil end
     worm.body_visible = true
     balloon_sound(worm, "pop", 4)
+    local vy = against_land and math.max(b.vy, 0) or b.vy
     if worm.taken then
-      worm:release(b.vx, b.vy)
+      worm:release(b.vx, vy)
     end
+    b.unstand = against_land and BALLOON_UNSTAND or nil
   end
 
   local function balloon_draw(worm, b)
@@ -2697,6 +2706,14 @@ do
     end
     b.was_parachuting = state == "parachuting"
     if state ~= "parachuting" then b.equipped_weapon = worm.weapon end
+    if b.unstand then
+      if state == "standing" then
+        worm:release(0, 0)
+        b.unstand = nil
+      else
+        b.unstand = b.unstand > 1 and b.unstand - 1 or nil
+      end
+    end
     if not b.active then
       return
     end
@@ -2717,7 +2734,11 @@ do
     b.vx, b.vy = vx, vy
     local x, y = b.x + vx, b.y + vy
     -- It pops on touching land, as WA's parachute closes there, and in water.
-    if balloon_blocked(x, y) or y >= wa.world.water() then
+    if balloon_blocked(x, y) then
+      balloon_stop(worm, b, true)
+      return
+    end
+    if y >= wa.world.water() then
       balloon_stop(worm, b)
       return
     end

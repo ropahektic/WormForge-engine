@@ -1251,10 +1251,20 @@ do
   check("up again", up_again())
   local top = w.y - 5 * P
   M.solid = function(_, y) return y < top end
-  for _ = 1, 20 do M.message(w, wa.msg.FRAME_FINISH) end
-  check("land: popped, the worm back to WA", not w.taken and w.state == "sliding"
-    and M.sounds[#M.sounds]:find("pop"))
+  for _ = 1, 20 do
+    M.message(w, wa.msg.FRAME_FINISH)
+    if not w.taken then break end
+  end
+  check("land: popped, the worm back to WA, not pushed up into it", not w.taken
+    and w.state == "sliding" and w.vy >= 0 and M.sounds[#M.sounds]:find("pop"))
   M.solid = nil
+  -- WA stands it up against the ceiling: released again, falling.
+  w.state, w.vy = "standing", 0
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("stood up under the ceiling: released again", w.state == "sliding")
+  w.state = "standing"
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("only once", w.state == "standing")
   -- Up again; the engine lets go at the turn's end: it pops.
   check("up again", up_again())
   w.taken = nil
