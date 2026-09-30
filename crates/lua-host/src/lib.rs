@@ -465,7 +465,8 @@ wa.weapons.replace({
         actor::bind_actor_native(actor::ActorNative {
             list_worms: |_| vec![0x1234],
             take: |h, hide, freeze| CALLS.with(|c| c.borrow_mut().push(format!("take {h:x} {hide} {freeze}"))),
-            release: |h, vx, vy| CALLS.with(|c| c.borrow_mut().push(format!("release {h:x} {vx} {vy}"))),
+            release: |h, vx, vy, t| CALLS.with(|c| c.borrow_mut().push(format!("release {h:x} {vx} {vy} {t}"))),
+            is_taken: |h| h == 0x1234,
             jetpack_steer: |h, on| CALLS.with(|c| c.borrow_mut().push(format!("steer {h:x} {on}"))),
             ..Default::default()
         });
@@ -487,6 +488,8 @@ wa.weapons.replace({
                  w:take{ turn = 'run' }
                  w:release(0x30000, -0x20000)
                  w:release()
+                 w:release(1, 2, { tumble = true })
+                 assert(w.taken == true)
                  w:jetpack_steer(true)
                  w:jetpack_steer(false)",
             )
@@ -502,8 +505,9 @@ wa.weapons.replace({
                     "take 1234 false false",
                     "take 1234 true true",
                     "take 1234 false false",
-                    "release 1234 196608 -131072",
-                    "release 1234 0 0",
+                    "release 1234 196608 -131072 false",
+                    "release 1234 0 0 false",
+                    "release 1234 1 2 true",
                     "steer 1234 true",
                     "steer 1234 false",
                 ]

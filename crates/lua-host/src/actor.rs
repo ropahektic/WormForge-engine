@@ -188,8 +188,10 @@ pub struct ActorNative {
     pub drop_carry: fn(handle: u32),
     /// `worm:take{ hide, turn }`: (handle, hide, freeze the turn).
     pub take: fn(handle: u32, hide: bool, freeze: bool),
-    /// `worm:release(vx, vy)`.
-    pub release: fn(handle: u32, vx: i32, vy: i32),
+    /// `worm:release(vx, vy, { tumble })`: (handle, vx, vy, tumble).
+    pub release: fn(handle: u32, vx: i32, vy: i32, tumble: bool),
+    /// `worm.taken`: the engine still holds it for the pack.
+    pub is_taken: fn(handle: u32) -> bool,
     /// `worm:jetpack_steer(on)`.
     pub jetpack_steer: fn(handle: u32, on: bool),
     /// Switch this actor's installed sheet and reset the animation phase.
@@ -300,7 +302,8 @@ impl Default for ActorNative {
             carry: |_, _, _| {},
             drop_carry: |_| {},
             take: |_, _, _| {},
-            release: |_, _, _| {},
+            release: |_, _, _, _| {},
+            is_taken: |_| false,
             jetpack_steer: |_, _| {},
             look: |_, _, _, _, _| {},
             keys: || 0,
@@ -959,6 +962,11 @@ impl UserData for WormHandle {
             }
             Ok(worm_state_name(unsafe { read_i32(this.0 as *mut u8, WORM_STATE) } as u32))
         });
+        // `worm.taken`: still the pack's since `worm:take`. The engine lets
+        // go at the turn's end and when WA knocks the worm flying.
+        fields.add_field_method_get("taken", |_, this| {
+            Ok(this.0 != 0 && native_is_taken().map(|f| f(this.0)).unwrap_or(false))
+        });
         // Diagnostics: keep the raw value even when `state` has no name yet.
         fields.add_field_method_get("state_id", |_, this| {
             if this.0 == 0 {
@@ -1187,19 +1195,27 @@ impl UserData for WormHandle {
             }
             Ok(())
         });
-        // `worm:release(vx, vy)`: give the worm back to WA moving at (vx, vy),
-        // 16.16. A held worm is shown again and let go; any worm then falls
-        // under WA's control (as from a closed parachute), and WA flies and
-        // lands it with its own states.
-        methods.add_method("release", |_, this, (vx, vy): (Option<i32>, Option<i32>)| {
-            crate::sim_context::require("worm:release")?;
-            if this.0 != 0 {
-                if let Some(release) = native_release() {
-                    release(this.0, vx.unwrap_or(0), vy.unwrap_or(0));
+        // `worm:release(vx, vy, { tumble })`: give the worm back to WA moving
+        // at (vx, vy), 16.16. A held worm is shown again and let go; any worm
+        // then falls under WA's control (as from a closed parachute), and WA
+        // flies and lands it with its own states. `tumble = true`: out of
+        // control instead, as after a hit; in water WA drowns it.
+        methods.add_method(
+            "release",
+            |_, this, (vx, vy, opts): (Option<i32>, Option<i32>, Option<Table>)| {
+                crate::sim_context::require("worm:release")?;
+                let tumble = match &opts {
+                    Some(t) => t.get::<Option<bool>>("tumble")?.unwrap_or(false),
+                    None => false,
+                };
+                if this.0 != 0 {
+                    if let Some(release) = native_release() {
+                        release(this.0, vx.unwrap_or(0), vy.unwrap_or(0), tumble);
+                    }
                 }
-            }
-            Ok(())
-        });
+                Ok(())
+            },
+        );
         // `worm:jetpack_steer(on)`: while WA's jet pack runs, the pack steers
         // it (speed, fuel) and WA neither thrusts nor burns fuel from the keys;
         // WA keeps its collisions, fuel HUD and landing. Lapses when the jet
@@ -1454,7 +1470,11 @@ fn native_take() -> Option<fn(u32, bool, bool)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.take)
 }
 
-fn native_release() -> Option<fn(u32, i32, i32)> {
+fn native_is_taken() -> Option<fn(u32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.is_taken)
+}
+
+fn native_release() -> Option<fn(u32, i32, i32, bool)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.release)
 }
 

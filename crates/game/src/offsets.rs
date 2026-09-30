@@ -87,6 +87,12 @@ pub const WORM_STATE_BUNGEE: u32 = 0x7C;
 /// standing on land, or to drowning (0x85) in water. Long mislabelled as
 /// drowning after Project X's WS_SINKING; see `crate::worm_state`.
 pub const WORM_STATE_TUMBLING: u32 = 0x7F;
+/// Hit and flying from a blast: traced after msg 0x1C (0x65 -> 0x80), and
+/// after 0x81, landing through 0x7F. Named from traces only.
+pub const WORM_STATE_HIT: u32 = 0x80;
+/// Blasted: the first state of a blast's knockback (msg 0x1C), then 0x80
+/// or 0x7F. Named from traces only.
+pub const WORM_STATE_BLASTED: u32 = 0x81;
 /// Jet pack fuel (16.16), drained by WormEntity__handle_JetPacking by the
 /// thrust / 10 each frame; 0 is unlimited, and running out sets 0x65.
 pub const WORM_JET_FUEL: usize = 0x220;
