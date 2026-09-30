@@ -420,6 +420,8 @@ Here the pack takes the worm when that parachute opens and flies it with WA
   both are damped to 0.8. These are WA's entity physics (0x4FCB30) with the
   parachute's damping and wind factor (SetState 0x7D, 0x50EBE2 and 0x50EC57).
   So it rises at up to four times gravity and drifts with four times the wind.
+- **Steering:** the arrow keys push it as they push WA's parachute (0x513EB0):
+  half of gravity a frame in the key's direction, opposite keys cancelling.
 - **Pops:** on touching land, in water, on the jump key (which closes WA's
   parachute), and when the turn ends. The worm then goes back to WA, falling
   with the balloon's speed. Weapons fire from the basket as from WA's

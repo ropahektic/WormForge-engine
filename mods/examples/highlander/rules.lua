@@ -2600,7 +2600,9 @@ do
   -- 0x50EBE2 and 0x50EC57) damps them to 0.8 and takes the wind factor from the
   -- weapon record's +0x38 in percent: the patched bungee's fire_method, 100.
   -- So it rises at up to four times gravity and drifts with four times the
-  -- wind. It pops -- the worm given back to WA, falling -- on touching land,
+  -- wind. The arrow keys push it as they push WA's parachute (0x513EB0, run
+  -- before that step): half of gravity a frame each way held (through the
+  -- worm's +0x44 push, divided by its mass, 1.0), opposite keys cancelling. It pops -- the worm given back to WA, falling -- on touching land,
   -- in water, on the jump key (which closes WA's parachute), and when the
   -- turn ends. The worm's body is hidden behind the balloon, drawn in its
   -- team's colour, and the worm in its basket, as PX's RenderWorm override.
@@ -2716,10 +2718,19 @@ do
       balloon_stop(worm, b)
       return
     end
-    -- WA's parachute physics, gravity upside down (0x4FCB30).
     local P = 0x10000
-    local vy = b.vy - wa.world.gravity() * worm.gravity // P
-    local vx = b.vx
+    local vx, vy = b.vx, b.vy
+    -- The arrow keys, as WA's parachute takes them (0x514AC0, 0x513EB0).
+    local k = worm.keys or {}
+    local left, right, up, down = k.left, k.right, k.up, k.down
+    if left and right then left, right = false, false end
+    if up and down then up, down = false, false end
+    local g = wa.world.gravity()
+    local push = g >= 0 and g // 2 or -(-g // 2)
+    vx = vx + (right and push or 0) - (left and push or 0)
+    vy = vy + (down and push or 0) - (up and push or 0)
+    -- WA's parachute physics, gravity upside down (0x4FCB30).
+    vy = vy - g * worm.gravity // P
     local side = wa.world.wind() >= 0 and P or -P
     if worm:fits(b.x + side, b.y) then
       vx = vx + wa.world.wind() * (BALLOON_WIND * P // 100) // P

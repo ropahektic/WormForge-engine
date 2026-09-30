@@ -1244,6 +1244,22 @@ do
   M.message(w, wa.msg.FRAME_FINISH)
   check("rising at four times gravity", math.abs((w.y - y1) + 4 * 0x4000) <= 8, tostring(w.y - y1))
   check("drifting with four times the wind", math.abs((w.x - x1) - 4 * 0x100) <= 8, tostring(w.x - x1))
+  -- The arrow keys push it, half of gravity a frame, as WA's parachute:
+  -- the new speed is (last + push + wind) damped, and it moves by it.
+  local function step_x(keys)
+    local before, last = w.x, w.x - x1
+    x1, w.keys = w.x, keys
+    M.message(w, wa.msg.FRAME_FINISH)
+    return w.x - before, last
+  end
+  local dx, last = step_x({ left = true })
+  check("left pushes it left by half of gravity", dx == (last - 0x2000 + 0x100) * 0xCCCC // P,
+    dx .. " " .. last)
+  dx, last = step_x({ left = true, right = true })
+  check("left and right together cancel", dx == (last + 0x100) * 0xCCCC // P, dx .. " " .. last)
+  dx, last = step_x({ right = true })
+  check("right pushes it right", dx == (last + 0x2000 + 0x100) * 0xCCCC // P, dx .. " " .. last)
+  w.keys = {}
   check("weapons fire from the basket", M.message(w, wa.msg.FIRE_WEAPON) ~= "eat" and w.taken)
   -- The jump key pops it: the worm back to WA, falling with its speed.
   check("the jump key pops it", M.message(w, wa.msg.JUMP) == "eat" and M.sounds[#M.sounds]:find("pop")
