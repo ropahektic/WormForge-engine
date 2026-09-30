@@ -732,7 +732,7 @@ replace = ["holy_grenade"]
         let scripts = run_mods(&[pack]).unwrap();
         assert_eq!(scripts.resolved.applied.len(), 1);
         let claim = &scripts.resolved.applied[0];
-        assert_eq!(claim.slot, StockWeapon::Bazooka);
+        assert_eq!(claim.slot, StockWeapon::Donkey);
         match &claim.params.panel_icon {
             Some(weapons::PanelIcon::File { path, width, height, .. }) => {
                 assert_eq!(path, "sprites/ico_sentrygun.png");
