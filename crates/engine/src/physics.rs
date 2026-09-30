@@ -26,7 +26,7 @@ use game::offsets::{
     WORM_STATE_AIRBORNE, WORM_TURN_ACTIVE, WORLD_ROOT_TURN_ENDED,
     COLLISION_LANDSCAPE_BIT, ENT_COLLISION_MASK, MSG_JUMP, MSG_JUMP_UP, WORM_KEY_DOWN, WORM_KEY_LEFT,
     WORM_KEY_RIGHT, WORM_KEY_UP, WORM_STATE_JETPACKING, WORM_STATE_TUMBLING, WORM_STATE_HIT,
-    WORM_STATE_BLASTED, WORLD_ROOT_TURN_TIMER,
+    WORM_STATE_BLASTED, WORLD_ROOT_TURN_TIMER, ENT_WORLD, ENT_HELPER, GAME_WORLD_COLLISION_MANAGER,
 };
 use std::ffi::c_void;
 use std::collections::{HashMap, HashSet};
@@ -383,6 +383,40 @@ pub fn release(handle: u32, vx: i32, vy: i32, tumble: bool) {
 /// Worms whose jet pack a pack steers (`worm:jetpack_steer(true)`), and
 /// whether their jet pack has run yet (it may be armed before it starts).
 static STEERED: Mutex<Vec<(u32, bool)>> = Mutex::new(Vec::new());
+
+type CollidesAtFn = unsafe extern "stdcall" fn(*mut u8, *mut u8, i32, i32, i32, i32) -> i32;
+
+/// `worm:fits(x, y)`: WA's own test (0x4FB9D0, as its landing check
+/// 0x5018F0 calls it) of the worm's collision helper at (x, y) against what
+/// its mask collides with: true when it touches nothing. A held worm is
+/// tested with the mask it had when taken (taking it clears the landscape
+/// bit), so a pack can keep it clear of land by WA's own measure.
+pub fn fits(handle: u32, x: i32, y: i32) -> bool {
+    if handle == 0 {
+        return true;
+    }
+    let this = handle as *mut u8;
+    let saved = CARRY
+        .lock()
+        .ok()
+        .and_then(|g| g.iter().find(|c| c.handle == handle).and_then(|c| c.mask));
+    unsafe {
+        let world = read_i32(this, ENT_WORLD) as *mut u8;
+        if world.is_null() {
+            return true;
+        }
+        let cm = read_i32(world, GAME_WORLD_COLLISION_MANAGER) as *mut u8;
+        let Some(addr) = crate::wa::try_address("ENTITY_COLLIDES_AT") else {
+            return true;
+        };
+        if cm.is_null() {
+            return true;
+        }
+        let mask = saved.unwrap_or_else(|| read_i32(this, ENT_COLLISION_MASK));
+        let f: CollidesAtFn = std::mem::transmute(addr as usize);
+        f(cm, this, x, y, read_i32(this, ENT_HELPER), mask) == 0
+    }
+}
 
 /// `worm:jetpack_steer(on)`: while WA's jet pack runs (0x78), the engine
 /// consumes the worm's move keys after the pack's hooks read them, so WA

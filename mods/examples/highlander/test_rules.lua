@@ -104,6 +104,14 @@ function Worm:release(vx, vy, opts)
   self.vx, self.vy = vx or 0, vy or 0
 end
 function Worm:jetpack_steer(on) self.steered = on ~= false end
+-- WA's collision test, in the mock: the land M.solid gives, 4 pixels either
+-- side of the worm and 6 above and below.
+function Worm:fits(x, y)
+  if not M.solid then return true end
+  local w, h = 4 * 0x10000, 6 * 0x10000
+  return not (M.solid(x, y) or M.solid(x - w, y) or M.solid(x + w, y)
+    or M.solid(x, y - h) or M.solid(x, y + h))
+end
 
 local function inventory_api()
   local api = {}

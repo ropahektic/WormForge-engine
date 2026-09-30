@@ -2612,8 +2612,6 @@ do
   local BALLOON_WIND = 100          -- the patched bungee's fire_method, in percent
   local BALLOON_DEPTH = 0x10001     -- behind the basket, in front of worms
   local BASKET_DEPTH = 0x10000
-  -- The land a balloon stops at: the basket, 4 pixels either side, 6 above and below.
-  local BALLOON_HALF_W, BALLOON_HALF_H = 4 * 0x10000, 6 * 0x10000
   -- PX's GetTeamColorRGB, by WA's colour index (worm.alliance, 0 red .. 5 cyan).
   -- PX adds it to its dark grey balloon (SetColorMod mode 8); the GPU tint
   -- multiplies, so the pack's balloon art is PX's lightened to white, and the
@@ -2637,10 +2635,6 @@ do
     wa.sound.play(worm, "sounds/balloon/" .. name .. wa.random(1, n) .. ".wav")
   end
 
-  local function balloon_blocked(x, y)
-    return wa.land.solid(x - BALLOON_HALF_W, y) or wa.land.solid(x + BALLOON_HALF_W, y)
-      or wa.land.solid(x, y - BALLOON_HALF_H) or wa.land.solid(x, y + BALLOON_HALF_H)
-  end
 
   -- How many frames after popping against land the worm is watched: WA may
   -- stand it up there, in mid-air under a ceiling.
@@ -2727,14 +2721,15 @@ do
     local vy = b.vy - wa.world.gravity() * worm.gravity // P
     local vx = b.vx
     local side = wa.world.wind() >= 0 and P or -P
-    if not wa.land.solid(b.x + side, b.y) then
+    if worm:fits(b.x + side, b.y) then
       vx = vx + wa.world.wind() * (BALLOON_WIND * P // 100) // P
     end
     vx, vy = vx * BALLOON_DAMP // P, vy * BALLOON_DAMP // P
     b.vx, b.vy = vx, vy
     local x, y = b.x + vx, b.y + vy
-    -- It pops on touching land, as WA's parachute closes there, and in water.
-    if balloon_blocked(x, y) then
+    -- It pops on touching land, as WA's parachute closes there: where WA's
+    -- own test says the worm would touch it, so it never sits inside it.
+    if not worm:fits(x, y) then
       balloon_stop(worm, b, true)
       return
     end

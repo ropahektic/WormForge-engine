@@ -467,6 +467,7 @@ wa.weapons.replace({
             take: |h, hide, freeze| CALLS.with(|c| c.borrow_mut().push(format!("take {h:x} {hide} {freeze}"))),
             release: |h, vx, vy, t| CALLS.with(|c| c.borrow_mut().push(format!("release {h:x} {vx} {vy} {t}"))),
             is_taken: |h| h == 0x1234,
+            fits: |h, x, y| h == 0x1234 && x > 0 && y == 7,
             jetpack_steer: |h, on| CALLS.with(|c| c.borrow_mut().push(format!("steer {h:x} {on}"))),
             ..Default::default()
         });
@@ -490,6 +491,7 @@ wa.weapons.replace({
                  w:release()
                  w:release(1, 2, { tumble = true })
                  assert(w.taken == true)
+                 assert(w:fits(1, 7) == true and w:fits(-1, 7) == false)
                  w:jetpack_steer(true)
                  w:jetpack_steer(false)",
             )
