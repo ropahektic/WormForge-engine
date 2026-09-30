@@ -597,6 +597,7 @@ pub fn collect_draws() {
         }
         Err(e) => warn(&format!("wa.on.draw: {e}")),
     }
+    crate::worm_hold::draw_holds();
 }
 
 /// A `wa.draw.quad` colour (straight 0xAARRGGBB) as a vertex `Tint`:
@@ -629,6 +630,22 @@ struct Pending {
     tint: u32,
     /// Occlusion band, as a render-queue depth.
     depth: u32,
+}
+
+/// Queue an engine-owned held sheet in WA world coordinates. Called once per
+/// rendered frame, after begin_frame and before the stock scene dispatch.
+pub(crate) fn enqueue_hold(x: i32, y: i32, sheet: u32, frame: u32,
+    facing: i32, angle: f32, scale: f32, tint: u32, depth: u32) {
+    if !is_active() || !crate::sprite::is_gpu_sheet(sheet) { return; }
+    let Some((_, count, _)) = crate::sprite::gpu_frame(sheet) else { return; };
+    if count == 0 { return; }
+    let phase = (((frame.min(count as u32 - 1) as u64 * 65536) + 32768) / count as u64) as u32;
+    if let Ok(mut pending) = PENDING.lock() {
+        pending.push(Pending {
+            x, y, sprite: sheet | if facing < 0 { 0x40000 } else { 0 },
+            anim: phase.min(0xffff), angle, scale, tint, depth,
+        });
+    }
 }
 
 /// Take over one sprite draw, or decline it.

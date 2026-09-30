@@ -18,7 +18,7 @@ use game::offsets::{
       MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
     MISSILE_RENDER_SPRITE, MISSILE_SHOOT_PELLET, MISSILE_RENDER_SPRITE_ALT, MISSILE_TYPE, MISSILE_TYPE_HOMING,
      MISSILE_WEAPON_ALT_SPRITE,
-    MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FINISH_TURN, MSG_FRAME_FINISH, MSG_HIT,
+    MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FINISH_TURN, MSG_FIRE_WEAPON, MSG_FRAME_FINISH, MSG_HIT,
     MSG_RENDER_SCENE, MSG_RETREAT_FINISHED, MSG_RETREAT_STARTED, MSG_START_TURN,
 
 
@@ -1010,6 +1010,7 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     eat = eat || worm_message_reporting_errors(this as u32, team, msg);
     // After the pack's hooks (which read the keys), before WA's handler.
     eat = eat || owned_input(this, msg);
+    if msg == MSG_FIRE_WEAPON { crate::worm_hold::on_fire(this as u32); }
     if msg == MSG_START_TURN {
         if let Err(e) = lua_host::turn_start(this as u32) {
             crate::log_error(&format!("turn_start: {e}"));
@@ -1072,6 +1073,7 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         crate::world::pump_space_fire(this);
         apply_carry(this);
         crate::worm_sprite::tick(this as usize);
+        crate::worm_hold::tick(this as u32);
     }
 }
 

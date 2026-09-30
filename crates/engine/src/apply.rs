@@ -54,6 +54,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     actor::clear_claims();
     crate::mask_collide::clear();
     crate::worm_sprite::clear();
+    crate::worm_hold::clear();
     crate::mine::clear();
     crate::missile_boom::clear();
     crate::particles::clear();
@@ -146,6 +147,10 @@ pub fn on_gfx_ready(display: *mut u8) {
                 let worm_sheet = !as_weapon
                     && claim.params.gpu_worm_sprites
                     && claim.params.worm_sprites.iter().any(|(_, _, wp)| wp == p);
+                let hold_sheet = !as_weapon && claim.params.hold.as_ref().is_some_and(|hold| {
+                    hold.sheet == *p || hold.hand.as_ref() == Some(p)
+                        || hold.flash.as_ref().is_some_and(|flash| flash.sheet == *p)
+                });
                 let mole_dig_sheet = claim
                     .params
                     .mole_dig_rotation
@@ -156,7 +161,7 @@ pub fn on_gfx_ready(display: *mut u8) {
                 // be team-colour entries WA then tints with the team's colour.
                 let override_sheet = !as_weapon
                     && claim.params.sprite_overrides.iter().any(|(_, wp)| wp == p);
-                if (by_prefix || worm_sheet || override_sheet) && !mole_dig_sheet {
+                if (by_prefix || worm_sheet || hold_sheet || override_sheet) && !mole_dig_sheet {
                     gpu_sheets.push((gfx::sprite_key(&claim.mod_id, p), sheet.clone()));
                     return;
                 }
@@ -371,6 +376,9 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             &claim.params.worm_sprites,
             claim.params.worm_sprites_animate,
         );
+        if let Some(hold) = &claim.params.hold {
+            crate::worm_hold::claim(idx, &claim.mod_id, hold);
+        }
         if let Some(spawn) = spawn {
             let id = pass
                 .sprite_ids

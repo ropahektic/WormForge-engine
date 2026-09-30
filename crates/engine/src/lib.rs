@@ -39,6 +39,7 @@ mod wa;
 mod world;
 mod terrain;
 mod worm_sprite;
+mod worm_hold;
 mod zip;
 
 pub use log::{attach_console, error_log_path, log_error, log_line, log_path, panic_text};

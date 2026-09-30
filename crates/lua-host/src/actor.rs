@@ -9,7 +9,7 @@ use game::offsets::{
     CLASS_MINE, WORM_INDEX,
     CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
-    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_CHARGING, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_TUMBLING, ENT_COLLISION_MASK,
+    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_TUMBLING, ENT_COLLISION_MASK,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -1502,6 +1502,8 @@ const WORM_KEYS: [(&str, usize); 4] = [
 pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
     Some(match state {
         WORM_STATE_STANDING => "standing",
+        0x6A => "firing",
+        0x6B => "fired",
         WORM_STATE_PREFIRING => "prefiring",
         WORM_STATE_PUNCHING => "punching",
         WORM_STATE_DRILLING => "drilling",
@@ -1836,10 +1838,9 @@ fn aim_fraction(raw: i32) -> f64 {
 }
 
 /// The worm states in which WA draws the worm with its weapon out: 0x67
-/// standing with it (and its variants 0x68/0x69, where `worm_sprite` maps the
-/// hold sheet), and 0x73 while the power bar charges.
+/// ready and its variants 0x68/0x69. 0x73 is rope rolling in live traces.
 fn holds_weapon(state: u32) -> bool {
-    matches!(state, 0x67..=0x69) || state == WORM_STATE_CHARGING
+    matches!(state, 0x67..=0x69)
 }
 
 #[cfg(test)]
@@ -1856,12 +1857,12 @@ mod tests {
     }
 
     #[test]
-    fn aiming_is_standing_with_the_weapon_or_charging() {
-        for state in [0x67, 0x68, 0x69, 0x73] {
+    fn aiming_is_ready_or_charging_the_weapon() {
+        for state in [0x67, 0x68, 0x69] {
             assert!(super::holds_weapon(state), "{state:#x}");
         }
         // Idle, walking, drilling, jumping, hurt.
-        for state in [0x65, 0x66, 0x6E, 0x77, 0x80] {
+        for state in [0x65, 0x66, 0x6E, 0x73, 0x77, 0x80] {
             assert!(!super::holds_weapon(state), "{state:#x}");
         }
     }

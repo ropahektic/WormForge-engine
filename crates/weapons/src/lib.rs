@@ -13,7 +13,7 @@ mod templates;
 pub mod wep;
 
 pub use overlay::{
-    PanelIcon,
+    PanelIcon, HoldFlash, HoldSpec,
     ActorSpawn, AttachedSpawn, ClusterHoming, ClusterSpec, HomingMode, OverlayClaim, OverlayParams,
     ResolveResult, ScreenBlit, SkippedClaim, SpawnExplode, SpawnFrom, SpriteOrigin, apply_params,
     resolve_claims,
