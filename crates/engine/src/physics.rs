@@ -26,7 +26,7 @@ use game::offsets::{
     WORM_STATE_AIRBORNE, WORM_TURN_ACTIVE, WORLD_ROOT_TURN_ENDED,
     COLLISION_LANDSCAPE_BIT, ENT_COLLISION_MASK, MSG_JUMP, MSG_JUMP_UP, WORM_KEY_DOWN, WORM_KEY_LEFT,
     WORM_KEY_RIGHT, WORM_KEY_UP, WORM_STATE_JETPACKING, WORM_STATE_TUMBLING, WORM_STATE_HIT,
-    WORM_STATE_BLASTED,
+    WORM_STATE_BLASTED, WORLD_ROOT_TURN_TIMER,
 };
 use std::ffi::c_void;
 use std::collections::{HashMap, HashSet};
@@ -403,13 +403,19 @@ fn owned_input(this: *mut u8, msg: u32) -> bool {
         return false;
     }
     let handle = this as u32;
+    // WA latches each move key as its message arrives; clear them once, at
+    // the frame's end after the pack's hooks read them, so keys that came in
+    // separate messages (up and left) are all seen.
+    let frame = msg == MSG_FRAME_FINISH;
     let jetpacking = unsafe { read_i32(this, WORM_STATE) } as u32 == WORM_STATE_JETPACKING;
     let mut lapsed = false;
     if let Ok(mut g) = STEERED.lock() {
         if let Some(entry) = g.iter_mut().find(|(h, _)| *h == handle) {
             if jetpacking {
                 entry.1 = true;
-                clear_move_keys(this);
+                if frame {
+                    clear_move_keys(this);
+                }
             } else if entry.1 && msg == MSG_FRAME_FINISH {
                 lapsed = true;
             }
@@ -424,7 +430,9 @@ fn owned_input(this: *mut u8, msg: u32) -> bool {
     if msg == MSG_JUMP || msg == MSG_JUMP_UP {
         return true;
     }
-    clear_move_keys(this);
+    if frame {
+        clear_move_keys(this);
+    }
     false
 }
 
@@ -943,7 +951,18 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     }
     if msg == MSG_FRAME_FINISH && !this.is_null() {
         let ended = unsafe { read_i32(this, WORLD_ROOT_TURN_ENDED) != 0 };
-        if ended {
+        // A turn that runs while a worm is held (take{ turn = "run" }) ends
+        // when its clock runs out; WA then waits for every worm to settle,
+        // which a held worm never does. The ended flag alone was never seen
+        // set in that case (a swimmer held past its turn), so the clock
+        // counts too.
+        let timer = unsafe { read_i32(this, WORLD_ROOT_TURN_TIMER) };
+        let out_of_time = !freezing() && timer <= 0;
+        if ended || out_of_time {
+            crate::log_line(&format!(
+                "turn over with a worm held (ended flag {}, turn clock {timer}): letting go",
+                ended as u8
+            ));
             crate::mask_collide::clear();
             drop_all();
         }
