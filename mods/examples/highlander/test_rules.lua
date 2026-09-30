@@ -324,6 +324,7 @@ local function new_match(opts)
         M.sound_targets[#M.sound_targets + 1] = target
         M.sounds[#M.sounds + 1] = name
         M.sound_flags[#M.sound_flags + 1] = flags
+        M.sound_positions[#M.sound_positions + 1] = { x = target.x, y = target.y }
         -- A pack WAV plays only once an entry registers it (`sounds`);
         -- otherwise the engine plays nothing, without a word.
         if type(name) == "string" then
@@ -454,7 +455,8 @@ local function new_match(opts)
       end,
     },
   }
-  M.quads, M.ribbons, M.sounds, M.sound_flags, M.trace_hit, M.draws = {}, {}, {}, {}, nil, nil
+  M.quads, M.ribbons, M.sounds, M.sound_flags, M.sound_positions, M.trace_hit, M.draws =
+    {}, {}, {}, {}, {}, nil, nil
   M.mines, M.crates, M.oil, M.graves = {}, {}, {}, {}
   -- The engine's require: a pack module runs once per match, in its own
   -- environment that reads the shared globals and keeps its writes.
@@ -2079,6 +2081,23 @@ do
   for _ = 1, 50 do M.message(w, wa.msg.FRAME_FINISH) end
   check("a dead worm is never moved or carved in and its marker is removed",
     w.x == 40 * P and w.y == 70 * P and not M.digs and marker.dead)
+
+  new_match()
+  spec = nil
+  for _, r in ipairs(replaced) do if r.weapon == "teleport" then spec = r end end
+  w = worm(16)
+  w.x, w.y, w.hp = 960 * P, -10000 * P, 100
+  local place_x, place_y = 220 * P, 130 * P
+  spec.on_click({ worm = w, x = place_x, y = place_y })
+  check("manual placement moves the unplaced worm before it can fall",
+    w.x == place_x and w.y == place_y and w.state == "teleporting")
+  check("manual placement plays the start sound at the destination",
+    #M.sounds == 1 and M.sounds[1] == 67
+      and M.sound_positions[1].x == place_x and M.sound_positions[1].y == place_y)
+  check("manual placement carves the destination without a delayed marker",
+    #M.digs == 3 and not M.spawned)
+  for _ = 1, 51 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("manual placement has no second arrival", w.x == place_x and w.y == place_y and #M.digs == 3)
 end
 
 print("lightning strike: warning, hit, grave identity and copied hand")

@@ -11,6 +11,13 @@ do
 -- three overlapping round cuts, centred where PX places them.
 fires.teleports = {} -- worm id -> frozen target and elapsed frames
 
+local function super_tele_arrive(worm, x, y)
+  worm.x, worm.y = x, y
+  for _, rise in ipairs({ 0, 10, 22 }) do
+    wa.land.dig({ x = x, y = y - rise * 0x10000, radius = 12 })
+  end
+end
+
 fires.super_tele_click = function(ev)
   local worm = ev.worm
   if worm.hp <= 0 then return end
@@ -18,6 +25,15 @@ fires.super_tele_click = function(ev)
   if wa.world.cavern() and y < 19 * 0x10000 then y = 19 * 0x10000 end
   local previous = fires.teleports[worm.id]
   if previous and previous.marker then previous.marker:despawn() end
+  -- During manual placement WA keeps unplaced worms at (960, -10000).
+  -- Waiting 50 frames there makes the worm fall and take damage before the
+  -- arrival. Place it now so the teleport sound has an audible position.
+  if worm.y == -10000 * 0x10000 then
+    super_tele_arrive(worm, ev.x, y)
+    worm:set_state("teleporting")
+    wa.sound.play(worm, 67, 0)
+    return
+  end
   -- FireWeapon clears WA's planted X for click-only weapons. Keep a fixed
   -- stock planted-X marker at the saved target until the worm arrives instead.
   local marker = wa.actors.spawn({
@@ -49,9 +65,6 @@ wa.on.worm_message(function(worm, msg)
   if tele.frames < 50 then return end
   tele.marker:despawn()
   fires.teleports[worm.id] = nil
-  worm.x, worm.y = tele.x, tele.y
-  for _, rise in ipairs({ 0, 10, 22 }) do
-    wa.land.dig({ x = tele.x, y = tele.y - rise * 0x10000, radius = 12 })
-  end
+  super_tele_arrive(worm, tele.x, tele.y)
 end, { msgs = { wa.msg.FRAME_FINISH } })
 end
