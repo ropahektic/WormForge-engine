@@ -2127,7 +2127,11 @@ do
   target.x, target.y = 5*P, 0
   spec.on_explode({ worm=owner, x=0, y=0 })
   tick(1)
-  check("near worm is held in tazed pose", target.carried and target.body_visible == false)
+  function target:set_state() error("a tazed worm is taken, not set to a state") end
+  function target:clear_keys() error("a tazed worm's keys are the engine's to consume") end
+  check("near worm is held in tazed pose", target.taken and target.taken.turn == "freeze"
+    and target.body_visible == false)
+  check("a tazed worm cannot start a shot", M.message(target, wa.msg.FIRE_WEAPON) == "eat")
   -- The current, drawn: a glow at every point of the strip, and PX's
   -- widths (9 at the thickest, a half width).
   M.quads, M.ribbons = {}, {}
@@ -2141,8 +2145,9 @@ do
   tick(23)
   check("zap waits 24 frames", target.hp == 100)
   tick(1)
-  check("zap deals 24 and releases movement", target.hp == 76 and target.carried == false
-    and target.body_visible == true)
+  check("zap deals 24 and releases movement", target.hp == 76 and target.taken == nil
+    and target.state == "sliding" and target.body_visible == true)
+  check("released, it may fire again", M.message(target, wa.msg.FIRE_WEAPON) ~= "eat")
   spec, owner = setup()
   local first, second = worm(17), worm(32)
   first.x, first.y = 5*P, 0

@@ -4292,11 +4292,19 @@ local function release_taze(key)
   if hold.count > 0 then return end
   local worm = find_target(key)
   if worm then
-    worm:drop()
+    worm:release(0, 0)
     worm.body_visible = true
   end
   tazed[key] = nil
 end
+
+-- A tazed worm is the pack's (worm:take): the engine eats its moves and
+-- jumps; it cannot start a shot either.
+wa.on.worm_message(function(worm, msg)
+  if msg == wa.msg.FIRE_WEAPON and tazed[target_key(worm)] then
+    return "eat"
+  end
+end)
 
 local function zap_target(arc, pending)
   local obj = find_target(pending.key)
@@ -4322,15 +4330,6 @@ local function progress_arc(arc)
       table.remove(arc.pending, i)
     end
   end
-  for _, key in ipairs(wa.sorted(tazed)) do
-    local hold = tazed[key]
-    local worm = find_target(key)
-    if worm then
-      worm:clear_keys()
-      worm:set_state("standing")
-      worm:carry(hold.x, hold.y)
-    end
-  end
   if arc.pause > 0 then arc.pause = arc.pause - 1; return end
   if arc.life <= 0 then
     if #arc.points > 0 then table.remove(arc.points, 1) end
@@ -4353,7 +4352,8 @@ local function progress_arc(arc)
             sheet = wa.random(1, 2) == 1 and "sprites/electric_grenade/tazed1" or "sprites/electric_grenade/tazed2" }
         end
         target.body_visible = false
-        target:carry(target.x, target.y)
+        -- Held where it stands, the turn stopped, until the zap.
+        target:take{ turn = "freeze" }
       end
       arc.x, arc.y = target.x, target.y
       arc.life = 20
