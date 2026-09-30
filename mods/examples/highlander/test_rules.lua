@@ -281,7 +281,10 @@ local function new_match(opts)
         M.digs = M.digs or {}
         M.digs[#M.digs + 1] = spec
       end,
-      trace = function() return M.trace_hit end,
+      trace = function(...)
+        if type(M.trace_hit) == "function" then return M.trace_hit(...) end
+        return M.trace_hit
+      end,
       solid = function(x, y) return M.solid ~= nil and M.solid(x, y) or false end,
     },
     draw = {
@@ -1195,51 +1198,84 @@ do
   check("a fast landing crashes it, as in PX", #M.spawned == before + 1 and M.spawned[#M.spawned].explode)
 end
 
-print("hot air balloon: PX's balloon on WA's parachute")
+print("hot air balloon: PX's balloon, flown with WA's parachute physics upside down")
 do
   new_match()
   frame()
   local P = 0x10000
+  M.gravity, M.wind, M.water, M.solid = 0x4000, 0, nil, nil
   local w = worm(16)
   w.weapon, w.state, w.x, w.y, w.vx, w.vy, w.facing, w.turn = "bungee", "sliding", 100 * P, 50 * P, 0, P, 1, true
   w.gravity, w.body_visible, w.alliance, w.keys = P, true, 1, {}
   for i, o in ipairs(worms) do
     if o ~= w then o.x, o.y = -1000 * P * i, 0 end
   end
-  function w:set_state(s) self.state = s end
+  function w:set_state() error("the balloon takes and releases the worm; it sets no state") end
   M.spawned, M.sounds = {}, {}
   M.message(w, wa.msg.FRAME_FINISH)
-  check("nothing while it just falls", #M.spawned == 0 and w.gravity == P)
+  check("nothing while it just falls", #M.spawned == 0 and not w.taken)
   -- WA opens the parachute and clears the selection: "none", as seen in WA.
   w.state, w.weapon = "parachuting", "none"
+  local y0 = w.y
   M.message(w, wa.msg.FRAME_FINISH)
-  check("up: gravity turned over", w.gravity == -P, tostring(w.gravity))
+  check("taken for the flight, the turn running", w.taken and w.taken.turn == "run")
   check("an inflate sound", M.sounds[1] and M.sounds[1]:find("inflate"))
+  -- WA's step: gravity (upside down) in, then damped to 0.8.
+  check("its first step: the fall turned upward, damped", w.y - y0 == (P - 0x4000) * 0xCCCC // P,
+    tostring((w.y - y0) / P))
   local balloon, basket = M.spawned[1], M.spawned[2]
   check("the balloon in the team's colour, the basket below", balloon.sprite == "sprites/balloon/balloon"
     and balloon.tint == 0xFF0096FF and basket.sprite == "sprites/balloon/basket" and w.body_visible == false,
     string.format("%x", balloon.tint or 0))
   check("the balloon 43 above, 6 ahead; the basket's art mirrored facing right",
     balloon.y == w.y - 43 * P and balloon.x == w.x + 6 * P and basket.facing == -1)
-  -- The parachute closes on the ground: slide, pop, gravity back.
-  w.state = "standing"
+  -- It settles at four times gravity upward and four times the wind across.
+  M.wind = 0x100
+  for _ = 1, 100 do M.message(w, wa.msg.FRAME_FINISH) end
+  local x1, y1 = w.x, w.y
   M.message(w, wa.msg.FRAME_FINISH)
-  check("closed: gravity back, sliding, popped", w.gravity == P and w.state == "sliding"
-    and M.sounds[#M.sounds]:find("pop") and balloon.dead and w.body_visible == true)
-  -- Up again, then the turn changes.
-  w.state, w.weapon = "sliding", "bungee"
+  check("rising at four times gravity", math.abs((w.y - y1) + 4 * 0x4000) <= 8, tostring(w.y - y1))
+  check("drifting with four times the wind", math.abs((w.x - x1) - 4 * 0x100) <= 8, tostring(w.x - x1))
+  check("no weapons from the basket", M.message(w, wa.msg.FIRE_WEAPON) == "eat")
+  -- The jump key pops it: the worm back to WA, falling with its speed.
+  check("the jump key pops it", M.message(w, wa.msg.JUMP) == "eat" and M.sounds[#M.sounds]:find("pop")
+    and balloon.dead and w.body_visible == true and not w.taken and w.state == "sliding" and w.vy < 0)
+  local function up_again()
+    w.state, w.weapon = "sliding", "bungee"
+    M.message(w, wa.msg.FRAME_FINISH)
+    w.state, w.weapon = "parachuting", "none"
+    M.message(w, wa.msg.FRAME_FINISH)
+    return w.taken
+  end
+  -- Up again, into land above it: it pops there.
+  check("up again", up_again())
+  local top = w.y - 5 * P
+  M.solid = function(_, y) return y < top end
+  for _ = 1, 20 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("land: popped, the worm back to WA", not w.taken and w.state == "sliding"
+    and M.sounds[#M.sounds]:find("pop"))
+  M.solid = nil
+  -- Up again; the engine lets go at the turn's end: it pops.
+  check("up again", up_again())
+  w.taken = nil
   M.message(w, wa.msg.FRAME_FINISH)
-  w.state = "parachuting"
-  M.message(w, wa.msg.FRAME_FINISH)
-  check("up again", w.gravity == -P)
+  check("the turn over: popped", M.sounds[#M.sounds]:find("pop") and w.body_visible == true)
+  -- Up again, then the next turn begins.
+  check("up again", up_again())
   M.turn_start({ worm = worm(32), active = worm(32) })
-  check("a turn change pops it", w.gravity == P)
+  check("a turn change pops it", not w.taken and w.body_visible == true)
   -- The Hang-Glider's parachute is not a balloon.
-  w.state, w.weapon = "sliding", "parachute"
+  local n = #M.spawned
+  w.state, w.weapon, w.keys = "sliding", "parachute", {}
   M.message(w, wa.msg.FRAME_FINISH)
   w.state = "parachuting"
   M.message(w, wa.msg.FRAME_FINISH)
-  check("another slot's parachute is left alone", w.gravity == P)
+  local balloons = 0
+  for i = n + 1, #M.spawned do
+    if M.spawned[i].sprite == "sprites/balloon/balloon" then balloons = balloons + 1 end
+  end
+  check("another slot's parachute is left alone", balloons == 0)
+  M.message(w, wa.msg.JUMP)
 end
 
 print("automatic parachute: only the equipped weapon opens")
@@ -1247,6 +1283,7 @@ do
   new_match()
   frame()
   local P = 0x10000
+  M.gravity, M.wind, M.water, M.solid, M.trace_hit = 0x3AE, 0, nil, nil, nil
   local w = worm(16)
   w.weapon, w.state, w.x, w.y, w.vx, w.vy, w.turn =
     "bungee", "sliding", 100 * P, 50 * P, 0, P, true
@@ -1256,12 +1293,13 @@ do
   w.weapon, w.state = "parachute", "parachuting"
   M.message(w, wa.msg.FRAME_FINISH)
   check("equipped balloon owns the auto opening despite WA's slot change",
-    w.gravity == -P and M.spawned[1] and M.spawned[1].sprite == "sprites/balloon/balloon")
+    w.taken and M.spawned[1] and M.spawned[1].sprite == "sprites/balloon/balloon")
   local glider = false
   for _, a in ipairs(M.spawned) do
     if a.sprite == "sprites/hang_glider/glider" then glider = true end
   end
   check("equipped balloon does not start the glider", not glider)
+  M.message(w, wa.msg.JUMP)
 
   new_match()
   frame()
@@ -1274,7 +1312,8 @@ do
   w.weapon, w.state = "none", "parachuting"
   M.message(w, wa.msg.FRAME_FINISH)
   check("equipped glider owns its auto opening",
-    M.spawned[1] and M.spawned[1].sprite == "sprites/hang_glider/glider" and w.gravity == P)
+    M.spawned[1] and M.spawned[1].sprite == "sprites/hang_glider/glider" and w.taken)
+  M.message(w, wa.msg.JUMP)
 
   new_match()
   frame()
@@ -1287,7 +1326,7 @@ do
   -- Even an unexpected stock parachute state must not turn into either mod.
   w.weapon, w.state = "none", "parachuting"
   M.message(w, wa.msg.FRAME_FINISH)
-  check("another equipped weapon claims neither parachute replacement", #M.spawned == 0)
+  check("another equipped weapon claims neither parachute replacement", #M.spawned == 0 and not w.taken)
 
   new_match()
   frame()
@@ -1300,54 +1339,71 @@ do
   M.message(w, wa.msg.FRAME_FINISH)
   w.weapon, w.state = "none", "parachuting"
   M.message(w, wa.msg.FRAME_FINISH)
-  check("putting the glider away removes its automatic claim", #M.spawned == 0)
+  check("putting the glider away removes its automatic claim", #M.spawned == 0 and not w.taken)
 end
 
-print("hang-glider: PX's glider on WA's parachute")
+print("hang-glider: PX's glider, flown by the pack")
 do
   new_match()
   frame()
   local P = 0x10000
-  M.gravity, M.wind, M.trace_hit = 0x3AE, 0, nil -- a small pull, as WA's is
+  M.gravity, M.wind, M.water, M.solid, M.trace_hit = 0x3AE, 0, nil, nil, nil -- a small pull, as WA's is
   for i, o in ipairs(worms) do o.x, o.y = -1000 * P * i, 0 end
   local w = worm(16)
   w.weapon, w.state, w.x, w.y, w.vx, w.vy, w.facing, w.turn = "parachute", "sliding", 100 * P, 50 * P, 3 * P, P, 1, true
   w.body_visible, w.keys = true, {}
-  function w:set_state(s) self.state = s end
+  function w:set_state() error("the glider takes and releases the worm; it sets no state") end
   M.spawned, M.sounds = {}, {}
   M.message(w, wa.msg.FRAME_FINISH)
   check("nothing while it just falls", #M.spawned == 0 and w.body_visible == true)
-  -- WA opens the parachute and clears the selection.
+  -- WA opens the parachute and clears the selection: the pack takes over.
   w.state, w.weapon = "parachuting", "none"
+  local x0, y0 = w.x, w.y
   M.message(w, wa.msg.FRAME_FINISH)
   local art = M.spawned[1]
-  check("opens: the glider sound and art, the body hidden", M.sounds[1] and M.sounds[1]:find("hangopen")
+  check("opens: taken, the glider sound and art, the body hidden", w.taken and w.taken.turn == "run"
+    and M.sounds[1] and M.sounds[1]:find("hangopen")
     and art and art.sprite == "sprites/hang_glider/glider" and w.body_visible == false)
   check("its art faces left, as WA's worms: mirrored facing right", art.facing == -1)
   -- Level, the wing's up side is straight up: a quarter of the fall goes.
   check("the speed carries on into the glide; the wing takes a quarter of the fall",
-    math.abs(w.vx - 3 * P) <= 1 and math.abs(w.vy - (1 + 0x3AE * 0.75 / P) * 0.75 * P) <= 1, w.vx .. " " .. w.vy)
+    math.abs((w.x - x0) - 3 * P) <= 1 and math.abs((w.y - y0) - (1 + 0x3AE * 0.75 / P) * 0.75 * P) <= 1,
+    (w.x - x0) .. " " .. (w.y - y0))
   for _ = 1, 30 do M.message(w, wa.msg.FRAME_FINISH) end
   check("and the nose follows the flight path", art.angle ~= 0, tostring(art.angle))
   check("it opens over 25 frames", art.shown == 9, tostring(art.shown))
+  check("no weapons while it glides", M.message(w, wa.msg.FIRE_WEAPON) == "eat")
   -- Nose up: the nose angle drops, faster the faster it flies.
   w.keys = { up = true }
   for _ = 1, 10 do M.message(w, wa.msg.FRAME_FINISH) end
   w.keys = {}
   check("up turns the nose up", art.angle and art.angle > 180, tostring(art.angle))
-  -- Heading into the ground: it stops gliding, as PX's WS_AFTERROPE.
+  local function glide_again()
+    w.state, w.weapon, w.vx, w.vy = "sliding", "parachute", 3 * P, P
+    M.message(w, wa.msg.FRAME_FINISH)
+    w.state, w.weapon = "parachuting", "none"
+    M.message(w, wa.msg.FRAME_FINISH)
+    return w.taken
+  end
+  -- Into something ahead, no land below: a crash, the worm back to WA with
+  -- the glider's speed, and no pack-away.
+  local n = #M.spawned
+  M.trace_hit = function(x0, _, x1) if x1 ~= x0 then return { x = x1 } end end
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.trace_hit = nil
+  check("a crash: let go, falling on", not w.taken and w.state == "sliding" and w.vx > 0)
+  check("closed: the sound, the art gone, the body back",
+    M.sounds[#M.sounds]:find("hangclose") and art.dead and w.body_visible == true)
+  w.state = "standing"
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("and no pack-away", #M.spawned == n)
+  -- Coming down onto land: let go; once WA stands it up, the glider's own
+  -- pack-away over the hidden body.
+  check("gliding again", glide_again())
   M.trace_hit = { x = w.x, y = w.y }
   M.message(w, wa.msg.FRAME_FINISH)
-  check("about to hit something: it slides", w.state == "sliding")
   M.trace_hit = nil
-  M.message(w, wa.msg.FRAME_FINISH)
-  check("closed: the sound, the art gone, the body back, no pack-away",
-    M.sounds[#M.sounds]:find("hangclose") and art.dead and w.body_visible == true and #M.spawned == 1)
-  -- Equip the glider again for the next opening, then land on its feet.
-  w.weapon = "parachute"
-  M.message(w, wa.msg.FRAME_FINISH)
-  w.state, w.weapon = "parachuting", "none"
-  M.message(w, wa.msg.FRAME_FINISH)
+  check("about to land: let go", not w.taken and w.state == "sliding")
   w.state = "standing"
   M.message(w, wa.msg.FRAME_FINISH)
   local pack = M.spawned[#M.spawned]
@@ -1357,10 +1413,19 @@ do
   check("six frames at 24 a second", pack.shown == 5 and not pack.dead, tostring(pack.shown))
   M.message(w, wa.msg.FRAME_FINISH)
   check("then the worm again", pack.dead and w.body_visible == true)
-  -- The balloon's parachute is not a glider.
-  w.weapon = "bungee"
+  -- The jump key lets go of it.
+  check("gliding again", glide_again())
+  check("the jump key: let go", M.message(w, wa.msg.JUMP) == "eat" and not w.taken
+    and M.sounds[#M.sounds]:find("hangclose"))
+  -- The engine lets go at the turn's end.
+  check("gliding again", glide_again())
+  w.taken = nil
   M.message(w, wa.msg.FRAME_FINISH)
-  local n = #M.spawned
+  check("the turn over: closed", M.sounds[#M.sounds]:find("hangclose") and w.body_visible == true)
+  -- The balloon's parachute is not a glider.
+  w.state, w.weapon = "sliding", "bungee"
+  M.message(w, wa.msg.FRAME_FINISH)
+  n = #M.spawned
   w.state = "parachuting"
   M.message(w, wa.msg.FRAME_FINISH)
   local glider = false
@@ -1368,6 +1433,7 @@ do
     if M.spawned[i].sprite == "sprites/hang_glider/glider" then glider = true end
   end
   check("the Hot Air Balloon's parachute is left alone", not glider)
+  M.message(w, wa.msg.JUMP)
 end
 
 print("swim suit: PX's swimming on WA's laser sight")

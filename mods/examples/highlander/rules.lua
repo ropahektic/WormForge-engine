@@ -2585,346 +2585,444 @@ if wa.on.contact then
 end
 end
 
+-- Shared by the balloon and glider handlers to recognize the equipped weapon.
+local balloons = {}
+
 -- --------------------------------------------------------- Hot Air Balloon
--- Shared with later sections; the rest of this section is local to it.
-local balloons
 do
---
--- PX's balloon_s (r2_balloon by rafa''2, modified by 0rang3), on WA's
--- parachute. While the parachute is open, the worm's gravity is turned
--- upside down, so it rises; the balloon pops -- gravity back -- when the
--- parachute closes, at a turn change, or in water. The worm's body is
--- hidden behind the balloon, drawn in its team's colour, and the worm in its
--- basket, as PX's RenderWorm override draws them.
+  --
+  -- PX's balloon_s (r2_balloon by rafa''2, modified by 0rang3). PX flies it on
+  -- WA's parachute with the worm's gravity turned upside down; here the pack
+  -- flies it (worm:take) with WA's own parachute physics, upside down. WA 3.8.1,
+  -- per frame (0x4FCB30): the speed gains gravity times the worm's gravity
+  -- factor and, unless the worm is against land beside it, the wind times its
+  -- wind factor; then both speeds are damped. Its parachute (SetState 0x7D at
+  -- 0x50EBE2 and 0x50EC57) damps them to 0.8 and takes the wind factor from the
+  -- weapon record's +0x38 in percent: the patched bungee's fire_method, 100.
+  -- So it rises at up to four times gravity and drifts with four times the
+  -- wind. It pops -- the worm given back to WA, falling -- on touching land,
+  -- in water, on the jump key (which closes WA's parachute), and when the
+  -- turn ends. The worm's body is hidden behind the balloon, drawn in its
+  -- team's colour, and the worm in its basket, as PX's RenderWorm override.
+  --
+  -- It still opens as WA's parachute (the patched bungee, by hand or
+  -- automatically); the pack takes the worm on the first frame of it.
 
-local BALLOON_DEPTH = 0x10001    -- behind the basket, in front of worms
-local BASKET_DEPTH = 0x10000
--- PX's GetTeamColorRGB, by WA's colour index (worm.alliance, 0 red .. 5 cyan).
--- PX adds it to its dark grey balloon (SetColorMod mode 8); the GPU tint
--- multiplies, so the pack's balloon art is PX's lightened to white, and the
--- team colour shows at full strength.
-local TEAM_RGB = { 0xFF8080, 0x0096FF, 0x00D000, 0xFFFF40, 0xE800E8, 0x50FFFF }
+  local BALLOON_DAMP = 0xCCCC       -- WA's parachute damping, 0.8
+  local BALLOON_WIND = 100          -- the patched bungee's fire_method, in percent
+  local BALLOON_DEPTH = 0x10001     -- behind the basket, in front of worms
+  local BASKET_DEPTH = 0x10000
+  -- The land a balloon stops at: the basket, 4 pixels either side, 6 above and below.
+  local BALLOON_HALF_W, BALLOON_HALF_H = 4 * 0x10000, 6 * 0x10000
+  -- PX's GetTeamColorRGB, by WA's colour index (worm.alliance, 0 red .. 5 cyan).
+  -- PX adds it to its dark grey balloon (SetColorMod mode 8); the GPU tint
+  -- multiplies, so the pack's balloon art is PX's lightened to white, and the
+  -- team colour shows at full strength.
+  local TEAM_RGB = { 0xFF8080, 0x0096FF, 0x00D000, 0xFFFF40, 0xE800E8, 0x50FFFF }
 
--- Also records the weapon equipped before WA changes the visible slot while
--- opening a parachute, for both the balloon and glider handlers.
-balloons = {} -- worm id -> { active, gravity, ticks, equipped_weapon, balloon, basket }
+  -- Also records the weapon equipped before WA changes the visible slot while
+  -- opening a parachute, for both the balloon and glider handlers.
+  -- worm id -> { active, x, y, vx, vy, ticks, equipped_weapon, balloon, basket }
 
-local function balloon_of(worm)
-  local b = balloons[worm.id]
-  if not b then
-    b = { active = false, gravity = 0, ticks = 0 }
-    balloons[worm.id] = b
+  local function balloon_of(worm)
+    local b = balloons[worm.id]
+    if not b then
+      b = { active = false, ticks = 0 }
+      balloons[worm.id] = b
+    end
+    return b
   end
-  return b
-end
 
-local function balloon_sound(worm, name, n)
-  wa.sound.play(worm, "sounds/balloon/" .. name .. wa.random(1, n) .. ".wav")
-end
-
--- StopBalloon: gravity back, and a pop.
-local function balloon_stop(worm, b)
-  if not b.active then
-    return
+  local function balloon_sound(worm, name, n)
+    wa.sound.play(worm, "sounds/balloon/" .. name .. wa.random(1, n) .. ".wav")
   end
-  worm.gravity = -b.gravity
-  b.active, b.ticks = false, 0
-  if b.balloon then b.balloon:despawn(); b.balloon = nil end
-  if b.basket then b.basket:despawn(); b.basket = nil end
-  worm.body_visible = true
-  balloon_sound(worm, "pop", 4)
-end
 
-local function balloon_frame(worm)
-  local b = balloon_of(worm)
-  local state = worm.state
-  -- WA may change the selected slot to Parachute (or none) as Bungee fires.
-  -- The weapon equipped before that transition identifies the auto trigger;
-  -- an unrelated parachute opening must not become a Hot Air Balloon.
-  local equipped = b.equipped_weapon
-  if not b.active and state == "parachuting" and not b.was_parachuting
-      and equipped == "bungee" then
-    b.active, b.ticks = true, 0
-    balloon_sound(worm, "inflate", 3)
+  local function balloon_blocked(x, y)
+    return wa.land.solid(x - BALLOON_HALF_W, y) or wa.land.solid(x + BALLOON_HALF_W, y)
+      or wa.land.solid(x, y - BALLOON_HALF_H) or wa.land.solid(x, y + BALLOON_HALF_H)
   end
-  b.was_parachuting = state == "parachuting"
-  if state ~= "parachuting" then b.equipped_weapon = worm.weapon end
-  if b.active then
-    if state == "parachuting" and worm.turn and worm.y < wa.world.water() then
-      worm.gravity = b.gravity
-    else
-      if state == "standing" then
-        worm:set_state("sliding")
-      end
-      balloon_stop(worm, b)
+
+  -- StopBalloon: a pop, and the worm back to WA, falling with its speed.
+  local function balloon_stop(worm, b)
+    if not b.active then
       return
     end
-    b.ticks = b.ticks + 1
+    b.active, b.ticks = false, 0
+    if b.balloon then b.balloon:despawn(); b.balloon = nil end
+    if b.basket then b.basket:despawn(); b.basket = nil end
+    worm.body_visible = true
+    balloon_sound(worm, "pop", 4)
+    if worm.taken then
+      worm:release(b.vx, b.vy)
+    end
+  end
+
+  local function balloon_draw(worm, b)
     -- DrawBalloonWorm: the balloon above, in the team's colour, and the worm
     -- in its basket, whose art faces left.
     local f = worm.facing
     local function art(sheet)
       return wa.actors.spawn({
-        sprite = sheet, x = worm.x, y = worm.y, gravity = false,
+        sprite = sheet, x = b.x, y = b.y, gravity = false,
         collide = false, owner = worm, on = function() end,
       })
     end
     b.balloon = b.balloon or art("sprites/balloon/balloon")
     b.basket = b.basket or art("sprites/balloon/basket")
-    local x = worm.x + 6 * f * FX
-    b.balloon.x, b.balloon.y, b.balloon.vx, b.balloon.vy = x, worm.y - 43 * FX, 0, 0
+    local x = b.x + 6 * f * FX
+    b.balloon.x, b.balloon.y, b.balloon.vx, b.balloon.vy = x, b.y - 43 * FX, 0, 0
     b.balloon:frame(math.min((b.ticks % 200) * 16 // 200, 15))
     b.balloon:gfx({ tint = 0xFF000000 | (TEAM_RGB[(worm.alliance or 0) + 1] or 0xFFFFFF),
       depth = BALLOON_DEPTH })
-    b.basket.x, b.basket.y, b.basket.vx, b.basket.vy = x, worm.y + 3 * FX, 0, 0
+    b.basket.x, b.basket.y, b.basket.vx, b.basket.vy = x, b.y + 3 * FX, 0, 0
     b.basket.facing = -f
     b.basket:frame(math.min((b.ticks % 80) * 17 // 80, 16))
     b.basket:gfx({ depth = BASKET_DEPTH })
     worm.body_visible = false
-  else
-    -- Kept up to date while it is not flying: the gravity to turn over.
-    b.gravity = -worm.gravity
   end
-end
 
-wa.on.worm_message(function(worm, msg)
-  if msg == wa.msg.FRAME_FINISH then
-    balloon_frame(worm)
-  end
-end)
-
--- M_TURNBEGIN: any balloon still up pops.
-wa.on.turn_start(function()
-  for _, worm in ipairs(wa.worms.all()) do
-    local b = balloons[worm.id]
-    if b and b.active then
-      balloon_stop(worm, b)
+  local function balloon_frame(worm)
+    local b = balloon_of(worm)
+    local state = worm.state
+    -- WA may change the selected slot to Parachute (or none) as Bungee fires.
+    -- The weapon equipped before that transition identifies the auto trigger;
+    -- an unrelated parachute opening must not become a Hot Air Balloon.
+    local equipped = b.equipped_weapon
+    if not b.active and state == "parachuting" and not b.was_parachuting
+        and equipped == "bungee" then
+      b.active, b.ticks = true, 0
+      b.x, b.y, b.vx, b.vy = worm.x, worm.y, worm.vx, worm.vy
+      worm:take{ turn = "run" }
+      balloon_sound(worm, "inflate", 3)
     end
+    b.was_parachuting = state == "parachuting"
+    if state ~= "parachuting" then b.equipped_weapon = worm.weapon end
+    if not b.active then
+      return
+    end
+    -- The engine let go: the turn ended, or WA knocked the worm flying.
+    if not worm.taken then
+      balloon_stop(worm, b)
+      return
+    end
+    -- WA's parachute physics, gravity upside down (0x4FCB30).
+    local P = 0x10000
+    local vy = b.vy - wa.world.gravity() * worm.gravity // P
+    local vx = b.vx
+    local side = wa.world.wind() >= 0 and P or -P
+    if not wa.land.solid(b.x + side, b.y) then
+      vx = vx + wa.world.wind() * (BALLOON_WIND * P // 100) // P
+    end
+    vx, vy = vx * BALLOON_DAMP // P, vy * BALLOON_DAMP // P
+    b.vx, b.vy = vx, vy
+    local x, y = b.x + vx, b.y + vy
+    -- It pops on touching land, as WA's parachute closes there, and in water.
+    if balloon_blocked(x, y) or y >= wa.world.water() then
+      balloon_stop(worm, b)
+      return
+    end
+    b.x, b.y = x, y
+    worm:carry(x, y)
+    b.ticks = b.ticks + 1
+    balloon_draw(worm, b)
   end
-end)
+
+  wa.on.worm_message(function(worm, msg)
+    if msg == wa.msg.FRAME_FINISH then
+      balloon_frame(worm)
+      return
+    end
+    local b = balloons[worm.id]
+    if not (b and b.active) then
+      return
+    end
+    if msg == wa.msg.JUMP then
+      -- The jump key closes WA's parachute: here it pops the balloon.
+      balloon_stop(worm, b)
+      return "eat"
+    elseif msg == wa.msg.FIRE_WEAPON then
+      return "eat" -- no weapons from the basket
+    end
+  end)
+
+  -- M_TURNBEGIN: any balloon still up pops.
+  wa.on.turn_start(function()
+    for _, worm in ipairs(wa.worms.all()) do
+      local b = balloons[worm.id]
+      if b and b.active then
+        balloon_stop(worm, b)
+      end
+    end
+  end)
 end
 
 -- ------------------------------------------------------------- Hang-Glider
 do
---
--- PX's paratest (utility_hangglider_render), on WA's parachute. A worm that
--- opens the parachute with the Hang-Glider flies PX's glider: gravity at
--- 0.75, the wind blowing along the wing's up side (x3), the speed across the
--- wing damped, and the nose turning towards the flight path. Up and down
--- turn the nose, faster the faster it flies; left and right nudge it. It
--- stops gliding just before it would run into something (PX's
--- WS_AFTERROPE; here WA's sliding, as the Helicopter's end). While it
--- glides, the worm's body is hidden behind the glider art, which carries the
--- worm; on landing, the glider's own pack-away plays in place of WA's
--- parachute's (PX swaps sheet 289, wparbak, for it).
---
--- PX's speeds and angles are pixels per frame and radians; WA's gravity,
--- wind and worm speeds are 16.16.
+  --
+  -- PX's paratest (utility_hangglider_render). A worm that opens WA's
+  -- parachute with the Hang-Glider flies PX's glider instead: the pack takes
+  -- it (worm:take) and moves it with the glider's physics: gravity at 0.75,
+  -- the wind blowing along the wing's up side (x3), the speed across the wing
+  -- damped, and the nose turning towards the flight path. Up and down turn the
+  -- nose, faster the faster it flies; left and right nudge it. Just before it
+  -- would run into something (PX's WS_AFTERROPE), on the jump key, in water,
+  -- or when the turn ends, it gives the worm back to WA, falling on with the
+  -- glider's speed; WA lands it. While it glides, the worm's body is hidden
+  -- behind the glider art, which carries the worm; brought down onto land,
+  -- the glider's own pack-away plays once WA has the worm standing (PX swaps
+  -- sheet 289, wparbak, for it).
+  --
+  -- PX's speeds and angles are pixels per frame and radians; WA's gravity,
+  -- wind and worm speeds are 16.16.
 
-local GLIDER_GRAVITY = 0.75           -- GliderGravityFactor
-local GLIDER_WIND = 3.0               -- GliderWindFactor
-local GLIDER_FRICTION = 0.25          -- GliderFriction
-local GLIDER_TURN = 0.06              -- GliderMaxAngularVelocity
-local GLIDER_TURN_SPEED = 20.0        -- GliderMaxTurningSpeed
-local GLIDER_ANIM = 0.04              -- GliderAnimSpeed
-local GLIDER_LERP = 0.03              -- GliderRotationLerp
-local GLIDER_PUSH = 0.02              -- GliderMoveAcceleration
-local GLIDER_MAX_ANGLE = 1.5          -- about 86 degrees either way
-local GLIDER_DEPTH = 0x10000          -- in front of worms and terrain
--- wgldbak: 6 frames, loaded at 24 frames a second; WA runs 50.
-local GLIDER_PACK_FRAMES, GLIDER_PACK_FPS = 6, 24
-local GLIDER_PI = 3.141593
+  local GLIDER_GRAVITY = 0.75           -- GliderGravityFactor
+  local GLIDER_WIND = 3.0               -- GliderWindFactor
+  local GLIDER_FRICTION = 0.25          -- GliderFriction
+  local GLIDER_TURN = 0.06              -- GliderMaxAngularVelocity
+  local GLIDER_TURN_SPEED = 20.0        -- GliderMaxTurningSpeed
+  local GLIDER_ANIM = 0.04              -- GliderAnimSpeed
+  local GLIDER_LERP = 0.03              -- GliderRotationLerp
+  local GLIDER_PUSH = 0.02              -- GliderMoveAcceleration
+  local GLIDER_MAX_ANGLE = 1.5          -- about 86 degrees either way
+  local GLIDER_DEPTH = 0x10000          -- in front of worms and terrain
+  -- wgldbak: 6 frames, loaded at 24 frames a second; WA runs 50.
+  local GLIDER_PACK_FRAMES, GLIDER_PACK_FPS = 6, 24
+  -- How long after coming down onto land WA may take to stand the worm up for
+  -- the pack-away (frames).
+  local GLIDER_PACK_WAIT = 50
+  local GLIDER_PI = 3.141593
 
-local gliders = {} -- worm id -> { enabled, deployed, ang, target, cycle, sx, sy, art, pack, pack_t }
+  local gliders = {} -- worm id -> { enabled, deployed, x, y, ang, target, cycle, sx, sy, art, pack, pack_t, landing }
 
-local function glider_of(worm)
-  local g = gliders[worm.id]
-  if not g then
-    g = { enabled = false, deployed = false, ang = 0, target = 0, cycle = 0, sx = 0, sy = 0 }
-    gliders[worm.id] = g
+  local function glider_of(worm)
+    local g = gliders[worm.id]
+    if not g then
+      g = { enabled = false, deployed = false, ang = 0, target = 0, cycle = 0, sx = 0, sy = 0 }
+      gliders[worm.id] = g
+    end
+    return g
   end
-  return g
-end
 
--- utils' NormalizeAngle and LerpAngle.
-local function normalize_angle(a)
-  while a > GLIDER_PI do a = a - 6.283186 end
-  while a <= -GLIDER_PI do a = a + 6.283186 end
-  return a
-end
-
-local function lerp_angle(c, a, b)
-  a = normalize_angle(a)
-  b = a + normalize_angle(b - a)
-  return normalize_angle(a + (b - a) * c)
-end
-
-local function glider_art(worm, sheet)
-  return wa.actors.spawn({
-    sprite = sheet, x = worm.x, y = worm.y, gravity = false,
-    collide = false, owner = worm, on = function() end,
-  })
-end
-
-local function glider_drop_art(worm, g)
-  if g.art then g.art:despawn(); g.art = nil end
-  if g.pack then g.pack:despawn(); g.pack = nil end
-  worm.body_visible = true
-end
-
--- TraceMask from the worm to where it is heading: the terrain, and anything
--- else in the way by the Sniper Rifle's estimate of its mask.
-local function glider_blocked(worm, sx, sy)
-  local P = 0x10000
-  local x1, y1 = worm.x + trunc(1.1 * sx * P), worm.y + trunc(1.1 * sy * P)
-  if wa.land.trace(worm.x, worm.y, x1, y1) then
-    return true
+  -- utils' NormalizeAngle and LerpAngle.
+  local function normalize_angle(a)
+    while a > GLIDER_PI do a = a - 6.283186 end
+    while a <= -GLIDER_PI do a = a + 6.283186 end
+    return a
   end
-  local len = math.sqrt(sx * sx + sy * sy) * 1.1
-  if len == 0 then
-    return false
+
+  local function lerp_angle(c, a, b)
+    a = normalize_angle(a)
+    b = a + normalize_angle(b - a)
+    return normalize_angle(a + (b - a) * c)
   end
-  local dx, dy = sx * 1.1 / len, sy * 1.1 / len
-  for _, s in ipairs(STOPPERS) do
-    local list, r = s[1], s[2]
-    if list and list.all then
-      for _, o in ipairs(list.all()) do
-        if o.id ~= worm.id then
-          local ox, oy = (o.x - worm.x) / P, (o.y - worm.y) / P
-          local t = ox * dx + oy * dy
-          if t > 0 and t < len and math.abs(ox * dy - oy * dx) < r then
-            return true
+
+  local function glider_art(worm, x, y, sheet)
+    return wa.actors.spawn({
+      sprite = sheet, x = x, y = y, gravity = false,
+      collide = false, owner = worm, on = function() end,
+    })
+  end
+
+  local function glider_drop_art(worm, g)
+    if g.art then g.art:despawn(); g.art = nil end
+    if g.pack then g.pack:despawn(); g.pack = nil end
+    worm.body_visible = true
+  end
+
+  -- TraceMask from (x, y) to where it is heading: the terrain, and anything
+  -- else in the way by the Sniper Rifle's estimate of its mask.
+  local function glider_blocked(worm, x, y, sx, sy)
+    local P = 0x10000
+    local x1, y1 = x + trunc(1.1 * sx * P), y + trunc(1.1 * sy * P)
+    if wa.land.trace(x, y, x1, y1) then
+      return true
+    end
+    local len = math.sqrt(sx * sx + sy * sy) * 1.1
+    if len == 0 then
+      return false
+    end
+    local dx, dy = sx * 1.1 / len, sy * 1.1 / len
+    for _, s in ipairs(STOPPERS) do
+      local list, r = s[1], s[2]
+      if list and list.all then
+        for _, o in ipairs(list.all()) do
+          if o.id ~= worm.id then
+            local ox, oy = (o.x - x) / P, (o.y - y) / P
+            local t = ox * dx + oy * dy
+            if t > 0 and t < len and math.abs(ox * dy - oy * dx) < r then
+              return true
+            end
           end
         end
       end
     end
+    return false
   end
-  return false
-end
 
--- CWormGlider::Move: up and down turn the nose, left and right push.
-local function glider_keys(worm, g)
-  local k = worm.keys
-  local speed = math.sqrt(g.sx * g.sx + g.sy * g.sy) / GLIDER_TURN_SPEED
-  -- One message per held key, so both of a pair act together.
-  if k.up then
-    g.ang = math.max(g.ang - GLIDER_TURN * math.min(speed, 1), -GLIDER_MAX_ANGLE)
+  -- CWormGlider::Move: up and down turn the nose, left and right push.
+  local function glider_keys(worm, g)
+    local k = worm.keys
+    local speed = math.sqrt(g.sx * g.sx + g.sy * g.sy) / GLIDER_TURN_SPEED
+    if k.up then
+      g.ang = math.max(g.ang - GLIDER_TURN * math.min(speed, 1), -GLIDER_MAX_ANGLE)
+    end
+    if k.down then
+      g.ang = math.min(g.ang + GLIDER_TURN * math.max(math.min(speed, 1), 0.5), GLIDER_MAX_ANGLE)
+    end
+    if k.left then g.sx = g.sx - GLIDER_PUSH end
+    if k.right then g.sx = g.sx + GLIDER_PUSH end
   end
-  if k.down then
-    g.ang = math.min(g.ang + GLIDER_TURN * math.max(math.min(speed, 1), 0.5), GLIDER_MAX_ANGLE)
-  end
-  if k.left then g.sx = g.sx - GLIDER_PUSH end
-  if k.right then g.sx = g.sx + GLIDER_PUSH end
-end
 
--- CWormGlider::Think's physics, once deployed.
-local function glider_think(worm, g)
-  local P = 0x10000
-  local f = worm.facing
-  local ang = f < 0 and g.ang or GLIDER_PI - g.ang
-  local fwd_x, fwd_y = -math.cos(ang), math.sin(ang)
-  local up_x, up_y
-  if f < 0 then up_x, up_y = -fwd_y, fwd_x else up_x, up_y = fwd_y, -fwd_x end
-  local sx, sy = g.sx, g.sy
-  sy = sy + wa.world.gravity() / P * GLIDER_GRAVITY
-  local wind = up_x * wa.world.wind() / P * GLIDER_WIND
-  sx, sy = sx + wind * up_x, sy + wind * up_y
-  local up_vel = sx * up_x + sy * up_y
-  sx, sy = sx - up_x * up_vel * GLIDER_FRICTION, sy - up_y * up_vel * GLIDER_FRICTION
-  -- The nose turns towards the flight path, never straight up or down.
-  local target = f < 0 and math.atan(sy, -sx) or math.atan(sy, sx)
-  target = normalize_angle(target)
-  g.target = math.max(-GLIDER_MAX_ANGLE, math.min(GLIDER_MAX_ANGLE, target))
-  g.ang = lerp_angle(GLIDER_LERP, g.ang, g.target)
-  g.cycle = math.min(g.cycle + GLIDER_ANIM, 1)
-  if glider_blocked(worm, sx, sy) then
-    g.blocked = true
-    worm:set_state("sliding")
+  -- CWormGlider::Think's physics, once deployed: the new speed.
+  local function glider_think(worm, g)
+    local P = 0x10000
+    local f = worm.facing
+    local ang = f < 0 and g.ang or GLIDER_PI - g.ang
+    local fwd_x, fwd_y = -math.cos(ang), math.sin(ang)
+    local up_x, up_y
+    if f < 0 then up_x, up_y = -fwd_y, fwd_x else up_x, up_y = fwd_y, -fwd_x end
+    local sx, sy = g.sx, g.sy
+    sy = sy + wa.world.gravity() / P * GLIDER_GRAVITY
+    local wind = up_x * wa.world.wind() / P * GLIDER_WIND
+    sx, sy = sx + wind * up_x, sy + wind * up_y
+    local up_vel = sx * up_x + sy * up_y
+    sx, sy = sx - up_x * up_vel * GLIDER_FRICTION, sy - up_y * up_vel * GLIDER_FRICTION
+    -- The nose turns towards the flight path, never straight up or down.
+    local target = f < 0 and math.atan(sy, -sx) or math.atan(sy, sx)
+    target = normalize_angle(target)
+    g.target = math.max(-GLIDER_MAX_ANGLE, math.min(GLIDER_MAX_ANGLE, target))
+    g.ang = lerp_angle(GLIDER_LERP, g.ang, g.target)
+    g.cycle = math.min(g.cycle + GLIDER_ANIM, 1)
+    g.sx, g.sy = sx, sy
   end
-  g.sx, g.sy = sx, sy
-  worm.vx, worm.vy = trunc(sx * P), trunc(sy * P)
-end
 
-local function glider_frame(worm)
-  local state = worm.state
-  local b = balloons[worm.id]
-  local equipped = b and b.equipped_weapon
-  if b and b.active then
-    local g = gliders[worm.id]
-    if g then g.enabled = false end
-    return
+  -- The glide ends: the worm back to WA, falling on with the glider's speed.
+  -- `landing`: brought down onto land, so the pack-away plays once WA has
+  -- the worm standing.
+  local function glider_close(worm, g, landing)
+    local P = 0x10000
+    g.deployed = false
+    glider_drop_art(worm, g)
+    wa.sound.play(worm, "sounds/hang_glider/hangclose.wav")
+    g.landing = landing and GLIDER_PACK_WAIT or nil
+    if worm.taken then
+      worm:release(trunc(g.sx * P), trunc(g.sy * P))
+    end
   end
-  -- A glider may have auto-opened and cleared its selected slot before its
-  -- first frame. The slot equipped before opening is authoritative.
-  local g = gliders[worm.id]
-  if not g then
-    if (state == "parachuting" and equipped ~= "parachute")
-        or (state ~= "parachuting" and worm.weapon ~= "parachute") then
+
+  local function glider_frame(worm)
+    local state = worm.state
+    local b = balloons[worm.id]
+    local equipped = b and b.equipped_weapon
+    if b and b.active then
+      local g = gliders[worm.id]
+      if g then g.enabled = false end
       return
     end
-    g = glider_of(worm)
-  end
-  local P = 0x10000
-  if state ~= "parachuting" then
-    -- Which parachute the worm opens next: PX checks the weapon only while
-    -- the worm is not already under one.
-    g.enabled = worm.weapon == "parachute"
+    -- A glider may have auto-opened and cleared its selected slot before its
+    -- first frame. The slot equipped before opening is authoritative.
+    local g = gliders[worm.id]
+    if not g then
+      if (state == "parachuting" and equipped ~= "parachute")
+          or (state ~= "parachuting" and worm.weapon ~= "parachute") then
+        return
+      end
+      g = glider_of(worm)
+    end
+    local P = 0x10000
     if g.deployed then
-      g.deployed = false
-      glider_drop_art(worm, g)
-      wa.sound.play(worm, "sounds/hang_glider/hangclose.wav")
-      -- Landed on its feet: WA packs the parachute away (wparbak), which
-      -- PX draws as the glider's pack-away.
-      if not g.blocked and state == "standing" and worm.y < wa.world.water() then
-        g.pack, g.pack_t = glider_art(worm, "sprites/hang_glider/pack"), 0
+      -- The engine let go: the turn ended, or WA knocked the worm flying.
+      if not worm.taken then
+        glider_close(worm, g, false)
+        return
       end
-      g.blocked = false
-    end
-    if g.pack then
-      local frame = g.pack_t * GLIDER_PACK_FPS // 50
-      if frame >= GLIDER_PACK_FRAMES or worm.state ~= "standing" then
-        glider_drop_art(worm, g)
-      else
-        g.pack.x, g.pack.y, g.pack.vx, g.pack.vy = worm.x, worm.y, 0, 0
-        g.pack.facing = -worm.facing -- its art faces left, as WA's worms do
-        g.pack:frame(frame)
-        g.pack:gfx({ depth = GLIDER_DEPTH })
-        worm.body_visible = false
-        g.pack_t = g.pack_t + 1
+      glider_keys(worm, g)
+      glider_think(worm, g)
+      if glider_blocked(worm, g.x, g.y, g.sx, g.sy) then
+        -- Onto land below it: a landing; into anything else: a crash.
+        local below = g.sy > 0 and wa.land.trace(g.x, g.y, g.x, g.y + trunc((1.1 * g.sy + 12) * P))
+        glider_close(worm, g, below and true or false)
+        return
       end
+      local x, y = g.x + trunc(g.sx * P), g.y + trunc(g.sy * P)
+      if y >= wa.world.water() then
+        glider_close(worm, g, false)
+        return
+      end
+      g.x, g.y = x, y
+      worm:carry(x, y)
+      -- CWormGlider::Render, in the worm's place.
+      local f = worm.facing
+      g.art = g.art or glider_art(worm, x, y, "sprites/hang_glider/glider")
+      local a = g.art
+      a.x, a.y, a.vx, a.vy, a.facing = x, y, 0, 0, -f
+      a:frame(math.min(math.floor(g.cycle * 10), 9))
+      a:gfx({ angle = math.deg(f * g.ang) % 360, depth = GLIDER_DEPTH })
+      worm.body_visible = false
+      return
     end
-    -- Its speed carries over into the glide.
-    g.sx, g.sy = worm.vx / P, worm.vy / P
-    return
-  end
-  g.enabled = equipped == "parachute"
-  if not g.enabled then
-    return -- a plain parachute, or the balloon
-  end
-  if not g.deployed then
-    g.deployed, g.ang, g.target, g.cycle = true, 0, 0, 0
+    if state ~= "parachuting" then
+      -- Which parachute the worm opens next: PX checks the weapon only while
+      -- the worm is not already under one.
+      g.enabled = worm.weapon == "parachute"
+      -- Down on land: once WA has it standing, the glider's pack-away.
+      if g.landing then
+        if state == "standing" and worm.y < wa.world.water() then
+          g.landing = nil
+          g.pack, g.pack_t = glider_art(worm, worm.x, worm.y, "sprites/hang_glider/pack"), 0
+        else
+          g.landing = g.landing > 1 and g.landing - 1 or nil
+        end
+      end
+      if g.pack then
+        local frame = g.pack_t * GLIDER_PACK_FPS // 50
+        if frame >= GLIDER_PACK_FRAMES or worm.state ~= "standing" then
+          glider_drop_art(worm, g)
+        else
+          g.pack.x, g.pack.y, g.pack.vx, g.pack.vy = worm.x, worm.y, 0, 0
+          g.pack.facing = -worm.facing -- its art faces left, as WA's worms do
+          g.pack:frame(frame)
+          g.pack:gfx({ depth = GLIDER_DEPTH })
+          worm.body_visible = false
+          g.pack_t = g.pack_t + 1
+        end
+      end
+      -- Its speed carries over into the glide.
+      g.sx, g.sy = worm.vx / P, worm.vy / P
+      return
+    end
+    g.enabled = equipped == "parachute"
+    if not g.enabled or g.deployed or state ~= "parachuting" then
+      return -- a plain parachute, or the balloon
+    end
+    -- WA has opened its parachute: the pack takes the worm and glides.
+    g.deployed, g.ang, g.target, g.cycle, g.landing = true, 0, 0, 0, nil
+    g.x, g.y = worm.x, worm.y
     if g.pack then g.pack:despawn(); g.pack = nil end
+    worm:take{ turn = "run" }
     wa.sound.play(worm, "sounds/hang_glider/hangopen.wav")
+    return glider_frame(worm)
   end
-  glider_keys(worm, g)
-  glider_think(worm, g)
-  -- CWormGlider::Render, in the worm's place.
-  local f = worm.facing
-  g.art = g.art or glider_art(worm, "sprites/hang_glider/glider")
-  local a = g.art
-  a.x, a.y, a.vx, a.vy, a.facing = worm.x, worm.y, 0, 0, -f
-  a:frame(math.min(math.floor(g.cycle * 10), 9))
-  a:gfx({ angle = math.deg(f * g.ang) % 360, depth = GLIDER_DEPTH })
-  worm.body_visible = false
-end
 
-if wa.world.gravity and wa.world.wind then
-  wa.on.worm_message(function(worm, msg)
-    if msg == wa.msg.FRAME_FINISH then
-      glider_frame(worm)
-    end
-  end)
-end
+  if wa.world.gravity and wa.world.wind then
+    wa.on.worm_message(function(worm, msg)
+      if msg == wa.msg.FRAME_FINISH then
+        glider_frame(worm)
+        return
+      end
+      local g = gliders[worm.id]
+      if not (g and g.deployed) then
+        return
+      end
+      if msg == wa.msg.JUMP then
+        -- The jump key closes WA's parachute: here it lets go of the glider.
+        glider_close(worm, g, false)
+        return "eat"
+      elseif msg == wa.msg.FIRE_WEAPON then
+        return "eat" -- no weapons while it glides
+      end
+    end)
+  end
 end
 
 -- --------------------------------------------------------------- Swim Suit
