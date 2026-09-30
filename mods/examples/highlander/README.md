@@ -401,7 +401,8 @@ frame, and a nose that turns towards the flight path, at most about 86 degrees
 up or down. Up and down turn the nose, faster the faster it flies; left and
 right push it. It needs WA's own gravity and wind, `wa.world.gravity()` /
 `wa.world.wind()`.
-- **Ends:** just before it would run into something (PX's `WS_AFTERROPE`), on
+- **Ends:** just before it would run into something (PX's `WS_AFTERROPE`;
+  land by WA's own test of the worm's shape, `worm:fits`), on
   the jump key, in water, or when the turn ends, the worm goes back to WA
   (`worm:release`) falling on with the glider's speed, and WA lands it.
   Weapons fire from it as from WA's parachute.

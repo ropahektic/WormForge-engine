@@ -2854,13 +2854,17 @@ do
     worm.body_visible = true
   end
 
-  -- TraceMask from (x, y) to where it is heading: the terrain, and anything
-  -- else in the way by the Sniper Rifle's estimate of its mask.
+  -- TraceMask from (x, y) to where it is heading: anything the worm would
+  -- touch there by WA's own test of its shape (worm:fits, every 2 pixels),
+  -- and anything else in the way by the Sniper Rifle's estimate of its mask.
   local function glider_blocked(worm, x, y, sx, sy)
     local P = 0x10000
     local x1, y1 = x + trunc(1.1 * sx * P), y + trunc(1.1 * sy * P)
-    if wa.land.trace(x, y, x1, y1) then
-      return true
+    local n = math.max(1, math.ceil(math.sqrt(sx * sx + sy * sy) * 1.1 / 2))
+    for i = 1, n do
+      if not worm:fits(x + (x1 - x) * i // n, y + (y1 - y) * i // n) then
+        return true
+      end
     end
     local len = math.sqrt(sx * sx + sy * sy) * 1.1
     if len == 0 then
@@ -2921,15 +2925,21 @@ do
     g.sx, g.sy = sx, sy
   end
 
+  -- How many frames after a crash the worm is watched: WA may stand it up
+  -- where it hit, as it does a balloon popped against a ceiling.
+  local GLIDER_UNSTAND = 3
+
   -- The glide ends: the worm back to WA, falling on with the glider's speed.
   -- `landing`: brought down onto land, so the pack-away plays once WA has
-  -- the worm standing.
+  -- the worm standing. Otherwise, for a few frames, a worm WA has stood up
+  -- is released again, falling.
   local function glider_close(worm, g, landing)
     local P = 0x10000
     g.deployed = false
     glider_drop_art(worm, g)
     wa.sound.play(worm, "sounds/hang_glider/hangclose.wav")
     g.landing = landing and GLIDER_PACK_WAIT or nil
+    g.unstand = not landing and GLIDER_UNSTAND or nil
     if worm.taken then
       worm:release(trunc(g.sx * P), trunc(g.sy * P))
     end
@@ -2965,7 +2975,7 @@ do
       glider_think(worm, g)
       if glider_blocked(worm, g.x, g.y, g.sx, g.sy) then
         -- Onto land below it: a landing; into anything else: a crash.
-        local below = g.sy > 0 and wa.land.trace(g.x, g.y, g.x, g.y + trunc((1.1 * g.sy + 12) * P))
+        local below = g.sy > 0 and not worm:fits(g.x, g.y + trunc((1.1 * g.sy + 4) * P))
         glider_close(worm, g, below and true or false)
         return
       end
@@ -2990,6 +3000,14 @@ do
       -- Which parachute the worm opens next: PX checks the weapon only while
       -- the worm is not already under one.
       g.enabled = worm.weapon == "parachute"
+      if g.unstand then
+        if state == "standing" then
+          worm:release(0, 0)
+          g.unstand = nil
+        else
+          g.unstand = g.unstand > 1 and g.unstand - 1 or nil
+        end
+      end
       -- Down on land: once WA has it standing, the glider's pack-away.
       if g.landing then
         if state == "standing" and worm.y < wa.world.water() then
@@ -3021,7 +3039,7 @@ do
       return -- a plain parachute, or the balloon
     end
     -- WA has opened its parachute: the pack takes the worm and glides.
-    g.deployed, g.ang, g.target, g.cycle, g.landing = true, 0, 0, 0, nil
+    g.deployed, g.ang, g.target, g.cycle, g.landing, g.unstand = true, 0, 0, 0, nil, nil
     g.x, g.y = worm.x, worm.y
     if g.pack then g.pack:despawn(); g.pack = nil end
     worm:take{ turn = "run" }

@@ -1422,21 +1422,24 @@ do
   -- Into something ahead, no land below: a crash, the worm back to WA with
   -- the glider's speed, and no pack-away.
   local n = #M.spawned
-  M.trace_hit = function(x0, _, x1) if x1 ~= x0 then return { x = x1 } end end
+  local wall = w.x + 7 * P
+  M.solid = function(x) return x >= wall end
   M.message(w, wa.msg.FRAME_FINISH)
-  M.trace_hit = nil
+  M.solid = nil
   check("a crash: let go, falling on", not w.taken and w.state == "sliding" and w.vx > 0)
   check("closed: the sound, the art gone, the body back",
     M.sounds[#M.sounds]:find("hangclose") and art.dead and w.body_visible == true)
   w.state = "standing"
   M.message(w, wa.msg.FRAME_FINISH)
-  check("and no pack-away", #M.spawned == n)
+  check("and no pack-away; stood up where it hit, released again", #M.spawned == n
+    and w.state == "sliding")
   -- Coming down onto land: let go; once WA stands it up, the glider's own
   -- pack-away over the hidden body.
   check("gliding again", glide_again())
-  M.trace_hit = { x = w.x, y = w.y }
+  local floor = w.y + 13 * P // 2
+  M.solid = function(_, y) return y >= floor end
   M.message(w, wa.msg.FRAME_FINISH)
-  M.trace_hit = nil
+  M.solid = nil
   check("about to land: let go", not w.taken and w.state == "sliding")
   w.state = "standing"
   M.message(w, wa.msg.FRAME_FINISH)
