@@ -404,7 +404,7 @@ right push it. It needs WA's own gravity and wind, `wa.world.gravity()` /
 - **Ends:** just before it would run into something (PX's `WS_AFTERROPE`), on
   the jump key, in water, or when the turn ends, the worm goes back to WA
   (`worm:release`) falling on with the glider's speed, and WA lands it.
-  Weapons can't be used while it glides.
+  Weapons fire from it as from WA's parachute.
 - **Landing:** PX swaps the sheet WA packs a parachute away with (`wparbak`,
   289) for the glider's own. Here WA never packs a parachute away: when the
   glide ends coming down onto land, the glider's pack-away (6 frames at 24 a
@@ -422,7 +422,8 @@ Here the pack takes the worm when that parachute opens and flies it with WA
   So it rises at up to four times gravity and drifts with four times the wind.
 - **Pops:** on touching land, in water, on the jump key (which closes WA's
   parachute), and when the turn ends. The worm then goes back to WA, falling
-  with the balloon's speed. Weapons can't be used from the basket.
+  with the balloon's speed. Weapons fire from the basket as from WA's
+  parachute.
 - **Art:** the worm's body is hidden behind the balloon, drawn in its team's
   colour, and the worm in its basket, as PX's `RenderWorm` override draws them.
 

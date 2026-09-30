@@ -2740,8 +2740,6 @@ do
       -- The jump key closes WA's parachute: here it pops the balloon.
       balloon_stop(worm, b)
       return "eat"
-    elseif msg == wa.msg.FIRE_WEAPON then
-      return "eat" -- no weapons from the basket
     end
   end)
 
@@ -3018,8 +3016,6 @@ do
         -- The jump key closes WA's parachute: here it lets go of the glider.
         glider_close(worm, g, false)
         return "eat"
-      elseif msg == wa.msg.FIRE_WEAPON then
-        return "eat" -- no weapons while it glides
       end
     end)
   end

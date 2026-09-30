@@ -56,6 +56,12 @@ struct TurnPhase {
     completed: u8,
 }
 
+/// Between WA's retreat-started (0x3C) and retreat-finished (0x3D) messages
+/// to the turn's worm.
+fn retreating() -> bool {
+    TURN_PHASE.lock().map(|p| p.worm != 0 && p.completed == 1).unwrap_or(false)
+}
+
 impl TurnPhase {
     fn start(&mut self, worm: u32) {
         self.worm = worm;
@@ -953,11 +959,12 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         let ended = unsafe { read_i32(this, WORLD_ROOT_TURN_ENDED) != 0 };
         // A turn that runs while a worm is held (take{ turn = "run" }) ends
         // when its clock runs out; WA then waits for every worm to settle,
-        // which a held worm never does. The ended flag alone was never seen
-        // set in that case (a swimmer held past its turn), so the clock
-        // counts too.
+        // which a held worm never does, and sends no turn-end message. The
+        // ended flag alone was never seen set in that case (a swimmer held
+        // past its turn), so the clock counts too -- but not during a
+        // retreat, after a shot, whose end (msg 0x3D) lets go instead.
         let timer = unsafe { read_i32(this, WORLD_ROOT_TURN_TIMER) };
-        let out_of_time = !freezing() && timer <= 0;
+        let out_of_time = !freezing() && timer <= 0 && !retreating();
         if ended || out_of_time {
             crate::log_line(&format!(
                 "turn over with a worm held (ended flag {}, turn clock {timer}): letting go",
@@ -1048,7 +1055,16 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
             for event in events {
                 let (name, result) = match event {
                     TurnEvent::Retreat => ("turn_retreat", lua_host::turn_retreat(worm)),
-                    TurnEvent::End => ("turn_end", lua_host::turn_end(worm)),
+                    TurnEvent::End => {
+                        // The turn is over: every held worm goes back to WA
+                        // first, so turn_end handlers see it let go.
+                        if holding() {
+                            crate::log_line("turn end with a worm held: letting go");
+                            crate::mask_collide::clear();
+                            drop_all();
+                        }
+                        ("turn_end", lua_host::turn_end(worm))
+                    }
                     TurnEvent::Cleanup => ("turn_cleanup", lua_host::turn_cleanup(worm)),
                 };
                 if let Err(e) = result {

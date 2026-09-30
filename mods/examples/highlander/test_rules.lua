@@ -1236,7 +1236,7 @@ do
   M.message(w, wa.msg.FRAME_FINISH)
   check("rising at four times gravity", math.abs((w.y - y1) + 4 * 0x4000) <= 8, tostring(w.y - y1))
   check("drifting with four times the wind", math.abs((w.x - x1) - 4 * 0x100) <= 8, tostring(w.x - x1))
-  check("no weapons from the basket", M.message(w, wa.msg.FIRE_WEAPON) == "eat")
+  check("weapons fire from the basket", M.message(w, wa.msg.FIRE_WEAPON) ~= "eat" and w.taken)
   -- The jump key pops it: the worm back to WA, falling with its speed.
   check("the jump key pops it", M.message(w, wa.msg.JUMP) == "eat" and M.sounds[#M.sounds]:find("pop")
     and balloon.dead and w.body_visible == true and not w.taken and w.state == "sliding" and w.vy < 0)
@@ -1372,7 +1372,7 @@ do
   for _ = 1, 30 do M.message(w, wa.msg.FRAME_FINISH) end
   check("and the nose follows the flight path", art.angle ~= 0, tostring(art.angle))
   check("it opens over 25 frames", art.shown == 9, tostring(art.shown))
-  check("no weapons while it glides", M.message(w, wa.msg.FIRE_WEAPON) == "eat")
+  check("weapons fire while it glides", M.message(w, wa.msg.FIRE_WEAPON) ~= "eat" and w.taken)
   -- Nose up: the nose angle drops, faster the faster it flies.
   w.keys = { up = true }
   for _ = 1, 10 do M.message(w, wa.msg.FRAME_FINISH) end
