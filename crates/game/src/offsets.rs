@@ -430,6 +430,10 @@ pub const MSG_FIRE_WEAPON: u32 = 0x26;
 /// Space up — `ReleaseWeapon`, the shot leaves.
 pub const MSG_RELEASE_WEAPON: u32 = 0x27;
 pub const MSG_START_TURN: u32 = 0x34;
+/// WormEntity lifecycle messages in WA 3.8.1 (also named in OpenWA's EntityMessage).
+pub const MSG_FINISH_TURN: u32 = 0x37;
+pub const MSG_RETREAT_STARTED: u32 = 0x3C;
+pub const MSG_RETREAT_FINISHED: u32 = 0x3D;
 /// `DamageWorms` — subtract HP, never kills (floors at 1).
 pub const MSG_NONLETHAL: u32 = 0x3B;
 /// `ApplyPoison` tick.

@@ -371,8 +371,24 @@ pub struct Death {
 }
 
 pub fn turn_start(worm: u32) -> Result<(), String> {
+    turn_event("turn_start", worm)
+}
+
+pub fn turn_retreat(worm: u32) -> Result<(), String> {
+    turn_event("turn_retreat", worm)
+}
+
+pub fn turn_end(worm: u32) -> Result<(), String> {
+    turn_event("turn_end", worm)
+}
+
+pub fn turn_cleanup(worm: u32) -> Result<(), String> {
+    turn_event("turn_cleanup", worm)
+}
+
+fn turn_event(name: &str, worm: u32) -> Result<(), String> {
     with_lua(|lua| {
-        let list = hook_list(lua, "turn_start")?;
+        let list = hook_list(lua, name)?;
         if list.len().map_err(|e| e.to_string())? == 0 {
             return Ok(());
         }
