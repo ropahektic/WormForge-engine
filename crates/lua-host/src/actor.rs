@@ -188,8 +188,8 @@ pub struct ActorNative {
     pub drop_carry: fn(handle: u32),
     /// `worm:take{ hide, turn }`: (handle, hide, freeze the turn).
     pub take: fn(handle: u32, hide: bool, freeze: bool),
-    /// `worm:release(vx, vy, { tumble })`: (handle, vx, vy, tumble).
-    pub release: fn(handle: u32, vx: i32, vy: i32, tumble: bool),
+    /// `worm:release(vx, vy, { tumble, suppress_auto_parachute })`.
+    pub release: fn(handle: u32, vx: i32, vy: i32, tumble: bool, suppress_auto_parachute: bool),
     /// `worm.taken`: the engine still holds it for the pack.
     pub is_taken: fn(handle: u32) -> bool,
     /// `worm:fits(x, y)`: WA's own collision test of the worm there.
@@ -304,7 +304,7 @@ impl Default for ActorNative {
             carry: |_, _, _| {},
             drop_carry: |_| {},
             take: |_, _, _| {},
-            release: |_, _, _, _| {},
+            release: |_, _, _, _, _| {},
             is_taken: |_| false,
             fits: |_, _, _| true,
             jetpack_steer: |_, _| {},
@@ -1202,7 +1202,9 @@ impl UserData for WormHandle {
         // at (vx, vy), 16.16. A held worm is shown again and let go; any worm
         // then falls under WA's control (as from a closed parachute), and WA
         // flies and lands it with its own states. `tumble = true`: out of
-        // control instead, as after a hit; in water WA drowns it.
+        // control instead, as after a hit; in water WA drowns it. A hard
+        // vehicle landing can suppress automatic parachute reopening until
+        // WA moves the worm out of the falling or tumbling state.
         methods.add_method(
             "release",
             |_, this, (vx, vy, opts): (Option<i32>, Option<i32>, Option<Table>)| {
@@ -1211,9 +1213,13 @@ impl UserData for WormHandle {
                     Some(t) => t.get::<Option<bool>>("tumble")?.unwrap_or(false),
                     None => false,
                 };
+                let suppress_auto_parachute = match &opts {
+                    Some(t) => t.get::<Option<bool>>("suppress_auto_parachute")?.unwrap_or(false),
+                    None => false,
+                };
                 if this.0 != 0 {
                     if let Some(release) = native_release() {
-                        release(this.0, vx.unwrap_or(0), vy.unwrap_or(0), tumble);
+                        release(this.0, vx.unwrap_or(0), vy.unwrap_or(0), tumble, suppress_auto_parachute);
                     }
                 }
                 Ok(())
@@ -1490,7 +1496,7 @@ fn native_is_taken() -> Option<fn(u32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.is_taken)
 }
 
-fn native_release() -> Option<fn(u32, i32, i32, bool)> {
+fn native_release() -> Option<fn(u32, i32, i32, bool, bool)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.release)
 }
 

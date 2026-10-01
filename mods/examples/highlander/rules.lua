@@ -2935,8 +2935,10 @@ do
   -- The glide ends: the worm back to WA, falling on with the glider's speed.
   -- `landing`: a gentle landing, so the pack-away plays once WA has the worm
   -- standing. A hard landing gives WA the glider's full speed in its
-  -- out-of-control state, avoiding the falling-under-control path that
-  -- reopened the equipped parachute in the recorded test. Only a collision
+  -- falling state and lets WA decide whether it causes fall damage and loss
+  -- of control. Suppress automatic parachute firing only until WA handles
+  -- this impact; otherwise it immediately reopens and slows the worm.
+  -- Only a collision
   -- elsewhere needs the short guard against WA standing it up in mid-air.
   local function glider_close(worm, g, landing, hard_landing)
     local P = 0x10000
@@ -2948,7 +2950,7 @@ do
     if worm.taken then
       local vx, vy = trunc(g.sx * P), trunc(g.sy * P)
       if hard_landing then
-        worm:release(vx, vy, { tumble = true })
+        worm:release(vx, vy, { suppress_auto_parachute = true })
       else
         worm:release(vx, vy)
       end

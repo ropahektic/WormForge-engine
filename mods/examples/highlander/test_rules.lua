@@ -102,6 +102,7 @@ function Worm:release(vx, vy, opts)
   if self.visible == false then self.visible = true end
   self.state = opts and opts.tumble and "tumbling" or "sliding"
   self.vx, self.vy = vx or 0, vy or 0
+  self.release_options = opts
 end
 function Worm:jetpack_steer(on) self.steered = on ~= false end
 -- WA's collision test, in the mock: the land M.solid gives, 4 pixels either
@@ -1450,16 +1451,17 @@ do
   check("six frames at 24 a second", pack.shown == 5 and not pack.dead, tostring(pack.shown))
   M.message(w, wa.msg.FRAME_FINISH)
   check("then the worm again", pack.dead and w.body_visible == true)
-  -- A fast downward arrival gives WA the full speed and loss of control:
-  -- falling under control would immediately auto-open the equipped chute.
+  -- A fast downward arrival gives WA the full speed. The engine holds the
+  -- equipped chute closed until WA has resolved the impact and any damage.
   check("gliding into a hard landing", glide_again(20 * P))
   n = #M.spawned
   floor = w.y + 13 * P // 2
   M.solid = function(_, y) return y >= floor end
   M.message(w, wa.msg.FRAME_FINISH)
   M.solid = nil
-  check("hard landing: tumble at full speed", not w.taken
-    and w.state == "tumbling" and w.vy >= 8 * P - 1,
+  check("hard landing: fall at full speed without auto chute", not w.taken
+    and w.state == "sliding" and w.vy >= 8 * P - 1
+    and w.release_options and w.release_options.suppress_auto_parachute == true,
     string.format("taken=%s state=%s vy=%s", tostring(w.taken), tostring(w.state), tostring(w.vy)))
   w.state = "standing"
   M.message(w, wa.msg.FRAME_FINISH)

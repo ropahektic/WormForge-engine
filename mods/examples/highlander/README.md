@@ -411,9 +411,11 @@ right push it. It needs WA's own gravity and wind, `wa.world.gravity()` /
   glide ends coming down onto land below WA's 8-pixel-per-frame fall-damage
   threshold, the glider's pack-away (6 frames at 24 a second) plays once WA
   has the worm standing. A faster impact releases the worm at full speed into
-  WA's loss-of-control state, avoiding the controlled-fall path that reopened
-  the equipped parachute in the recorded test; it plays no pack-away. A crash
-  into something ahead plays none.
+  WA's normal falling state, so WA can apply the scheme's fall damage and
+  loss of control. During that impact, the engine masks the parachute slot
+  inside the worm's frame handler so it cannot reopen and slow the worm; the
+  selected weapon is restored afterwards. A hard landing or a crash into
+  something ahead plays no pack-away.
 
 **Hot Air Balloon.** PX's `balloon_s` (r2_balloon by rafa''2, modified by
 0rang3), on the Bungee's slot, whose record the pack patches into a parachute.

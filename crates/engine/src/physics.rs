@@ -26,12 +26,14 @@ use game::offsets::{
     WORM_STATE_AIRBORNE, WORM_TURN_ACTIVE, WORLD_ROOT_TURN_ENDED,
     COLLISION_LANDSCAPE_BIT, ENT_COLLISION_MASK, MSG_JUMP, MSG_JUMP_UP, WORM_KEY_DOWN, WORM_KEY_LEFT,
     WORM_KEY_RIGHT, WORM_KEY_UP, WORM_STATE_JETPACKING, WORM_STATE_TUMBLING, WORM_STATE_HIT,
-    WORM_STATE_BLASTED, WORLD_ROOT_TURN_TIMER, ENT_WORLD, ENT_HELPER, GAME_WORLD_COLLISION_MANAGER,
+    WORM_STATE_BLASTED, WORM_SELECTED_WEAPON,
+    WORLD_ROOT_TURN_TIMER, ENT_WORLD, ENT_HELPER, GAME_WORLD_COLLISION_MANAGER,
 };
 use std::ffi::c_void;
 use std::collections::{HashMap, HashSet};
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use std::sync::atomic::{AtomicPtr, Ordering};
+use weapons::StockWeapon;
 
 type ApplyGravityFn = unsafe extern "thiscall" fn(*mut u8, *mut u8);
 type HandleMessageFn = unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut u8);
@@ -215,6 +217,12 @@ fn knocked(state: u32) -> bool {
 }
 
 static CARRY: Mutex<Vec<Carry>> = Mutex::new(Vec::new());
+/// A hard vehicle landing may enter 0x7E with its parachute still selected.
+/// WA otherwise fires that parachute on the very next frame, before the worm
+/// can hit land at its original speed. Only the selected slot is masked while
+/// WA handles that worm's frame; the real selection is restored afterwards.
+static SUPPRESS_AUTO_PARACHUTE: LazyLock<Mutex<HashSet<u32>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 static HIDDEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 /// Worms whose body alone is hidden (`worm.body_visible = false`): only the
 /// body sprite is skipped, and WA still draws their labels, fuel and cursor,
@@ -267,6 +275,9 @@ pub fn clear_handoffs() {
         g.clear();
     }
     if let Ok(mut g) = STEERED.lock() {
+        g.clear();
+    }
+    if let Ok(mut g) = SUPPRESS_AUTO_PARACHUTE.lock() {
         g.clear();
     }
 }
@@ -346,16 +357,31 @@ pub fn take(handle: u32, hide: bool, freeze: bool) {
     }
 }
 
-/// `worm:release(vx, vy, { tumble })`: give the worm back to WA moving at
-/// (vx, vy). A held worm is dropped (shown again, its mask back, the turn
+/// `worm:release(vx, vy, { tumble, suppress_auto_parachute })`: give the worm
+/// back to WA moving at (vx, vy). A held worm is dropped (shown again, its mask back, the turn
 /// thawed); any worm then enters falling-under-control (0x7E) through WA's
 /// own SetState, as a closed parachute does, and WA flies and lands it. The
 /// Jump, a vehicle's exit and worm_toss's throw are this. With `tumble` it
 /// enters WA's out-of-control state (0x7F) instead, as a hit does: on land it
 /// gets up (0x76), in water it drowns (0x85, 0x87; both traced after hits).
-pub fn release(handle: u32, vx: i32, vy: i32, tumble: bool) {
+/// `suppress_auto_parachute` keeps the selected parachute from reopening
+/// during that worm's airborne frames, so WA can handle a hard impact.
+pub fn release(
+    handle: u32,
+    vx: i32,
+    vy: i32,
+    tumble: bool,
+    suppress_auto_parachute: bool,
+) {
     if handle == 0 {
         return;
+    }
+    if let Ok(mut g) = SUPPRESS_AUTO_PARACHUTE.lock() {
+        if suppress_auto_parachute {
+            g.insert(handle);
+        } else {
+            g.remove(&handle);
+        }
     }
     let held = CARRY
         .lock()
@@ -377,6 +403,12 @@ pub fn release(handle: u32, vx: i32, vy: i32, tumble: bool) {
     unsafe {
         write_i32(handle as *mut u8, ENT_SPEED_X, vx);
         write_i32(handle as *mut u8, ENT_SPEED_Y, vy);
+    }
+    if suppress_auto_parachute {
+        let slot = unsafe { read_i32(handle as *mut u8, WORM_SELECTED_WEAPON) };
+        log_line(&format!(
+            "auto parachute suppression armed worm={handle:#x} slot={slot} vy={vy}"
+        ));
     }
 }
 
@@ -1073,7 +1105,45 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     let orig = ORIG_WORM.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
+        // WA's special-weapon path runs inside its frame handler and checks
+        // the selected slot before it can reopen the parachute.
+        // Mask only this worm's parachute slot for that call, then restore it.
+        // This leaves the equipped weapon intact for all other messages and
+        // for the next turn, while native collision and fall damage still run.
+        let masked_slot = if msg == MSG_FRAME_FINISH
+            && !this.is_null()
+            && matches!(
+                unsafe { read_i32(this, WORM_STATE) as u32 },
+                WORM_STATE_AIRBORNE | WORM_STATE_TUMBLING
+            )
+            && SUPPRESS_AUTO_PARACHUTE
+                .lock()
+                .map(|g| g.contains(&(this as u32)))
+                .unwrap_or(false)
+            && unsafe { read_i32(this, WORM_SELECTED_WEAPON) } == StockWeapon::Parachute as i32
+        {
+            unsafe { write_i32(this, WORM_SELECTED_WEAPON, 0) };
+            true
+        } else {
+            false
+        };
         crate::state_trace::message(this, msg, || unsafe { f(this, a, msg, b, c) });
+        if masked_slot && unsafe { read_i32(this, WORM_SELECTED_WEAPON) } == 0 {
+            unsafe { write_i32(this, WORM_SELECTED_WEAPON, StockWeapon::Parachute as i32) };
+        }
+        if !this.is_null() {
+            let state = unsafe { read_i32(this, WORM_STATE) as u32 };
+            if !matches!(state, WORM_STATE_AIRBORNE | WORM_STATE_TUMBLING) {
+                if let Ok(mut g) = SUPPRESS_AUTO_PARACHUTE.lock() {
+                    if g.remove(&(this as u32)) {
+                        log_line(&format!(
+                            "auto parachute suppression ended worm={:#x} state={state:#x}",
+                            this as u32
+                        ));
+                    }
+                }
+            }
+        }
     }
     if !this.is_null() {
         let worm = this as u32;
