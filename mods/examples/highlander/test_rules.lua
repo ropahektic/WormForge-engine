@@ -543,7 +543,7 @@ do
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
-  check("the lightning, Super Tele, Laser Gun and Javelin slots use scheme records; others copy stock", own_file)
+  check("scheme records use their intended bases; others copy stock", own_file)
   check("Super Tele owns the teleport cursor and click dispatch",
     by_slot.teleport and by_slot.teleport.on_select.cursor
       and type(by_slot.teleport.on_click) == "function"
@@ -1015,6 +1015,30 @@ do
   spec.on_explode({ x = 1, y = 1, slot = 1, missile = 777 })
   M.message(w, wa.msg.FRAME_FINISH)
   check("no missile id, or one never seen flying: nothing", #M.launched == 1 and #M.digs == 1)
+end
+
+print("old woman launcher: launch the Old Woman from a clear point")
+do
+  new_match()
+  local P = 0x10000
+  local spec
+  for _, r in ipairs(replaced) do
+    if r.weapon == "old_woman" then spec = r end
+  end
+  check("stock Old Woman supplies the animal and Lua handles its projectile",
+    spec and spec.copy_from == "old_woman" and type(spec.on_fire) == "function"
+      and spec.patch.fire_type == 1 and spec.patch.fire_method == 3)
+  local w = worm(17)
+  w.x, w.y = 100 * P, 100 * P
+  M.solid = function(x) return x <= 91 * P end
+  spec.on_fire({ worm = w, x = 86 * P, y = w.y, vx = -12 * P, vy = 0 })
+  check("a wall at the muzzle moves the Old Woman into clear space",
+    #M.launched == 1 and M.launched[1].weapon == "old_woman"
+      and M.launched[1].x >= 94 * P and M.launched[1].fuse == 5000)
+  M.solid = nil
+  spec.on_fire({ worm = w, x = 114 * P, y = w.y, vx = 12 * P, vy = 0 })
+  check("a clear muzzle keeps WA's original launch point",
+    #M.launched == 2 and M.launched[2].x == 114 * P)
 end
 
 print("chilli bomb: five more Chillis burst out")

@@ -153,10 +153,11 @@ gives it the banana plane with `plane`.
 fire five times per shot; `fire_repeat = 5` does the same, five pellets in one
 frame, each spread by WA's own hitscan cone.
 
-**Old Woman Launcher's record differs from PX's in one field.** For a
-projectile, +0x34 picks the worm's aim sheet (0x51C060). WA knows values 1 to
-12 only, and for PX's 0 it draws no worm at all. The pack's copy has 3, the
-bazooka hold, as the Cow Launcher's.
+**Old Woman Launcher** fires WA's Old Woman directly, with her stock movement,
+sprite, and five-second fuse. If WA's muzzle point is inside a wall, the pack
+places her at the nearest clear point back toward the worm before calling
+`wa.weapons.launch`. The worm uses the bazooka aim sheet (+0x34 = 3);
+PX's 0 draws no worm in WA 3.8.1.
 
 ### PX weapons with a small script
 
