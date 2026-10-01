@@ -2372,9 +2372,14 @@ do
     f:close()
     print("  wrote " .. BASELINE)
   else
-    local f = io.open(BASELINE, "r")
-    local was = f and f:read("a")
-    if f then f:close() end
+    -- A host that runs this suite from elsewhere (lua-host's test, from the
+    -- crate's folder) hands the file's text in as HIGHLANDER_BASELINE.
+    local was = HIGHLANDER_BASELINE
+    if was == nil then
+      local f = io.open(BASELINE, "r")
+      was = f and f:read("a")
+      if f then f:close() end
+    end
     local differs
     if was and was ~= now then
       local a, b = {}, {}
