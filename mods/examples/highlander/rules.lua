@@ -2815,6 +2815,9 @@ do
   -- How long after coming down onto land WA may take to stand the worm up for
   -- the pack-away (frames).
   local GLIDER_PACK_WAIT = 50
+  -- WA's fall damage begins at 8 pixels/frame of downward impact speed. Its
+  -- fixed-point formula includes one 16.16 unit of bias.
+  local GLIDER_SAFE_LANDING_SPEED = 8 * 0x10000 - 1
   local GLIDER_PI = 3.141593
 
   local gliders = {} -- worm id -> { enabled, deployed, x, y, ang, target, cycle, sx, sy, art, pack, pack_t, landing }
@@ -2930,16 +2933,17 @@ do
   local GLIDER_UNSTAND = 3
 
   -- The glide ends: the worm back to WA, falling on with the glider's speed.
-  -- `landing`: brought down onto land, so the pack-away plays once WA has
-  -- the worm standing. Otherwise, for a few frames, a worm WA has stood up
-  -- is released again, falling.
-  local function glider_close(worm, g, landing)
+  -- `landing`: a gentle landing, so the pack-away plays once WA has the worm
+  -- standing. A hard landing also touches ground, where WA handles fall damage
+  -- from the released speed. Only a collision elsewhere needs the short guard
+  -- against WA standing the worm up in mid-air.
+  local function glider_close(worm, g, landing, hard_landing)
     local P = 0x10000
     g.deployed = false
     glider_drop_art(worm, g)
     wa.sound.play(worm, "sounds/hang_glider/hangclose.wav")
     g.landing = landing and GLIDER_PACK_WAIT or nil
-    g.unstand = not landing and GLIDER_UNSTAND or nil
+    g.unstand = not (landing or hard_landing) and GLIDER_UNSTAND or nil
     if worm.taken then
       worm:release(trunc(g.sx * P), trunc(g.sy * P))
     end
@@ -2974,9 +2978,11 @@ do
       glider_keys(worm, g)
       glider_think(worm, g)
       if glider_blocked(worm, g.x, g.y, g.sx, g.sy) then
-        -- Onto land below it: a landing; into anything else: a crash.
+        -- Onto land below it: WA handles the impact with the glider's full
+        -- speed. Only a fall below its damage threshold gets the pack-away.
         local below = g.sy > 0 and not worm:fits(g.x, g.y + trunc((1.1 * g.sy + 4) * P))
-        glider_close(worm, g, below and true or false)
+        local hard_landing = below and trunc(g.sy * P) >= GLIDER_SAFE_LANDING_SPEED
+        glider_close(worm, g, below and not hard_landing, hard_landing)
         return
       end
       local x, y = g.x + trunc(g.sx * P), g.y + trunc(g.sy * P)

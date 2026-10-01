@@ -408,9 +408,10 @@ right push it. It needs WA's own gravity and wind, `wa.world.gravity()` /
   Weapons fire from it as from WA's parachute.
 - **Landing:** PX swaps the sheet WA packs a parachute away with (`wparbak`,
   289) for the glider's own. Here WA never packs a parachute away: when the
-  glide ends coming down onto land, the glider's pack-away (6 frames at 24 a
-  second) plays once WA has the worm standing. A crash into something ahead
-  plays none.
+  glide ends coming down onto land below WA's 8-pixel-per-frame fall-damage
+  threshold, the glider's pack-away (6 frames at 24 a second) plays once WA
+  has the worm standing. A faster impact keeps its full speed for WA's fall
+  damage and plays no pack-away. A crash into something ahead plays none.
 
 **Hot Air Balloon.** PX's `balloon_s` (r2_balloon by rafa''2, modified by
 0rang3), on the Bungee's slot, whose record the pack patches into a parachute.

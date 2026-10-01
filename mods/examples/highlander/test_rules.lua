@@ -1412,8 +1412,8 @@ do
   for _ = 1, 10 do M.message(w, wa.msg.FRAME_FINISH) end
   w.keys = {}
   check("up turns the nose up", art.angle and art.angle > 180, tostring(art.angle))
-  local function glide_again()
-    w.state, w.weapon, w.vx, w.vy = "sliding", "parachute", 3 * P, P
+  local function glide_again(vy)
+    w.state, w.weapon, w.vx, w.vy = "sliding", "parachute", 3 * P, vy or P
     M.message(w, wa.msg.FRAME_FINISH)
     w.state, w.weapon = "parachuting", "none"
     M.message(w, wa.msg.FRAME_FINISH)
@@ -1450,6 +1450,22 @@ do
   check("six frames at 24 a second", pack.shown == 5 and not pack.dead, tostring(pack.shown))
   M.message(w, wa.msg.FRAME_FINISH)
   check("then the worm again", pack.dead and w.body_visible == true)
+  -- A fast downward arrival still gives WA the full speed for fall damage;
+  -- it is ground contact, so no pack-away or mid-air unstick follows.
+  check("gliding into a hard landing", glide_again(20 * P))
+  n = #M.spawned
+  floor = w.y + 13 * P // 2
+  M.solid = function(_, y) return y >= floor end
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.solid = nil
+  check("hard landing: let WA resolve the full impact", not w.taken
+    and w.state == "sliding" and w.vy >= 8 * P - 1,
+    string.format("taken=%s state=%s vy=%s", tostring(w.taken), tostring(w.state), tostring(w.vy)))
+  w.state = "standing"
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("hard landing: no safe pack-away or mid-air unstick",
+    #M.spawned == n and w.state == "standing",
+    string.format("spawned=%d expected=%d state=%s", #M.spawned, n, tostring(w.state)))
   -- The jump key lets go of it.
   check("gliding again", glide_again())
   check("the jump key: let go", M.message(w, wa.msg.JUMP) == "eat" and not w.taken
