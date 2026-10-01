@@ -1442,11 +1442,21 @@ do
   M.message(w, wa.msg.FRAME_FINISH)
   M.solid = nil
   check("about to land: let go", not w.taken and w.state == "sliding")
+  local landing_art = M.spawned[#M.spawned]
+  check("gentle landing keeps the wing over the worm until WA stands it up",
+    landing_art.sprite == "sprites/hang_glider/glider" and not landing_art.dead
+    and w.body_visible == false)
+  w.state, w.x, w.y = "jump_falling", w.x + P, w.y + P
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("the wing follows the falling worm without exposing its body",
+    landing_art.x == w.x and landing_art.y == w.y and not landing_art.dead
+    and w.body_visible == false)
   w.state = "standing"
   M.message(w, wa.msg.FRAME_FINISH)
   local pack = M.spawned[#M.spawned]
   check("landed: the glider's own pack-away over the hidden body",
-    pack.sprite == "sprites/hang_glider/pack" and w.body_visible == false and pack.facing == -1)
+    landing_art.dead and pack.sprite == "sprites/hang_glider/pack"
+    and w.body_visible == false and pack.facing == -1)
   for _ = 1, 12 do M.message(w, wa.msg.FRAME_FINISH) end
   check("six frames at 24 a second", pack.shown == 5 and not pack.dead, tostring(pack.shown))
   M.message(w, wa.msg.FRAME_FINISH)
