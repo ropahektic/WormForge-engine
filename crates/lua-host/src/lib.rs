@@ -7,6 +7,7 @@
 mod actor;
 mod api;
 mod dispatch;
+mod modules;
 mod perf;
 mod sandbox;
 mod sim_context;
@@ -75,7 +76,7 @@ pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
         let entry = pack.root.join(&pack.manifest.entry);
         let src = std::fs::read_to_string(&entry)
             .map_err(|e| format!("{}: cannot read {}: {e}", pack.manifest.id, entry.display()))?;
-        sandbox::run_script(&lua, &src, &pack.manifest.entry)
+        modules::run_entry(&lua, &pack.manifest.id, &pack.root, &pack.manifest.entry, &src)
             .map_err(|e| format!("{}: {e}", pack.manifest.id))?;
     }
 
@@ -1307,6 +1308,86 @@ wa.weapons.replace({
         LoadedMod {
             manifest: parse_manifest(toml).unwrap(),
             root: dir.to_path_buf(),
+        }
+    }
+
+    /// A pack whose entry is `entry` and whose other files are `files`.
+    fn pack_with(dir: &std::path::Path, id: &str, entry: &str, files: &[(&str, &str)]) -> LoadedMod {
+        let toml = format!("id = \"{id}\"\napi_version = 1\nentry = \"weapons.lua\"\n");
+        let pack = pack(dir, id, &toml, entry);
+        for (path, src) in files {
+            let full = dir.join(path);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(full, src).unwrap();
+        }
+        pack
+    }
+
+    #[test]
+    fn a_pack_requires_its_own_modules_once_each_in_private() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-require-own");
+        let _ = std::fs::remove_dir_all(&root);
+        let p = pack_with(
+            &root.join("p"),
+            "p.mods",
+            r#"
+GREETING = "hi"
+local shared = require("lib/shared")
+assert(require("lib/shared") == shared, "one value per module")
+assert(shared.answer == 42, "nested require")
+assert(shared.greeting == "hi", "modules read the shared globals")
+assert(require("lib/silent") == true, "a module returning nothing gives true")
+ENTRY_SAW = shared.answer
+"#,
+            &[
+                ("lib/shared.lua", "LEAKED = true\nlocal two = require('lib/two')\nreturn { answer = 40 + two, greeting = GREETING, wa_seen = wa ~= nil }"),
+                ("lib/two.lua", "LOADS = (LOADS or 0) + 1\nreturn 2"),
+                ("lib/silent.lua", "local x = 1"),
+            ],
+        );
+        let scripts = run_mods(&[p]).unwrap();
+        let g = scripts.lua.globals();
+        assert_eq!(g.get::<i64>("ENTRY_SAW").unwrap(), 42, "the entry still writes the shared globals");
+        assert!(g.get::<Option<bool>>("LEAKED").unwrap().is_none(), "a module's globals stay its own");
+        assert!(g.get::<Option<i64>>("LOADS").unwrap().is_none());
+        assert!(g.get::<Option<mlua::Value>>("require").unwrap().is_none(), "no global require");
+    }
+
+    #[test]
+    fn two_packs_each_load_their_own_module_of_the_same_name() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-require-two");
+        let _ = std::fs::remove_dir_all(&root);
+        let a = pack_with(&root.join("a"), "a.p", "A_UTIL = require('lib/util')", &[("lib/util.lua", "return 'a'")]);
+        let b = pack_with(&root.join("b"), "b.p", "B_UTIL = require('lib/util')", &[("lib/util.lua", "return 'b'")]);
+        let scripts = run_mods(&[a, b]).unwrap();
+        let g = scripts.lua.globals();
+        assert_eq!(g.get::<String>("A_UTIL").unwrap(), "a");
+        assert_eq!(g.get::<String>("B_UTIL").unwrap(), "b");
+    }
+
+    #[test]
+    fn require_refuses_cycles_the_entry_and_anything_outside_the_pack() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-require-refused");
+        let _ = std::fs::remove_dir_all(&root);
+        let cases = [
+            ("require('lib/a')", "require cycle in t.p: lib/a -> lib/b -> lib/a"),
+            ("require('weapons')", "weapons.lua is the pack's entry file"),
+            ("require('../other/x')", "with '/' between folders"),
+            ("require('lib/missing')", "no lib/missing.lua in the pack"),
+            ("require('lib')", "lib.lua"),
+        ];
+        for (i, (entry, expected)) in cases.iter().enumerate() {
+            let p = pack_with(
+                &root.join(format!("p{i}")),
+                "t.p",
+                entry,
+                &[("lib/a.lua", "return require('lib/b')"), ("lib/b.lua", "return require('lib/a')")],
+            );
+            let err = run_mods(&[p]).err().unwrap_or_default();
+            assert!(err.contains(expected), "{entry}: {err}");
         }
     }
 

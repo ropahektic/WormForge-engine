@@ -37,10 +37,3 @@ fn strip_unsafe(lua: &Lua) -> LuaResult<()> {
     math.set("randomseed", mlua::Value::Nil)?;
     Ok(())
 }
-
-pub fn run_script(lua: &Lua, src: &str, chunk_name: &str) -> Result<(), String> {
-    lua.load(src)
-        .set_name(chunk_name)
-        .exec()
-        .map_err(|e| e.to_string())
-}
