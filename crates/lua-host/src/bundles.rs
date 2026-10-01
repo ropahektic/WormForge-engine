@@ -59,8 +59,9 @@ const CRATE: &[(&str, Field)] = &[
     ("chance_pct", Field::Int { min: 0, max: 100 }),
     ("type", Field::Choice(&["weapon", "utility", "health", "custom"])),
 ];
-/// The weapon data a component may declare and a scheme may override. Not
-/// yet written into WA's scheme: install(ctx) receives it as `ctx.data`.
+/// The weapon data a component may declare and a scheme may override.
+/// install(ctx) receives it as `ctx.data`; [`WeaponSettings`] is what the
+/// engine writes into WA's scheme.
 const WEAPON_DATA: &[(&str, Field)] = &[
     ("ammo", Field::Table(AMMO)),
     ("delay", Field::Int { min: 0, max: 99 }),
@@ -86,6 +87,54 @@ impl Kind {
     }
 }
 
+/// A placed weapon's merged data, as the engine writes it into WA's scheme
+/// for the round. Read before any install runs, so an install that edits
+/// `ctx.data` changes nothing here. `None` keeps WA's scheme value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WeaponSettings {
+    pub component: String,
+    pub slot: StockWeapon,
+    /// Ammo at round start; -1 is infinite.
+    pub round_start: Option<i32>,
+    /// Turns before the weapon can be used.
+    pub delay: Option<i32>,
+    /// `crate.chance_pct`: the weapon's weight in WA's crate draw, on the
+    /// scheme's scale (WSC crate probability × 20, so 100 is the most a
+    /// scheme can give).
+    pub crate_weight: Option<i32>,
+    pub ends_turn: Option<bool>,
+    /// Declared fields WA has no place for yet, by path.
+    pub unapplied: Vec<&'static str>,
+}
+
+/// The fields of [`WEAPON_DATA`] the engine doesn't write yet.
+const UNAPPLIED: &[&str] = &["power", "ammo.turn_start", "ammo.crate_collect", "crate.type"];
+
+fn settings(component: &str, slot: StockWeapon, data: &Table) -> mlua::Result<WeaponSettings> {
+    let ammo: Option<Table> = data.raw_get("ammo")?;
+    let crate_t: Option<Table> = data.raw_get("crate")?;
+    let field = |path: &str| -> mlua::Result<Value> {
+        match path.split_once('.') {
+            Some(("ammo", f)) => ammo.as_ref().map_or(Ok(Value::Nil), |t| t.raw_get(f)),
+            Some(("crate", f)) => crate_t.as_ref().map_or(Ok(Value::Nil), |t| t.raw_get(f)),
+            _ => data.raw_get(path),
+        }
+    };
+    Ok(WeaponSettings {
+        component: component.to_string(),
+        slot,
+        round_start: field("ammo.round_start")?.as_i32(),
+        delay: field("delay")?.as_i32(),
+        crate_weight: field("crate.chance_pct")?.as_i32(),
+        ends_turn: field("ends_turn")?.as_boolean(),
+        unapplied: UNAPPLIED
+            .iter()
+            .copied()
+            .filter(|p| field(p).is_ok_and(|v| !v.is_nil()))
+            .collect(),
+    })
+}
+
 struct Declared {
     kind: Kind,
     component: Selected,
@@ -101,7 +150,7 @@ pub(crate) fn run(
     plan: &ComponentPlan,
     claims: &Rc<RefCell<Vec<OverlayClaim>>>,
     logs: &Rc<RefCell<Vec<String>>>,
-) -> Result<(), String> {
+) -> Result<Vec<WeaponSettings>, String> {
     let r = &plan.resolved;
     let mut envs: BTreeMap<String, Table> = BTreeMap::new();
     for (bundle, root) in &plan.roots {
@@ -153,6 +202,14 @@ pub(crate) fn run(
         let merged = merge(lua, d.data.as_ref(), over.as_ref(), WEAPON_DATA).map_err(|e| e.to_string())?;
         data.insert(id.clone(), merged);
     }
+    let mut applied = Vec::new();
+    for w in &r.weapons {
+        let s = settings(&w.component.id, w.slot, &data[&w.component.id]).map_err(|e| e.to_string())?;
+        if !s.unapplied.is_empty() {
+            log(logs, &format!("{}: {} not applied to WA's scheme yet", s.component, s.unapplied.join(", ")));
+        }
+        applied.push(s);
+    }
 
     // 3. Install, in load order.
     let weapons_table = weapons_table(lua, r, &data).map_err(|e| e.to_string())?;
@@ -174,7 +231,7 @@ pub(crate) fn run(
             .call::<()>(ctx_table)
             .map_err(|e| format!("{} {}: install: {e}", d.kind.name(), d.component.id))?;
     }
-    Ok(())
+    Ok(applied)
 }
 
 /// A `wa` that refuses every use: the declaration pass only returns data.

@@ -116,8 +116,15 @@ pub const WEAPON_NAME2: usize = 0x04;
 pub const WEAPON_PANEL_STATE: usize = 0x08;
 pub const WEAPON_REQUIRES_AIMING: usize = 0x0C;
 pub const WEAPON_DEFINED: usize = 0x10;
-pub const WEAPON_UNKNOWN_18: usize = 0x18;
+/// 1 if firing the weapon ends the turn: 0 in the stock table exactly for
+/// the rope, bungee, parachute, jet pack, select worm and the power-ups.
+/// When set, a shot starts the retreat (0x55E3A8).
+pub const WEAPON_ENDS_TURN: usize = 0x18;
 pub const WEAPON_CREATES_PROJECTILE: usize = 0x20;
+/// Also the weapon's weight in the crate draw (0x561974 adds every weight
+/// above 0): the scheme's crate probability × 20, by `InitWeaponTable`'s
+/// overlay (0x53AD80); `CheckWeaponAvail` zeroes it for a weapon the round
+/// doesn't allow. Whether the weapon can be used is its ammo and delay.
 pub const WEAPON_AVAILABILITY: usize = 0x24;
 pub const WEAPON_ENABLED: usize = 0x28;
 pub const WEAPON_FIRE_TYPE: usize = 0x30;
@@ -341,6 +348,16 @@ pub const TEAM_OWNER_MACHINE: usize = 0x40;
 /// set per machine by `InitTeamsFromLobby`: 0 the host, 1.. the clients).
 pub const GAME_WORLD_GAME_INFO: usize = 0x24;
 pub const GAME_INFO_LOCAL_MACHINE: usize = 0xD9DC;
+/// GameInfo: the round's starting ammo and delay, one row per alliance
+/// (`GAME_INFO_ALLIANCE_COUNT` rows, stride `GAME_INFO_WEAPON_ROW_STRIDE`):
+/// `i16 ammo[71]` then `i16 delay[71]` at `GAME_INFO_WEAPON_ROW_DELAY`, by
+/// weapon id, -1 ammo infinite. Filled from the scheme before the world
+/// exists; `GameWorld__InitTeamsFromSetup` (0x5220B0) copies them into the
+/// team arena right after `InitWeaponTable` returns (0x527882, 0x527897).
+pub const GAME_INFO_WEAPON_ROWS: usize = 0xD0C0;
+pub const GAME_INFO_WEAPON_ROW_STRIDE: usize = 0x11E;
+pub const GAME_INFO_WEAPON_ROW_DELAY: usize = 0x8E;
+pub const GAME_INFO_ALLIANCE_COUNT: usize = 0xD0BC;
 /// GameInfo: the match's gravity, 16.16, from the scheme. Every frame
 /// `TurnManager__ProcessFrame` (0x55FDA0, at 0x5603CF) sets the collision
 /// manager's gravity to it times `GAME_WORLD_GRAVITY_PCT` / 100.

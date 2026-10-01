@@ -24,6 +24,7 @@ struct GfxPass {
     display: usize,
     resolved: ResolveResult,
     sprite_ids: HashMap<usize, i32>,
+    weapon_settings: Vec<lua_host::WeaponSettings>,
 }
 
 static GFX: Mutex<Option<GfxPass>> = Mutex::new(None);
@@ -271,6 +272,7 @@ pub fn on_gfx_ready(display: *mut u8) {
             display: key,
             resolved: scripts.resolved,
             sprite_ids,
+            weapon_settings: scripts.weapon_settings,
         });
     }
 }
@@ -610,6 +612,11 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             idx,
             claim.slot.name(),
         ));
+    }
+
+    // After the claims: they rewrite whole entries from the snapshot.
+    unsafe {
+        crate::scheme::apply(world, table, &pass.weapon_settings);
     }
 
     *NAMES.lock().unwrap() = names;

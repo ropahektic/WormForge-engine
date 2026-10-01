@@ -14,7 +14,7 @@ mod sandbox;
 mod sim_context;
 mod spawn;
 
-pub use bundles::ComponentPlan;
+pub use bundles::{ComponentPlan, WeaponSettings};
 pub use perf::{perf_flags, take_lua_time, PerfFlags};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
@@ -51,6 +51,8 @@ pub struct MatchScripts {
     pub lua: Lua,
     pub resolved: ResolveResult,
     pub logs: Vec<String>,
+    /// The selected weapons' data, for WA's scheme. Empty without components.
+    pub weapon_settings: Vec<WeaponSettings>,
 }
 
 pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
@@ -87,9 +89,10 @@ pub fn run_match(mods: &[LoadedMod], plan: Option<&ComponentPlan>) -> Result<Mat
             .map_err(|e| format!("{}: {e}", pack.manifest.id))?;
     }
 
-    if let Some(plan) = plan {
-        bundles::run(&lua, plan, &claims, &logs)?;
-    }
+    let weapon_settings = match plan {
+        Some(plan) => bundles::run(&lua, plan, &claims, &logs)?,
+        None => Vec::new(),
+    };
 
     let resolved = resolve_claims(claims.borrow().clone());
     let log_lines = logs.borrow().clone();
@@ -97,6 +100,7 @@ pub fn run_match(mods: &[LoadedMod], plan: Option<&ComponentPlan>) -> Result<Mat
         lua,
         resolved,
         logs: log_lines,
+        weapon_settings,
     })
 }
 
@@ -1500,6 +1504,7 @@ label = "Fast"
                      ctx.position.column, d.ammo.round_start, d.ammo.turn_start.amount, d.ammo.turn_start.mode, d.delay,
                      tostring(d.ends_turn), shared))
                    wa.weapons.replace({ weapon = ctx.stock_slot, name = "Double Bazooka" })
+                   d.delay = 9 -- too late: the settings were read before install
                  end,
                }"#,
             r#"return function(ctx)
@@ -1513,6 +1518,7 @@ label = "Fast"
         let logs: Vec<&str> = scripts.logs.iter().map(String::as_str).collect();
         assert_eq!(logs, [
             "[components] scheme override for t.unused skipped: not in the loadout",
+            "[components] t.double_bazooka: ammo.turn_start not applied to WA's scheme yet",
             "[t.double_bazooka] bazooka at F1 1: round 1, turn 1 replace, delay 0, ends false, shared ok",
             "[t.scheme] scheme sees bazooka",
             "[t.feature] feature fast=true scheme selected=true unused selected=false",
@@ -1520,6 +1526,15 @@ label = "Fast"
         let claim = &scripts.resolved.applied[0];
         assert_eq!((claim.slot, claim.mod_id.as_str()), (StockWeapon::Bazooka, "t.double_bazooka"));
         assert_eq!(scripts.resolved.applied.len(), 1);
+        assert_eq!(scripts.weapon_settings, [WeaponSettings {
+            component: "t.double_bazooka".into(),
+            slot: StockWeapon::Bazooka,
+            round_start: Some(1),
+            delay: Some(0),
+            crate_weight: None,
+            ends_turn: Some(false),
+            unapplied: vec!["ammo.turn_start"],
+        }]);
     }
 
     #[test]
@@ -1542,6 +1557,8 @@ label = "Fast"
         ]);
         let claim = &scripts.resolved.applied[0];
         assert_eq!((claim.slot, claim.params.name.as_deref(), claim.params.damage), (StockWeapon::Bazooka, Some("Big Bazooka"), Some(80)));
+        let s = &scripts.weapon_settings[0];
+        assert_eq!((s.slot, s.round_start, s.delay, s.crate_weight), (StockWeapon::Bazooka, Some(-1), Some(1), None));
     }
 
     #[test]
