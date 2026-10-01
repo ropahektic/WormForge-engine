@@ -18,6 +18,7 @@ pub mod store;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use weapons::components::PackFolder;
 use weapons::LoadedMod;
 
 pub use assets::sha256::digest;
@@ -171,6 +172,12 @@ pub fn hex(bytes: &[u8]) -> String {
 /// The copy is built beside `dest` and renamed into place only once complete,
 /// so a session directory that exists is always whole. `dest` must not exist.
 pub fn freeze(mods: &[LoadedMod], dest: &Path) -> Result<Session, String> {
+    freeze_with(mods, &[], dest)
+}
+
+/// [`freeze`] `mods` and `extra` folders together: component bundles and the
+/// frozen selection, which are no loaded packs but travel as packs do.
+pub fn freeze_with(mods: &[LoadedMod], extra: &[PackFolder], dest: &Path) -> Result<Session, String> {
     if dest.exists() {
         return Err(format!("session directory already exists: {}", dest.display()));
     }
@@ -178,7 +185,12 @@ pub fn freeze(mods: &[LoadedMod], dest: &Path) -> Result<Session, String> {
     if staging.exists() {
         fs::remove_dir_all(&staging).map_err(|e| format!("{}: {e}", staging.display()))?;
     }
-    let result = build(mods, &staging).and_then(|manifest| {
+    let mut folders: Vec<PackFolder> = mods
+        .iter()
+        .map(|m| PackFolder { id: m.manifest.id.clone(), version: m.manifest.version.clone(), root: m.root.clone() })
+        .collect();
+    folders.extend(extra.iter().cloned());
+    let result = build(&folders, &staging).and_then(|manifest| {
         fs::rename(&staging, dest)
             .map_err(|e| format!("publish {}: {e}", dest.display()))?;
         Ok(Session { dir: dest.to_path_buf(), manifest })
@@ -241,18 +253,18 @@ fn staging_path(dest: &Path) -> Result<PathBuf, String> {
     Ok(dest.with_file_name(staging))
 }
 
-fn build(mods: &[LoadedMod], staging: &Path) -> Result<Manifest, String> {
-    let mut sorted: Vec<&LoadedMod> = mods.iter().collect();
-    sorted.sort_by(|a, b| a.manifest.id.cmp(&b.manifest.id));
+fn build(folders: &[PackFolder], staging: &Path) -> Result<Manifest, String> {
+    let mut sorted: Vec<&PackFolder> = folders.iter().collect();
+    sorted.sort_by(|a, b| a.id.cmp(&b.id));
     let mut manifest = Manifest::default();
     for m in sorted {
-        let id = &m.manifest.id;
+        let id = &m.id;
         check_id(id)?;
-        check_field("version", &m.manifest.version)?;
+        check_field("version", &m.version)?;
         if manifest.packs.iter().any(|p| &p.id == id) {
             return Err(format!("pack id {id} appears twice"));
         }
-        manifest.packs.push(FrozenPack { id: id.clone(), version: m.manifest.version.clone() });
+        manifest.packs.push(FrozenPack { id: id.clone(), version: m.version.clone() });
 
         let mut files = Vec::new();
         collect(&m.root, &m.root, &mut files)?;
@@ -375,6 +387,34 @@ mod tests {
             fs::write(target, bytes).unwrap();
         }
         LoadedMod { manifest: parse_manifest(&toml).unwrap(), root: dir }
+    }
+
+    #[test]
+    fn bundles_and_the_frozen_selection_travel_as_packs_but_are_not_installed() {
+        let root = scratch("extras");
+        let a = pack(&root, "a", "a.pack", &[("weapons.lua", b"-- a")]);
+        let bundle = root.join("b");
+        fs::create_dir_all(&bundle).unwrap();
+        fs::write(bundle.join("mod.toml"), "id = \"b.bundle\"\napi_version = 1\nformat_version = 2\n").unwrap();
+        fs::write(bundle.join("w.lua"), "return {}").unwrap();
+        let selection = root.join("stage").join(weapons::components::PROFILE_PACK);
+        fs::create_dir_all(&selection).unwrap();
+        fs::write(selection.join(weapons::components::PROFILE_FILE), "scheme = \"x\"\n").unwrap();
+        let extras = [
+            PackFolder { id: "b.bundle".into(), version: "1.0.0".into(), root: bundle },
+            PackFolder { id: weapons::components::PROFILE_PACK.into(), version: "1".into(), root: selection },
+        ];
+        let session = freeze_with(&[a], &extras, &root.join("session")).unwrap();
+        let ids: Vec<_> = session.manifest.packs.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["a.pack", "b.bundle", "wormforge.profile"]);
+        let frozen = session.dir.join(PACKS_DIR).join("wormforge.profile").join("profile.toml");
+        assert_eq!(fs::read_to_string(frozen).unwrap(), "scheme = \"x\"\n");
+
+        let mods = root.join("Mods");
+        let report = install_session_into_mods(&session.dir, &mods).unwrap();
+        assert_eq!(report.installed, ["a.pack"]);
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert!(!mods.join("wormforge.profile").exists());
     }
 
     #[test]

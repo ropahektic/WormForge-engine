@@ -8,7 +8,7 @@ use game::offsets::{
     GAME_WORLD_WEAPON_TABLE,
 };
 use game::weapon::{snapshot_table, write_entry, WeaponEntry};
-use lua_host::{mods_root_from, run_mods};
+use lua_host::{mods_root_from, run_match};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
@@ -24,6 +24,7 @@ struct GfxPass {
     display: usize,
     resolved: ResolveResult,
     sprite_ids: HashMap<usize, i32>,
+    weapon_settings: Vec<lua_host::WeaponSettings>,
 }
 
 static GFX: Mutex<Option<GfxPass>> = Mutex::new(None);
@@ -94,15 +95,25 @@ pub fn on_gfx_ready(display: *mut u8) {
     for s in req_skip {
         log_line(&s);
     }
-    let fingerprint = modset_fingerprint(&mods);
+    // The selection: frozen with the packs in a network round or a replay,
+    // else the loader settings'. Its bundles and the selection itself are
+    // archived with the packs, so the replay runs the same components.
+    let selection = crate::selection::load(&mods_dir, &crate::log::wormforge_dir().join("selection-stage"));
+    let plan = selection.plan;
+    let mut fingerprint = modset_fingerprint(&mods);
+    if let Some(plan) = &plan {
+        // Peers with a different selection see a modset mismatch.
+        fingerprint.push(';');
+        fingerprint.push_str(&plan.resolved.modset_part());
+    }
     log_line(&format!("modset {fingerprint}"));
     crate::sync::set_local_modset(fingerprint);
     crate::modloader::match_loaded(&mods);
-    if !crate::replay::prepare(&mods) {
+    if !crate::replay::prepare(&mods, &selection.folders) {
         return;
     }
 
-    let scripts = match run_mods(&mods) {
+    let scripts = match run_match(&mods, plan.as_ref()) {
         Ok(s) => s,
         Err(e) => {
             log_error(&format!("InitGraphic lua: {e}"));
@@ -261,6 +272,7 @@ pub fn on_gfx_ready(display: *mut u8) {
             display: key,
             resolved: scripts.resolved,
             sprite_ids,
+            weapon_settings: scripts.weapon_settings,
         });
     }
 }
@@ -600,6 +612,11 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             idx,
             claim.slot.name(),
         ));
+    }
+
+    // After the claims: they rewrite whole entries from the snapshot.
+    unsafe {
+        crate::scheme::apply(world, table, &pass.weapon_settings);
     }
 
     *NAMES.lock().unwrap() = names;

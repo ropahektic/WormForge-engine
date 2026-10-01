@@ -7,7 +7,7 @@ use crate::offsets::{
     WEAPON_CREATES_PROJECTILE, WEAPON_DAMAGE, WEAPON_DEFINED, WEAPON_ENTRY_SIZE, WEAPON_FIRE_METHOD,
     WEAPON_FIRE_TYPE, WEAPON_GRAVITY_PCT, WEAPON_MINE_BLAST, WEAPON_MINE_FUSE, WEAPON_MINE_MASK,
     WEAPON_MINE_PROXIMITY, WEAPON_MINE_TRIGGER, WEAPON_NAME1, WEAPON_NAME2, WEAPON_REQUIRES_AIMING, WEAPON_SPECIAL_SUBTYPE,
-    WEAPON_SPRITE_ID, WEAPON_TABLE_BYTES, WEAPON_UNKNOWN_18, WEAPON_WIND_PCT,
+    WEAPON_SPRITE_ID, WEAPON_TABLE_BYTES, WEAPON_ENDS_TURN, WEAPON_WIND_PCT,
 };
 
 /// One stock table slot. Layout is a fixed 0x1D0 blob so host tests can
@@ -109,8 +109,8 @@ impl WeaponEntry {
         self.write_i32(WEAPON_CREATES_PROJECTILE, value);
     }
 
-    pub fn set_unknown_18(&mut self, value: i32) {
-        self.write_i32(WEAPON_UNKNOWN_18, value);
+    pub fn set_ends_turn(&mut self, value: i32) {
+        self.write_i32(WEAPON_ENDS_TURN, value);
     }
 
     /// `weapon` is the panel slot. This copies only how the weapon fires

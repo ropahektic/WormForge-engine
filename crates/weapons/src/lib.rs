@@ -5,7 +5,9 @@
 //! (sorted mod id) wins and the later claim is skipped. That skip is the
 //! dispatcher: handlers for a slot belong to the winner, they do not stack.
 
+pub mod components;
 mod overlay;
+pub mod panel;
 mod stock;
 mod templates;
 pub mod wep;
@@ -133,7 +135,15 @@ pub struct LoadedMod {
     pub root: PathBuf,
 }
 
+/// Why a component bundle's folder is listed but not loaded, for now.
+pub const BUNDLE_NOT_LOADED: &str = "this is a component bundle (format_version 2); bundles are not loaded yet";
+
 pub fn parse_manifest(src: &str) -> Result<ModManifest, String> {
+    // A component bundle would otherwise read as a pack with no claims and
+    // the default entry, and be run as one.
+    if components::declares_components(src) {
+        return Err(BUNDLE_NOT_LOADED.into());
+    }
     let mut m: ModManifest = toml::from_str(src).map_err(|e| e.to_string())?;
     if m.id.trim().is_empty() {
         return Err("mod.toml id is empty".into());
@@ -171,6 +181,10 @@ pub struct LoaderSettings {
     /// loader tell "up to date" from "update available" without version bumps.
     #[serde(default)]
     pub installed: std::collections::BTreeMap<String, String>,
+    /// The component selection (`[profile]`), kept as written so a save by the
+    /// loader window never loses it; read with `components::ProfileSpec`.
+    #[serde(default)]
+    pub profile: Option<toml::Table>,
 }
 
 impl LoaderSettings {
@@ -203,6 +217,13 @@ impl LoaderSettings {
             for (id, sha) in &self.installed {
                 out.push_str(&format!("{id:?} = {sha:?}\n"));
             }
+        }
+        if let Some(profile) = &self.profile {
+            let mut wrapper = toml::Table::new();
+            wrapper.insert("profile".into(), toml::Value::Table(profile.clone()));
+            let text = toml::to_string(&wrapper).map_err(|e| e.to_string())?;
+            out.push_str("\n# The component selection: scheme, weapons, features, options.\n");
+            out.push_str(&text);
         }
         std::fs::create_dir_all(mods_dir).map_err(|e| e.to_string())?;
         // Not std::fs::write: that truncates the existing file in place, which
@@ -411,7 +432,12 @@ pub fn conflict_text(conflicts: &[SlotConflict], id: &str) -> String {
 pub fn discover_mods(mods_dir: &Path) -> Result<Vec<LoadedMod>, String> {
     let mut mods = Vec::new();
     for entry in list_mods(mods_dir)? {
-        let manifest = entry.manifest?;
+        let manifest = match entry.manifest {
+            Ok(m) => m,
+            // Listed for the loader to show; not a pack the match runs.
+            Err(e) if e == BUNDLE_NOT_LOADED => continue,
+            Err(e) => return Err(e),
+        };
         if !entry.enabled {
             continue;
         }
@@ -529,6 +555,45 @@ pub fn filter_requirements(mods: &[LoadedMod]) -> (Vec<LoadedMod>, Vec<String>) 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_save_keeps_the_profile() {
+        let root = std::env::temp_dir().join("wf-weapons-settings-profile");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join(SETTINGS_FILE),
+            "disabled = []\n[profile]\nscheme = \"hl.highlander\"\n[profile.weapons]\n\"core.teleport\" = { row = \"F8\", column = 4 }\n",
+        )
+        .unwrap();
+        let mut settings = LoaderSettings::load(&root);
+        settings.set_enabled("some.pack", false);
+        settings.save(&root).unwrap();
+        let again = LoaderSettings::load(&root);
+        assert_eq!(again.disabled, ["some.pack"]);
+        assert_eq!(again.profile, settings.profile);
+        let spec = components::ProfileSpec::from_table(again.profile.as_ref().unwrap()).unwrap();
+        assert_eq!(spec.scheme.as_deref(), Some("hl.highlander"));
+        assert_eq!(spec.weapons.len(), 1);
+    }
+
+    #[test]
+    fn a_component_bundle_is_listed_but_not_loaded_as_a_pack() {
+        let root = std::env::temp_dir().join("wf-weapons-bundle-skip");
+        let _ = std::fs::remove_dir_all(&root);
+        for (folder, toml) in [
+            ("old", "id = \"old.pack\"\napi_version = 1\nentry = \"init.lua\"\n"),
+            ("new", "id = \"new.bundle\"\napi_version = 1\nformat_version = 2\n[[components]]\nid = \"a.b\"\ntype = \"feature\"\nentry = \"a.lua\"\n"),
+        ] {
+            std::fs::create_dir_all(root.join(folder)).unwrap();
+            std::fs::write(root.join(folder).join("mod.toml"), toml).unwrap();
+        }
+        let listed = list_mods(&root).unwrap();
+        assert_eq!(listed.len(), 2);
+        assert!(listed.iter().any(|e| e.manifest.as_ref().err().map(String::as_str) == Some(BUNDLE_NOT_LOADED)));
+        let loaded = discover_mods(&root).unwrap();
+        assert_eq!(loaded.iter().map(|m| m.manifest.id.as_str()).collect::<Vec<_>>(), ["old.pack"]);
+    }
+
     use super::*;
 
     #[test]

@@ -654,7 +654,7 @@ fn apply_cluster_homing(entry: &mut WeaponEntry, mode: HomingMode, sprite: Optio
 pub fn apply_drop_fire(entry: &mut WeaponEntry) {
     entry.set_requires_aiming(0);
     entry.set_creates_projectile(1);
-    entry.set_unknown_18(1);
+    entry.set_ends_turn(1);
     entry.set_fire_type(3);
     entry.set_special_subtype(0);
     entry.set_fire_method(0);
