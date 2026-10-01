@@ -8,7 +8,7 @@ use game::offsets::{
     GAME_WORLD_WEAPON_TABLE,
 };
 use game::weapon::{snapshot_table, write_entry, WeaponEntry};
-use lua_host::{mods_root_from, run_mods};
+use lua_host::{mods_root_from, run_match, ComponentPlan};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
@@ -96,7 +96,18 @@ pub fn on_gfx_ready(display: *mut u8) {
     for s in req_skip {
         log_line(&s);
     }
-    let fingerprint = modset_fingerprint(&mods);
+    let plan = component_plan(&mods_dir);
+    let mut fingerprint = modset_fingerprint(&mods);
+    if let Some(plan) = &plan {
+        // Peers with a different selection see a modset mismatch.
+        fingerprint.push(';');
+        fingerprint.push_str(&plan.resolved.modset_part());
+        if crate::replay::playback_mods_root().is_none() {
+            log_error(
+                "components are not recorded in replays yet: this match's replay will not play back the same",
+            );
+        }
+    }
     log_line(&format!("modset {fingerprint}"));
     crate::sync::set_local_modset(fingerprint);
     crate::modloader::match_loaded(&mods);
@@ -104,7 +115,7 @@ pub fn on_gfx_ready(display: *mut u8) {
         return;
     }
 
-    let scripts = match run_mods(&mods) {
+    let scripts = match run_match(&mods, plan.as_ref()) {
         Ok(s) => s,
         Err(e) => {
             log_error(&format!("InitGraphic lua: {e}"));
@@ -784,4 +795,46 @@ fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>) {
     crate::gpu::set_atlas(atlas);
     crate::gpu::set_active(true);
     log_line("gpu renderer active: sprites drawn as GPU quads");
+}
+
+/// The component selection in `mods_dir`'s loader settings, resolved against
+/// the bundles installed there; None (with the reasons logged) when there is
+/// no selection or it does not resolve, so the match loads its packs alone.
+fn component_plan(mods_dir: &std::path::Path) -> Option<ComponentPlan> {
+    use weapons::components::{list_bundles, resolve, ProfileSpec};
+    let table = weapons::LoaderSettings::load(mods_dir).profile?;
+    let (bundles, broken) = list_bundles(mods_dir);
+    for e in &broken {
+        log_error(&format!("component bundle {e}"));
+    }
+    let profile = match ProfileSpec::from_table(&table).map_err(|e| vec![e]).and_then(|s| s.to_profile()) {
+        Ok(p) => p,
+        Err(errors) => {
+            for e in errors {
+                log_error(&format!("profile: {e}"));
+            }
+            return None;
+        }
+    };
+    let manifests: Vec<_> = bundles.iter().map(|b| b.manifest.clone()).collect();
+    let resolved = match resolve(&manifests, &profile) {
+        Ok(r) => r,
+        Err(errors) => {
+            log_error("profile does not resolve; loading packs without components:");
+            for e in errors {
+                log_error(&format!("  {e}"));
+            }
+            return None;
+        }
+    };
+    if resolved.is_empty() {
+        return None;
+    }
+    for line in resolved.canonical().lines() {
+        log_line(&format!("profile {line}"));
+    }
+    Some(ComponentPlan {
+        resolved,
+        roots: bundles.into_iter().map(|b| (b.manifest.id, b.root)).collect(),
+    })
 }
