@@ -30,7 +30,7 @@ const MAX_NAME: usize = 200;
 
 /// Run a pack's entry chunk with the pack's own `require`.
 pub fn run_entry(lua: &Lua, mod_id: &str, root: &Path, entry: &str, src: &str) -> Result<(), String> {
-    let env = entry_env(lua, mod_id, root, entry).map_err(|e| e.to_string())?;
+    let env = folder_env(lua, mod_id, root, Some(entry), true).map_err(|e| e.to_string())?;
     lua.load(src)
         .set_name(entry)
         .set_environment(env)
@@ -38,23 +38,33 @@ pub fn run_entry(lua: &Lua, mod_id: &str, root: &Path, entry: &str, src: &str) -
         .map_err(|e| e.to_string())
 }
 
-/// The entry's environment: globals read and written through, `require` its own.
-fn entry_env(lua: &Lua, mod_id: &str, root: &Path, entry: &str) -> mlua::Result<Table> {
+/// A component bundle's environment: what its modules (components included)
+/// fall back to. It reads the shared globals and holds the bundle's
+/// `require`; nothing writes to it, since every module writes to its own.
+pub fn bundle_env(lua: &Lua, bundle_id: &str, root: &Path) -> mlua::Result<Table> {
+    folder_env(lua, bundle_id, root, None, false)
+}
+
+/// The environment of a pack's entry (`entry`, writes through to the shared
+/// globals) or of a bundle (no entry, no writes), with the folder's `require`.
+fn folder_env(lua: &Lua, mod_id: &str, root: &Path, entry: Option<&str>, write_through: bool) -> mlua::Result<Table> {
     let env = lua.create_table()?;
     let meta = lua.create_table()?;
     meta.raw_set("__index", lua.globals())?;
-    meta.raw_set("__newindex", lua.globals())?;
+    if write_through {
+        meta.raw_set("__newindex", lua.globals())?;
+    }
     env.set_metatable(Some(meta));
 
     let cache = lua.create_table()?;
     let loading: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
     let root = root.to_path_buf();
     let mod_id = mod_id.to_string();
-    let entry = entry.replace('\\', "/");
+    let entry = entry.map(|e| e.replace('\\', "/"));
     let pack_env = env.clone();
     let require = lua.create_function(move |lua, name: String| {
         let rel = module_path(&name).map_err(mlua::Error::external)?;
-        if rel == entry {
+        if entry.as_deref() == Some(rel.as_str()) {
             return Err(mlua::Error::external(format!(
                 "require(\"{name}\"): {rel} is the pack's entry file"
             )));
