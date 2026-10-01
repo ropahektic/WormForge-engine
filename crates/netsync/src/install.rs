@@ -53,6 +53,11 @@ pub fn install_session_into_mods(session_dir: &Path, mods_dir: &Path) -> Result<
         if folder_name.is_empty() || is_ignored_folder(&folder_name) {
             continue;
         }
+        // The host's frozen selection is the session's, never the player's
+        // own; and a component bundle is not installed from a session yet.
+        if folder_name == weapons::components::PROFILE_PACK {
+            continue;
+        }
         let toml = match fs::read_to_string(src.join("mod.toml")) {
             Ok(s) => s,
             Err(e) => {
@@ -60,6 +65,9 @@ pub fn install_session_into_mods(session_dir: &Path, mods_dir: &Path) -> Result<
                 continue;
             }
         };
+        if weapons::components::declares_components(&toml) {
+            continue;
+        }
         let manifest = match parse_manifest(&toml) {
             Ok(m) => m,
             Err(e) => {
