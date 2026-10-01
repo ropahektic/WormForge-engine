@@ -2854,7 +2854,19 @@ do
   local function glider_drop_art(worm, g)
     if g.art then g.art:despawn(); g.art = nil end
     if g.pack then g.pack:despawn(); g.pack = nil end
+    g.pack_x, g.pack_y = nil, nil
     worm.body_visible = true
+  end
+
+  local function glider_begin_pack(worm, g)
+    g.landing = nil
+    if g.art then g.art:despawn(); g.art = nil end
+    g.pack, g.pack_t = glider_art(worm, worm.x, worm.y, "sprites/hang_glider/pack"), 0
+    g.pack_x, g.pack_y = worm.x, worm.y
+    g.pack.facing = -worm.facing
+    g.pack:frame(0)
+    g.pack:gfx({ depth = GLIDER_DEPTH })
+    worm.body_visible = false
   end
 
   -- TraceMask from (x, y) to where it is heading: anything the worm would
@@ -3030,13 +3042,12 @@ do
           g.unstand = g.unstand > 1 and g.unstand - 1 or nil
         end
       end
-      -- Down on land: once WA has it standing, the glider's pack-away.
+      -- A land contact starts the pack-away in that frame. Standing is a
+      -- fallback if WA did not report a contact; it may arrive 12 frames later.
       if g.landing then
         if state == "standing" and worm.y < wa.world.water() then
-          g.landing = nil
-          if g.art then g.art:despawn(); g.art = nil end
-          g.pack, g.pack_t = glider_art(worm, worm.x, worm.y, "sprites/hang_glider/pack"), 0
-        elseif worm.y >= wa.world.water() then
+          glider_begin_pack(worm, g)
+        elseif worm.y >= wa.world.water() or state == "tumbling" then
           g.landing = nil
           glider_drop_art(worm, g)
         else
@@ -3052,7 +3063,14 @@ do
       end
       if g.pack then
         local frame = g.pack_t * GLIDER_PACK_FPS // 50
-        if frame >= GLIDER_PACK_FRAMES or worm.state ~= "standing" then
+        local keys = worm.keys or {}
+        local moving = keys.left or keys.right or state == "walking"
+          or state == "jump_prepare" or state == "jumping"
+          or math.abs(worm.x - g.pack_x) > P
+        local landing_state = state == "standing" or state == "sliding"
+          or state == "jump_falling" or state == "falling"
+        if frame >= GLIDER_PACK_FRAMES or moving or not landing_state
+            or worm.y >= wa.world.water() then
           glider_drop_art(worm, g)
         else
           g.pack.x, g.pack.y, g.pack.vx, g.pack.vy = worm.x, worm.y, 0, 0
@@ -3081,12 +3099,30 @@ do
   end
 
   if wa.world.gravity and wa.world.wind then
+    if wa.on.contact then
+      wa.on.contact(function(worm, other)
+        local g = gliders[worm.id]
+        if g and g.landing and other.kind == "land" and worm.y < wa.world.water() then
+          local keys = worm.keys or {}
+          if keys.left or keys.right then
+            g.landing = nil
+            glider_drop_art(worm, g)
+          else
+            glider_begin_pack(worm, g)
+          end
+        end
+      end)
+    end
     wa.on.worm_message(function(worm, msg)
       if msg == wa.msg.FRAME_FINISH then
         glider_frame(worm)
         return
       end
       local g = gliders[worm.id]
+      if g and g.pack and (msg == wa.msg.JUMP or msg == wa.msg.JUMP_UP) then
+        glider_drop_art(worm, g)
+        return
+      end
       if not (g and g.deployed) then
         return
       end

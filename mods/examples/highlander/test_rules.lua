@@ -1434,8 +1434,8 @@ do
   M.message(w, wa.msg.FRAME_FINISH)
   check("and no pack-away; stood up where it hit, released again", #M.spawned == n
     and w.state == "sliding")
-  -- Coming down onto land: let go; once WA stands it up, the glider's own
-  -- pack-away over the hidden body.
+  -- Coming down onto land: let go, then begin the pack-away at WA's terrain
+  -- contact instead of waiting for its delayed standing state.
   check("gliding again", glide_again())
   local floor = w.y + 13 * P // 2
   M.solid = function(_, y) return y >= floor end
@@ -1443,7 +1443,7 @@ do
   M.solid = nil
   check("about to land: let go", not w.taken and w.state == "sliding")
   local landing_art = M.spawned[#M.spawned]
-  check("gentle landing keeps the wing over the worm until WA stands it up",
+  check("gentle landing keeps the wing over the worm until contact",
     landing_art.sprite == "sprites/hang_glider/glider" and not landing_art.dead
     and w.body_visible == false)
   w.state, w.x, w.y = "jump_falling", w.x + P, w.y + P
@@ -1451,16 +1451,53 @@ do
   check("the wing follows the falling worm without exposing its body",
     landing_art.x == w.x and landing_art.y == w.y and not landing_art.dead
     and w.body_visible == false)
-  w.state = "standing"
-  M.message(w, wa.msg.FRAME_FINISH)
+  M.contact(w, { kind = "land" }, { vx = w.vx, vy = w.vy, flags = 0 })
   local pack = M.spawned[#M.spawned]
-  check("landed: the glider's own pack-away over the hidden body",
+  check("land contact immediately replaces the wing with pack-away, before WA stands the worm",
     landing_art.dead and pack.sprite == "sprites/hang_glider/pack"
-    and w.body_visible == false and pack.facing == -1)
+    and w.state == "jump_falling" and w.body_visible == false and pack.facing == -1)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("pack-away runs while WA is still in the landing handoff",
+    not pack.dead and pack.shown == 0 and w.body_visible == false)
+  w.state = "standing"
   for _ = 1, 12 do M.message(w, wa.msg.FRAME_FINISH) end
   check("six frames at 24 a second", pack.shown == 5 and not pack.dead, tostring(pack.shown))
   M.message(w, wa.msg.FRAME_FINISH)
   check("then the worm again", pack.dead and w.body_visible == true)
+  -- A movement key interrupts the pack-away even before WA has changed the
+  -- worm's landing state to walking.
+  check("gliding again", glide_again())
+  floor = w.y + 13 * P // 2
+  M.solid = function(_, y) return y >= floor end
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.solid = nil
+  M.contact(w, { kind = "land" }, { vx = w.vx, vy = w.vy, flags = 0 })
+  local interrupted_pack = M.spawned[#M.spawned]
+  w.keys = { left = true }
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("moving interrupts pack-away and returns to WA's worm immediately",
+    interrupted_pack.dead and w.body_visible == true)
+  w.keys = {}
+  check("gliding again", glide_again())
+  floor = w.y + 13 * P // 2
+  M.solid = function(_, y) return y >= floor end
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.solid = nil
+  M.contact(w, { kind = "land" }, { vx = w.vx, vy = w.vy, flags = 0 })
+  local jump_pack = M.spawned[#M.spawned]
+  check("jump interrupts pack-away without eating WA's jump",
+    M.message(w, wa.msg.JUMP) ~= "eat" and jump_pack.dead and w.body_visible == true)
+  check("gliding again", glide_again())
+  floor = w.y + 13 * P // 2
+  M.solid = function(_, y) return y >= floor end
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.solid = nil
+  n = #M.spawned
+  w.keys = { right = true }
+  M.contact(w, { kind = "land" }, { vx = w.vx, vy = w.vy, flags = 0 })
+  check("a held movement key skips the pack-away at contact",
+    #M.spawned == n and w.body_visible == true)
+  w.keys = {}
   -- A fast downward arrival gives WA the full speed. The engine holds the
   -- equipped chute closed until WA has resolved the impact and any damage.
   check("gliding into a hard landing", glide_again(20 * P))
