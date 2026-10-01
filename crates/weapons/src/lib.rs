@@ -5,7 +5,9 @@
 //! (sorted mod id) wins and the later claim is skipped. That skip is the
 //! dispatcher: handlers for a slot belong to the winner, they do not stack.
 
+pub mod components;
 mod overlay;
+pub mod panel;
 mod stock;
 mod templates;
 pub mod wep;
@@ -133,7 +135,15 @@ pub struct LoadedMod {
     pub root: PathBuf,
 }
 
+/// Why a component bundle's folder is listed but not loaded, for now.
+pub const BUNDLE_NOT_LOADED: &str = "this is a component bundle (format_version 2); bundles are not loaded yet";
+
 pub fn parse_manifest(src: &str) -> Result<ModManifest, String> {
+    // A component bundle would otherwise read as a pack with no claims and
+    // the default entry, and be run as one.
+    if components::declares_components(src) {
+        return Err(BUNDLE_NOT_LOADED.into());
+    }
     let mut m: ModManifest = toml::from_str(src).map_err(|e| e.to_string())?;
     if m.id.trim().is_empty() {
         return Err("mod.toml id is empty".into());
@@ -411,7 +421,12 @@ pub fn conflict_text(conflicts: &[SlotConflict], id: &str) -> String {
 pub fn discover_mods(mods_dir: &Path) -> Result<Vec<LoadedMod>, String> {
     let mut mods = Vec::new();
     for entry in list_mods(mods_dir)? {
-        let manifest = entry.manifest?;
+        let manifest = match entry.manifest {
+            Ok(m) => m,
+            // Listed for the loader to show; not a pack the match runs.
+            Err(e) if e == BUNDLE_NOT_LOADED => continue,
+            Err(e) => return Err(e),
+        };
         if !entry.enabled {
             continue;
         }
@@ -529,6 +544,24 @@ pub fn filter_requirements(mods: &[LoadedMod]) -> (Vec<LoadedMod>, Vec<String>) 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_component_bundle_is_listed_but_not_loaded_as_a_pack() {
+        let root = std::env::temp_dir().join("wf-weapons-bundle-skip");
+        let _ = std::fs::remove_dir_all(&root);
+        for (folder, toml) in [
+            ("old", "id = \"old.pack\"\napi_version = 1\nentry = \"init.lua\"\n"),
+            ("new", "id = \"new.bundle\"\napi_version = 1\nformat_version = 2\n[[components]]\nid = \"a.b\"\ntype = \"feature\"\nentry = \"a.lua\"\n"),
+        ] {
+            std::fs::create_dir_all(root.join(folder)).unwrap();
+            std::fs::write(root.join(folder).join("mod.toml"), toml).unwrap();
+        }
+        let listed = list_mods(&root).unwrap();
+        assert_eq!(listed.len(), 2);
+        assert!(listed.iter().any(|e| e.manifest.as_ref().err().map(String::as_str) == Some(BUNDLE_NOT_LOADED)));
+        let loaded = discover_mods(&root).unwrap();
+        assert_eq!(loaded.iter().map(|m| m.manifest.id.as_str()).collect::<Vec<_>>(), ["old.pack"]);
+    }
+
     use super::*;
 
     #[test]
