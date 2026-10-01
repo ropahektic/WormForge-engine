@@ -2934,9 +2934,10 @@ do
 
   -- The glide ends: the worm back to WA, falling on with the glider's speed.
   -- `landing`: a gentle landing, so the pack-away plays once WA has the worm
-  -- standing. A hard landing also touches ground, where WA handles fall damage
-  -- from the released speed. Only a collision elsewhere needs the short guard
-  -- against WA standing the worm up in mid-air.
+  -- standing. A hard landing gives WA the glider's full speed in its
+  -- out-of-control state, avoiding the falling-under-control path that
+  -- reopened the equipped parachute in the recorded test. Only a collision
+  -- elsewhere needs the short guard against WA standing it up in mid-air.
   local function glider_close(worm, g, landing, hard_landing)
     local P = 0x10000
     g.deployed = false
@@ -2945,7 +2946,12 @@ do
     g.landing = landing and GLIDER_PACK_WAIT or nil
     g.unstand = not (landing or hard_landing) and GLIDER_UNSTAND or nil
     if worm.taken then
-      worm:release(trunc(g.sx * P), trunc(g.sy * P))
+      local vx, vy = trunc(g.sx * P), trunc(g.sy * P)
+      if hard_landing then
+        worm:release(vx, vy, { tumble = true })
+      else
+        worm:release(vx, vy)
+      end
     end
   end
 
