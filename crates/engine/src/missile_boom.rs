@@ -579,7 +579,8 @@ mod live_tests {
     fn a_freed_missile_leaves_no_explode_step_behind() {
         // A Chilli Bomb (slot 42) freed by WA: the next missile WA builds
         // at its address, a Pogo Sheep with no explode step, must not fire it.
-        let at = 0x0E9A_0A98;
+        // Not id_tests' address: its forget_weapon would race this test.
+        let at = 0x0E9A_3A98;
         keep(at, 42);
         assert_eq!(live_of(at as *mut u8).map(|l| l.slot), Some(42));
         forget_weapon(at as usize);
