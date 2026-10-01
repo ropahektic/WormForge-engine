@@ -622,6 +622,42 @@ impl ProfileSpec {
     }
 }
 
+/// The pseudo-pack that carries a frozen selection: in a synced session's
+/// packs and in a replay's pack table it is a folder holding [`PROFILE_FILE`],
+/// so it travels, is hashed and is archived like any pack file. It has no
+/// `mod.toml`, so discovery passes it by.
+pub const PROFILE_PACK: &str = "wormforge.profile";
+/// The `[profile]` table's contents, inside [`PROFILE_PACK`].
+pub const PROFILE_FILE: &str = "profile.toml";
+
+/// A folder to freeze for the network or archive in a replay.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackFolder {
+    pub id: String,
+    pub version: String,
+    pub root: PathBuf,
+}
+
+/// The selection a round loading from `mods_dir` runs: a frozen one when the
+/// folder is a synced session or a replay's packs, else the loader settings'.
+pub fn profile_table(mods_dir: &Path) -> Result<Option<toml::Table>, String> {
+    let frozen = mods_dir.join(PROFILE_PACK).join(PROFILE_FILE);
+    match std::fs::read_to_string(&frozen) {
+        Ok(src) => toml::from_str(&src).map(Some).map_err(|e| format!("{}: {e}", frozen.display())),
+        Err(_) => Ok(crate::LoaderSettings::load(mods_dir).profile),
+    }
+}
+
+/// Write `table` as the frozen selection under `dir`, as a folder to freeze.
+pub fn write_profile_pack(dir: &Path, table: &toml::Table) -> Result<PackFolder, String> {
+    let root = dir.join(PROFILE_PACK);
+    std::fs::create_dir_all(&root).map_err(|e| format!("{}: {e}", root.display()))?;
+    let text = toml::to_string(table).map_err(|e| e.to_string())?;
+    let path = root.join(PROFILE_FILE);
+    std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(PackFolder { id: PROFILE_PACK.into(), version: "1".into(), root })
+}
+
 /// An installed bundle and its folder.
 #[derive(Debug, Clone)]
 pub struct LoadedBundle {
@@ -971,6 +1007,24 @@ always_fast_walk = true
         assert_eq!(found.iter().map(|b| b.manifest.id.as_str()).collect::<Vec<_>>(), ["catalog.weapons"]);
         assert_eq!(errors.len(), 1);
         assert!(errors[0].starts_with("broken: broken: declares no components"), "{errors:?}");
+    }
+
+    #[test]
+    fn a_frozen_selection_wins_over_the_loader_settings() {
+        let root = std::env::temp_dir().join("wf-weapons-frozen-profile");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        assert_eq!(profile_table(&root).unwrap(), None);
+        std::fs::write(root.join(crate::SETTINGS_FILE), "[profile]\nscheme = \"local\"\n").unwrap();
+        assert_eq!(profile_table(&root).unwrap().unwrap()["scheme"].as_str(), Some("local"));
+        let frozen: toml::Table = toml::from_str("scheme = \"host\"\nfeatures = [\"core.utilities\"]\n").unwrap();
+        let folder = write_profile_pack(&root, &frozen).unwrap();
+        assert_eq!((folder.id.as_str(), folder.root.clone()), (PROFILE_PACK, root.join(PROFILE_PACK)));
+        assert_eq!(profile_table(&root).unwrap(), Some(frozen));
+        let (bundles, errors) = list_bundles(&root);
+        assert!(bundles.is_empty() && errors.is_empty(), "the pseudo-pack is no bundle");
+        std::fs::write(root.join(PROFILE_PACK).join(PROFILE_FILE), "scheme = ").unwrap();
+        assert!(profile_table(&root).is_err());
     }
 
     #[test]

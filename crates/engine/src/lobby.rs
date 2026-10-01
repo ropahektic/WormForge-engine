@@ -174,7 +174,13 @@ fn freeze_generation(n: u32) {
         return;
     }
     let dest = root.join(session_name(n));
-    let session = match netsync::freeze(&mods, &dest) {
+    // The component selection and the bundles it uses travel with the packs,
+    // so every peer runs the host's selection, not its own settings.
+    let stage = root.join(format!("selection-{n}"));
+    let selection = crate::selection::load(&mods_dir, &stage);
+    let frozen = netsync::freeze_with(&mods, &selection.folders, &dest);
+    let _ = std::fs::remove_dir_all(&stage);
+    let session = match frozen {
         Ok(s) => s,
         Err(e) => {
             log_error(&format!("sync generation {n}: freeze failed: {e}"));
