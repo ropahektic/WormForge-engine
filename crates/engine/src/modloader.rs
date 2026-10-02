@@ -1814,6 +1814,82 @@ mod tests {
         wait.recv_timeout(std::time::Duration::from_secs(30)).expect("the window hung switching tabs");
     }
 
+    /// Not a check: draws the Profile tab, with `component_demo` installed
+    /// and its feature selected, to `tmp/profile-tab.png` in the repo, to see
+    /// it as a player does. Run alone (`render_profile_tab --ignored`): each
+    /// window test registers the window class.
+    #[test]
+    #[ignore]
+    fn render_profile_tab() {
+        use windows_sys::Win32::Graphics::Gdi::{
+            BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, GetDC, GetDIBits, RedrawWindow, SelectObject,
+            BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, RDW_ALLCHILDREN, RDW_ERASE, RDW_INVALIDATE,
+            RDW_UPDATENOW, SRCCOPY,
+        };
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mods = mods_dir();
+        let demo = mods.join("component_demo");
+        let _ = std::fs::remove_dir_all(&mods);
+        for f in ["mod.toml", "scheme.lua", "weapons/big_bazooka.lua", "features/turn_note.lua"] {
+            let src = repo.join("mods/examples/component_demo").join(f);
+            let dst = demo.join(f);
+            std::fs::create_dir_all(dst.parent().unwrap()).unwrap();
+            std::fs::copy(&src, &dst).unwrap();
+        }
+        std::fs::write(
+            mods.join(weapons::SETTINGS_FILE),
+            "[profile]\nscheme = \"demo.scheme\"\nfeatures = [\"demo.turn_note\"]\n",
+        )
+        .unwrap();
+        unsafe {
+            let hwnd = create_window().expect("window");
+            MoveWindow(hwnd, -2000, 0, 960, 680, 1);
+            ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            let pump = || {
+                let mut msg: MSG = std::mem::zeroed();
+                while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            };
+            SendMessageW(hwnd, WM_COMMAND, profile_tab::ID_TAB_PROFILE, 0);
+            pump();
+            profile_tab::select_for_test(1, 0);
+            pump();
+            let (w, h) = (960, 680);
+            let screen = GetDC(hwnd);
+            let dc = CreateCompatibleDC(screen);
+            let bmp = CreateCompatibleBitmap(screen, w, h);
+            SelectObject(dc, bmp);
+            RedrawWindow(hwnd, std::ptr::null(), std::ptr::null_mut(), RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            pump();
+            BitBlt(dc, 0, 0, w, h, screen, 0, 0, SRCCOPY);
+            let mut info: BITMAPINFO = std::mem::zeroed();
+            info.bmiHeader = BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w,
+                biHeight: -h,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB,
+                ..std::mem::zeroed()
+            };
+            let mut px = vec![0u8; (w * h * 4) as usize];
+            GetDIBits(dc, bmp, 0, h as u32, px.as_mut_ptr() as *mut c_void, &mut info, DIB_RGB_COLORS);
+            for p in px.chunks_mut(4) {
+                p.swap(0, 2);
+                p[3] = 255;
+            }
+            let out = repo.join("tmp/profile-tab.png");
+            std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+            let mut enc = png::Encoder::new(std::fs::File::create(&out).unwrap(), w as u32, h as u32);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&px).unwrap();
+            DestroyWindow(hwnd);
+        }
+    }
+
     fn demo_row(enabled: bool, bundle: Result<BundleManifest, String>) -> Row {
         Row {
             local: Some(ModEntry {

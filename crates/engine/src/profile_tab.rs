@@ -28,7 +28,8 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::SystemServices::SS_ENDELLIPSIS;
 use windows_sys::Win32::UI::Controls::{
     BST_CHECKED, LVCF_TEXT, LVCF_WIDTH, LVCOLUMNW, LVIF_STATE, LVIS_SELECTED, LVIS_STATEIMAGEMASK,
-    LVM_DELETEALLITEMS, LVM_INSERTCOLUMNW, LVM_SETEXTENDEDLISTVIEWSTYLE, LVN_ITEMCHANGED, LVS_EX_CHECKBOXES, LVS_EX_DOUBLEBUFFER, LVS_EX_FULLROWSELECT,
+    LVM_DELETEALLITEMS, LVM_INSERTCOLUMNW, LVM_SETCOLUMNWIDTH, LVM_SETEXTENDEDLISTVIEWSTYLE,
+    LVSCW_AUTOSIZE_USEHEADER, LVN_ITEMCHANGED, LVS_EX_CHECKBOXES, LVS_EX_DOUBLEBUFFER, LVS_EX_FULLROWSELECT,
     LVS_EX_LABELTIP, LVS_REPORT, LVS_SHOWSELALWAYS, LVS_SINGLESEL, NMHDR, NMLISTVIEW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -75,14 +76,19 @@ struct State {
     options: Vec<OptionDecl>,
     detail: Detail,
     status: (String, Tone),
-    /// Where the tab lays out: x, y, width, height.
-    area: (i32, i32, i32, i32),
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
 /// The status line's colour, apart from `STATE`: Windows asks for it while the
 /// line's text is set, which happens with `STATE` held.
 static STATUS_TONE: Mutex<Option<Tone>> = Mutex::new(None);
+/// Where the tab lays out: x, y, width, height. Apart from `STATE`, which the
+/// window's first layout comes before.
+static AREA: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
+
+fn area() -> (i32, i32, i32, i32) {
+    AREA.lock().map(|a| *a).unwrap_or_default()
+}
 /// Set while the tab fills its own controls, so their notifications are not
 /// taken for the player's edits.
 static FILLING: AtomicBool = AtomicBool::new(false);
@@ -210,7 +216,7 @@ fn read_profile() -> (Editor, Vec<String>) {
 unsafe fn load() {
     let (editor, load_errors) = read_profile();
     if let Ok(mut g) = STATE.try_lock() {
-        let (area, detail) = g.as_ref().map(|s| (s.area, s.detail.clone())).unwrap_or(((0, 0, 0, 0), Detail::None));
+        let detail = g.as_ref().map(|s| s.detail.clone()).unwrap_or(Detail::None);
         *g = Some(State {
             editor,
             load_errors,
@@ -221,7 +227,6 @@ unsafe fn load() {
             options: Vec::new(),
             detail,
             status: (String::new(), Tone::On),
-            area,
         });
     }
 }
@@ -268,15 +273,12 @@ fn value_text(v: &OptionValue) -> String {
 /// row was selected; rebuilding the lists would lose their scroll position).
 pub(crate) unsafe fn on_message(wparam: usize) {
     if wparam == 1 {
-        let area = with(|s| {
+        with(|s| {
             FILLING.store(true, Ordering::SeqCst);
             fill_detail(s);
             FILLING.store(false, Ordering::SeqCst);
-            s.area
         });
-        if let Some(area) = area {
-            layout_area(area);
-        }
+        layout_area(area());
     } else {
         refresh();
     }
@@ -301,9 +303,8 @@ pub(crate) unsafe fn refresh() {
     }
     SetWindowTextW(ctl(ID_PROFILE_STATUS), wide(&s.status.0).as_ptr());
     FILLING.store(false, Ordering::SeqCst);
-    let area = s.area;
     drop(g);
-    layout_area(area);
+    layout_area(area());
 }
 
 unsafe fn fill_schemes(s: &mut State) {
@@ -557,7 +558,9 @@ pub(crate) unsafe fn tone_of(control: HWND) -> Option<Tone> {
 
 /// Lay the tab out in `(x, y, w, h)`.
 pub(crate) unsafe fn layout(x: i32, y: i32, w: i32, h: i32) {
-    with(|s| s.area = (x, y, w, h));
+    if let Ok(mut a) = AREA.lock() {
+        *a = (x, y, w, h);
+    }
     layout_area((x, y, w, h));
 }
 
@@ -579,6 +582,9 @@ unsafe fn layout_area((x, y, w, h): (i32, i32, i32, i32)) {
     let left_w = (w - gap) * 3 / 5;
     MoveWindow(ctl(ID_WEAPONS), x, lists_y, left_w, lists_h, 1);
     MoveWindow(ctl(ID_FEATURES), x + left_w + gap, lists_y, w - left_w - gap, lists_h, 1);
+    // The last column takes the rest of each list, as the pack list's does.
+    SendMessageW(ctl(ID_WEAPONS), LVM_SETCOLUMNWIDTH, 3, LVSCW_AUTOSIZE_USEHEADER as isize);
+    SendMessageW(ctl(ID_FEATURES), LVM_SETCOLUMNWIDTH, 2, LVSCW_AUTOSIZE_USEHEADER as isize);
     let detail_y = lists_y + lists_h + gap;
     MoveWindow(ctl(ID_DETAIL), x, detail_y, w, line_h, 1);
     let controls_y = detail_y + line_h + 4;
@@ -784,6 +790,31 @@ pub(crate) unsafe fn notify(hdr: *const NMHDR) -> Option<LRESULT> {
         }
     }
     Some(0)
+}
+
+/// Select row `item` of the weapons (`list` 0) or features (1) list, as a
+/// click does, for the window tests.
+#[cfg(test)]
+pub(crate) unsafe fn select_for_test(list: usize, item: usize) {
+    let list = ctl(if list == 0 { ID_WEAPONS } else { ID_FEATURES });
+    let lvi = windows_sys::Win32::UI::Controls::LVITEMW {
+        mask: LVIF_STATE,
+        iItem: item as i32,
+        iSubItem: 0,
+        state: LVIS_SELECTED,
+        stateMask: LVIS_SELECTED,
+        pszText: std::ptr::null_mut(),
+        cchTextMax: 0,
+        iImage: 0,
+        lParam: 0,
+        iIndent: 0,
+        iGroupId: 0,
+        cColumns: 0,
+        puColumns: std::ptr::null_mut(),
+        piColFmt: std::ptr::null_mut(),
+        iGroup: 0,
+    };
+    SendMessageW(list, windows_sys::Win32::UI::Controls::LVM_SETITEMSTATE, item, &lvi as *const _ as isize);
 }
 
 #[cfg(test)]
