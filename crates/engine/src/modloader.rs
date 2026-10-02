@@ -353,12 +353,26 @@ const COMCTL6_MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalon
 /// WA.exe has no common-controls v6 manifest, so its windows draw in the
 /// Windows 95 style. Activating one on this thread only gives the loader
 /// themed controls without touching WA's own windows.
+/// The manifest file `CreateActCtxW` reads, in `dir` (the temp folder),
+/// rewritten at every start.
+fn write_manifest(dir: &Path) -> std::io::Result<PathBuf> {
+    let path = dir.join("wormforge-modloader.manifest");
+    // Not std::fs::write: the file is left from the last start, and truncating
+    // it in place is what the Wine in the macOS WA bundles does not implement
+    // (os error 120), which left the window with classic controls from the
+    // second start on. See game::overwrite.
+    game::overwrite::write(&path, COMCTL6_MANIFEST.as_bytes())?;
+    Ok(path)
+}
+
 unsafe fn enable_visual_styles() {
-    let path = std::env::temp_dir().join("wormforge-modloader.manifest");
-    if let Err(e) = std::fs::write(&path, COMCTL6_MANIFEST) {
-        log_error(&format!("mod loader: visual styles manifest: {e}"));
-        return;
-    }
+    let path = match write_manifest(&std::env::temp_dir()) {
+        Ok(path) => path,
+        Err(e) => {
+            log_error(&format!("mod loader: visual styles manifest: {e}"));
+            return;
+        }
+    };
     let source = wide(&path.to_string_lossy());
     let ctx = ActCtxW {
         cb_size: std::mem::size_of::<ActCtxW>() as u32,
@@ -1683,4 +1697,21 @@ fn collect_packs(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
 pub fn is_open() -> bool {
     let hwnd = WINDOW.load(Ordering::SeqCst);
     !hwnd.is_null() && unsafe { IsWindow(hwnd) } != 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_manifest_is_rewritten_over_the_last_start() {
+        // Its own folder: a window test opening the loader writes the real
+        // one in the temp folder at the same time.
+        let dir = std::env::temp_dir().join(format!("wf-manifest-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for _ in 0..2 {
+            let path = write_manifest(&dir).unwrap();
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), COMCTL6_MANIFEST);
+        }
+    }
 }
