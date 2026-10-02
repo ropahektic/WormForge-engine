@@ -81,6 +81,7 @@ Draw primitives belong in the DLL. Named FX (lightning, fire) belong in Lua. No 
 
 ## Lua surface
 
+- `require("lib/shared")` loads `lib/shared.lua` from the pack's own folder: `/`-separated names of letters, digits, `_` and `-`, no extension, never outside the pack (symlinks refused). Each module runs once per match in its own environment: it reads the shared globals (`wa`, the standard libraries, what the entry set) and its own `require`, but its global writes stay private; `require` returns what it returned (`true` for nothing). A require cycle, or requiring the pack's entry, is an error naming the files. Modules travel with the pack (network sync and replays carry every file), so they need nothing declared. The entry chunk's own global reads and writes still go to the shared globals, as before.
 - `wa.log`, `wa.weapons.replace` / `register`, `wa.actors.spawn` / `all` / `kind`
 - Actor: `x y vx vy facing owner kind`, `a:gravity` `a:move` `a:advance` `a:look` `a:frame` `a:explode` `a:dig{radius}` `a:despawn` `a:spawn` `a:sound` `a:in_water` `a:on_feet`
 - Weapon steps (do not steal MineEntity): `on_place` / `on_proximity` / `on_explode` as a function or `{ spawn = { sprite = false, explode = { damage = 0, id = 40, now = true }, damage_worms = false } }`. Same `spawn` table as `on_fire` / `on_click`. `sprite = false` is invisible (blit id 1023). `explode.now` blasts at spawn. Nested `on_explode` on a spawned actor fires when that actor blasts. Stock `CreateClusters` is not this path yet.
