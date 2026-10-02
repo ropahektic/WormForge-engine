@@ -338,6 +338,9 @@ fn client_send(message: &Message) -> bool {
 const SCREEN_LOG: usize = 0x10318;
 static DISPLAY: AtomicU32 = AtomicU32::new(0);
 static NOTES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// Only the newest timed progress line matters if no packet arrives to show it.
+static PROGRESS_NOTE: Mutex<Option<String>> = Mutex::new(None);
+const PROGRESS_EVERY: Duration = Duration::from_secs(3);
 
 type DisplayFn = unsafe extern "system" fn(*mut u8, *const u8) -> i32;
 
@@ -350,6 +353,19 @@ fn note(text: String) {
     }
 }
 
+fn progress_note(text: String) {
+    log_line(&format!("note: {text}"));
+    if let Ok(mut pending) = PROGRESS_NOTE.lock() {
+        *pending = Some(text);
+    }
+}
+
+fn clear_progress_note() {
+    if let Ok(mut pending) = PROGRESS_NOTE.lock() {
+        *pending = None;
+    }
+}
+
 /// Show queued notes on `screen`, which a lobby hook just received.
 fn show_notes(screen: *mut u8) {
     let display = DISPLAY.load(Ordering::Relaxed);
@@ -357,8 +373,9 @@ fn show_notes(screen: *mut u8) {
         return;
     }
     let notes: Vec<String> = NOTES.lock().map(|mut n| std::mem::take(&mut *n)).unwrap_or_default();
-    for text in notes {
-        // WA's system-message prefix, as wkFOW and PX use it.
+    let progress = PROGRESS_NOTE.lock().ok().and_then(|mut n| n.take());
+    for text in notes.into_iter().chain(progress) {
+        // WA's green action text uses this same system-message prefix.
         let line = format!("SYS::ALL:WormForge: {text}\0");
         unsafe {
             let f: DisplayFn = std::mem::transmute(display as usize);
@@ -445,6 +462,10 @@ pub fn match_started() {
     if let Ok(mut n) = NOTES.lock() {
         n.clear();
     }
+    clear_progress_note();
+    if let Ok(mut clock) = HOST_PROGRESS.lock() {
+        *clock = None;
+    }
     for t in &TRACED {
         t.store(0, Ordering::Relaxed);
     }
@@ -470,6 +491,14 @@ extern "system" fn tick(_: *mut c_void, _: u32, _: usize, _: u32) {
 fn pump() {
     host_pump();
     client_pump();
+}
+
+fn progress_due(last: &mut Instant, now: Instant) -> bool {
+    if now.duration_since(*last) < PROGRESS_EVERY {
+        return false;
+    }
+    *last = now;
+    true
 }
 
 // --------------------------------------------------------------------- host
@@ -499,8 +528,17 @@ const ANSWER: Duration = Duration::from_secs(15);
 /// How long a slot must have been in the lobby before it is greeted.
 const SETTLE: Duration = Duration::from_secs(3);
 
-/// Latest status per client slot, for the Start gate in step 3.
-static SLOT_STATUS: Mutex<[Option<(u32, State)>; HOST_SLOTS]> = Mutex::new([None; HOST_SLOTS]);
+/// Latest status per client slot, for the Start gate and lobby progress.
+#[derive(Clone, Copy)]
+struct SlotStatus {
+    generation: u32,
+    state: State,
+    have: u64,
+    total: u64,
+}
+
+static SLOT_STATUS: Mutex<[Option<SlotStatus>; HOST_SLOTS]> = Mutex::new([None; HOST_SLOTS]);
+static HOST_PROGRESS: Mutex<Option<(u32, Instant)>> = Mutex::new(None);
 
 /// Called by the freeze worker once a generation is published.
 pub fn serve(served: Served, dir: PathBuf) {
@@ -522,6 +560,10 @@ pub fn serve(served: Served, dir: PathBuf) {
 pub fn withdraw(generation: u32) {
     let current = SERVED.lock().ok().and_then(|mut s| s.take());
     OFFER_PENDING.store(false, Ordering::SeqCst);
+    clear_progress_note();
+    if let Ok(mut clock) = HOST_PROGRESS.lock() {
+        *clock = None;
+    }
     if current.is_some_and(|s| s.generation == generation) {
         let slots = host_broadcast(&Message::Withdraw { generation });
         log_line(&format!("sync generation {generation}: withdrawn from slots {slots:?}"));
@@ -530,6 +572,7 @@ pub fn withdraw(generation: u32) {
 
 fn host_pump() {
     greet();
+    host_progress();
     if !OFFER_PENDING.swap(false, Ordering::SeqCst) {
         return;
     }
@@ -541,6 +584,78 @@ fn host_pump() {
     if !slots.is_empty() {
         note(format!("sending the packs to {} player(s)", slots.len()));
     }
+}
+
+/// Queue one local green action line every three seconds while the host waits
+/// for its current generation. The next lobby packet supplies a live screen.
+fn host_progress() {
+    let host = HOST_SESSION.load(Ordering::Relaxed) as *mut u8;
+    if host.is_null() || unsafe { read_i32(host, HOSTING) } == 0 {
+        return;
+    }
+    let generation = crate::lobby::current_generation();
+    let connected: Vec<usize> = (0..HOST_SLOTS).filter(|&slot| slot_connected(slot)).collect();
+    if generation == 0 || connected.is_empty() {
+        reset_host_progress();
+        return;
+    }
+    let served = SERVED.lock().ok().and_then(|s| s.as_ref().map(|s| (s.generation, s.packs)));
+    let text = match served {
+        Some((g, 0)) if g == generation => None,
+        Some((g, _)) if g == generation => {
+            let peers = PEERS.lock().map(|p| *p).unwrap_or_default();
+            let statuses = SLOT_STATUS.lock().map(|s| *s).unwrap_or([None; HOST_SLOTS]);
+            let ready = connected.iter().filter(|&&slot| {
+                statuses[slot].is_some_and(|s| s.generation == generation && s.state == State::Ready)
+            }).count();
+            let mut waiting = Vec::new();
+            for &slot in &connected {
+                if peers[slot].reported {
+                    continue; // the missing-WormForge error already has its own line
+                }
+                let status = statuses[slot].filter(|s| s.generation == generation);
+                match status {
+                    Some(SlotStatus { state: State::Ready | State::Failed, .. }) => {},
+                    Some(SlotStatus { state: State::Working, have, total, .. }) if total > 0 => {
+                        waiting.push(format!("{} {}%", slot_name(slot), (have.saturating_mul(100) / total).min(100)));
+                    }
+                    Some(_) => waiting.push(format!("{} checking", slot_name(slot))),
+                    None => waiting.push(format!("{} waiting", slot_name(slot))),
+                }
+            }
+            if waiting.is_empty() {
+                None
+            } else {
+                let extra = waiting.len().saturating_sub(2);
+                waiting.truncate(2);
+                let suffix = if extra > 0 { format!(", +{extra} more") } else { String::new() };
+                Some(format!("sync: {ready}/{} players ready; {}{suffix}", connected.len(), waiting.join(", ")))
+            }
+        }
+        _ => Some("sync: preparing the packs".into()),
+    };
+    let Some(text) = text else {
+        reset_host_progress();
+        return;
+    };
+    let now = Instant::now();
+    let mut due = false;
+    if let Ok(mut clock) = HOST_PROGRESS.lock() {
+        match clock.as_mut() {
+            Some((g, last)) if *g == generation => due = progress_due(last, now),
+            _ => *clock = Some((generation, now)),
+        }
+    }
+    if due {
+        progress_note(text);
+    }
+}
+
+fn reset_host_progress() {
+    if let Ok(mut clock) = HOST_PROGRESS.lock() {
+        *clock = None;
+    }
+    clear_progress_note();
 }
 
 /// The Start gate, from WA's `IsOkToStartNetGame` on the host: WA's own
@@ -559,7 +674,7 @@ pub fn start_allowed(wa_allows: bool) -> bool {
             in_lobby: peers[slot].seen.is_some(),
             wormforge: peers[slot].wormforge,
             gave_up: peers[slot].greeted.is_some_and(|t| now.duration_since(t) >= ANSWER),
-            status: statuses[slot],
+            status: statuses[slot].map(|s| (s.generation, s.state)),
         })
         .collect();
     let verdict = netsync::gate::verdict(generation, served, &views);
@@ -659,7 +774,7 @@ fn host_receive(slot: usize, message: Message) -> bool {
         }
         Message::Status { generation, state, have, total, text, .. } => {
             if let Ok(mut st) = SLOT_STATUS.lock() {
-                st[slot] = Some((generation, state));
+                st[slot] = Some(SlotStatus { generation, state, have, total });
             }
             match state {
                 State::Working => log_line(&format!(
@@ -675,6 +790,7 @@ fn host_receive(slot: usize, message: Message) -> bool {
                 }
             }
             if state != State::Working {
+                clear_progress_note();
                 host_send(slot, &Message::Ack { generation });
             }
         }
@@ -707,15 +823,21 @@ static CLIENT_SESSIONS: AtomicU32 = AtomicU32::new(0);
 static LAST_OFFER: Mutex<Option<(u32, [u8; 32])>> = Mutex::new(None);
 
 enum ClientJob {
-    Downloading { download: Download, manifest: Option<Arc<Manifest>>, sources: Option<Arc<Sources>>, last_report: Instant },
-    Assembling { generation: u32 },
+    Downloading {
+        download: Download,
+        manifest: Option<Arc<Manifest>>,
+        sources: Option<Arc<Sources>>,
+        last_report: Instant,
+        last_display: Instant,
+    },
+    Assembling { generation: u32, last_display: Instant },
 }
 
 impl ClientJob {
     fn generation(&self) -> u32 {
         match self {
             ClientJob::Downloading { download, .. } => download.generation,
-            ClientJob::Assembling { generation } => *generation,
+            ClientJob::Assembling { generation, .. } => *generation,
         }
     }
 }
@@ -754,6 +876,7 @@ fn client_receive(message: Message) {
             if let Ok(mut job) = CLIENT.lock() {
                 if job.as_ref().is_some_and(|j| j.generation() == generation) {
                     *job = None;
+                    clear_progress_note();
                     log_line(&format!("sync: host withdrew generation {generation}"));
                 }
             }
@@ -793,6 +916,7 @@ fn offer(generation: u32, digest: [u8; 32], size: u32) {
     }
     let ready = READY.lock().ok().and_then(|r| r.clone());
     if ready.as_ref().is_some_and(|(d, _)| *d == digest) {
+        clear_progress_note();
         if let Ok(mut job) = CLIENT.lock() {
             *job = None;
         }
@@ -811,11 +935,20 @@ fn offer(generation: u32, digest: [u8; 32], size: u32) {
         Ok(download) => {
             log_line(&format!("sync: host offers generation {generation} ({}), fetching its manifest", &hex[..12]));
             note("receiving the host's packs".into());
-            *job = Some(ClientJob::Downloading { download, manifest: None, sources: None, last_report: Instant::now() });
+            clear_progress_note();
+            let now = Instant::now();
+            *job = Some(ClientJob::Downloading {
+                download,
+                manifest: None,
+                sources: None,
+                last_report: now,
+                last_display: now,
+            });
         }
         Err(e) => {
             *job = None;
             drop(job);
+            clear_progress_note();
             log_error(&format!("sync: generation {generation} refused: {e}"));
             report(generation, digest, State::Failed, 0, 0, &e);
         }
@@ -836,6 +969,7 @@ fn download_event(event: Event) {
     let digest = download.digest;
     match event {
         Event::Manifest(m) => {
+            clear_progress_note();
             log_line(&format!(
                 "sync: generation {generation} manifest: {} packs, {} files, {} bytes; checking what is here",
                 m.packs.len(),
@@ -849,13 +983,15 @@ fn download_event(event: Event) {
         Event::Complete(blobs) => {
             let Some(m) = manifest.clone() else { return };
             let s = sources.clone().unwrap_or_default();
-            *guard = Some(ClientJob::Assembling { generation });
+            clear_progress_note();
+            *guard = Some(ClientJob::Assembling { generation, last_display: Instant::now() });
             drop(guard);
             worker(format!("wf-sync-publish-{generation}"), move || publish(generation, digest, &m, &s, blobs));
         }
         Event::Failed(reason) => {
             *guard = None;
             drop(guard);
+            clear_progress_note();
             log_error(&format!("sync: generation {generation} failed: {reason}"));
             report(generation, digest, State::Failed, 0, 0, &reason);
         }
@@ -869,8 +1005,9 @@ fn client_pump() {
     }
     let mut failure = None;
     let mut progress = None;
+    let mut display = None;
     if let Ok(mut guard) = CLIENT.lock() {
-        if let Some(ClientJob::Downloading { download, last_report, .. }) = guard.as_mut() {
+        if let Some(ClientJob::Downloading { download, manifest, sources, last_report, last_display }) = guard.as_mut() {
             let now = Instant::now();
             match download.poll(now) {
                 Ok(requests) => {
@@ -887,17 +1024,41 @@ fn client_pump() {
                     progress = Some((download.generation, download.digest, have, total));
                 }
             }
+            if progress_due(last_display, now) {
+                let text = if manifest.is_none() {
+                    "sync: receiving the manifest".into()
+                } else if sources.is_none() {
+                    "sync: checking local packs".into()
+                } else {
+                    let (have, total) = download.progress();
+                    if total == 0 {
+                        "sync: checking local packs".into()
+                    } else {
+                        format!("sync: {} / {} KB ({}%)", have.div_ceil(1024), total.div_ceil(1024), (have.saturating_mul(100) / total).min(100))
+                    }
+                };
+                display = Some(text);
+            }
+        } else if let Some(ClientJob::Assembling { last_display, .. }) = guard.as_mut() {
+            if progress_due(last_display, Instant::now()) {
+                display = Some("sync: preparing the downloaded packs".into());
+            }
         }
         if failure.is_some() {
             *guard = None;
+            display = None;
         }
     }
     if let Some((g, d, e)) = failure {
+        clear_progress_note();
         log_error(&format!("sync: generation {g} failed: {e}"));
         report(g, d, State::Failed, 0, 0, &e);
     }
     if let Some((g, d, have, total)) = progress {
         report(g, d, State::Working, have, total, "");
+    }
+    if let Some(text) = display {
+        progress_note(text);
     }
 }
 
@@ -910,6 +1071,7 @@ fn client_work(work: Work) {
                 if download.generation != generation {
                     return;
                 }
+                clear_progress_note();
                 let bytes: u64 = need.iter().map(|(_, s)| s).sum();
                 log_line(&format!(
                     "sync: generation {generation}: {} files here, {} to fetch ({bytes} bytes)",
@@ -930,6 +1092,7 @@ fn client_work(work: Work) {
             if let Ok(mut guard) = CLIENT.lock() {
                 if guard.as_ref().is_some_and(|j| j.generation() == generation) {
                     *guard = None;
+                    clear_progress_note();
                 }
             }
             log_line(&format!("sync: generation {generation} ready ({total} bytes) at {}", dir.display()));
@@ -953,6 +1116,7 @@ fn client_work(work: Work) {
             if let Ok(mut guard) = CLIENT.lock() {
                 if guard.as_ref().is_some_and(|j| j.generation() == generation) {
                     *guard = None;
+                    clear_progress_note();
                 }
             }
             log_error(&format!("sync: generation {generation} failed: {reason}"));
