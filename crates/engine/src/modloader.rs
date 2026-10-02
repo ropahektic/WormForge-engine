@@ -417,6 +417,26 @@ pub(crate) static FONT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut())
 pub(crate) static FONT_BOLD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 unsafe fn ui_thread() {
+    let Some(hwnd) = create_window() else {
+        return;
+    };
+    ShowWindow(hwnd, SW_SHOWNORMAL);
+    log_line(&format!(
+        "mod loader window open; settings {}",
+        mods_dir().join(weapons::SETTINGS_FILE).display()
+    ));
+
+    let mut msg: MSG = std::mem::zeroed();
+    while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    WINDOW.store(std::ptr::null_mut(), Ordering::SeqCst);
+    log_line("mod loader window closed");
+}
+
+/// Register the class and create the window, not yet shown.
+unsafe fn create_window() -> Option<HWND> {
     enable_visual_styles();
     let icc = INITCOMMONCONTROLSEX {
         dwSize: std::mem::size_of::<INITCOMMONCONTROLSEX>() as u32,
@@ -445,7 +465,7 @@ unsafe fn ui_thread() {
     };
     if RegisterClassExW(&wc) == 0 {
         log_error("mod loader: RegisterClassExW failed");
-        return;
+        return None;
     }
     let title = wide(&format!("WormForge Mods  \u{00B7}  {BUILD_ID}"));
     let hwnd = CreateWindowExW(
@@ -464,22 +484,10 @@ unsafe fn ui_thread() {
     );
     if hwnd.is_null() {
         log_error("mod loader: CreateWindowExW failed");
-        return;
+        return None;
     }
     WINDOW.store(hwnd, Ordering::SeqCst);
-    ShowWindow(hwnd, SW_SHOWNORMAL);
-    log_line(&format!(
-        "mod loader window open; settings {}",
-        mods_dir().join(weapons::SETTINGS_FILE).display()
-    ));
-
-    let mut msg: MSG = std::mem::zeroed();
-    while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-    WINDOW.store(std::ptr::null_mut(), Ordering::SeqCst);
-    log_line("mod loader window closed");
+    Some(hwnd)
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -1775,6 +1783,36 @@ pub fn is_open() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use windows_sys::Win32::Graphics::Gdi::UpdateWindow;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{PeekMessageW, PM_REMOVE, SW_SHOWNOACTIVATE};
+
+    /// The real window, shown off to the side, switched to the Profile tab and
+    /// back: each switch must return. (Painting the tab's status line asks the
+    /// window for its colour while the tab rebuilds.)
+    #[test]
+    fn the_profile_tab_opens_without_hanging_the_window() {
+        let (done, wait) = std::sync::mpsc::channel();
+        std::thread::spawn(move || unsafe {
+            let hwnd = create_window().expect("window");
+            MoveWindow(hwnd, -2000, 0, 960, 680, 1);
+            ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            let pump = || {
+                let mut msg: MSG = std::mem::zeroed();
+                while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            };
+            for id in [profile_tab::ID_TAB_PROFILE, ID_TAB_ALL, profile_tab::ID_TAB_PROFILE] {
+                SendMessageW(hwnd, WM_COMMAND, id, 0);
+                UpdateWindow(hwnd);
+                pump();
+            }
+            DestroyWindow(hwnd);
+            let _ = done.send(());
+        });
+        wait.recv_timeout(std::time::Duration::from_secs(30)).expect("the window hung switching tabs");
+    }
 
     fn demo_row(enabled: bool, bundle: Result<BundleManifest, String>) -> Row {
         Row {

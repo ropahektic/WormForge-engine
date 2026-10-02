@@ -80,12 +80,22 @@ struct State {
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
+/// The status line's colour, apart from `STATE`: Windows asks for it while the
+/// line's text is set, which happens with `STATE` held.
+static STATUS_TONE: Mutex<Option<Tone>> = Mutex::new(None);
 /// Set while the tab fills its own controls, so their notifications are not
 /// taken for the player's edits.
 static FILLING: AtomicBool = AtomicBool::new(false);
 
+/// Run `f` on the tab's state. Windows delivers some messages synchronously
+/// while the tab is rebuilding with the state held; such a re-entrant call gets
+/// `None` instead of deadlocking the window's thread.
 fn with<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
-    STATE.lock().ok()?.as_mut().map(f)
+    match STATE.try_lock() {
+        Ok(mut g) => g.as_mut().map(f),
+        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner().as_mut().map(f),
+        Err(std::sync::TryLockError::WouldBlock) => None,
+    }
 }
 
 unsafe fn ctl(id: usize) -> HWND {
@@ -199,7 +209,7 @@ fn read_profile() -> (Editor, Vec<String>) {
 
 unsafe fn load() {
     let (editor, load_errors) = read_profile();
-    if let Ok(mut g) = STATE.lock() {
+    if let Ok(mut g) = STATE.try_lock() {
         let (area, detail) = g.as_ref().map(|s| (s.area, s.detail.clone())).unwrap_or(((0, 0, 0, 0), Detail::None));
         *g = Some(State {
             editor,
@@ -274,7 +284,7 @@ pub(crate) unsafe fn on_message(wparam: usize) {
 
 /// Rebuild every control from the editor.
 pub(crate) unsafe fn refresh() {
-    let Ok(mut g) = STATE.lock() else {
+    let Ok(mut g) = STATE.try_lock() else {
         return;
     };
     let Some(s) = g.as_mut() else {
@@ -286,6 +296,9 @@ pub(crate) unsafe fn refresh() {
     fill_features(s);
     fill_detail(s);
     s.status = status_line(s);
+    if let Ok(mut t) = STATUS_TONE.lock() {
+        *t = Some(s.status.1);
+    }
     SetWindowTextW(ctl(ID_PROFILE_STATUS), wide(&s.status.0).as_ptr());
     FILLING.store(false, Ordering::SeqCst);
     let area = s.area;
@@ -539,7 +552,7 @@ pub(crate) unsafe fn tone_of(control: HWND) -> Option<Tone> {
     if control != ctl(ID_PROFILE_STATUS) {
         return None;
     }
-    with(|s| s.status.1)
+    STATUS_TONE.lock().ok().and_then(|t| *t)
 }
 
 /// Lay the tab out in `(x, y, w, h)`.
