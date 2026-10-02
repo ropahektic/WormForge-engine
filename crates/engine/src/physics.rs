@@ -243,7 +243,7 @@ pub fn set_worm_state(handle: u32, state: u32) {
     }
     unsafe {
         let f: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
-        f(handle as *mut u8, state);
+        crate::state_trace::with_cause("lua worm:set_state", || f(handle as *mut u8, state));
     }
 }
 
@@ -253,7 +253,7 @@ pub fn drop_carry(handle: u32) {
         unsafe {
             write_i32(handle as *mut u8, ENT_MOVED, 1);
             let f: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
-            f(handle as *mut u8, WORM_STATE_AIRBORNE);
+            crate::state_trace::with_cause("drop_carry", || f(handle as *mut u8, WORM_STATE_AIRBORNE));
         }
     }
     if let Ok(mut g) = CARRY.lock() {
@@ -778,7 +778,7 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     let orig = ORIG_WORM.load(Ordering::SeqCst);
     if !orig.is_null() {
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
-        unsafe { f(this, a, msg, b, c) };
+        crate::state_trace::message(this, msg, || unsafe { f(this, a, msg, b, c) });
     }
     if !this.is_null() {
         let worm = this as u32;
@@ -853,14 +853,18 @@ pub fn hit_worm(target: u32, from: u32, amount: i32) {
         data[2] = y;
         data[HIT_AMOUNT / 4] = amount;
         data[HIT_TEAM / 4] = by;
-        crate::hurt::synthetic(|| worm_hook(this, from, MSG_HIT, 0, data.as_mut_ptr() as *mut u8));
+        crate::state_trace::with_cause("worm:hurt", || {
+            crate::hurt::synthetic(|| worm_hook(this, from, MSG_HIT, 0, data.as_mut_ptr() as *mut u8))
+        });
         write_i32(this, ENT_POS_X, x);
         write_i32(this, ENT_POS_Y, y);
         write_i32(this, ENT_SPEED_X, vx);
         write_i32(this, ENT_SPEED_Y, vy);
         let hp = crate::world::worm_hp(target);
         if hp > 0 && !airborne && restores_after_hit(state) {
+            let hit = read_i32(this, WORM_STATE) as u32;
             write_i32(this, WORM_STATE, state);
+            crate::state_trace::wrote(this, hit, state as u32, "worm:hurt restore");
         }
         if !airborne && hp < hp0 {
             worm_hook(this, from, MSG_COMMIT_HEALTH, 0, std::ptr::null_mut());

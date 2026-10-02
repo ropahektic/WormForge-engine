@@ -586,6 +586,11 @@ pub fn freeze_turn() {
                     display: read_i32(root, WORLD_ROOT_TURN_TIMER_DISPLAY),
                     active: read_i32(root, WORLD_ROOT_WORM_ACTIVE),
                 });
+                crate::log_line(&format!(
+                    "turn frozen (a worm is carried): timer {} active {}",
+                    read_i32(root, WORLD_ROOT_TURN_TIMER),
+                    read_i32(root, WORLD_ROOT_WORM_ACTIVE)
+                ));
             }
         }
         write_i32(root, WORLD_ROOT_WORM_ACTIVE, 1);
@@ -603,6 +608,7 @@ pub fn thaw_turn() {
     let Some(saved) = saved else {
         return;
     };
+    crate::log_line(&format!("turn thawed: active back to {}", saved.active));
     if root.is_null() {
         return;
     }

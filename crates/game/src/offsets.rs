@@ -69,9 +69,8 @@ pub const WORM_STATE: usize = 0x44;
 pub const WORM_STATE_DRILLING: u32 = 0x6E;
 /// Worm states by the setup each `SetState` case calls (jump table 0x50F484,
 /// base 0x64): 0x65 setup_Standing, 0x69 setup_PreFiring, 0x6C
-/// setup_Punching, 0x6F setup_Teleporting, 0x78 setup_JetPacking. 0x7E has
-/// no setup: it is the tumbling/sliding physics state WA sets on knockback,
-/// on contact and when a worm walks off a ledge (`WORM_STATE_AIRBORNE`).
+/// setup_Punching, 0x6F setup_Teleporting, 0x78 setup_JetPacking. The full
+/// table, with the evidence for each, is `crate::worm_state`.
 pub const WORM_STATE_STANDING: u32 = 0x65;
 pub const WORM_STATE_PREFIRING: u32 = 0x69;
 pub const WORM_STATE_PUNCHING: u32 = 0x6C;
@@ -83,9 +82,11 @@ pub const WORM_STATE_PARACHUTING: u32 = 0x7D;
 /// `setup_Bungeing` (SetState's table at 0x50F484): hanging from a bungee.
 /// Project X's Swim Suit holds a swimming worm here (WS_BUNGEE).
 pub const WORM_STATE_BUNGEE: u32 = 0x7C;
-/// Drowning: WA's hurt handler enters it for water damage (kind 1); Project
-/// X's WS_SINKING.
-pub const WORM_STATE_SINKING: u32 = 0x7F;
+/// Tumbling, out of control: WA enters it when a worm is hit (msg 0x4B),
+/// water damage included, and it resolves through 0x76 (getting up) to
+/// standing on land, or to drowning (0x85) in water. Long mislabelled as
+/// drowning after Project X's WS_SINKING; see `crate::worm_state`.
+pub const WORM_STATE_TUMBLING: u32 = 0x7F;
 /// Jet pack fuel (16.16), drained by WormEntity__handle_JetPacking by the
 /// thrust / 10 each frame; 0 is unlimited, and running out sets 0x65.
 pub const WORM_JET_FUEL: usize = 0x220;
@@ -100,9 +101,11 @@ pub const WORM_KEY_RIGHT: usize = 0x1E0;
 /// Ground slope selector used by `WormEntity__calc_sprite`: negative adds the
 /// uphill (+1) pose, positive adds the downhill (+2) pose.
 pub const WORM_SLOPE_DIR: usize = 0x1AC;
-/// WeaponCharging — power bar live.
+/// WeaponCharging — power bar live. Unconfirmed: traces show a thrown
+/// weapon's charge as 0x68, and the worm_state_logger saw 0x73 while roping.
 pub const WORM_STATE_CHARGING: u32 = 0x73;
-/// AimingAngle — crosshair up, ready for Space.
+/// AimingAngle — crosshair up, ready for Space. Unconfirmed: SetState's case
+/// calls the rope's setup, and the worm_state_logger saw 0x7B while roping.
 pub const WORM_STATE_AIMING: u32 = 0x7B;
 
 pub const WEAPON_ENTRY_SIZE: usize = 0x1D0;
@@ -276,7 +279,9 @@ pub const WORM_HANDLE_MESSAGE: u32 = 0x0051_0B40;
 pub const WORLD_ROOT_HANDLE_MESSAGE: u32 = 0x0055_DC00;
 /// WormEntity__SetState — thiscall ECX=this, stack state. Slot 14 override.
 pub const WORM_SET_STATE: u32 = 0x0050_E850;
-/// Post-fire / airborne (stock uses `wroll` once moving, not jump-hang).
+/// Falling under control: a closed parachute (0x7D -> 0x7E on the jump key),
+/// a worm walking off a ledge. SetState into it with a speed gives the worm
+/// to WA's own flight and landing (`worm:drop`, the Lua `"sliding"`).
 pub const WORM_STATE_AIRBORNE: u32 = 0x7E;
 /// WormEntity__DrawSprite_Maybe — usercall EAX=this. Body sprite blit.
 pub const WORM_DRAW_SPRITE: u32 = 0x0050_FCD0;
