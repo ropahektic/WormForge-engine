@@ -654,7 +654,10 @@ pub fn write_profile_pack(dir: &Path, table: &toml::Table) -> Result<PackFolder,
     std::fs::create_dir_all(&root).map_err(|e| format!("{}: {e}", root.display()))?;
     let text = toml::to_string(table).map_err(|e| e.to_string())?;
     let path = root.join(PROFILE_FILE);
-    std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    // Not std::fs::write: the stage is rewritten every match, and truncating
+    // an existing file in place is what the Wine in the macOS WA bundles does
+    // not implement (os error 120). See game::overwrite.
+    game::overwrite::write(&path, text.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(PackFolder { id: PROFILE_PACK.into(), version: "1".into(), root })
 }
 
@@ -1021,6 +1024,10 @@ always_fast_walk = true
         let folder = write_profile_pack(&root, &frozen).unwrap();
         assert_eq!((folder.id.as_str(), folder.root.clone()), (PROFILE_PACK, root.join(PROFILE_PACK)));
         assert_eq!(profile_table(&root).unwrap(), Some(frozen));
+        // Every match restages over the last one.
+        let next: toml::Table = toml::from_str("scheme = \"next\"\n").unwrap();
+        write_profile_pack(&root, &next).unwrap();
+        assert_eq!(profile_table(&root).unwrap(), Some(next));
         let (bundles, errors) = list_bundles(&root);
         assert!(bundles.is_empty() && errors.is_empty(), "the pseudo-pack is no bundle");
         std::fs::write(root.join(PROFILE_PACK).join(PROFILE_FILE), "scheme = ").unwrap();
