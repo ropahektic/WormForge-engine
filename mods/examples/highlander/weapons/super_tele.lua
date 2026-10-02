@@ -35,10 +35,11 @@ fires.super_tele_click = function(ev)
     return
   end
   -- FireWeapon clears WA's planted X for click-only weapons. Keep a fixed
-  -- stock planted-X marker at the saved target until the worm arrives instead.
+  -- stock planted-X marker at the saved target until the worm arrives instead;
+  -- the engine plays it once, as WA plays its own.
   local marker = wa.actors.spawn({
     owner = worm, x = ev.x, y = y, sprite = "markerr",
-    gravity = false, collide = false, drown = false, loop = true,
+    gravity = false, collide = false, drown = false,
   })
   fires.teleports[worm.id] = { x = ev.x, y = y, frames = 0, pending = true, marker = marker }
   wa.sound.play(worm, 68, 0) -- PX's M_SETTARGET confirmation

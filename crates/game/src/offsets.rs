@@ -691,7 +691,12 @@ pub const GAME_WORLD_LAND_CURSOR_Y_LAST: usize = 0x738C;
 /// WorldRootEntity active team, 1-based.
 pub const WORLD_ROOT_CURRENT_TEAM: usize = 0x12C;
 pub const SPRITE_CURSOR_R: i32 = 32;
+/// The planted X (`markerr`..`markerc`, ids 38..=43): `TeamEntity` draws
+/// sprite `colour + 0x26` with its phase at `+0x40C` (0x556B06).
 pub const SPRITE_MARKER_R: i32 = 38;
+/// What `TeamEntity` adds to the planted X's phase every frame (0x55885E):
+/// one play-through of the sheet in 20 frames, from 0 when the X is planted.
+pub const MARKER_PHASE_STEP: i32 = 0xCCC;
 pub const GAME_WORLD_MAP_H: usize = 0x77C4;
 /// Plot scratch BitGrid (Landscape+0x0D0). Not walk collision. See FUN_0057d040.
 pub const LANDSCAPE_PLOT_SCRATCH: usize = 0x0D0;
