@@ -308,7 +308,10 @@ pub fn parse_attached(lua: &Lua, s: &Table) -> mlua::Result<AttachedSpawn> {
 
 pub fn bind_world(lua: &Lua, actors: &Table, wa: &Table) -> Result<(), String> {
     let spawn_fn = lua
-        .create_function(|lua, spec: Table| runtime_spawn(lua, spec, None))
+        .create_function(|lua, spec: Table| {
+            crate::sim_context::require("wa.actors.spawn")?;
+            runtime_spawn(lua, spec, None)
+        })
         .map_err(|e| e.to_string())?;
     actors.set("spawn", spawn_fn).map_err(|e| e.to_string())?;
 
@@ -316,7 +319,10 @@ pub fn bind_world(lua: &Lua, actors: &Table, wa: &Table) -> Result<(), String> {
     // world cursor. Pair with `on_select = { cursor = true }` + `eat_fire = true`.
     let cursor = lua.create_table().map_err(|e| e.to_string())?;
     let cursor_spawn = lua
-        .create_function(|lua, spec: Table| cursor_spawn(lua, spec))
+        .create_function(|lua, spec: Table| {
+            crate::sim_context::require("wa.cursor.spawn")?;
+            cursor_spawn(lua, spec)
+        })
         .map_err(|e| e.to_string())?;
     cursor.set("spawn", cursor_spawn).map_err(|e| e.to_string())?;
     wa.set("cursor", cursor).map_err(|e| e.to_string())?;
@@ -541,11 +547,11 @@ mod terrain_tests {
 /// silently got `nil` here would fail somewhere later and further away.
 fn random_fn(lua: &Lua) -> Result<Function, String> {
     lua.create_function(|_, (a, b): (Option<i64>, Option<i64>)| {
-        if crate::dispatch::drawing() {
+        if crate::dispatch::rendering() {
             return Err(mlua::Error::external(
-                "wa.random: not inside wa.on.draw. Drawing runs at render time, \
-                 differently on every peer, so a draw from WA's RNG there would \
-                 desync the match. Use wa.draw.random() for looks.",
+                "wa.random: not inside wa.on.draw or wa.on.hud. They run at render \
+                 time, differently on every peer, so a draw from WA's RNG there \
+                 would desync the match. Use wa.draw.random() for looks.",
             ));
         }
         let draw = crate::actor::native_random()

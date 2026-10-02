@@ -10,6 +10,20 @@ pub(crate) fn active() -> bool {
     DEPTH.with(|depth| depth.get() != 0)
 }
 
+/// Refuse a write that reaches the lockstep simulation outside a simulation
+/// callback: from `wa.on.draw` / `wa.on.hud` (render time, differently on
+/// every peer) it would desync the match.
+pub(crate) fn require(what: &str) -> mlua::Result<()> {
+    if active() {
+        Ok(())
+    } else {
+        Err(mlua::Error::external(format!(
+            "{what}: only from a simulation callback (worm_message, a brain, on_fire, ...), \
+             never from wa.on.draw or wa.on.hud"
+        )))
+    }
+}
+
 pub(crate) fn with_sim<T>(f: impl FnOnce() -> T) -> T {
     DEPTH.with(|depth| {
         depth.set(depth.get() + 1);

@@ -21,7 +21,8 @@ def checksum(data):
 def snapshots(text):
     # Logs append across launches. Never compare a new round to a stale one.
     text = text.rsplit("wkLua build ", 1)[-1]
-    text = text.rsplit("replay recorder: pending ", 1)[-1]
+    # Where a recorded round starts: "recording" now, "pending" in older logs.
+    text = re.split(r"replay recorder: (?:recording|pending) ", text)[-1]
     complete, pending = {}, {}
     for line in text.splitlines():
         if match := HEADER.fullmatch(line):

@@ -662,6 +662,7 @@ impl UserData for ActorHandle {
             })
         });
         fields.add_field_method_set("facing", |_, this, v: i32| {
+            crate::sim_context::require("worm.facing (write)")?;
             let mut flags = read_handle(this.0, ACTOR_FLAGS);
             if v < 0 {
                 flags |= ACTOR_FLAG_MIRROR_X;
@@ -686,6 +687,7 @@ impl UserData for ActorHandle {
             )
         });
         methods.add_method("explode", |_, this, opts: Option<Table>| {
+            crate::sim_context::require("actor:explode")?;
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
             }
@@ -713,6 +715,7 @@ impl UserData for ActorHandle {
             Ok(())
         });
         methods.add_method("despawn", |_, this, ()| {
+            crate::sim_context::require("actor:despawn")?;
             if this.0 == 0 || actor_dead(this.0) {
                 return Ok(());
             }
@@ -897,6 +900,7 @@ impl UserData for WormHandle {
             Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, WORM_JET_FUEL) } })
         });
         fields.add_field_method_set("fuel", |_, this, v: i32| {
+            crate::sim_context::require("worm.fuel (write)")?;
             if this.0 != 0 {
                 unsafe { write_i32(this.0 as *mut u8, WORM_JET_FUEL, v) };
             }
@@ -909,6 +913,7 @@ impl UserData for WormHandle {
                 Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, off) } })
             });
             fields.add_field_method_set(name, move |_, this, v: i32| {
+                crate::sim_context::require(&format!("worm.{name} (write)"))?;
                 if this.0 != 0 {
                     unsafe { write_i32(this.0 as *mut u8, off, v) };
                 }
@@ -923,6 +928,7 @@ impl UserData for WormHandle {
             Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, ENT_COLLISION_MASK) } })
         });
         fields.add_field_method_set("collision_mask", |_, this, v: i64| {
+            crate::sim_context::require("worm.collision_mask (write)")?;
             if this.0 != 0 {
                 unsafe { write_i32(this.0 as *mut u8, ENT_COLLISION_MASK, v as u32 as i32) };
             }
@@ -1010,6 +1016,7 @@ impl UserData for WormHandle {
                 .unwrap_or(false))
         });
         fields.add_field_method_set("visible", |_, this, v: bool| {
+            crate::sim_context::require("worm.visible (write)")?;
             if this.0 == 0 {
                 return Ok(());
             }
@@ -1024,6 +1031,7 @@ impl UserData for WormHandle {
             Ok(!native_hide_body().map(|(_, hidden)| hidden(this.0)).unwrap_or(false))
         });
         fields.add_field_method_set("body_visible", |_, this, v: bool| {
+            crate::sim_context::require("worm.body_visible (write)")?;
             if this.0 != 0 {
                 if let Some((hide, _)) = native_hide_body() {
                     hide(this.0, !v);
@@ -1101,6 +1109,7 @@ impl UserData for WormHandle {
             Ok(())
         });
         methods.add_method("carry", |_, this, (x, y): (i32, i32)| {
+            crate::sim_context::require("worm:carry")?;
             if this.0 == 0 {
                 return Ok(());
             }
@@ -1110,6 +1119,7 @@ impl UserData for WormHandle {
             Ok(())
         });
         methods.add_method("drop", |_, this, ()| {
+            crate::sim_context::require("worm:drop")?;
             if this.0 == 0 {
                 return Ok(());
             }
@@ -1119,6 +1129,7 @@ impl UserData for WormHandle {
             Ok(())
         });
         methods.add_method("equip", |_, this, name: String| {
+            crate::sim_context::require("worm:equip")?;
             if this.0 == 0 {
                 return Ok(0i32);
             }
@@ -1134,11 +1145,15 @@ impl UserData for WormHandle {
             }
             let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
             let change = ammo_change(change)?;
+            if change.is_some() {
+                crate::sim_context::require("worm:ammo (a change)")?;
+            }
             Ok(native_ammo()
                 .map(|f| f(this.0, slot as u32, change))
                 .unwrap_or(0))
         });
         methods.add_method("hurt", |_, this, arg: Value| {
+            crate::sim_context::require("worm:hurt")?;
             if this.0 == 0 {
                 return Ok(());
             }
@@ -1250,11 +1265,13 @@ where
 {
     fields.add_field_method_get("x", move |_, this| Ok(read_handle(handle(this), ENT_POS_X)));
     fields.add_field_method_set("x", move |_, this, v: i32| {
+        crate::sim_context::require("x (write)")?;
         write_handle(handle(this), ENT_POS_X, v);
         Ok(())
     });
     fields.add_field_method_get("y", move |_, this| Ok(read_handle(handle(this), ENT_POS_Y)));
     fields.add_field_method_set("y", move |_, this, v: i32| {
+        crate::sim_context::require("y (write)")?;
         write_handle(handle(this), ENT_POS_Y, v);
         Ok(())
     });
@@ -1262,6 +1279,7 @@ where
         Ok(read_handle(handle(this), ENT_SPEED_X))
     });
     fields.add_field_method_set("vx", move |_, this, v: i32| {
+        crate::sim_context::require("vx (write)")?;
         write_handle(handle(this), ENT_SPEED_X, v);
         Ok(())
     });
@@ -1269,6 +1287,7 @@ where
         Ok(read_handle(handle(this), ENT_SPEED_Y))
     });
     fields.add_field_method_set("vy", move |_, this, v: i32| {
+        crate::sim_context::require("vy (write)")?;
         write_handle(handle(this), ENT_SPEED_Y, v);
         Ok(())
     });

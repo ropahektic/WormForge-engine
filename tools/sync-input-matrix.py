@@ -8,6 +8,9 @@ import re
 
 
 BUILD = re.compile(r"wkLua build (\S+)")
+# Where a recorded round starts: "recording" since the replay trailer, "pending"
+# in older builds' logs.
+ROUND = re.compile(r"replay recorder: (?:recording|pending) ")
 INPUT = re.compile(
     r"sync input (tx|rx) f=(-?\d+) keys=0x([0-9a-fA-F]+) "
     r"pointer=(-?\d+),(-?\d+) down=(true|false)$"
@@ -63,10 +66,10 @@ def latest_round(text: str) -> tuple[str, str]:
         raise ValueError("no wkLua build line")
     launch = launches[-1]
     session = text[launch.start():]
-    marker = "replay recorder: pending "
-    if marker not in session:
+    rounds = list(ROUND.finditer(session))
+    if not rounds:
         raise ValueError("latest launch has no recorded round")
-    return launch.group(1), session.rsplit(marker, 1)[-1]
+    return launch.group(1), session[rounds[-1].end():]
 
 
 def parse(text: str) -> Log:

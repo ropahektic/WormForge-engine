@@ -1062,6 +1062,18 @@ unsafe fn hash_worms() -> u32 {
     h.finish()
 }
 
+/// Every live worm's WA state (+0x44), in the same (team, index) order as
+/// [`hash_worms`]. Kept apart from it so older replays, which have no state
+/// hash, still compare positions: a worm frozen in the wrong state shows here
+/// before it has moved anywhere.
+pub(crate) unsafe fn hash_worm_states() -> u32 {
+    let mut h = Fnv::new();
+    for handle in crate::actor::live_worms() {
+        h.write_i32(read_i32(handle as *mut u8, game::offsets::WORM_STATE));
+    }
+    h.finish()
+}
+
 /// Our own actors. `LIVE` is a `Vec` and `retain` preserves order, so the walk
 /// is insertion-ordered and reproducible.
 ///
