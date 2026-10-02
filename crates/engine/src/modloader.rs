@@ -1791,6 +1791,7 @@ mod tests {
     /// window for its colour while the tab rebuilds.)
     #[test]
     fn the_profile_tab_opens_without_hanging_the_window() {
+        install_demo_mods();
         let (done, wait) = std::sync::mpsc::channel();
         std::thread::spawn(move || unsafe {
             let hwnd = create_window().expect("window");
@@ -1808,10 +1809,37 @@ mod tests {
                 UpdateWindow(hwnd);
                 pump();
             }
+            // The weapon, the feature, then the weapon again: each click
+            // shows that row's settings.
+            let mut shown = Vec::new();
+            for (list, item) in [(0, 0), (1, 0), (0, 0)] {
+                profile_tab::select_for_test(list, item);
+                pump();
+                shown.push(profile_tab::detail_for_test());
+            }
             DestroyWindow(hwnd);
-            let _ = done.send(());
+            let _ = done.send(shown);
         });
-        wait.recv_timeout(std::time::Duration::from_secs(30)).expect("the window hung switching tabs");
+        let shown = wait.recv_timeout(std::time::Duration::from_secs(30)).expect("the window hung switching tabs");
+        assert_eq!(shown, ["weapon demo.big_bazooka", "feature demo.turn_note", "weapon demo.big_bazooka"]);
+    }
+
+    /// `component_demo` in the test's Mods folder, selected by `[profile]`.
+    fn install_demo_mods() {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mods = mods_dir();
+        let demo = mods.join("component_demo");
+        let _ = std::fs::remove_dir_all(&mods);
+        for f in ["mod.toml", "scheme.lua", "weapons/big_bazooka.lua", "features/turn_note.lua"] {
+            let dst = demo.join(f);
+            std::fs::create_dir_all(dst.parent().unwrap()).unwrap();
+            std::fs::copy(repo.join("mods/examples/component_demo").join(f), &dst).unwrap();
+        }
+        std::fs::write(
+            mods.join(weapons::SETTINGS_FILE),
+            "[profile]\nscheme = \"demo.scheme\"\nfeatures = [\"demo.turn_note\"]\n",
+        )
+        .unwrap();
     }
 
     /// Not a check: draws the Profile tab, with `component_demo` installed
@@ -1827,20 +1855,7 @@ mod tests {
             RDW_UPDATENOW, SRCCOPY,
         };
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let mods = mods_dir();
-        let demo = mods.join("component_demo");
-        let _ = std::fs::remove_dir_all(&mods);
-        for f in ["mod.toml", "scheme.lua", "weapons/big_bazooka.lua", "features/turn_note.lua"] {
-            let src = repo.join("mods/examples/component_demo").join(f);
-            let dst = demo.join(f);
-            std::fs::create_dir_all(dst.parent().unwrap()).unwrap();
-            std::fs::copy(&src, &dst).unwrap();
-        }
-        std::fs::write(
-            mods.join(weapons::SETTINGS_FILE),
-            "[profile]\nscheme = \"demo.scheme\"\nfeatures = [\"demo.turn_note\"]\n",
-        )
-        .unwrap();
+        install_demo_mods();
         unsafe {
             let hwnd = create_window().expect("window");
             MoveWindow(hwnd, -2000, 0, 960, 680, 1);

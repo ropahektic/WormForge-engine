@@ -403,26 +403,32 @@ unsafe fn select_row(list: HWND, ids: &[String], detail: &Detail, kind: impl Fn(
         _ => return,
     };
     if let Some(i) = ids.iter().position(|x| x == id) {
-        let lvi = windows_sys::Win32::UI::Controls::LVITEMW {
-            mask: LVIF_STATE,
-            iItem: i as i32,
-            iSubItem: 0,
-            state: LVIS_SELECTED,
-            stateMask: LVIS_SELECTED,
-            pszText: std::ptr::null_mut(),
-            cchTextMax: 0,
-            iImage: 0,
-            lParam: 0,
-            iIndent: 0,
-            iGroupId: 0,
-            cColumns: 0,
-            puColumns: std::ptr::null_mut(),
-            piColFmt: std::ptr::null_mut(),
-            iGroup: 0,
-        };
-        SendMessageW(list, windows_sys::Win32::UI::Controls::LVM_SETITEMSTATE, i, &lvi as *const _ as isize);
+        set_selected(list, Some(i));
         SendMessageW(list, windows_sys::Win32::UI::Controls::LVM_ENSUREVISIBLE, i, 0);
     }
+}
+
+/// Select row `item` of `list`, or with `None` clear its selection.
+unsafe fn set_selected(list: HWND, item: Option<usize>) {
+    let lvi = windows_sys::Win32::UI::Controls::LVITEMW {
+        mask: LVIF_STATE,
+        iItem: item.map_or(-1, |i| i as i32),
+        iSubItem: 0,
+        state: if item.is_some() { LVIS_SELECTED } else { 0 },
+        stateMask: LVIS_SELECTED,
+        pszText: std::ptr::null_mut(),
+        cchTextMax: 0,
+        iImage: 0,
+        lParam: 0,
+        iIndent: 0,
+        iGroupId: 0,
+        cColumns: 0,
+        puColumns: std::ptr::null_mut(),
+        piColFmt: std::ptr::null_mut(),
+        iGroup: 0,
+    };
+    // Item -1 (usize::MAX) is every row.
+    SendMessageW(list, windows_sys::Win32::UI::Controls::LVM_SETITEMSTATE, item.unwrap_or(usize::MAX), &lvi as *const _ as isize);
 }
 
 /// The selected weapon's position dropdown, or the selected feature's options.
@@ -770,8 +776,12 @@ pub(crate) unsafe fn notify(hdr: *const NMHDR) -> Option<LRESULT> {
     let Some(id) = id else {
         return Some(0);
     };
-    // Selected: show its settings.
+    // Selected: show its settings. One row is selected across both lists:
+    // a row left selected in the other list would not report a click.
     if nm.uNewState & LVIS_SELECTED != 0 && nm.uOldState & LVIS_SELECTED == 0 {
+        FILLING.store(true, Ordering::SeqCst);
+        set_selected(ctl(if from == ID_WEAPONS { ID_FEATURES } else { ID_WEAPONS }), None);
+        FILLING.store(false, Ordering::SeqCst);
         let detail = if from == ID_WEAPONS { Detail::Weapon(id.clone()) } else { Detail::Feature(id.clone()) };
         if with(|s| std::mem::replace(&mut s.detail, detail.clone()) != detail).unwrap_or(false) {
             PostMessageW(WINDOW.load(Ordering::SeqCst), WM_APP_PROFILE, 1, 0);
@@ -793,28 +803,20 @@ pub(crate) unsafe fn notify(hdr: *const NMHDR) -> Option<LRESULT> {
 }
 
 /// Select row `item` of the weapons (`list` 0) or features (1) list, as a
-/// click does, for the window tests.
+/// click does, and say what the settings area then shows, for the window tests.
 #[cfg(test)]
 pub(crate) unsafe fn select_for_test(list: usize, item: usize) {
-    let list = ctl(if list == 0 { ID_WEAPONS } else { ID_FEATURES });
-    let lvi = windows_sys::Win32::UI::Controls::LVITEMW {
-        mask: LVIF_STATE,
-        iItem: item as i32,
-        iSubItem: 0,
-        state: LVIS_SELECTED,
-        stateMask: LVIS_SELECTED,
-        pszText: std::ptr::null_mut(),
-        cchTextMax: 0,
-        iImage: 0,
-        lParam: 0,
-        iIndent: 0,
-        iGroupId: 0,
-        cColumns: 0,
-        puColumns: std::ptr::null_mut(),
-        piColFmt: std::ptr::null_mut(),
-        iGroup: 0,
-    };
-    SendMessageW(list, windows_sys::Win32::UI::Controls::LVM_SETITEMSTATE, item, &lvi as *const _ as isize);
+    set_selected(ctl(if list == 0 { ID_WEAPONS } else { ID_FEATURES }), Some(item));
+}
+
+#[cfg(test)]
+pub(crate) fn detail_for_test() -> String {
+    with(|s| match &s.detail {
+        Detail::None => "none".to_string(),
+        Detail::Weapon(id) => format!("weapon {id}"),
+        Detail::Feature(id) => format!("feature {id}"),
+    })
+    .unwrap_or_default()
 }
 
 #[cfg(test)]
