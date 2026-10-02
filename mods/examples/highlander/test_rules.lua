@@ -2380,6 +2380,8 @@ do
       was = f and f:read("a")
       if f then f:close() end
     end
+    -- A Windows checkout may hand the file back with CRLF line endings.
+    was = was and was:gsub("\r\n", "\n")
     local differs
     if was and was ~= now then
       local a, b = {}, {}
