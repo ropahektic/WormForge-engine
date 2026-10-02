@@ -207,6 +207,7 @@ pub fn install() -> Result<(), String> {
         hurt: crate::physics::hit_worm,
         set_worm_state: crate::physics::set_worm_state,
         retreat_ms: crate::world::retreat_ms,
+        turn_clock_ms: crate::world::turn_clock_ms,
         launch: crate::missile_boom::launch,
         retarget_weapon_sprites: |slot, body, cluster| {
             crate::apply::retarget_sprites(

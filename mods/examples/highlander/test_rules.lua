@@ -252,6 +252,7 @@ local function new_match(opts)
     world = {
       cavern = function() return cavern end,
       retreat = function() return M.retreat or 0 end,
+      turn_clock = function() return M.turn_clock or 0 end,
       water = function() return M.water or 0x7FFFFFFF end,
       gravity = function() return M.gravity or 0 end,
       wind = function() return M.wind or 0 end,
@@ -1729,6 +1730,30 @@ do
   check("turn start leaves Gravity Control active", M.gravity == math.floor(0x3AE * 2.4))
   M.turn_end({ worm = w, active = w })
   check("turn end restores the match's gravity", M.gravity == 0x3AE)
+  -- PX's rule: the turn clock standing still for 10 s puts the gravity back.
+  local high = math.floor(0x3AE * 2.4)
+  M.digit = 5
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.digit = nil
+  M.message(w, wa.msg.FIRE_WEAPON)
+  M.turn_clock = 20000
+  for _ = 1, 120 do
+    M.message(w, wa.msg.FRAME_FINISH)
+  end
+  check("a shot's settling (2.4 s, clock still) keeps the gravity", M.gravity == high)
+  for i = 1, 600 do
+    M.turn_clock = 20000 - i * 20
+    M.message(w, wa.msg.FRAME_FINISH)
+  end
+  check("a running clock keeps it however long", M.gravity == high)
+  for _ = 1, 499 do
+    M.message(w, wa.msg.FRAME_FINISH)
+  end
+  check("the clock still for 499 frames keeps it", M.gravity == high)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("10 s with the clock still puts the gravity back", M.gravity == 0x3AE, tostring(M.gravity))
+  M.turn_end({ worm = w, active = w })
+  check("turn end after that leaves the match's gravity", M.gravity == 0x3AE)
 end
 
 print("jump: the worm leaves with the shot")

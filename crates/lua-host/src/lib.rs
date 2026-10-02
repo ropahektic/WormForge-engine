@@ -2782,10 +2782,11 @@ end)
     }
 
     #[test]
-    fn world_reads_gravity_and_wind() {
+    fn world_reads_gravity_wind_and_the_turn_clock() {
         let _host = lock_host();
         crate::bind_actor_native(crate::ActorNative {
             forces: || (0x3AE, -0x120),
+            turn_clock_ms: || 24200,
             ..Default::default()
         });
         let root = std::env::temp_dir().join("wklua-lua-host-world-forces");
@@ -2798,14 +2799,15 @@ id = "f.forces"
 api_version = 1
 entry = "weapons.lua"
 "#,
-            "GRAVITY, WIND = wa.world.gravity(), wa.world.wind()",
+            "GRAVITY, WIND, CLOCK = wa.world.gravity(), wa.world.wind(), wa.world.turn_clock()",
         );
         let scripts = run_mods(&[pack]).unwrap();
         let g: i32 = scripts.lua.globals().get("GRAVITY").unwrap();
         let w: i32 = scripts.lua.globals().get("WIND").unwrap();
+        let c: i32 = scripts.lua.globals().get("CLOCK").unwrap();
         park_lua(scripts.lua);
         crate::bind_actor_native(crate::ActorNative::default());
-        assert_eq!((g, w), (0x3AE, -0x120));
+        assert_eq!((g, w, c), (0x3AE, -0x120, 24200));
     }
 
     #[test]
