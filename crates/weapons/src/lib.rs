@@ -254,6 +254,10 @@ pub struct ModEntry {
     /// silently hiding a pack with a typo in `mod.toml`.
     pub manifest: Result<ModManifest, String>,
     pub enabled: bool,
+    /// A component bundle's manifest, or why it doesn't parse; `None` for a
+    /// pack. A bundle is never loaded as a pack: its `manifest` is
+    /// `Err(BUNDLE_NOT_LOADED)`.
+    pub bundle: Option<Result<components::BundleManifest, String>>,
 }
 
 /// Folders the scanner never looks at: `_name`, `.name`. A nested folder such
@@ -286,18 +290,25 @@ pub fn list_mods(mods_dir: &Path) -> Result<Vec<ModEntry>, String> {
         if !manifest_path.is_file() {
             continue;
         }
-        let manifest = std::fs::read_to_string(&manifest_path)
-            .map_err(|e| e.to_string())
-            .and_then(|src| parse_manifest(&src));
-        let enabled = match &manifest {
-            Ok(m) => !settings.is_disabled(&m.id),
-            Err(_) => false,
+        let src = std::fs::read_to_string(&manifest_path).map_err(|e| e.to_string());
+        let (manifest, bundle) = match &src {
+            Ok(src) if components::declares_components(src) => {
+                (Err(BUNDLE_NOT_LOADED.to_string()), Some(components::parse_bundle(src)))
+            }
+            Ok(src) => (parse_manifest(src), None),
+            Err(e) => (Err(e.clone()), None),
+        };
+        let enabled = match (&manifest, &bundle) {
+            (Ok(m), _) => !settings.is_disabled(&m.id),
+            (_, Some(Ok(b))) => !settings.is_disabled(&b.id),
+            _ => false,
         };
         out.push(ModEntry {
             folder,
             root: path,
             manifest,
             enabled,
+            bundle,
         });
     }
     out.sort_by(|a, b| a.folder.to_lowercase().cmp(&b.folder.to_lowercase()));
@@ -583,13 +594,26 @@ mod tests {
         for (folder, toml) in [
             ("old", "id = \"old.pack\"\napi_version = 1\nentry = \"init.lua\"\n"),
             ("new", "id = \"new.bundle\"\napi_version = 1\nformat_version = 2\n[[components]]\nid = \"a.b\"\ntype = \"feature\"\nentry = \"a.lua\"\n"),
+            ("off", "id = \"off.bundle\"\napi_version = 1\nformat_version = 2\n[[components]]\nid = \"o.b\"\ntype = \"feature\"\nentry = \"o.lua\"\n"),
+            ("bad", "id = \"bad.bundle\"\napi_version = 1\nformat_version = 2\n[[components]]\nid = \"a.c\"\n"),
         ] {
             std::fs::create_dir_all(root.join(folder)).unwrap();
             std::fs::write(root.join(folder).join("mod.toml"), toml).unwrap();
         }
+        std::fs::write(root.join(SETTINGS_FILE), "disabled = [\"off.bundle\"]\n").unwrap();
         let listed = list_mods(&root).unwrap();
-        assert_eq!(listed.len(), 2);
-        assert!(listed.iter().any(|e| e.manifest.as_ref().err().map(String::as_str) == Some(BUNDLE_NOT_LOADED)));
+        assert_eq!(listed.len(), 4);
+        let bundle = listed.iter().find(|e| e.folder == "new").unwrap();
+        assert_eq!(bundle.manifest.as_ref().err().map(String::as_str), Some(BUNDLE_NOT_LOADED));
+        assert_eq!(bundle.bundle.as_ref().and_then(|b| b.as_ref().ok()).map(|b| b.id.as_str()), Some("new.bundle"));
+        assert!(bundle.enabled);
+        assert!(listed.iter().find(|e| e.folder == "old").unwrap().bundle.is_none());
+        let off = listed.iter().find(|e| e.folder == "off").unwrap();
+        assert!(off.bundle.as_ref().is_some_and(|b| b.is_ok()) && !off.enabled);
+        // A broken bundle keeps its own error for the loader, and doesn't stop
+        // the packs from loading.
+        let bad = listed.iter().find(|e| e.folder == "bad").unwrap();
+        assert!(bad.bundle.as_ref().is_some_and(|b| b.is_err()) && !bad.enabled);
         let loaded = discover_mods(&root).unwrap();
         assert_eq!(loaded.iter().map(|m| m.manifest.id.as_str()).collect::<Vec<_>>(), ["old.pack"]);
     }
@@ -699,6 +723,7 @@ register = ["example.boss.mole"]
                 "id = \"{id}\"\napi_version = 1\n[weapons]\nreplace = [{replace}]\n"
             )),
             enabled,
+            bundle: None,
         };
         let entries = vec![
             entry("z.late", "\"bazooka\", \"grenade\"", true),

@@ -21,6 +21,7 @@ use weapons::{
     conflict_text, list_mods, parse_index, slot_conflicts, LoaderSettings, ModEntry, PackIndex,
     PackKind, RemotePack, SlotConflict,
 };
+use weapons::components::BundleManifest;
 use windows_sys::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
     CreateBitmap, CreateFontW, GetSysColor, GetSysColorBrush, InvalidateRect, SetBkMode,
@@ -197,6 +198,9 @@ impl Row {
             if let Ok(m) = &l.manifest {
                 return m.id.clone();
             }
+            if let Some(Ok(b)) = &l.bundle {
+                return b.id.clone();
+            }
         }
         if let Some(r) = &self.remote {
             return r.id.clone();
@@ -212,7 +216,12 @@ impl Row {
     }
 
     fn toggleable(&self) -> bool {
-        self.local.as_ref().is_some_and(|l| l.manifest.is_ok())
+        self.local.as_ref().is_some_and(|l| l.manifest.is_ok() || matches!(l.bundle, Some(Ok(_))))
+    }
+
+    /// A component bundle's manifest, or why it doesn't parse.
+    fn bundle(&self) -> Option<&Result<BundleManifest, String>> {
+        self.local.as_ref().and_then(|l| l.bundle.as_ref())
     }
 
     fn kind(&self) -> PackKind {
@@ -965,6 +974,14 @@ fn weapon_slots<'a>(names: impl Iterator<Item = &'a String>) -> String {
 /// Stock panel slots this pack takes (`replace` + `overlay`), or a role label
 /// for gameplay packs that claim none.
 fn role_column(row: &Row) -> String {
+    match row.bundle() {
+        Some(Ok(b)) => {
+            let n = b.components.len();
+            return format!("{n} component{}", if n == 1 { "" } else { "s" });
+        }
+        Some(Err(_)) => return String::new(),
+        None => {}
+    }
     match row.kind() {
         PackKind::Gameplay => "ruleset".into(),
         PackKind::Weapons => {
@@ -987,8 +1004,9 @@ fn role_column(row: &Row) -> String {
 
 fn row_matches_filter(row: &Row, filter: usize) -> bool {
     match filter {
-        1 => row.kind() == PackKind::Weapons,
-        2 => row.kind() == PackKind::Gameplay,
+        // A bundle can hold weapons, a scheme and features: both tabs.
+        1 => row.bundle().is_some() || row.kind() == PackKind::Weapons,
+        2 => row.bundle().is_some() || row.kind() == PackKind::Gameplay,
         _ => true,
     }
 }
@@ -1041,6 +1059,14 @@ fn row_status(rows: &[Row], conflicts: &[SlotConflict], settings: &LoaderSetting
     let Some(local) = &row.local else {
         return (online, Tone::OnlineOnly);
     };
+    match &local.bundle {
+        Some(Err(e)) => return (format!("error: {e}"), Tone::Problem),
+        // What runs is the profile's choice; the checkbox only makes the
+        // bundle's components available to it.
+        Some(Ok(_)) if local.enabled => return ("on (components the profile selects run)".into(), Tone::On),
+        Some(Ok(_)) => return ("off".into(), Tone::Off),
+        None => {}
+    }
     let m = match &local.manifest {
         Ok(m) => m,
         Err(e) => return (format!("error: {e}"), Tone::Problem),
@@ -1224,7 +1250,10 @@ fn row_columns(row: &Row, settings: &LoaderSettings) -> Option<[String; 4]> {
                 };
                 (display_name(&m.id), version, m.author.clone())
             }
-            Err(_) => (format!("{} (broken mod.toml)", l.folder), String::new(), String::new()),
+            Err(_) => match &l.bundle {
+                Some(Ok(b)) => (display_name(&b.id), b.version.clone(), b.author.clone()),
+                _ => (format!("{} (broken mod.toml)", l.folder), String::new(), String::new()),
+            },
         },
         (None, Some(r)) => (display_name(&r.id), r.version.clone(), r.author.clone()),
         (None, None) => return None,
@@ -1396,12 +1425,13 @@ unsafe fn on_item_changed(nm: &NMLISTVIEW) {
         let Some(row) = rows.get_mut(nm.iItem as usize) else {
             return;
         };
+        let row_id = row.id();
         match row.local.as_mut() {
             None => Outcome::NotInstalled,
-            Some(local) => match &local.manifest {
-                Ok(m) => {
+            Some(local) => match local.manifest.is_ok() || matches!(local.bundle, Some(Ok(_))) {
+                true => {
                     local.enabled = checked;
-                    let id = m.id.clone();
+                    let id = row_id;
                     if let Ok(mut all) = ALL_ROWS.lock() {
                         if let Some(full) = all.iter_mut().find(|r| r.id() == id) {
                             if let Some(l) = full.local.as_mut() {
@@ -1411,7 +1441,7 @@ unsafe fn on_item_changed(nm: &NMLISTVIEW) {
                     }
                     Outcome::Toggle(id)
                 }
-                Err(_) => Outcome::Broken,
+                false => Outcome::Broken,
             },
         }
     };
@@ -1683,4 +1713,55 @@ fn collect_packs(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
 pub fn is_open() -> bool {
     let hwnd = WINDOW.load(Ordering::SeqCst);
     !hwnd.is_null() && unsafe { IsWindow(hwnd) } != 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn demo_row(enabled: bool, bundle: Result<BundleManifest, String>) -> Row {
+        Row {
+            local: Some(ModEntry {
+                folder: "component_demo".into(),
+                root: std::path::PathBuf::new(),
+                manifest: Err(weapons::BUNDLE_NOT_LOADED.into()),
+                enabled,
+                bundle: Some(bundle),
+            }),
+            remote: None,
+        }
+    }
+
+    fn demo_manifest() -> BundleManifest {
+        let src = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/component_demo/mod.toml"),
+        )
+        .unwrap();
+        weapons::components::parse_bundle(&src).unwrap()
+    }
+
+    #[test]
+    fn a_component_bundle_is_a_row_that_can_be_toggled() {
+        let settings = LoaderSettings::default();
+        let row = demo_row(true, Ok(demo_manifest()));
+        assert_eq!(row.id(), "example.components");
+        assert!(row.toggleable());
+        assert!(row_matches_filter(&row, 1) && row_matches_filter(&row, 2));
+        let cols = row_columns(&row, &settings).unwrap();
+        assert_eq!((cols[0].as_str(), cols[3].as_str()), ("components", "3 components"));
+        let rows = [demo_row(true, Ok(demo_manifest()))];
+        assert_eq!(row_status(&rows, &[], &settings, &row).0, "on (components the profile selects run)");
+        let off = demo_row(false, Ok(demo_manifest()));
+        let (text, tone) = row_status(&rows, &[], &settings, &off);
+        assert!(text == "off" && tone == Tone::Off, "{text}");
+    }
+
+    #[test]
+    fn a_broken_bundle_shows_its_error() {
+        let settings = LoaderSettings::default();
+        let row = demo_row(false, Err("demo.components: no entry".into()));
+        assert!(!row.toggleable());
+        assert_eq!(row_columns(&row, &settings).unwrap()[0], "component_demo (broken mod.toml)");
+        assert_eq!(row_status(&[], &[], &settings, &row).0, "error: demo.components: no entry");
+    }
 }
