@@ -1562,6 +1562,70 @@ label = "Fast"
     }
 
     #[test]
+    fn the_utilities_example_acts_on_its_readme_settings() {
+        let _guard = lock_host();
+        use std::sync::Mutex as M;
+        static SEEN: M<Vec<String>> = M::new(Vec::new());
+        fn note(s: String) {
+            SEEN.lock().unwrap().push(s);
+        }
+        SEEN.lock().unwrap().clear();
+        crate::bind_actor_native(crate::ActorNative {
+            forces: || (0x3AE, 0x500),
+            set_gravity: |v| note(format!("gravity {v:#x}")),
+            set_wind: |v| note(format!("wind {v}")),
+            heal: |w, n| {
+                note(format!("heal {w} {n}"));
+                n
+            },
+            ammo: |w, slot, change| {
+                note(format!("ammo {w} {} {change:?}", StockWeapon::from_index(slot).unwrap().name()));
+                -1
+            },
+            ..Default::default()
+        });
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/utilities");
+        let manifest = weapons::components::parse_bundle(&std::fs::read_to_string(root.join("mod.toml")).unwrap()).unwrap();
+        use weapons::components::OptionValue as V;
+        // The README's settings.
+        let profile = weapons::components::Profile {
+            features: ["core.utilities".to_string()].into(),
+            options: [(
+                "core.utilities".to_string(),
+                [
+                    ("gravity_pct".to_string(), V::Int(60)),
+                    ("wind".to_string(), V::Choice("none".into())),
+                    ("heal_per_turn".to_string(), V::Int(10)),
+                    ("infinite_ninja_rope".to_string(), V::Bool(true)),
+                ]
+                .into(),
+            )]
+            .into(),
+            ..Default::default()
+        };
+        let bundles = [weapons::components::LoadedBundle { manifest, root }];
+        let scripts = run_match(&[], Some(&plan(&bundles, &profile))).unwrap();
+        assert_eq!(scripts.logs, ["[core.utilities] gravity 60%, wind none, heal 10, infinite ninja_rope"]);
+        park_lua(scripts.lua);
+        // Two turns, each with two frames after it: gravity is scaled from
+        // the scheme's once, not compounded; the wind is set once per turn,
+        // on the frame after the turn starts.
+        for _ in 0..2 {
+            crate::turn_start(7).unwrap();
+            crate::worm_message(7, 1, 2).unwrap();
+            crate::worm_message(7, 1, 2).unwrap();
+        }
+        crate::bind_actor_native(crate::ActorNative::default());
+        let turn = [
+            format!("gravity {:#x}", 0x3AE * 60 / 100),
+            "heal 7 10".to_string(),
+            "ammo 7 ninja_rope Some(Set(-1))".to_string(),
+            "wind 0".to_string(),
+        ];
+        assert_eq!(*SEEN.lock().unwrap(), [turn.clone(), turn].concat());
+    }
+
+    #[test]
     fn components_are_refused_before_anything_installs() {
         let _guard = lock_host();
         let ok_scheme = "return {}";

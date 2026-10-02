@@ -1824,26 +1824,31 @@ mod tests {
         assert_eq!(shown, ["weapon demo.big_bazooka", "feature demo.turn_note", "weapon demo.big_bazooka"]);
     }
 
-    /// `component_demo` in the test's Mods folder, selected by `[profile]`.
+    /// `component_demo` and `utilities` in the test's Mods folder, selected
+    /// by `[profile]`.
     fn install_demo_mods() {
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let mods = mods_dir();
-        let demo = mods.join("component_demo");
         let _ = std::fs::remove_dir_all(&mods);
-        for f in ["mod.toml", "scheme.lua", "weapons/big_bazooka.lua", "features/turn_note.lua"] {
-            let dst = demo.join(f);
-            std::fs::create_dir_all(dst.parent().unwrap()).unwrap();
-            std::fs::copy(repo.join("mods/examples/component_demo").join(f), &dst).unwrap();
+        for (bundle, files) in [
+            ("component_demo", &["mod.toml", "scheme.lua", "weapons/big_bazooka.lua", "features/turn_note.lua"][..]),
+            ("utilities", &["mod.toml", "features/utilities.lua"][..]),
+        ] {
+            for f in files {
+                let dst = mods.join(bundle).join(f);
+                std::fs::create_dir_all(dst.parent().unwrap()).unwrap();
+                std::fs::copy(repo.join("mods/examples").join(bundle).join(f), &dst).unwrap();
+            }
         }
         std::fs::write(
             mods.join(weapons::SETTINGS_FILE),
-            "[profile]\nscheme = \"demo.scheme\"\nfeatures = [\"demo.turn_note\"]\n",
+            "[profile]\nscheme = \"demo.scheme\"\nfeatures = [\"demo.turn_note\", \"core.utilities\"]\n",
         )
         .unwrap();
     }
 
-    /// Not a check: draws the Profile tab, with `component_demo` installed
-    /// and its feature selected, to `tmp/profile-tab.png` in the repo, to see
+    /// Not a check: draws the Profile tab, with the example bundles installed
+    /// and Utilities selected, to `tmp/profile-tab.png` in the repo, to see
     /// it as a player does. Run alone (`render_profile_tab --ignored`): each
     /// window test registers the window class.
     #[test]
@@ -1869,7 +1874,8 @@ mod tests {
             };
             SendMessageW(hwnd, WM_COMMAND, profile_tab::ID_TAB_PROFILE, 0);
             pump();
-            profile_tab::select_for_test(1, 0);
+            // Utilities: the second feature by name.
+            profile_tab::select_for_test(1, 1);
             pump();
             let (w, h) = (960, 680);
             let screen = GetDC(hwnd);
