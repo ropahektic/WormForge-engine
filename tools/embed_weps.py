@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Diff pack .wep files against stock_weps.json → named patch tables for Lua."""
+"""Diff pack .wep files against stock_weps.json → named patch tables for Lua.
+
+The Highlander no longer ships most of its .wep files; regenerate from the
+last commit that did:  python3 tools/embed_weps.py --rev 78974f9
+"""
 from __future__ import annotations
 
 import base64
@@ -7,6 +11,8 @@ import glob
 import json
 import os
 import struct
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -128,12 +134,36 @@ LAST_STOCK_SPRITE = 696
 # Where PX numbers the sprites it adds (crates/weapons/src/wep.rs PX_SPRITE_BASE).
 PX_SPRITE_BASE = 100_000
 
-# The fields whose PX-only ids import() leaves stock (wep.rs SPRITE_FIELDS and
-# STRIKE_SPRITE_FIELDS): WA cannot draw them; the pack's art draws those.
-# Every other id a record names is one of WA's own and is patched in, as
-# import() took it: the Banana Express's bananas, the Mortar Strike's shells.
-SPRITE_FIELDS = {0x60, 0x64, 0x68, 0xDC, 0xE0, 0xE4, 0x124, 0x178}
-STRIKE_SPRITE_FIELDS = {0x74, 0x7C, 0x138, 0x140}
+# import()'s keep_stock_sprites (crates/weapons/src/wep.rs): the fields whose
+# PX-only ids leave the slot's own, the strike's extra ones, and its plane.
+SPRITE_FIELDS = (0x60, 0x64, 0x68, 0xDC, 0xE0, 0xE4, 0x124, 0x170)
+STRIKE_SPRITE_FIELDS = (0x74, 0x7C, 0x138, 0x140)
+STRIKE_PLANE = 0x38
+MISSILE_TYPE = 0xA4
+
+# Where .wep files are read from: the working tree, or a commit (--rev).
+WEP_REV: str | None = None
+
+
+def read_wep(path: Path) -> bytes:
+    if WEP_REV is None:
+        return path.read_bytes()
+    rel = path.resolve().relative_to(ROOT).as_posix()
+    return subprocess.run(
+        ["git", "-C", str(ROOT), "show", f"{WEP_REV}:{rel}"],
+        check=True, capture_output=True,
+    ).stdout
+
+
+def list_weps(folder: Path) -> list[Path]:
+    if WEP_REV is None:
+        return sorted(folder.glob("*.wep"))
+    rel = folder.resolve().relative_to(ROOT).as_posix()
+    names = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-tree", "--name-only", f"{WEP_REV}:{rel}"],
+        check=True, capture_output=True, text=True,
+    ).stdout.split()
+    return sorted(folder / n for n in names if n.endswith(".wep"))
 
 
 def patchable(off: int) -> bool:
@@ -149,14 +179,14 @@ def i32(buf: bytes, off: int) -> int:
 
 
 def parse_wep(path: Path) -> bytes:
-    b = path.read_bytes()
+    b = read_wep(path)
     if b[:4] != WEP_TAG or len(b) < 4 + WEAPON_ENTRY_SIZE:
         raise SystemExit(f"{path} is not a PX .wep")
     return bytes(b[4 : 4 + WEAPON_ENTRY_SIZE])
 
 
 def wep_display_name(path: Path) -> str:
-    b = path.read_bytes()
+    b = read_wep(path)
     if b[:4] != WEP_TAG or len(b) < STRINGS_AT + 4:
         raise SystemExit(f"{path}: no PX name string")
     ln = struct.unpack_from("<I", b, STRINGS_AT)[0]
@@ -225,61 +255,80 @@ def names_for_weapon(ft: int, fm: int) -> list[tuple[str, int, bool]]:
     return ordered
 
 
-def keeps_stock(wep: bytes, name: str, off: int, v: int, strike: bool) -> bool:
-    """import()'s keep_stock_sprites: a PX-only id, or no flight sprite on a
-    projectile, leaves the slot's own. A PX-only id in any other sprite or
-    trail field stays stock too (import() let those through)."""
-    if off in SPRITE_FIELDS or (strike and off in STRIKE_SPRITE_FIELDS):
-        if v >= PX_SPRITE_BASE:
-            return True
-        flies = i32(wep, 0xA4) != 0
-        return off == 0x60 and v == 0 and flies and not strike
-    drawn = name.endswith("_sprite") or name.endswith("trail")
-    return drawn and PX_SPRITE_BASE <= v < 2 * PX_SPRITE_BASE
+def put_i32(buf: bytearray, off: int, v: int) -> None:
+    struct.pack_into("<i", buf, off, v)
 
 
-def diff_patch(stock: bytes, wep: bytes) -> list[tuple[str, int]]:
-    ft = i32(wep, WEAPON_FIRE_TYPE)
-    fm = i32(wep, 0x38)
-    strike = ft == 3
-    by_off: dict[int, tuple[str, int]] = {}
+def imported(stock: bytes, wep: bytes) -> bytes:
+    """The slot's entry after import(): copy_fire_from the record, then
+    keep_stock_sprites. Byte for byte what `wep = "x.wep"` gave the slot."""
+    out = bytearray(stock)
+    for lo, hi in ((0x0C, 0x10), (0x14, 0x24), (WEAPON_FIRE_TYPE, WEAPON_ENTRY_SIZE)):
+        out[lo:hi] = wep[lo:hi]
+    flies = i32(out, MISSILE_TYPE) != 0
+    strike = i32(out, WEAPON_FIRE_TYPE) == 3 and i32(out, 0x34) == 0
+    fields = SPRITE_FIELDS + (STRIKE_SPRITE_FIELDS if strike else ())
+    for off in fields:
+        v = i32(out, off)
+        if v >= PX_SPRITE_BASE or (off == 0x60 and v == 0 and flies and not strike):
+            put_i32(out, off, i32(stock, off))
+    if strike and i32(out, STRIKE_PLANE) > LAST_STOCK_SPRITE:
+        put_i32(out, STRIKE_PLANE, i32(stock, STRIKE_PLANE))
+    return bytes(out)
+
+
+def field_name(abs_off: int, ft: int, fm: int, strike: bool) -> str | None:
+    """The name `patch` resolves to `abs_off` (lua-host shifts slab names by
+    0x14 when the weapon is a strike), preferring the fire type's own layout."""
+    if strike and abs_off == STRIKE_PLANE:
+        return "plane_sprite"
     for name, off, slab in names_for_weapon(ft, fm):
-        abs_off = off + STRIKE_SHIFT if (slab and strike) else off
-        if name == "c_sprite":
-            wv, sv = i32(wep, abs_off), i32(stock, abs_off)
-            if 0 < wv <= LAST_STOCK_SPRITE and wv != sv and abs_off not in by_off:
-                by_off[abs_off] = (name, wv)
-            continue
-        # Strike plane sprite sits at 0x38 (named fire_method in the table).
-        if strike and abs_off == 0x38:
-            continue
-        if not patchable(abs_off) or abs_off in by_off:
-            continue
-        wv, sv = i32(wep, abs_off), i32(stock, abs_off)
-        if keeps_stock(wep, name, abs_off, wv, strike):
-            continue
-        if wv != sv:
-            by_off[abs_off] = (name, wv)
-    return [by_off[o] for o in sorted(by_off)]
+        if (off + STRIKE_SHIFT if (slab and strike) else off) == abs_off:
+            return name
+    return None
 
 
-def lua_patch(fields: list[tuple[str, int]], indent: str = "  ") -> str:
+def diff_patch(stock: bytes, wep: bytes) -> list[tuple[str | int, int]]:
+    """Every field import() changed on the stock slot, so copy_from + patch
+    lays down the same entry. A field no name reaches (WA reads it, but no
+    one has named it yet: +0xD0, the cluster copies at +0x140..+0x1AC, ...)
+    goes in by offset; dropping it changes how the weapon behaves."""
+    want = imported(stock, wep)
+    ft = i32(want, WEAPON_FIRE_TYPE)
+    fm = i32(want, 0x38)
+    # As lua-host decides: fire_type in the patch if it changes, else the slot's.
+    strike = ft == 3 if ft != i32(stock, WEAPON_FIRE_TYPE) else i32(stock, WEAPON_FIRE_TYPE) == 3
+    out: list[tuple[str | int, int]] = []
+    for off in range(0, WEAPON_ENTRY_SIZE, 4):
+        if not patchable(off) or i32(want, off) == i32(stock, off):
+            continue
+        out.append((field_name(off, ft, fm, strike) or off, i32(want, off)))
+    return out
+
+
+def lua_key(key: str | int) -> str:
+    return key if isinstance(key, str) else f"[0x{key:03X}]"
+
+
+def lua_patch(fields: list[tuple[str | int, int]], indent: str = "  ") -> str:
     if not fields:
         return ""
     lines = [f"{indent}patch = {{"]
-    for name, v in fields:
-        lines.append(f"{indent}  {name} = {v},")
+    for key, v in fields:
+        lines.append(f"{indent}  {lua_key(key)} = {v},")
     lines.append(f"{indent}}},")
     return "\n".join(lines)
 
 
 def emit_highlander_table(
-    patches: dict[str, list[tuple[str, int]]],
+    patches: dict[str, list[tuple[str | int, int]]],
     names: dict[str, str],
 ) -> str:
     lines = [
         "-- Display names + named patches from each former weps/<slot>.wep,",
         "-- as copy_from + name + patch (web editor style). Generated by tools/embed_weps.py.",
+        "-- Each patch is every field the .wep's import changed, so the slot fires as",
+        "-- it did; a field with no name yet goes in by offset ([0x0D0] = 2).",
         "local WEP_NAME = {",
     ]
     for slot in sorted(names):
@@ -292,8 +341,8 @@ def emit_highlander_table(
         if not fields:
             continue
         lines.append(f"  {slot} = {{")
-        for name, v in fields:
-            lines.append(f"    {name} = {v},")
+        for key, v in fields:
+            lines.append(f"    {lua_key(key)} = {v},")
         lines.append("  },")
     lines.append("}")
     lines.append("")
@@ -320,10 +369,19 @@ def splice_into_rules(table: str) -> None:
 
 
 def main() -> None:
+    global WEP_REV
+    # The pack no longer ships most of its .wep files: --rev reads them from
+    # a commit that did (78974f9 has all of them).
+    args = sys.argv[1:]
+    if args[:1] == ["--rev"] and len(args) == 2:
+        WEP_REV = args[1]
+    elif args:
+        raise SystemExit("usage: embed_weps.py [--rev <commit with the .wep files>]")
+
     stocks = load_stocks()
-    highlander: dict[str, list[tuple[str, int]]] = {}
+    highlander: dict[str, list[tuple[str | int, int]]] = {}
     names: dict[str, str] = {}
-    for path in sorted((ROOT / "mods/examples/highlander/weps").glob("*.wep")):
+    for path in list_weps(ROOT / "mods/examples/highlander/weps"):
         slot = path.stem
         if slot not in stocks:
             raise SystemExit(f"no stock for {slot}")
@@ -336,11 +394,12 @@ def main() -> None:
     table = emit_highlander_table(highlander, names)
     splice_into_rules(table)
 
-    fixture = ROOT / "crates/weapons/tests/fixtures/hellish.wep"
     hellish_src = ROOT / "mods/examples/hellish_grenade/hellish.wep"
-    if hellish_src.is_file():
+    if WEP_REV is None and hellish_src.is_file():
+        fixture = ROOT / "crates/weapons/tests/fixtures/hellish.wep"
         fixture.parent.mkdir(parents=True, exist_ok=True)
         fixture.write_bytes(hellish_src.read_bytes())
+    if WEP_REV is not None or hellish_src.is_file():
         hellish = diff_patch(stocks["holy_grenade"], parse_wep(hellish_src))
         print(f"hellish: {len(hellish)} fields -> {hellish}")
         (ROOT / "tools/tmp/hellish_patch.lua").write_text(lua_patch(hellish), encoding="utf-8", newline="\n")
