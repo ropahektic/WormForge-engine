@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 use weapons::{
-    parse_panel_icon, parse_stock_weapon, HomingMode, OverlayClaim, OverlayParams, PanelIcon,
+    parse_panel_icon, parse_stock_weapon, HoldFlash, HoldSpec, HomingMode, OverlayClaim, OverlayParams, PanelIcon,
     StockWeapon,
 };
 
@@ -1069,6 +1069,56 @@ fn table_to_claim(
         }
     }
 
+    // Held sheets are presentation-only. Always pack them into the GPU atlas;
+    // they never consume WA's finite sprite slots.
+    let hold = if let Some(h) = spec.get::<Option<Table>>("hold")? {
+        let sheet: String = h.get("sheet")?;
+        let hand: Option<String> = h.get("hand")?;
+        let flash = if let Some(f) = h.get::<Option<Table>>("flash")? {
+            Some(HoldFlash {
+                sheet: f.get("sheet")?,
+                out: f.get("out")?,
+                side: f.get("side")?,
+                scale: f.get("scale")?,
+                frames: f.get("frames")?,
+            })
+        } else { None };
+        let static_angles = h.get::<Option<Table>>("static")?
+            .map(|angles| Ok::<_, mlua::Error>((angles.get("weap")?, angles.get("hand")?)))
+            .transpose()?;
+        let hold = HoldSpec {
+            sheet, hand, static_angles, flash,
+            hand_radius: h.get::<Option<f32>>("hand_radius")?.unwrap_or(1.0),
+            hand_rotation: h.get::<Option<f32>>("hand_rotation")?.unwrap_or(1.0),
+            hand_radial_rotation: h.get::<Option<f32>>("hand_radial_rotation")?.unwrap_or(1.0),
+            hand_scale: h.get::<Option<f32>>("hand_scale")?.unwrap_or(1.0),
+            weap_radius: h.get::<Option<f32>>("weap_radius")?.unwrap_or(1.0),
+            weap_rotation: h.get::<Option<f32>>("weap_rotation")?.unwrap_or(1.0),
+            weap_radial_rotation: h.get::<Option<f32>>("weap_radial_rotation")?.unwrap_or(1.0),
+            anim_speed: h.get::<Option<f32>>("anim_speed")?.unwrap_or(1.0),
+            frames: h.get::<Option<u32>>("frames")?.unwrap_or(1),
+            keep_while_firing: h.get::<Option<bool>>("keep_while_firing")?.unwrap_or(false),
+            thrown: h.get::<Option<bool>>("thrown")?.unwrap_or(false),
+        };
+        let values = [hold.hand_radius, hold.hand_rotation, hold.hand_radial_rotation,
+            hold.hand_scale, hold.weap_radius, hold.weap_rotation,
+            hold.weap_radial_rotation, hold.anim_speed];
+        if hold.frames == 0 || hold.anim_speed <= 0.0 ||
+            values.iter().any(|v| !v.is_finite()) ||
+            hold.static_angles.is_some_and(|(w, h)| !w.is_finite() || !h.is_finite()) ||
+            hold.flash.as_ref().is_some_and(|f| f.frames == 0 || f.scale <= 0.0 ||
+                [f.out, f.side, f.scale].iter().any(|v| !v.is_finite())) {
+            return Err(mlua::Error::external("hold geometry must be finite, with positive frames and speeds"));
+        }
+        for path in [&hold.sheet, hold.hand.as_ref().unwrap_or(&hold.sheet)]
+            .into_iter().chain(hold.flash.as_ref().map(|f| &f.sheet)) {
+            if !extra_sheets.iter().any(|(p, _)| p == path) {
+                extra_sheets.push(load_pack_sheet(root, path, 1)?);
+            }
+        }
+        Some(hold)
+    } else { None };
+
     let mut extra_sounds = Vec::new();
     match spec.get::<Value>("sounds")? {
         Value::Nil => {}
@@ -1267,6 +1317,7 @@ fn table_to_claim(
             mole_dig_rotation,
             sprite_overrides,
             worm_sprites,
+            hold,
             layer,
             depth,
             depth_prefix,

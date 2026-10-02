@@ -18,6 +18,36 @@ use actors::is_drop;
 use game::weapon::WeaponEntry;
 use gfx::{FeetPlatform, SpriteStrip};
 
+/// A sheet drawn over a worm while a replaced weapon is held. These values
+/// describe PX's CWormAnimParams; the engine owns the pose handoff.
+#[derive(Debug, Clone)]
+pub struct HoldSpec {
+    pub sheet: String,
+    pub hand: Option<String>,
+    pub hand_radius: f32,
+    pub hand_rotation: f32,
+    pub hand_radial_rotation: f32,
+    pub hand_scale: f32,
+    pub weap_radius: f32,
+    pub weap_rotation: f32,
+    pub weap_radial_rotation: f32,
+    pub static_angles: Option<(f32, f32)>,
+    pub anim_speed: f32,
+    pub frames: u32,
+    pub keep_while_firing: bool,
+    pub thrown: bool,
+    pub flash: Option<HoldFlash>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HoldFlash {
+    pub sheet: String,
+    pub out: f32,
+    pub side: f32,
+    pub scale: f32,
+    pub frames: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SpawnFrom {
     #[default]
@@ -345,6 +375,8 @@ pub struct OverlayParams {
     /// With an alliance, the sheet is only for worms of that team colour
     /// (0 red .. 5 cyan); without one, it is for every worm.
     pub worm_sprites: Vec<(i32, Option<u8>, String)>,
+    /// Optional engine-drawn held weapon and hand for this slot.
+    pub hold: Option<HoldSpec>,
     pub layer: Option<u32>,
     pub depth: Option<u32>,
     pub depth_prefix: Option<String>,
@@ -432,6 +464,7 @@ impl Default for OverlayParams {
             mole_dig_rotation: Vec::new(),
             sprite_overrides: Vec::new(),
             worm_sprites: Vec::new(),
+            hold: None,
             layer: None,
             depth: None,
             depth_prefix: None,

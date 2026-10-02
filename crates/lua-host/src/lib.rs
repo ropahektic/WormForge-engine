@@ -706,6 +706,14 @@ wa.weapons.replace({
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());
         assert!(javelin.params.on_explode_id != 0);
+        let held: Vec<_> = applied.iter().filter(|c| c.params.hold.is_some()).collect();
+        assert_eq!(held.len(), 8, "each PX hold is a replacement claim");
+        let rifle = claim(StockWeapon::Handgun).params.hold.as_ref().unwrap();
+        assert_eq!(rifle.sheet, "sprites/px_hold/sniper_rifle");
+        assert!(rifle.hand.is_none());
+        assert_eq!(rifle.flash.as_ref().unwrap().sheet, "sprites/sniper_rifle/flash");
+        assert!(claim(StockWeapon::Handgun).params.extra_sheets.iter().any(|(path, _)|
+            path == "sprites/sniper_rifle/flash"));
 
         // The scheme's record for the girder slot is the Baseball Bat:
         // a special weapon, subtype 2, as WA's own bat.
