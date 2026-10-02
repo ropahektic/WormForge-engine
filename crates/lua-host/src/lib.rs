@@ -1846,6 +1846,11 @@ end)
             })
             .unwrap();
         lua.globals().set("dofile", dofile).unwrap();
+        // The suite compares against baseline.txt, which it cannot open from
+        // the crate's folder.
+        lua.globals()
+            .set("HIGHLANDER_BASELINE", include_str!("../../../mods/examples/highlander/baseline.txt"))
+            .unwrap();
         let os: mlua::Table = lua.globals().get("os").unwrap();
         os.set(
             "exit",

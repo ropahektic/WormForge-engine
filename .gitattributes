@@ -3,3 +3,5 @@ crates/render/shaders/*.hlsl text eol=lf
 crates/render/shaders/*.h text eol=lf
 crates/engine/shaders/*.hlsl text eol=lf
 crates/engine/shaders/*.h text eol=lf
+# Compared line by line by the Highlander mock suite.
+mods/examples/highlander/baseline.txt text eol=lf
