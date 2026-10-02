@@ -25,7 +25,8 @@ use game::offsets::{
     WORM_SHOW_CURSOR, WORM_FACING,   WORM_STATE,
     WORM_STATE_AIRBORNE, WORM_TURN_ACTIVE, WORLD_ROOT_TURN_ENDED,
     COLLISION_LANDSCAPE_BIT, ENT_COLLISION_MASK, MSG_JUMP, MSG_JUMP_UP, WORM_KEY_DOWN, WORM_KEY_LEFT,
-    WORM_KEY_RIGHT, WORM_KEY_UP, WORM_STATE_JETPACKING,
+    WORM_KEY_RIGHT, WORM_KEY_UP, WORM_STATE_JETPACKING, WORM_STATE_TUMBLING, WORM_STATE_HIT,
+    WORM_STATE_BLASTED, WORLD_ROOT_TURN_TIMER,
 };
 use std::ffi::c_void;
 use std::collections::{HashMap, HashSet};
@@ -196,6 +197,15 @@ struct Carry {
     taken: bool,
     /// The collision mask it had when taken, restored on release.
     mask: Option<i32>,
+    /// Its WA state at the last pin, so a taken worm WA knocks flying (into
+    /// a hit state) is let go rather than held.
+    state: u32,
+}
+
+/// WA's states for a worm knocked out of control: a hit (0x4B) and a
+/// blast's knockback (0x1C), both traced.
+fn knocked(state: u32) -> bool {
+    matches!(state, WORM_STATE_TUMBLING | WORM_STATE_HIT | WORM_STATE_BLASTED)
 }
 
 static CARRY: Mutex<Vec<Carry>> = Mutex::new(Vec::new());
@@ -263,6 +273,8 @@ pub fn carry(handle: u32, x: i32, y: i32) {
         if let Some(slot) = g.iter_mut().find(|c| c.handle == handle) {
             slot.x = x;
             slot.y = y;
+            // The pack may have turned it (worm.facing) since the last pin.
+            slot.facing = unsafe { read_i32(handle as *mut u8, WORM_FACING) };
         } else {
             let facing = unsafe { read_i32(handle as *mut u8, WORM_FACING) };
             g.push(Carry {
@@ -273,6 +285,7 @@ pub fn carry(handle: u32, x: i32, y: i32) {
                 freeze: true,
                 taken: false,
                 mask: None,
+                state: 0,
             });
             crate::world::freeze_turn();
         }
@@ -302,7 +315,8 @@ pub fn take(handle: u32, hide: bool, freeze: bool) {
                 let (x, y, facing) = unsafe {
                     (read_i32(this, ENT_POS_X), read_i32(this, ENT_POS_Y), read_i32(this, WORM_FACING))
                 };
-                g.push(Carry { handle, x, y, facing, freeze: false, taken: false, mask: None });
+                let state = unsafe { read_i32(this, WORM_STATE) } as u32;
+                g.push(Carry { handle, x, y, facing, freeze: false, taken: false, mask: None, state });
                 g.last_mut().unwrap()
             }
         };
@@ -326,12 +340,14 @@ pub fn take(handle: u32, hide: bool, freeze: bool) {
     }
 }
 
-/// `worm:release(vx, vy)`: give the worm back to WA moving at (vx, vy).
-/// A held worm is dropped (shown again, its mask back, the turn thawed); any
-/// worm then enters falling-under-control (0x7E) through WA's own SetState,
-/// as a closed parachute does, and WA flies and lands it. The Jump, a
-/// vehicle's exit and worm_toss's throw are this.
-pub fn release(handle: u32, vx: i32, vy: i32) {
+/// `worm:release(vx, vy, { tumble })`: give the worm back to WA moving at
+/// (vx, vy). A held worm is dropped (shown again, its mask back, the turn
+/// thawed); any worm then enters falling-under-control (0x7E) through WA's
+/// own SetState, as a closed parachute does, and WA flies and lands it. The
+/// Jump, a vehicle's exit and worm_toss's throw are this. With `tumble` it
+/// enters WA's out-of-control state (0x7F) instead, as a hit does: on land it
+/// gets up (0x76), in water it drowns (0x85, 0x87; both traced after hits).
+pub fn release(handle: u32, vx: i32, vy: i32, tumble: bool) {
     if handle == 0 {
         return;
     }
@@ -341,12 +357,15 @@ pub fn release(handle: u32, vx: i32, vy: i32) {
         .map(|g| g.iter().any(|c| c.handle == handle))
         .unwrap_or(false);
     if held {
-        drop_held(handle, "release");
-    } else {
+        // Let go; into 0x7E here unless it tumbles (one SetState either way).
+        let_go(handle, (!tumble).then_some("release"));
+    }
+    if tumble || !held {
+        let state = if tumble { WORM_STATE_TUMBLING } else { WORM_STATE_AIRBORNE };
         unsafe {
             write_i32(handle as *mut u8, ENT_MOVED, 1);
             let f: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
-            crate::state_trace::with_cause("release", || f(handle as *mut u8, WORM_STATE_AIRBORNE));
+            crate::state_trace::with_cause("release", || f(handle as *mut u8, state));
         }
     }
     unsafe {
@@ -384,13 +403,19 @@ fn owned_input(this: *mut u8, msg: u32) -> bool {
         return false;
     }
     let handle = this as u32;
+    // WA latches each move key as its message arrives; clear them once, at
+    // the frame's end after the pack's hooks read them, so keys that came in
+    // separate messages (up and left) are all seen.
+    let frame = msg == MSG_FRAME_FINISH;
     let jetpacking = unsafe { read_i32(this, WORM_STATE) } as u32 == WORM_STATE_JETPACKING;
     let mut lapsed = false;
     if let Ok(mut g) = STEERED.lock() {
         if let Some(entry) = g.iter_mut().find(|(h, _)| *h == handle) {
             if jetpacking {
                 entry.1 = true;
-                clear_move_keys(this);
+                if frame {
+                    clear_move_keys(this);
+                }
             } else if entry.1 && msg == MSG_FRAME_FINISH {
                 lapsed = true;
             }
@@ -405,7 +430,9 @@ fn owned_input(this: *mut u8, msg: u32) -> bool {
     if msg == MSG_JUMP || msg == MSG_JUMP_UP {
         return true;
     }
-    clear_move_keys(this);
+    if frame {
+        clear_move_keys(this);
+    }
     false
 }
 
@@ -434,6 +461,12 @@ pub fn drop_carry(handle: u32) {
 /// falling-under-control (0x7E) through SetState, and the turn thawed once no
 /// held worm freezes it.
 fn drop_held(handle: u32, cause: &'static str) {
+    let_go(handle, Some(cause));
+}
+
+/// Give a held worm back; `cause` None leaves its WA state alone (WA has
+/// already moved it on, e.g. knocked it flying).
+fn let_go(handle: u32, cause: Option<&'static str>) {
     hide_worm(handle, false);
     let mask = CARRY
         .lock()
@@ -444,9 +477,12 @@ fn drop_held(handle: u32, cause: &'static str) {
             if let Some(mask) = mask {
                 write_i32(handle as *mut u8, ENT_COLLISION_MASK, mask);
             }
-            write_i32(handle as *mut u8, ENT_MOVED, 1);
-            let f: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
-            crate::state_trace::with_cause(cause, || f(handle as *mut u8, WORM_STATE_AIRBORNE));
+            if let Some(cause) = cause {
+                write_i32(handle as *mut u8, ENT_MOVED, 1);
+                let f: SetStateFn =
+                    std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
+                crate::state_trace::with_cause(cause, || f(handle as *mut u8, WORM_STATE_AIRBORNE));
+            }
         }
     }
     let thaw = if let Ok(mut g) = CARRY.lock() {
@@ -915,7 +951,18 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     }
     if msg == MSG_FRAME_FINISH && !this.is_null() {
         let ended = unsafe { read_i32(this, WORLD_ROOT_TURN_ENDED) != 0 };
-        if ended {
+        // A turn that runs while a worm is held (take{ turn = "run" }) ends
+        // when its clock runs out; WA then waits for every worm to settle,
+        // which a held worm never does. The ended flag alone was never seen
+        // set in that case (a swimmer held past its turn), so the clock
+        // counts too.
+        let timer = unsafe { read_i32(this, WORLD_ROOT_TURN_TIMER) };
+        let out_of_time = !freezing() && timer <= 0;
+        if ended || out_of_time {
+            crate::log_line(&format!(
+                "turn over with a worm held (ended flag {}, turn clock {timer}): letting go",
+                ended as u8
+            ));
             crate::mask_collide::clear();
             drop_all();
         }
@@ -1091,13 +1138,21 @@ fn apply_carry(this: *mut u8) {
         return;
     }
     let handle = this as u32;
-    let Some((x, y, facing)) = CARRY.lock().ok().and_then(|g| {
-        g.iter()
-            .find(|c| c.handle == handle)
-            .map(|c| (c.x, c.y, c.facing))
+    let now = unsafe { read_i32(this, WORM_STATE) } as u32;
+    let Some((x, y, facing, let_loose)) = CARRY.lock().ok().and_then(|mut g| {
+        g.iter_mut().find(|c| c.handle == handle).map(|c| {
+            // Knocked flying while taken: WA owns it again, with its speed.
+            let loose = c.taken && knocked(now) && !knocked(c.state);
+            c.state = now;
+            (c.x, c.y, c.facing, loose)
+        })
     }) else {
         return;
     };
+    if let_loose {
+        let_go(handle, None);
+        return;
+    }
     unsafe {
         write_i32(this, ENT_POS_X, x);
         write_i32(this, ENT_POS_Y, y);

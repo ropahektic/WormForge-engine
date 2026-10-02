@@ -177,6 +177,7 @@ pub fn install() -> Result<(), String> {
         drop_carry: crate::physics::drop_carry,
         take: crate::physics::take,
         release: crate::physics::release,
+        is_taken: crate::physics::taken,
         jetpack_steer: crate::physics::jetpack_steer,
         look: native_look,
         keys: crate::world::keys,
