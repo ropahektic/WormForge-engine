@@ -239,14 +239,13 @@ mod tests {
         let hooks = builtin_hooks().unwrap();
         assert_eq!(hooks[0].wa_function, "InitWeaponTable");
         assert_eq!(hooks[0].action, "wrap_after");
-        assert_eq!(hooks[1].wa_function, "GfxHandler__LoadSprites");
         assert_eq!(
-            hooks[2].wa_function,
+            hooks[1].wa_function,
             "CollisionManager__apply_projectile_gravity"
         );
-        assert_eq!(hooks.len(), 9);
-        assert_eq!(hooks[8].wa_function, "WormEntity__calc_sprite");
-        assert_eq!(hooks[8].action, "wrap_after");
+        assert_eq!(hooks.len(), 8);
+        assert_eq!(hooks[7].wa_function, "WormEntity__calc_sprite");
+        assert_eq!(hooks[7].action, "wrap_after");
         assert_eq!(
             Catalog::builtin()
                 .unwrap()

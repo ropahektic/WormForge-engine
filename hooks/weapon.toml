@@ -8,11 +8,6 @@ action = "wrap_after"
 comment = "Call original, then overlay Lua weapon claims onto the 71-slot table."
 
 [[hook]]
-wa_function = "GfxHandler__LoadSprites"
-action = "wrap_after"
-comment = "PX InitGraphic: after sprites.dat, ProcessSprite PNGs while MapColor still has free slots. Stock SetLayerVisibility(3,1) later commits the palette."
-
-[[hook]]
 wa_function = "CollisionManager__apply_projectile_gravity"
 action = "wrap"
 comment = "Lua gravity_before writes wind/gravity/damp scales; stock applies gravity+wind+damp; Lua gravity_after edits velocity. Bounce itself is in CollisionManager__rope (not this leaf)."
