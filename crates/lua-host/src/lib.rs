@@ -1345,6 +1345,7 @@ wa.weapons.replace({
 
     #[test]
     fn two_bazooka_overlays_first_wins() {
+        let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-lua-host-conflict");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
@@ -1816,6 +1817,7 @@ end)
 
     #[test]
     fn actors_kind_is_namespaced() {
+        let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-lua-host-actors");
         let _ = std::fs::remove_dir_all(&root);
         let pack = pack(
@@ -1894,6 +1896,7 @@ wa.weapons.replace({
 
     #[test]
     fn png_strip_loads_from_pack() {
+        let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-lua-host-circle");
         let _ = std::fs::remove_dir_all(&root);
         let pack = pack(
@@ -1935,6 +1938,7 @@ wa.weapons.replace({
 
     #[test]
     fn drop_actor_on_grenade_slot() {
+        let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-lua-host-drop-actor");
         let _ = std::fs::remove_dir_all(&root);
         let pack = pack(
@@ -2172,6 +2176,7 @@ end)
 
     #[test]
     fn on_fire_spawn_table_is_lua_projectile() {
+        let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-lua-host-on-fire");
         let _ = std::fs::remove_dir_all(&root);
         let pack = pack(
