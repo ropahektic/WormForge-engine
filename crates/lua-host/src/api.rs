@@ -818,9 +818,16 @@ fn table_to_claim(
                     }
                 }
             }
-            let strike = fire_hint == Some(3)
-                || wep.as_ref().map(|w| w.fire_type() == 3).unwrap_or(false)
-                || copy_from.map(weapons::wep::stock_is_strike).unwrap_or(false);
+            // Slab names shift on a strike: the fire type the patch gives the
+            // weapon if it sets one, else its base's (copy_from, the .wep, or
+            // the slot's own stock entry).
+            let strike = match fire_hint {
+                Some(fire_type) => fire_type == 3,
+                None => match &wep {
+                    Some(w) => w.fire_type() == 3,
+                    None => weapons::wep::stock_is_strike(copy_from.unwrap_or(slot)),
+                },
+            };
             for (offset, value) in numbered {
                 let off = weapons::wep::check_patch(offset, value).map_err(mlua::Error::external)?;
                 patch.push((off, value));

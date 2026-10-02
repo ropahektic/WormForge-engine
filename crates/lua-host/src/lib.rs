@@ -1032,6 +1032,38 @@ replace = ["bazooka"]
     }
 
     #[test]
+    fn patch_names_shift_by_the_fire_type_the_weapon_ends_with() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-patch-strike");
+        let _ = std::fs::remove_dir_all(&root);
+        let manifest = r#"
+id = "t.strike"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["air_strike"]
+"#;
+        let damage_at = |src: &str| {
+            let scripts = run_mods(&[pack(&root, "t.strike", manifest, src)]).unwrap();
+            let p = &scripts.resolved.applied[0].params;
+            p.patch.iter().find(|&&(_, v)| v == 70).map(|&(off, _)| off)
+        };
+        // A strike's munition slab sits 0x14 later, with or without copy_from.
+        assert_eq!(
+            damage_at(r#"wa.weapons.replace({ weapon = "air_strike", patch = { damage = 70 } })"#),
+            Some(0x64)
+        );
+        // A strike made a projectile takes the projectile's offsets.
+        assert_eq!(
+            damage_at(
+                r#"wa.weapons.replace({ weapon = "air_strike", copy_from = "air_strike",
+                     patch = { fire_type = 1, damage = 70 } })"#
+            ),
+            Some(0x50)
+        );
+    }
+
+    #[test]
     fn mine_brain_and_sprite() {
         let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-mine-brain");
