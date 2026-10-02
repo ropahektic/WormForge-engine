@@ -737,6 +737,7 @@ pub fn hit_worm(target: u32, from: u32, amount: i32) {
     if target == 0 || amount <= 0 {
         return;
     }
+    let (from, by) = crate::world::hit_sender(from);
     let this = target as *mut u8;
     unsafe {
         let x = read_i32(this, ENT_POS_X);
@@ -746,11 +747,6 @@ pub fn hit_worm(target: u32, from: u32, amount: i32) {
         let state = read_i32(this, WORM_STATE);
         let airborne = vx != 0 || vy != 0;
         let hp0 = crate::world::worm_hp(target);
-        let by = if from == 0 {
-            0
-        } else {
-            read_i32(from as *mut u8, ENT_WORM_TEAM)
-        };
         let mut data = [0i32; 8];
         data[1] = x;
         data[2] = y;

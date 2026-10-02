@@ -1165,6 +1165,25 @@ pub fn mine_fuse(handle: u32) -> i32 {
     }
 }
 
+/// A missile explosion can give Lua a missile or a former worm as its owner.
+/// Never pass that pointer or its arbitrary team field to WA's hit handler:
+/// WA indexes its team table directly with HIT_TEAM.
+pub(crate) fn hit_sender(from: u32) -> (u32, i32) {
+    if from == 0 {
+        return (0, 0);
+    }
+    if !crate::actor::list_worms_pub(0).contains(&from) {
+        log_line(&format!("hit sender {from:#x} is no longer a live worm; using neutral attribution"));
+        return (0, 0);
+    }
+    let team = unsafe { read_i32(from as *mut u8, ENT_WORM_TEAM) };
+    if !(1..=MAX_TEAMS as i32).contains(&team) {
+        log_line(&format!("hit sender {from:#x} has invalid team {team}; using neutral attribution"));
+        return (0, 0);
+    }
+    (from, team)
+}
+
 /// Send WA's SpecialImpact to a mine, crate or oil drum. The target owns its normal
 /// damage and detonation path, including knockback and weapon attribution.
 pub fn hit_object(handle: u32, from: u32, damage: i32, vx: i32, vy: i32, projectile: bool) -> bool {
@@ -1172,6 +1191,7 @@ pub fn hit_object(handle: u32, from: u32, damage: i32, vx: i32, vy: i32, project
     unsafe {
         let target = handle as *mut u8;
         if !matches!(read_i32(target, ENT_CLASS_TYPE), CLASS_MINE | CLASS_CRATE | CLASS_OIL) { return false; }
+        let (from, team) = hit_sender(from);
         // PX sends a 0x408-byte M_GUNEXP buffer with flag 0. Stock oil drums
         // then take the direct-trigger path; crates receive the damage field.
         let mut data = [0i32; 0x408 / 4];
@@ -1183,7 +1203,7 @@ pub fn hit_object(handle: u32, from: u32, damage: i32, vx: i32, vy: i32, project
         data[3] = vx;
         data[4] = vy;
         data[HIT_AMOUNT / 4] = damage;
-        data[HIT_TEAM / 4] = if from == 0 { 0 } else { read_i32(from as *mut u8, ENT_WORM_TEAM) };
+        data[HIT_TEAM / 4] = team;
         let vtable = *(target as *const *const u32);
         if vtable.is_null() { return false; }
         let message: unsafe extern "thiscall" fn(*mut u8, u32, u32, u32, *mut u8) =
