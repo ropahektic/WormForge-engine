@@ -1823,6 +1823,20 @@ unsafe fn climb_root(from: *mut u8) -> *mut u8 {
 }
 
 /// The retreat countdown in ms, 0 before retreat starts (or with no match).
+/// The turn clock in ms left (root +0x18C, the timer the engine already
+/// reads to let go of held worms). Traced in replays: it stands still while
+/// WA's turn-ended flag (root +0x150) is up after a shot, about 120 frames
+/// each time, and resumes when everything has settled.
+pub fn turn_clock_ms() -> i32 {
+    unsafe {
+        let root = session_root_ptr();
+        if root.is_null() {
+            return 0;
+        }
+        read_i32(root, game::offsets::WORLD_ROOT_TURN_TIMER)
+    }
+}
+
 pub fn retreat_ms() -> i32 {
     unsafe {
         let root = session_root_ptr();

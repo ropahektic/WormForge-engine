@@ -252,6 +252,9 @@ pub struct ActorNative {
     pub set_worm_state: fn(handle: u32, state: u32),
     /// The retreat countdown in ms, 0 when retreat has not started.
     pub retreat_ms: fn() -> i32,
+    /// The turn clock in ms left, as WA counts it (it stands still while WA
+    /// waits for everything to settle after a shot).
+    pub turn_clock_ms: fn() -> i32,
 }
 
 /// A write to team ammo.
@@ -276,6 +279,7 @@ impl Default for ActorNative {
             networked: || false,
             set_worm_state: |_, _| {},
             retreat_ms: || 0,
+            turn_clock_ms: || 0,
             random: || None,
             log: |_| {},
             in_water: |_| false,
@@ -1510,6 +1514,10 @@ pub fn native_set_worm_state() -> Option<fn(u32, u32)> {
 
 pub fn native_retreat_ms() -> Option<fn() -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.retreat_ms)
+}
+
+pub fn native_turn_clock_ms() -> Option<fn() -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.turn_clock_ms)
 }
 
 const WORM_KEYS: [(&str, usize); 4] = [

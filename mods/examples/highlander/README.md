@@ -376,12 +376,14 @@ WA fires a utility that does nothing and the script does the work:
   wind change (the clouds and the wind bar follow). The rules grant one every
   turn, as PX's GiveWeapons does.
 - **Gravity Control:** 1-5 choose 0.3, 0.5, 1, 1.7 or 2.4 times the match's
-  gravity. Firing it holds WA's gravity there until this turn ends. Fired with
-  nothing chosen, it doesn't fire.
+  gravity. Firing it holds WA's gravity there until this turn ends, or until
+  the turn clock has stood still for 10 s, as PX does: the clock stands still
+  while WA waits for things to settle after a shot, and some things (a grave
+  at 2.4x) never settle under a strong gravity. Fired with nothing chosen, it
+  doesn't fire.
 - **Keys:** the digit keys are synced like the other keys.
 - **Differences:** a HUD line shows the keys and the choice, in place of PX's
-  team messages. PX also puts the gravity back after 10 s with the turn clock
-  stopped; that isn't ported.
+  team messages.
 
 **Jump.** PX's `jumpscript` (`utility_jump`), on the Ninja Rope's slot. Its
 record throws like a grenade, but nothing leaves the worm:

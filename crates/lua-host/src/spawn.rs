@@ -692,6 +692,14 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     world.set("retreat", retreat).map_err(|e| e.to_string())?;
+    // The turn clock in ms left (Project X's turn time). It stands still while
+    // WA waits for everything to settle after a shot, and during a retreat.
+    let turn_clock = lua
+        .create_function(|_, ()| {
+            Ok(crate::actor::native_turn_clock_ms().map(|f| f()).unwrap_or(0))
+        })
+        .map_err(|e| e.to_string())?;
+    world.set("turn_clock", turn_clock).map_err(|e| e.to_string())?;
     // WA's gravity and wind, 16.16 speed per frame (Project X's
     // Env->Gravity / Env->Wind): what WA adds to anything that takes them at
     // full strength. The wind changes each turn.
