@@ -72,6 +72,7 @@ pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
             allowed_register: pack.manifest.weapons.register.iter().cloned().collect(),
             claims: Rc::clone(&claims),
             logs: Rc::clone(&logs),
+            debug_worm_state: pack.manifest.debug_worm_state,
         };
         api::install(&lua, &ctx)?;
         let entry = pack.root.join(&pack.manifest.entry);
@@ -171,6 +172,7 @@ mod tests {
             allowed_register: Default::default(),
             claims: Rc::new(RefCell::new(Vec::new())),
             logs: Rc::new(RefCell::new(Vec::new())),
+            debug_worm_state: false,
         }
     }
 
@@ -450,6 +452,90 @@ wa.weapons.replace({
         );
         let err = run_mods(&[bad]).err().expect("a non-mole sprite is refused");
         assert!(err.contains("mole_dig_rotation keys are moledive"), "{err}");
+    }
+
+    /// The handoff verbs are lockstep writes: refused outside a simulation
+    /// callback, and inside one they reach the engine with the parsed options.
+    #[test]
+    fn handoff_verbs_reach_native_only_during_simulation() {
+        let _guard = lock_host();
+        thread_local! {
+            static CALLS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            take: |h, hide, freeze| CALLS.with(|c| c.borrow_mut().push(format!("take {h:x} {hide} {freeze}"))),
+            release: |h, vx, vy| CALLS.with(|c| c.borrow_mut().push(format!("release {h:x} {vx} {vy}"))),
+            jetpack_steer: |h, on| CALLS.with(|c| c.borrow_mut().push(format!("steer {h:x} {on}"))),
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        for src in [
+            "wa.worms.all()[1]:take()",
+            "wa.worms.all()[1]:release(1, 2)",
+            "wa.worms.all()[1]:jetpack_steer(true)",
+        ] {
+            assert!(lua.load(src).exec().is_err(), "{src} outside a simulation callback");
+        }
+        CALLS.with(|c| assert!(c.borrow().is_empty()));
+        sim_context::with_sim(|| {
+            lua.load(
+                "local w = wa.worms.all()[1]
+                 w:take()
+                 w:take{ hide = true, turn = 'freeze' }
+                 w:take{ turn = 'run' }
+                 w:release(0x30000, -0x20000)
+                 w:release()
+                 w:jetpack_steer(true)
+                 w:jetpack_steer(false)",
+            )
+            .exec()
+            .unwrap();
+            let err = lua.load("wa.worms.all()[1]:take{ turn = 'pause' }").exec().unwrap_err();
+            assert!(err.to_string().contains("\"run\" or \"freeze\""), "{err}");
+        });
+        CALLS.with(|c| {
+            assert_eq!(
+                c.borrow().as_slice(),
+                [
+                    "take 1234 false false",
+                    "take 1234 true true",
+                    "take 1234 false false",
+                    "release 1234 196608 -131072",
+                    "release 1234 0 0",
+                    "steer 1234 true",
+                    "steer 1234 false",
+                ]
+            )
+        });
+    }
+
+    /// `worm:set_state` is a debugging tool a pack opts into in its mod.toml;
+    /// without the flag it is refused even inside a simulation callback.
+    #[test]
+    fn set_state_needs_the_debug_opt_in() {
+        let _guard = lock_host();
+        thread_local! {
+            static SET: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            set_worm_state: |_, s| SET.with(|v| v.borrow_mut().push(s)),
+            ..Default::default()
+        });
+        let set = "wa.worms.all()[1]:set_state('standing')";
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let err = sim_context::with_sim(|| lua.load(set).exec().unwrap_err());
+        assert!(err.to_string().contains("debug_worm_state"), "{err}");
+        SET.with(|v| assert!(v.borrow().is_empty()));
+
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &BindContext { debug_worm_state: true, ..test_ctx() }).unwrap();
+        assert!(lua.load(set).exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| lua.load(set).exec().unwrap());
+        SET.with(|v| assert_eq!(v.borrow().as_slice(), [game::offsets::WORM_STATE_STANDING]));
     }
 
     #[test]

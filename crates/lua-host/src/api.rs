@@ -19,12 +19,27 @@ pub struct BindContext {
     pub allowed_register: HashSet<String>,
     pub claims: Rc<RefCell<Vec<OverlayClaim>>>,
     pub logs: Rc<RefCell<Vec<String>>>,
+    /// The manifest's `debug_worm_state`: this pack may call `worm:set_state`.
+    pub debug_worm_state: bool,
 }
 
 pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     let wa = ensure_wa(lua)?;
     wa.set("_mod", ctx.mod_id.clone())
         .map_err(|e| e.to_string())?;
+    if ctx.debug_worm_state {
+        // The packs that opted in, by id: worm:set_state checks the calling
+        // pack (`wa._mod`) against it.
+        let allowed: Table = match wa.get::<Value>("_debug_worm_state").map_err(|e| e.to_string())? {
+            Value::Table(t) => t,
+            _ => {
+                let t = lua.create_table().map_err(|e| e.to_string())?;
+                wa.set("_debug_worm_state", t.clone()).map_err(|e| e.to_string())?;
+                t
+            }
+        };
+        allowed.set(ctx.mod_id.clone(), true).map_err(|e| e.to_string())?;
+    }
 
     let logs = Rc::clone(&ctx.logs);
     let mod_id_log = ctx.mod_id.clone();
@@ -1642,6 +1657,7 @@ mod tests {
             allowed_register: HashSet::new(),
             claims: Rc::new(RefCell::new(Vec::new())),
             logs: Rc::new(RefCell::new(Vec::new())),
+            debug_worm_state: false,
         }
     }
 
