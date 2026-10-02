@@ -96,7 +96,7 @@ return function(load_pack)
     end },
   }
   load_pack()
-  assert(spec.weapon == "bazooka" and spec.copy_from == "mine")
+  assert(spec.weapon == "donkey" and spec.copy_from == "mine")
   turn(owner, wa.msg.START_TURN)
   -- Huge launch velocity and a distant launch position must not affect placement.
   spec.on_fire({ worm = owner, x = 999 * PX, y = 999 * PX, vx = 80 * PX, vy = -80 * PX })

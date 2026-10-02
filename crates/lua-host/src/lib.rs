@@ -19,7 +19,8 @@ pub use actor::{
 };
 pub use dispatch::{
     contact, Contact,
-    death, drawing, gravity_after, gravity_before, hurt, missile_frame, run_draw, run_hud, turn_start, worm_message,
+    death, drawing, gravity_after, gravity_before, hurt, missile_frame, run_draw, run_hud,
+    turn_cleanup, turn_end, turn_retreat, turn_start, worm_message,
     Death, DrawQuad, Hurt,
 };
 
@@ -731,7 +732,7 @@ replace = ["holy_grenade"]
         let scripts = run_mods(&[pack]).unwrap();
         assert_eq!(scripts.resolved.applied.len(), 1);
         let claim = &scripts.resolved.applied[0];
-        assert_eq!(claim.slot, StockWeapon::Bazooka);
+        assert_eq!(claim.slot, StockWeapon::Donkey);
         match &claim.params.panel_icon {
             Some(weapons::PanelIcon::File { path, width, height, .. }) => {
                 assert_eq!(path, "sprites/ico_sentrygun.png");
@@ -1675,9 +1676,24 @@ entry = "weapons.lua"
 replace = []
 "#,
             r#"
-seen = {}
+seen = { phases = {} }
 wa.on.turn_start(function(event)
   seen.turn = event.worm ~= nil and event.active ~= nil
+end)
+wa.on.turn_retreat(function(event)
+  if event.worm ~= nil and event.active ~= nil then
+    seen.phases[#seen.phases + 1] = "retreat"
+  end
+end)
+wa.on.turn_end(function(event)
+  if event.worm ~= nil and event.active ~= nil then
+    seen.phases[#seen.phases + 1] = "end"
+  end
+end)
+wa.on.turn_cleanup(function(event)
+  if event.worm ~= nil and event.active ~= nil then
+    seen.phases[#seen.phases + 1] = "cleanup"
+  end
 end)
 wa.on.death(function(event)
   seen.death = event.victim ~= nil
@@ -1699,6 +1715,9 @@ end)
         park_lua(scripts.lua);
 
         turn_start(1).unwrap();
+        turn_retreat(1).unwrap();
+        turn_end(1).unwrap();
+        turn_cleanup(1).unwrap();
         hurt(Hurt {
             worm: 1,
             from: 2,
@@ -1727,6 +1746,9 @@ end)
             let lua = guard.as_ref().unwrap();
             let seen: mlua::Table = lua.globals().get("seen").unwrap();
             assert!(seen.get::<bool>("turn").unwrap());
+            let phases: mlua::Table = seen.get("phases").unwrap();
+            let phases: Vec<String> = phases.sequence_values().collect::<Result<_, _>>().unwrap();
+            assert_eq!(phases, ["retreat", "end", "cleanup"]);
             assert!(seen.get::<bool>("hurt").unwrap());
             assert!(seen.get::<bool>("death").unwrap());
         });

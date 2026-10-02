@@ -219,6 +219,9 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "worm_message",
         "hurt",
         "turn_start",
+        "turn_retreat",
+        "turn_end",
+        "turn_cleanup",
         "death",
         "hud",
         "draw",
@@ -251,6 +254,9 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     bind_on(lua, &on, "worm_message")?;
     bind_on(lua, &on, "hurt")?;
     bind_on(lua, &on, "turn_start")?;
+    bind_on(lua, &on, "turn_retreat")?;
+    bind_on(lua, &on, "turn_end")?;
+    bind_on(lua, &on, "turn_cleanup")?;
     bind_on(lua, &on, "death")?;
     bind_on(lua, &on, "hud")?;
     bind_on(lua, &on, "draw")?;

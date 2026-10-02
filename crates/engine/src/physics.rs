@@ -18,12 +18,12 @@ use game::offsets::{
       MISSILE_HOMING_MODE, MISSILE_HOMING_SPRITE_A, MISSILE_HOMING_SPRITE_B,
     MISSILE_RENDER_SPRITE, MISSILE_SHOOT_PELLET, MISSILE_RENDER_SPRITE_ALT, MISSILE_TYPE, MISSILE_TYPE_HOMING,
      MISSILE_WEAPON_ALT_SPRITE,
-    MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FRAME_FINISH, MSG_HIT, MSG_RENDER_SCENE,
-    MSG_START_TURN,
+    MISSILE_WEAPON_SPRITE, MSG_COMMIT_HEALTH, MSG_FINISH_TURN, MSG_FRAME_FINISH, MSG_HIT,
+    MSG_RENDER_SCENE, MSG_RETREAT_FINISHED, MSG_RETREAT_STARTED, MSG_START_TURN,
 
 
     WORM_SHOW_CURSOR, WORM_FACING,   WORM_STATE,
-    WORM_STATE_AIRBORNE,  WORLD_ROOT_TURN_ENDED,
+    WORM_STATE_AIRBORNE, WORM_TURN_ACTIVE, WORLD_ROOT_TURN_ENDED,
 };
 use std::ffi::c_void;
 use std::collections::{HashMap, HashSet};
@@ -37,6 +37,81 @@ static ORIG_GRAVITY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_MISSILE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static WORM_MSG_ERRORS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static ORIG_WORM: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static TURN_PHASE: Mutex<TurnPhase> = Mutex::new(TurnPhase { worm: 0, completed: 0 });
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TurnEvent {
+    Retreat,
+    End,
+    Cleanup,
+}
+
+/// The stock retreat timer can be zero. Fill any skipped phase when WA sends
+/// the next lifecycle message, so packs still see all three events in order.
+struct TurnPhase {
+    worm: u32,
+    completed: u8,
+}
+
+impl TurnPhase {
+    fn start(&mut self, worm: u32) {
+        self.worm = worm;
+        self.completed = 0;
+    }
+
+    fn advance(&mut self, worm: u32, msg: u32) -> Vec<TurnEvent> {
+        let target = match msg {
+            MSG_RETREAT_STARTED => 1,
+            MSG_RETREAT_FINISHED => 2,
+            MSG_FINISH_TURN => 3,
+            _ => return Vec::new(),
+        };
+        if self.worm != worm {
+            self.start(worm);
+        }
+        let mut events = Vec::new();
+        while self.completed < target {
+            self.completed += 1;
+            events.push(match self.completed {
+                1 => TurnEvent::Retreat,
+                2 => TurnEvent::End,
+                _ => TurnEvent::Cleanup,
+            });
+        }
+        events
+    }
+}
+
+#[cfg(test)]
+mod turn_phase_tests {
+    use super::*;
+
+    #[test]
+    fn normal_and_zero_retreat_emit_each_boundary_once() {
+        let mut phase = TurnPhase { worm: 0, completed: 0 };
+        phase.start(1);
+        assert_eq!(phase.advance(1, MSG_RETREAT_STARTED), [TurnEvent::Retreat]);
+        assert!(phase.advance(1, MSG_RETREAT_STARTED).is_empty());
+        assert_eq!(phase.advance(1, MSG_RETREAT_FINISHED), [TurnEvent::End]);
+        assert_eq!(phase.advance(1, MSG_FINISH_TURN), [TurnEvent::Cleanup]);
+        assert!(phase.advance(1, MSG_FINISH_TURN).is_empty());
+
+        // A zero retreat can skip both retreat messages entirely.
+        phase.start(2);
+        assert_eq!(
+            phase.advance(2, MSG_FINISH_TURN),
+            [TurnEvent::Retreat, TurnEvent::End, TurnEvent::Cleanup]
+        );
+
+        // If only the start message arrives, finish fills the remaining phases.
+        phase.start(3);
+        assert_eq!(phase.advance(3, MSG_RETREAT_STARTED), [TurnEvent::Retreat]);
+        assert_eq!(
+            phase.advance(3, MSG_FINISH_TURN),
+            [TurnEvent::End, TurnEvent::Cleanup]
+        );
+    }
+}
 static ORIG_ROOT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_DRAW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIG_NAME: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -667,6 +742,9 @@ fn worm_message_reporting_errors(worm: u32, team: u32, msg: u32) -> bool {
 }
 
 unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
+    let turn_transition = matches!(msg, MSG_RETREAT_STARTED | MSG_RETREAT_FINISHED | MSG_FINISH_TURN);
+    let turn_was_active = turn_transition && !this.is_null()
+        && unsafe { read_i32(this, WORM_TURN_ACTIVE) != 0 };
     let team = if this.is_null() {
         0
     } else {
@@ -701,6 +779,29 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if !orig.is_null() {
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
+    }
+    if !this.is_null() {
+        let worm = this as u32;
+        if msg == MSG_START_TURN && unsafe { read_i32(this, WORM_TURN_ACTIVE) != 0 } {
+            if let Ok(mut phase) = TURN_PHASE.lock() {
+                phase.start(worm);
+            }
+        } else if turn_was_active {
+            let events = TURN_PHASE
+                .lock()
+                .map(|mut phase| phase.advance(worm, msg))
+                .unwrap_or_default();
+            for event in events {
+                let (name, result) = match event {
+                    TurnEvent::Retreat => ("turn_retreat", lua_host::turn_retreat(worm)),
+                    TurnEvent::End => ("turn_end", lua_host::turn_end(worm)),
+                    TurnEvent::Cleanup => ("turn_cleanup", lua_host::turn_cleanup(worm)),
+                };
+                if let Err(e) = result {
+                    crate::log_error(&format!("{name}: {e}"));
+                }
+            }
+        }
     }
     if graveless != 0 {
         for grave in crate::world::list_kind(game::offsets::CLASS_GRAVE, 0) {
