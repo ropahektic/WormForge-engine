@@ -1089,6 +1089,15 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
 /// 0x7A with no speed, in mid-air, and a landing one (0x7F) in 0x76, for
 /// good, so the turn never ended (seen under the Highlander's Laser Gun,
 /// which cuts the ground from under the worms it burns).
+///
+/// A worm at rest (standing, or the turn's worm ready) goes back through
+/// WA's own SetState, as WA's getting-up does: WA's hit moves the worm into
+/// collision layer 3 (entity +0x30) and sets +0x15C, and only SetState's
+/// standing setup puts it back in layer 2 and clears +0x15C. A direct write
+/// left a burned worm in layer 3, and WA took its next turn from it at once,
+/// as lost control (traced in a replay of an online round: Laser Gun hits
+/// at frames 47482..47510, then "loses turn due to loss of control" one
+/// frame into the worm's turn at 47966).
 pub fn hit_worm(target: u32, from: u32, amount: i32) {
     if target == 0 || amount <= 0 {
         return;
@@ -1116,7 +1125,12 @@ pub fn hit_worm(target: u32, from: u32, amount: i32) {
         write_i32(this, ENT_SPEED_X, vx);
         write_i32(this, ENT_SPEED_Y, vy);
         let hp = crate::world::worm_hp(target);
-        if hp > 0 && !airborne && restores_after_hit(state) {
+        if hp > 0 && !airborne && at_rest(state) {
+            let set_state: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
+            crate::state_trace::with_cause("worm:hurt restore", || set_state(this, state as u32));
+        } else if hp > 0 && !airborne && restores_after_hit(state) {
+            // Mid-shot or aiming: SetState would restart the shot, so the
+            // state is written back (the worm's turn ends on the hit anyway).
             let hit = read_i32(this, WORM_STATE) as u32;
             write_i32(this, WORM_STATE, state);
             crate::state_trace::wrote(this, hit, state as u32, "worm:hurt restore");
@@ -1125,6 +1139,12 @@ pub fn hit_worm(target: u32, from: u32, amount: i32) {
             worm_hook(this, from, MSG_COMMIT_HEALTH, 0, std::ptr::null_mut());
         }
     }
+}
+
+/// Standing idle (0x65) or the turn's worm ready (0x67): the states WA's own
+/// getting-up returns a hit worm to through SetState.
+fn at_rest(state: i32) -> bool {
+    matches!(state as u32, 0x65 | 0x67)
 }
 
 /// The states a hit worm may be put back in (see `hit_worm`): standing idle
