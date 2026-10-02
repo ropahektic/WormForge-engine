@@ -12,6 +12,7 @@
 //! available" works even when a pack author forgets to bump `version`.
 
 use crate::log::{log_error, log_line, panic_text, wa_directory, BUILD_ID};
+use crate::profile_tab::{self, FILTER_PROFILE};
 use lua_host::mods_root_from;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
@@ -48,7 +49,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     RegisterClassExW, SendMessageW, SetWindowTextW, ShowWindow, TranslateMessage, BM_SETCHECK,
     BM_SETSTYLE, BS_AUTORADIOBUTTON, BS_DEFPUSHBUTTON, BS_GROUPBOX, BS_PUSHBUTTON, BS_PUSHLIKE,
     CW_USEDEFAULT, EN_CHANGE, ES_AUTOHSCROLL, IDC_ARROW, IMAGE_BITMAP, MINMAXINFO, MSG,
-    STM_SETIMAGE, SW_SHOWNORMAL, WM_APP, WM_CLOSE, WM_COMMAND, WM_CREATE, WM_CTLCOLORSTATIC,
+    STM_SETIMAGE, SW_HIDE, SW_SHOW, SW_SHOWNORMAL, WM_APP, WM_CLOSE, WM_COMMAND, WM_CREATE, WM_CTLCOLORSTATIC,
     WM_DESTROY, WM_GETMINMAXINFO, WM_NOTIFY, WM_SETFONT, WM_SIZE, WNDCLASSEXW, WS_CHILD,
     WS_EX_CLIENTEDGE, WS_GROUP, WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE,
 };
@@ -74,10 +75,11 @@ const ID_GROUP_ONLINE: usize = 117;
 /// Legend swatches, one per `Tone`, in `Tone::ALL` order.
 const ID_LEGEND: usize = 120;
 const NETWORK_BUTTONS: [usize; 3] = [ID_CHECK, ID_INSTALL, ID_UPDATE_ALL];
-const TAB_BUTTONS: [(usize, &str); 3] = [
+const TAB_BUTTONS: [(usize, &str); 4] = [
     (ID_TAB_ALL, "All"),
     (ID_TAB_WEAPONS, "Weapons"),
     (ID_TAB_GAMEPLAY, "Gameplay"),
+    (profile_tab::ID_TAB_PROFILE, "Profile"),
 ];
 const PACK_BUTTONS: [(usize, &str); 4] = [
     (ID_ENABLE_ALL, "Enable all"),
@@ -91,7 +93,7 @@ const ONLINE_BUTTONS: [(usize, &str); 3] = [
     (ID_UPDATE_ALL, "Update all"),
 ];
 
-/// 0 = all, 1 = weapons, 2 = gameplay.
+/// 0 = all, 1 = weapons, 2 = gameplay, 3 = the profile tab.
 static FILTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Online catalogue produced by `tools/publish-packs.ps1`.
@@ -110,7 +112,7 @@ const WM_APP_REFRESH: u32 = WM_APP + 2;
 const WM_APP_NET_DONE: u32 = WM_APP + 3;
 
 static BUSY: AtomicBool = AtomicBool::new(false);
-static WINDOW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+pub(crate) static WINDOW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static LIST: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static STATUS_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static PEER_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -146,7 +148,7 @@ enum Online {
 
 /// What a row's colour says, most urgent first.
 #[derive(Clone, Copy, PartialEq)]
-enum Tone {
+pub(crate) enum Tone {
     On,
     Off,
     Update,
@@ -254,13 +256,13 @@ impl Row {
     }
 }
 
-fn wide(s: &str) -> Vec<u16> {
+pub(crate) fn wide(s: &str) -> Vec<u16> {
     let mut v: Vec<u16> = s.encode_utf16().collect();
     v.push(0);
     v
 }
 
-fn mods_dir() -> PathBuf {
+pub(crate) fn mods_dir() -> PathBuf {
     mods_root_from(&wa_directory())
 }
 
@@ -411,8 +413,8 @@ unsafe fn ui_font(weight: u32) -> *mut c_void {
     )
 }
 
-static FONT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-static FONT_BOLD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+pub(crate) static FONT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+pub(crate) static FONT_BOLD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 unsafe fn ui_thread() {
     enable_visual_styles();
@@ -516,7 +518,11 @@ unsafe fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option
             let code = ((wparam >> 16) & 0xFFFF) as u32;
             match id {
                 ID_SEARCH if code == EN_CHANGE => {
-                    fill_list_from_all();
+                    if FILTER.load(Ordering::SeqCst) == FILTER_PROFILE {
+                        profile_tab::search_changed();
+                    } else {
+                        fill_list_from_all();
+                    }
                 }
                 ID_SEARCH => return None,
                 ID_REFRESH => populate(),
@@ -529,6 +535,8 @@ unsafe fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option
                 ID_TAB_ALL => set_filter(0),
                 ID_TAB_WEAPONS => set_filter(1),
                 ID_TAB_GAMEPLAY => set_filter(2),
+                profile_tab::ID_TAB_PROFILE => set_filter(FILTER_PROFILE),
+                _ if profile_tab::command(id, code) => {}
                 _ => return None,
             }
             Some(0)
@@ -540,7 +548,13 @@ unsafe fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option
         }
         WM_NOTIFY => {
             let hdr = lparam as *const NMHDR;
-            if hdr.is_null() || (*hdr).idFrom != ID_LIST {
+            if hdr.is_null() {
+                return None;
+            }
+            if let Some(r) = profile_tab::notify(hdr) {
+                return Some(r);
+            }
+            if (*hdr).idFrom != ID_LIST {
                 return None;
             }
             match (*hdr).code {
@@ -566,6 +580,10 @@ unsafe fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option
         }
         WM_APP_REFRESH => {
             populate();
+            Some(0)
+        }
+        profile_tab::WM_APP_PROFILE => {
+            profile_tab::on_message(wparam);
             Some(0)
         }
         WM_CLOSE => {
@@ -608,6 +626,8 @@ unsafe fn colour_static(hdc: HDC, ctl: HWND) -> Option<LRESULT> {
         status_tone(&STATUS.lock().map(|g| g.clone()).unwrap_or_default())
     } else if ctl == PEER_LABEL.load(Ordering::SeqCst) {
         status_tone(&PEER.lock().map(|g| g.clone()).unwrap_or_default())
+    } else if let Some(t) = profile_tab::tone_of(ctl) {
+        Some(t)
     } else {
         return None;
     };
@@ -740,6 +760,8 @@ unsafe fn create_children(parent: HWND) {
         child(button.as_ptr(), label, WS_TABSTOP, *id);
     }
 
+    profile_tab::create(parent);
+
     let status = child(static_class.as_ptr(), "", 0, ID_STATUS);
     SendMessageW(status, WM_SETFONT, bold as usize, 1);
     STATUS_LABEL.store(status, Ordering::SeqCst);
@@ -836,7 +858,8 @@ unsafe fn layout(hwnd: HWND) {
     for (i, (id, _)) in TAB_BUTTONS.iter().enumerate() {
         MoveWindow(ctl(*id), pad + i as i32 * (tab_w + 4), y, tab_w, tab_h, 1);
     }
-    let search_w = (w - 2 * pad - 3 * (tab_w + 4) - pad).clamp(160, 320);
+    let tabs = TAB_BUTTONS.len() as i32;
+    let search_w = (w - 2 * pad - tabs * (tab_w + 4) - pad).clamp(160, 320);
     MoveWindow(ctl(ID_SEARCH), w - pad - search_w, y + 2, search_w, tab_h - 4, 1);
     y += tab_h + 8;
 
@@ -847,6 +870,8 @@ unsafe fn layout(hwnd: HWND) {
     let list = ctl(ID_LIST);
     MoveWindow(list, pad, y, w - 2 * pad, list_h, 1);
     SendMessageW(list, LVM_SETCOLUMNWIDTH, 4, LVSCW_AUTOSIZE_USEHEADER as isize);
+    // The profile tab takes the list's place and the legend's line.
+    profile_tab::layout(pad, y, w - 2 * pad, list_h + 6 + line_h);
     y += list_h + 6;
 
     let mut x = pad;
@@ -870,17 +895,47 @@ unsafe fn layout(hwnd: HWND) {
 }
 
 unsafe fn set_filter(filter: usize) {
-    FILTER.store(filter, Ordering::SeqCst);
-    fill_list_from_all();
+    let was = FILTER.swap(filter, Ordering::SeqCst);
+    let profile = filter == FILTER_PROFILE;
+    if profile != (was == FILTER_PROFILE) || was == filter {
+        show_pack_list(!profile);
+    }
+    if profile {
+        profile_tab::show(true);
+        if let Ok(all) = ALL_ROWS.lock() {
+            paint_tabs(WINDOW.load(Ordering::SeqCst), &all);
+        }
+        update_buttons();
+    } else {
+        profile_tab::show(false);
+        fill_list_from_all();
+    }
+}
+
+/// The pack list and its legend, or the profile tab in their place. The
+/// search box searches whichever is shown.
+unsafe fn show_pack_list(on: bool) {
+    let hwnd = WINDOW.load(Ordering::SeqCst);
+    let cmd = if on { SW_SHOW } else { SW_HIDE };
+    ShowWindow(GetDlgItem(hwnd, ID_LIST as i32), cmd);
+    for i in 0..Tone::ALL.len() {
+        ShowWindow(GetDlgItem(hwnd, (ID_LEGEND + i) as i32), cmd);
+    }
+    let cue = wide(if on { "Search name, author, slot or status…" } else { "Search every component weapon…" });
+    SendMessageW(GetDlgItem(hwnd, ID_SEARCH as i32), EM_SETCUEBANNER, 1, cue.as_ptr() as isize);
 }
 
 /// Tab labels carry their pack counts; the active tab stays pressed.
 unsafe fn paint_tabs(hwnd: HWND, all: &[Row]) {
     let filter = FILTER.load(Ordering::SeqCst);
     for (i, (id, label)) in TAB_BUTTONS.iter().enumerate() {
-        let n = all.iter().filter(|r| row_matches_filter(r, i)).count();
         let tab = GetDlgItem(hwnd, *id as i32);
-        SetWindowTextW(tab, wide(&format!("{label}  ({n})")).as_ptr());
+        if i == FILTER_PROFILE {
+            SetWindowTextW(tab, wide(label).as_ptr());
+        } else {
+            let n = all.iter().filter(|r| row_matches_filter(r, i)).count();
+            SetWindowTextW(tab, wide(&format!("{label}  ({n})")).as_ptr());
+        }
         SendMessageW(tab, BM_SETCHECK, (i == filter) as usize, 0);
     }
 }
@@ -919,8 +974,10 @@ unsafe fn update_buttons() {
     enable(ID_CHECK, !busy);
     enable(ID_INSTALL, !busy && selectable);
     enable(ID_UPDATE_ALL, !busy && pending > 0);
-    enable(ID_ENABLE_ALL, shown_toggleable);
-    enable(ID_DISABLE_ALL, shown_toggleable);
+    // In the profile tab they would toggle the hidden pack list.
+    let packs_shown = FILTER.load(Ordering::SeqCst) != FILTER_PROFILE;
+    enable(ID_ENABLE_ALL, shown_toggleable && packs_shown);
+    enable(ID_DISABLE_ALL, shown_toggleable && packs_shown);
     let update_label = if pending > 0 {
         format!("Update all ({pending})")
     } else {
@@ -1155,7 +1212,7 @@ fn summary_line(rows: &[Row], conflicts: &[SlotConflict], settings: &LoaderSetti
     s
 }
 
-unsafe fn set_item_text(list: HWND, item: i32, sub: i32, text: &str) {
+pub(crate) unsafe fn set_item_text(list: HWND, item: i32, sub: i32, text: &str) {
     let mut t = wide(text);
     let lvi = LVITEMW {
         mask: LVIF_TEXT,
@@ -1181,7 +1238,7 @@ unsafe fn set_item_text(list: HWND, item: i32, sub: i32, text: &str) {
     }
 }
 
-unsafe fn set_item_checked(list: HWND, item: i32, checked: bool) {
+pub(crate) unsafe fn set_item_checked(list: HWND, item: i32, checked: bool) {
     let lvi = LVITEMW {
         mask: LVIF_STATE,
         iItem: item,
@@ -1202,7 +1259,7 @@ unsafe fn set_item_checked(list: HWND, item: i32, checked: bool) {
     SendMessageW(list, LVM_SETITEMSTATE, item as usize, &lvi as *const _ as isize);
 }
 
-unsafe fn item_checked(list: HWND, item: i32) -> bool {
+pub(crate) unsafe fn item_checked(list: HWND, item: i32) -> bool {
     let state = SendMessageW(list, LVM_GETITEMSTATE, item as usize, LVIS_STATEIMAGEMASK as isize);
     ((state as u32 & LVIS_STATEIMAGEMASK) >> 12) == 2
 }
@@ -1227,7 +1284,7 @@ unsafe fn populate() {
     fill_list_from_all();
 }
 
-fn search_text() -> String {
+pub(crate) fn search_text() -> String {
     let hwnd = WINDOW.load(Ordering::SeqCst);
     if hwnd.is_null() {
         return String::new();

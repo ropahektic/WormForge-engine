@@ -8,6 +8,7 @@
 pub mod components;
 mod overlay;
 pub mod panel;
+pub mod profile_editor;
 mod stock;
 mod templates;
 pub mod wep;

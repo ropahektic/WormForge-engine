@@ -184,7 +184,7 @@ impl OptionKind {
     }
 
     /// Why `value` is not a value of this option, if it is not.
-    fn check(&self, value: &OptionValue) -> Option<String> {
+    pub(crate) fn check(&self, value: &OptionValue) -> Option<String> {
         match (self, value) {
             (OptionKind::Bool { .. }, OptionValue::Bool(_)) => None,
             (OptionKind::Int { min, max, .. }, OptionValue::Int(v)) => {

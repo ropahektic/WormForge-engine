@@ -16,6 +16,7 @@ mod hurt;
 mod overlay;
 mod particles;
 mod perf;
+mod profile_tab;
 mod lobby;
 mod log;
 mod mask_collide;
