@@ -147,6 +147,9 @@ pub fn on_gfx_ready(display: *mut u8) {
     // `sprite_overrides`, resolved once the GPU atlas has given their sheets
     // an id: (mod id, stock sprite, pack path).
     let mut overrides: Vec<(String, i32, String)> = Vec::new();
+    // `params.truecolor` (default on): a GPU copy of each sheet WA holds as a
+    // real sprite, drawn in its place: (WA sprite id, atlas key, sheet).
+    let mut truecolor: Vec<(i32, String, gfx::SpriteStrip)> = Vec::new();
     for claim in &scripts.resolved.applied {
         sprite::set_force_layer(claim.params.layer);
         let mut install = |path: Option<String>, sheet: &gfx::SpriteStrip, as_weapon: bool| {
@@ -191,6 +194,9 @@ pub fn on_gfx_ready(display: *mut u8) {
             })) {
                 Ok(Ok(id)) => {
                     log_line(&format!("{} sprite slot {id}", claim.mod_id));
+                    if claim.params.truecolor && !truecolor.iter().any(|(t, ..)| *t == id) {
+                        truecolor.push((id, format!("truecolor:{id}"), sheet.clone()));
+                    }
                     if as_weapon {
                         sprite_ids.insert(claim.slot.index(), id);
                     }
@@ -258,7 +264,13 @@ pub fn on_gfx_ready(display: *mut u8) {
         }
     }
 
-    install_gpu_atlas(gpu_sheets);
+    let copies = truecolor.iter().map(|(_, key, sheet)| (key.clone(), sheet.clone())).collect();
+    install_gpu_atlas(gpu_sheets, copies);
+    for (id, key, _) in &truecolor {
+        if let Some(copy) = sprite::lookup_key(key).filter(|s| sprite::is_virtual(s.id)) {
+            sprite::alias_gpu(*id, copy.id);
+        }
+    }
     for (mod_id, target, path) in &overrides {
         let claimed = match sprite::lookup_key(&gfx::sprite_key(mod_id, path)) {
             Some(source) if sprite::is_virtual(source.id) => Ok(sprite::alias_gpu(*target, source.id)),
@@ -744,11 +756,7 @@ pub fn restore_panel_icons() {
 }
 
 
-fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>) {
-    crate::gpu::set_active(false);
-    if sheets.is_empty() {
-        return;
-    }
+fn pack_atlas(sheets: &[(String, gfx::SpriteStrip)]) -> Option<render::Atlas> {
     let framesets: Vec<Vec<Vec<u8>>> = sheets
         .iter()
         .map(|(_, strip)| strip.frames.iter().map(|f| f.rgba.clone()).collect())
@@ -764,8 +772,32 @@ fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>) {
             frames,
         })
         .collect();
+    render::Atlas::pack(&sources, 4096)
+}
 
-    let Some(atlas) = render::Atlas::pack(&sources, 4096) else {
+/// `optional` sheets go in too when everything fits; when only `sheets` do,
+/// the atlas is packed without them.
+fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>, optional: Vec<(String, gfx::SpriteStrip)>) {
+    crate::gpu::set_active(false);
+    let required = sheets.len();
+    let mut sheets = sheets;
+    sheets.extend(optional);
+    if sheets.is_empty() {
+        return;
+    }
+    let mut atlas = pack_atlas(&sheets);
+    if atlas.is_none() && sheets.len() > required {
+        log_error(&format!(
+            "gpu atlas: the {} true-colour copies of WA sprites do not fit; they keep their palette draw",
+            sheets.len() - required
+        ));
+        sheets.truncate(required);
+        if sheets.is_empty() {
+            return;
+        }
+        atlas = pack_atlas(&sheets);
+    }
+    let Some(atlas) = atlas else {
         log_error("gpu atlas: sheets do not fit 4096x4096; stock rendering retained");
         return;
     };

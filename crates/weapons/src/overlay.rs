@@ -388,6 +388,15 @@ pub struct OverlayParams {
     /// sprites, so the palette wash buys nothing. `params.gpu_worm_sprites =
     /// false` keeps the 8-bit path.
     pub gpu_worm_sprites: bool,
+    /// The claim's sheets that WA must hold as real sprites (the weapon
+    /// body, cluster bits, a strike's plane) are also put in the GPU atlas
+    /// and drawn from there, in true colour: on a map whose palette is full,
+    /// WA's palette copy has only the map's colours to pick from. WA keeps
+    /// that copy for every size, frame and phase lookup. Without the GPU
+    /// renderer, or if the copies do not fit the atlas, the palette copy
+    /// draws as before. `params.truecolor = false` keeps the palette draw,
+    /// for a sheet drawn in WA's team-colour entries on purpose.
+    pub truecolor: bool,
     /// `weaponlnk*` sheets are one-shot animations (equip / unfold) driven
     /// frame by frame, not aim-angle sheets. Default false = aim-wizard
     /// semantics (phase is the aim angle; draw poses hold or play).
@@ -472,6 +481,7 @@ impl Default for OverlayParams {
             gpu_prefix: None,
             truecolor_prefix: None,
             gpu_worm_sprites: true,
+            truecolor: true,
             worm_sprites_animate: false,
             extra_sounds: Vec::new(),
             cluster_sprite_id: None,
