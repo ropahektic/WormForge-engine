@@ -31,7 +31,9 @@ end
 -- PX's ExplodeAt: 51 fires on a 3-pixel ring at the impact, besides WA's own
 -- explosion (the record starts no fire of its own: its detonation is 0). Each
 -- with PX's CFireDesc: count 0, duration 6000, no upward power, damage 0,
--- owned by the team of the worm whose turn it is.
+-- owned by the team of the worm whose turn it is. PX's worm handler makes
+-- their hits 25% more damaging and knocks twice as hard (its M_GUNEXP,
+-- WA's 0x4B from the fire): the engine scales them as it spawns them.
 --
 -- PX places them at x +- 3 cos(360 - 7.2 i), y - 3 sin(360 - 7.2 i), the sign
 -- of x alternating. Simulation, so not computed here: the offsets below are
@@ -53,7 +55,9 @@ local RING_DY = {
     -49904, -181290, -170673, -26368, 138591, 194992, 98656, -74957, -189856, -156041,
     0,
 }
-local VALYRIAN_FIRE = { count = 0, duration = 6000, up_power = 0, damage = 0 }
+local VALYRIAN_FIRE = {
+  count = 0, duration = 6000, up_power = 0, damage = 0, damage_scale = 1.25, knock_scale = 2,
+}
 
 fires.valyrian_burst = function(ev)
   local owner = shared.current_worm() or ev.worm
@@ -63,6 +67,7 @@ fires.valyrian_burst = function(ev)
       owner = owner, x = ev.x + RING_DX[i], y = ev.y + RING_DY[i],
       count = VALYRIAN_FIRE.count, duration = VALYRIAN_FIRE.duration,
       up_power = VALYRIAN_FIRE.up_power, damage = VALYRIAN_FIRE.damage,
+      damage_scale = VALYRIAN_FIRE.damage_scale, knock_scale = VALYRIAN_FIRE.knock_scale,
     })
   end
 end
