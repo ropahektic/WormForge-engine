@@ -132,6 +132,17 @@ never changed. The stamp goes through WA's own girder routine
 the soil layer, rollback storage and redraws. Source pixels are retained for
 GPU sheets too, independent of drawing and device reset.
 
+`buried = { soften = 2, blend = "dither" }` changes only the pixels that fall
+on existing land, so a stamp can look stuck in the ground: a javelin's tip
+fades into the earth while its silhouette stays. Each such pixel keeps
+`min(d, soften) / soften` of its strength, `d` being its distance in pixels to
+the frame's outline (computed once, when the sheet is installed), so the
+sprite's thick middle stays whole and its edges fade. `blend = "dither"` keeps
+or drops each pixel against a 4x4 ordered-dither pattern anchored to the map;
+`"mix"` blends its colour with the land's and takes the nearest terrain colour.
+`soften` is 1..32 pixels (default 2), `blend` defaults to `"dither"`. Without
+`buried`, the whole frame is drawn over the land.
+
 `object:hit(damage, vx, vy, "projectile")` uses stock projectile impact handling
 for mines, crates and oil drums. Omitting the fourth argument keeps the existing
 direct-hit behavior. Mines apply their own stock rules for impact and damage.

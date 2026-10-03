@@ -449,9 +449,30 @@ fn bind_land(lua: &Lua, wa: &Table) -> Result<(), String> {
         let frame: u32 = spec.get::<Option<u32>>("frame")?.unwrap_or(0);
         let x: i32 = spec.get("x")?;
         let y: i32 = spec.get("y")?;
+        let buried = match spec.get::<Option<Table>>("buried")? {
+            None => None,
+            Some(b) => {
+                let soften: i64 = b.get::<Option<i64>>("soften")?.unwrap_or(2);
+                if !(1..=32).contains(&soften) {
+                    return Err(mlua::Error::external(format!(
+                        "land.stamp: buried.soften must be 1..32 pixels, got {soften}"
+                    )));
+                }
+                let mix = match b.get::<Option<String>>("blend")?.as_deref() {
+                    None | Some("dither") => false,
+                    Some("mix") => true,
+                    Some(other) => {
+                        return Err(mlua::Error::external(format!(
+                            "land.stamp: buried.blend must be \"dither\" or \"mix\", got {other:?}"
+                        )))
+                    }
+                };
+                Some(crate::actor::StampBuried { soften: soften as u8, mix })
+            }
+        };
         let (id, ..) = resolve_sprite_name(lua, &name)?;
         crate::actor::native_land_stamp()
-            .ok_or_else(|| mlua::Error::external("land.stamp: native stamp not bound"))?(id, frame, x, y)
+            .ok_or_else(|| mlua::Error::external("land.stamp: native stamp not bound"))?(id, frame, x, y, buried)
             .map_err(mlua::Error::external)
     }).map_err(|e| e.to_string())?;
     land.set("stamp", stamp).map_err(|e| e.to_string())?;

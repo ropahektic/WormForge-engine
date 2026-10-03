@@ -172,7 +172,7 @@ pub struct ActorNative {
     /// WA landscape cut, with 16.16 coordinates and pixel-sized radius.
     pub land_dig: fn(x: i32, y: i32, radius: i32) -> Result<(), String>,
     /// WA landscape mask cut; shape is a validated stock mask index.
-    pub land_stamp: fn(sprite: i32, frame: u32, x: i32, y: i32) -> Result<(), String>,
+    pub land_stamp: fn(sprite: i32, frame: u32, x: i32, y: i32, buried: Option<StampBuried>) -> Result<(), String>,
     pub land_cut: fn(shape: i32, x: i32, y: i32) -> Result<(), String>,
     pub land_trace: fn(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)>,
     pub map_size: fn() -> (i32, i32),
@@ -295,7 +295,7 @@ impl Default for ActorNative {
             resolve_sprite: |_| None,
             land_solid: |_, _| false,
             land_dig: |_, _, _| Err("land dig not bound".into()),
-            land_stamp: |_, _, _, _| Err("land stamp not bound".into()),
+            land_stamp: |_, _, _, _, _| Err("land stamp not bound".into()),
             land_cut: |_, _, _| Err("land cut not bound".into()),
             land_trace: |_, _, _, _| None,
             map_size: || (0, 0),
@@ -2008,6 +2008,20 @@ mod tests {
     }
 }
 
-pub fn native_land_stamp() -> Option<fn(i32, u32, i32, i32) -> Result<(), String>> {
+/// `wa.land.stamp{ buried = { soften, blend } }`: how the stamp's pixels
+/// that land on existing terrain are drawn. Each keeps `min(d, soften) /
+/// soften` of its strength, `d` being its distance in pixels to the frame's
+/// outline, so the sprite's thick middle stays whole and its edges fade into
+/// the land.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StampBuried {
+    /// Pixels over which the strength grows from the outline, 1..=32.
+    pub soften: u8,
+    /// Blend each buried pixel's colour with the land's (`"mix"`) rather than
+    /// keep or drop it against an ordered dither pattern (`"dither"`).
+    pub mix: bool,
+}
+
+pub fn native_land_stamp() -> Option<fn(i32, u32, i32, i32, Option<StampBuried>) -> Result<(), String>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_stamp)
 }
