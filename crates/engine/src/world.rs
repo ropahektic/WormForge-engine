@@ -680,7 +680,7 @@ static POINTER_SYNC_REQUESTED: AtomicU32 = AtomicU32::new(0);
 static POINTER_SYNC_UNTIL: AtomicU32 = AtomicU32::new(0);
 
 /// WA's sim frame, or `None` outside a game (frontend, map editor).
-fn sim_frame() -> Option<i64> {
+pub(crate) fn sim_frame() -> Option<i64> {
     let world = session_world();
     if world.is_null() {
         return None;

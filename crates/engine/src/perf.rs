@@ -255,6 +255,12 @@ pub fn frame() {
     }
     let now = Instant::now();
     let (lua_ns, lua_calls) = lua_host::take_lua_time();
+    if flags.profile {
+        let frame = crate::world::sim_frame();
+        for spike in lua_host::take_lua_spikes() {
+            log_line(&spike_line(frame, &spike));
+        }
+    }
     STATE.with(|s| {
         let mut s = s.borrow_mut();
         let s = &mut *s;
@@ -399,6 +405,34 @@ fn report_line(span: u64, r: &Report) -> String {
 
 /// The Lua breakdown for the same window: by what the engine called Lua
 /// for, and by the pack whose hook ran, each by time per frame.
+/// One long Lua call, logged as it happens: what it was for, Lua's memory
+/// around it (a drop means a GC cycle ran in it), and the lines it spent its
+/// time on.
+fn spike_line(frame: Option<i64>, s: &lua_host::Spike) -> String {
+    let mb = |b: usize| b as f64 / (1024.0 * 1024.0);
+    let mut line = format!(
+        "perf spike: {} {:.2} ms",
+        if s.label.is_empty() { "?" } else { s.label },
+        ms(s.ns)
+    );
+    if let Some(f) = frame {
+        line += &format!(" at f={f}");
+    }
+    line += &format!(" | lua memory {:.1} -> {:.1} MB", mb(s.mem_before), mb(s.mem_after));
+    if s.mem_after < s.mem_before {
+        line += " (gc ran)";
+    }
+    // The lines are only sampled with `wa.perf.enable{ spikes = true }`.
+    if !s.places.is_empty() {
+        line += " | on ";
+        for (place, ns) in &s.places {
+            line += &format!("{place} {:.2} ms, ", ms(*ns));
+        }
+        line += &format!("rest {:.2} ms", ms(s.rest_ns));
+    }
+    line
+}
+
 fn lua_line(frames: u64, b: &lua_host::LuaBreakdown) -> String {
     let frames = frames.max(1);
     let part = |list: &[(String, u64, u32)]| -> String {
@@ -508,6 +542,25 @@ mod tests {
         assert_eq!(line, "perf lua: by call worm_message 3.00 ms (100.0/frame, 30 us/call), \
             actor 1.00 ms (20.0/frame, 50 us/call) | by pack (hook handlers) \
             example.highlander 2.50 ms (95.0/frame, 26 us/call), ? 0.50 ms (5.0/frame, 100 us/call)");
+    }
+
+    #[test]
+    fn spike_line_names_the_call_its_lines_and_a_gc() {
+        let s = lua_host::Spike {
+            label: "worm_message",
+            ns: 43 * MS,
+            mem_before: 30 * 1024 * 1024,
+            mem_after: 22 * 1024 * 1024 + 512 * 1024,
+            places: vec![("weapons/electrical.lua:120".into(), 40 * MS), ("lib/sound.lua:9".into(), 2 * MS)],
+            rest_ns: MS,
+        };
+        assert_eq!(
+            spike_line(Some(855), &s),
+            "perf spike: worm_message 43.00 ms at f=855 | lua memory 30.0 -> 22.5 MB (gc ran) \
+             | on weapons/electrical.lua:120 40.00 ms, lib/sound.lua:9 2.00 ms, rest 1.00 ms"
+        );
+        let unsampled = lua_host::Spike { places: vec![], rest_ns: 43 * MS, mem_before: 0, ..s };
+        assert_eq!(spike_line(None, &unsampled), "perf spike: worm_message 43.00 ms | lua memory 0.0 -> 22.5 MB");
     }
 
     #[test]

@@ -15,7 +15,7 @@ mod sim_context;
 mod spawn;
 
 pub use bundles::ComponentPlan;
-pub use perf::{perf_flags, take_lua_breakdown, take_lua_time, LuaBreakdown, PerfFlags};
+pub use perf::{perf_flags, take_lua_breakdown, take_lua_spikes, take_lua_time, LuaBreakdown, PerfFlags, Spike};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
     weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
@@ -1917,7 +1917,7 @@ seen = {}
 wa.on.worm_message(function(_, m) seen[#seen + 1] = "f" .. m end, { msgs = { 2 } })
 "#);
         park_lua(run_mods(&[pack]).unwrap().lua);
-        perf::enable(PerfFlags { counter: false, profile: true, packs: false });
+        perf::enable(PerfFlags { counter: false, profile: true, packs: false, spikes: false });
         take_lua_time();
         assert!(!worm_message(1, 0, 5).unwrap());
         assert_eq!(take_lua_time().1, 0, "no call into Lua for an unwanted message");
@@ -1986,9 +1986,11 @@ wa.on.worm_message(function(_, m) seen[#seen + 1] = "f" .. m end, { msgs = { 2 }
             println!("bench_dispatch {label}: worm_message {wm:.2} us/call, missile_frame {mf:.2} us/call");
         };
         run("profiler off");
-        perf::enable(PerfFlags { counter: false, profile: true, packs: false });
+        perf::enable(PerfFlags { counter: false, profile: true, packs: false, spikes: false });
         run("profiler on ");
-        perf::enable(PerfFlags { counter: false, profile: true, packs: true });
+        PARKED_LUA.with(|slot| perf::install_sampler(slot.borrow().as_ref().unwrap()));
+        run("sampler on ");
+        perf::enable(PerfFlags { counter: false, profile: true, packs: true, spikes: false });
         run("packs on    ");
         perf::reset();
     }
@@ -2018,7 +2020,7 @@ end)
             (pre, post, sprite, mask, parked_seen())
         };
         let fast = run();
-        perf::enable(PerfFlags { counter: false, profile: true, packs: true });
+        perf::enable(PerfFlags { counter: false, profile: true, packs: true, spikes: false });
         let slow = run();
         perf::reset();
         assert_eq!(fast, slow);
@@ -2916,10 +2918,10 @@ wa.weapons.replace({
             "wa.perf.enable({ counter = true })",
         );
         run_mods(&[counter]).unwrap();
-        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: false, packs: false });
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: false, packs: false, spikes: false });
         let both = pack(&root.join("b"), "p.both", &manifest("p.both"), "wa.perf.enable()");
         run_mods(&[both]).unwrap();
-        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: true, packs: false });
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: true, packs: false, spikes: false });
         let none = pack(&root.join("n"), "p.none", &manifest("p.none"), "");
         run_mods(&[none]).unwrap();
         assert_eq!(perf_flags(), PerfFlags::default(), "a new match's packs decide afresh");
