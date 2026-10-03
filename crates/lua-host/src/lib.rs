@@ -291,7 +291,7 @@ mod tests {
         test.call::<()>(pack).unwrap();
     }
 
-    fn lock_host() -> std::sync::MutexGuard<'static, ()> {
+    pub(crate) fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
     }
 

@@ -256,6 +256,9 @@ mod tests {
 
     #[test]
     fn time_goes_to_the_outermost_label_and_hooks_to_their_pack() {
+        // The profiler's flags are process-wide: another test resetting them
+        // mid-run would leave this one unprofiled.
+        let _host = crate::tests::lock_host();
         let lua = Lua::new();
         enable(PerfFlags { counter: false, profile: true, packs: true, spikes: false });
         take_lua_breakdown();
@@ -277,6 +280,9 @@ mod tests {
 
     #[test]
     fn a_long_call_is_a_spike_with_the_lines_it_spent_its_time_on() {
+        // The profiler's flags are process-wide: another test resetting them
+        // mid-run would leave this one unprofiled.
+        let _host = crate::tests::lock_host();
         let lua = Lua::new();
         enable(PerfFlags { counter: false, profile: true, packs: false, spikes: false });
         install_sampler(&lua);
