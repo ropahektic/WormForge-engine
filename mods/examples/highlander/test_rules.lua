@@ -2171,6 +2171,36 @@ do
   spec.on_explode({ worm=owner, x=0, y=0 })
   tick(50)
   check("arc chains to a second unvisited worm", first.hp == 76 and second.hp == 76)
+  -- The thrower: as PX's, the arc never zaps the worm that fired the
+  -- grenade, whichever worm the explosion names.
+  spec, owner = setup()
+  owner.weapon = "earthquake"
+  M.message(owner, wa.msg.FIRE_WEAPON)
+  first = worm(17)
+  first.x, first.y = 5*P, 0
+  spec.on_explode({ worm=worm(32), x=0, y=0 })
+  tick(50)
+  check("the arc spares the worm that threw the grenade", owner.hp == 100 and first.hp == 76,
+    tostring(owner.hp) .. " " .. tostring(first.hp))
+  -- The trail: every point stays from the grenade on, links included.
+  spec, owner = setup()
+  first = worm(17)
+  first.x, first.y = 60*P, 0
+  spec.on_explode({ worm=owner, x=0, y=0 })
+  local function drawn_points()
+    M.quads, M.ribbons = {}, {}
+    M.draw()
+    local r = M.ribbons[#M.ribbons]
+    return r and #r.points or 0
+  end
+  local before, after = drawn_points(), nil
+  for _ = 1, 30 do
+    tick(1)
+    if first.taken then after = drawn_points(); break end
+    before = drawn_points()
+  end
+  check("linking to a worm keeps the trail it came along", after and before >= 3 and after == before + 1,
+    tostring(before) .. " -> " .. tostring(after))
   spec, owner = setup()
   local mine = { id=800, kind="mine", x=5*P, y=0 }
   function mine:arm(fuse) self.fuse = fuse end
