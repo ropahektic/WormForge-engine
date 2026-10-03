@@ -526,6 +526,11 @@ pub const HIT_AMOUNT: usize = 0x14;
 pub const HIT_TEAM: usize = 0x18;
 /// SpecialImpact `flag`. `10` = percent of current HP (battle axe).
 pub const HIT_FLAG: usize = 0x00;
+/// A fire's hit on a worm carries kind 1 (Project X's M_GUNEXP check).
+pub const HIT_KIND_FIRE: i32 = 1;
+/// The hit's knockback, 16.16 (Project X's fparams[3] and [4]).
+pub const HIT_KNOCK_X: usize = 0x0C;
+pub const HIT_KNOCK_Y: usize = 0x10;
 pub const HIT_PERCENT: i32 = 10;
 pub const WORLD_TEAM_STRIDE: usize = 0x51C;
 pub const ARENA_WORM_STRIDE: usize = 0x9C;
@@ -733,6 +738,9 @@ pub const FIRE_ENTITY_ZEROED: usize = 0xB8;
 /// The shared-data key of the fires' parent, the fire store (PX's
 /// `Root->GetObject(TI_FireStore, 0)`).
 pub const SHARED_FIRE_STORE: u32 = 0x17;
+/// FireEntity: its slot in the world's 256-entry fire pool, set by the
+/// constructor (world+0x7304 counter & 0xFF).
+pub const FIRE_ENTITY_POOL_SLOT: usize = 0xA8;
 pub const CLASS_OIL: i32 = 30;
 /// WA CrossEntity, the gravestone left by a dead worm.
 pub const CLASS_GRAVE: i32 = 21;

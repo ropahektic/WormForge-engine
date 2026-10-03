@@ -134,7 +134,8 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
 
     {
         // `wa.fire.spawn{ owner, x, y, vx, vy, count, duration, up_power,
-        // damage }`: one of WA's fires, as the Petrol Bomb starts its own.
+        // damage, damage_scale, knock_scale }`: one of WA's fires, as the
+        // Petrol Bomb starts its own.
         let fire = lua.create_table().map_err(|e| e.to_string())?;
         let f = lua
             .create_function(|_, spec: Table| {
@@ -818,6 +819,18 @@ const WORM_SPRITE_TEAMS: usize = 6;
 
 /// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse,
 /// sound, explode_into, countdown, explode_on_space }`.
+/// A scale (`1.25`) as 16.16, worked out once here so that every peer's
+/// engine then multiplies the same integers.
+fn scale(spec: &Table, key: &str) -> mlua::Result<Option<i32>> {
+    let Some(v) = spec.get::<Option<f64>>(key)? else {
+        return Ok(None);
+    };
+    if !(0.0..=1000.0).contains(&v) {
+        return Err(mlua::Error::external(format!("fire.spawn: {key} is 0 to 1000, got {v}")));
+    }
+    Ok(Some((v * 65536.0).round() as i32))
+}
+
 /// `wa.fire.spawn`'s table: owner, x and y required, the rest WA's Petrol
 /// Bomb's (FIRE_DEFAULTS).
 fn fire_args(spec: &Table) -> mlua::Result<crate::FireArgs> {
@@ -839,6 +852,8 @@ fn fire_args(spec: &Table) -> mlua::Result<crate::FireArgs> {
         duration: get_i32(spec, "duration")?.unwrap_or(d.duration),
         up_power: get_i32(spec, "up_power")?.unwrap_or(d.up_power),
         damage: get_i32(spec, "damage")?.unwrap_or(d.damage),
+        damage_scale: scale(spec, "damage_scale")?.unwrap_or(d.damage_scale),
+        knock_scale: scale(spec, "knock_scale")?.unwrap_or(d.knock_scale),
     };
     // WA's constructor gives up on a fire with no duration (its burn rate
     // divides by it).

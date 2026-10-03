@@ -18,7 +18,7 @@ pub use bundles::ComponentPlan;
 pub use perf::{perf_flags, take_lua_breakdown, take_lua_spikes, take_lua_time, LuaBreakdown, PerfFlags, Spike};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
-    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs, LaunchArgs, SpawnArgs,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs, LaunchArgs, SpawnArgs, FIRE_DEFAULTS,
     StampBuried,
 };
 pub use dispatch::{
@@ -601,7 +601,8 @@ wa.weapons.replace({
         assert_eq!(n, 7);
         sim_context::with_sim(|| {
             lua.load("wa.fire.spawn{ owner = wa.worms.all()[1], x = 1, y = 2, vx = 3, vy = 0, \
-                      count = 0, duration = 6000, up_power = 0, damage = 0 }")
+                      count = 0, duration = 6000, up_power = 0, damage = 0, \
+                      damage_scale = 1.25, knock_scale = 2 }")
                 .exec()
                 .unwrap();
             let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
@@ -609,6 +610,8 @@ wa.weapons.replace({
             assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0 }").contains("needs y"));
             assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, duration = 0 }")
                 .contains("duration"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, knock_scale = -1 }")
+                .contains("knock_scale"));
         });
         STARTED.with(|l| {
             let d = actor::FIRE_DEFAULTS;
@@ -618,6 +621,7 @@ wa.weapons.replace({
                     actor::FireArgs { owner: 0x1234, x: 0x100000, y: 0x200000, ..d },
                     actor::FireArgs {
                         owner: 0x1234, x: 1, y: 2, vx: 3, vy: 0, count: 0, duration: 6000, up_power: 0, damage: 0,
+                        damage_scale: 0x1_4000, knock_scale: 0x2_0000,
                     },
                 ],
                 "a bare spawn is WA's Petrol Bomb fire; every field can be given"

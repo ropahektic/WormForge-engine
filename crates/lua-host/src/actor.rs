@@ -46,12 +46,17 @@ pub struct FireArgs {
     pub duration: i32,
     pub up_power: i32,
     pub damage: i32,
+    /// How much harder this fire's hits on worms are, 16.16 (0x10000 as WA's):
+    /// their damage and their knockback.
+    pub damage_scale: i32,
+    pub knock_scale: i32,
 }
 
 /// `wa.fire.spawn` defaults: what WA's Petrol Bomb passes (CreateFire1 with
 /// the stock record), so a bare spawn is a petrol fire.
 pub const FIRE_DEFAULTS: FireArgs = FireArgs {
     owner: 0, x: 0, y: 0, vx: 0, vy: 0x4_0000, count: 8, duration: 4000, up_power: 100, damage: 20,
+    damage_scale: 0x1_0000, knock_scale: 0x1_0000,
 };
 
 /// `wa.weapons.launch`: a real WA missile, fired from a weapon slot's fire
