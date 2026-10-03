@@ -44,6 +44,7 @@ thread_local! {
 }
 
 pub fn park_lua(lua: Lua) {
+    dispatch::worm_message_rebuild(&lua);
     PARKED_LUA.with(|slot| {
         *slot.borrow_mut() = Some(lua);
     });
@@ -1923,6 +1924,22 @@ wa.on.worm_message(function(_, m) seen[#seen + 1] = "f" .. m end, { msgs = { 2 }
         assert_eq!(take_lua_time().1, 1);
         perf::reset();
         assert_eq!(parked_seen(), ["f2"]);
+    }
+
+    #[test]
+    fn another_state_built_mid_match_keeps_the_parked_filters() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-worm-filter-second");
+        let pack = filter_pack(&root, r#"
+seen = {}
+wa.on.worm_message(function(_, m) seen[#seen + 1] = "f" .. m end, { msgs = { 2 } })
+"#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        // A second pack state, built and not parked (a pack check, say).
+        let other = filter_pack(&root.join("other"), "-- no handlers");
+        let _second = run_mods(&[other]).unwrap();
+        worm_message(1, 0, 2).unwrap();
+        assert_eq!(parked_seen(), ["f2"], "the parked state's handler still runs");
     }
 
     #[test]

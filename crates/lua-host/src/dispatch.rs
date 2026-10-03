@@ -166,10 +166,23 @@ thread_local! {
     static WORM_MSG_WANTED: RefCell<BTreeSet<u32>> = const { RefCell::new(BTreeSet::new()) };
 }
 
-/// A new Lua state starts with no worm_message handlers.
-pub(crate) fn worm_message_reset() {
-    WORM_MSG_ANY.with(|a| a.set(false));
-    WORM_MSG_WANTED.with(|w| w.borrow_mut().clear());
+/// Set the wanted messages to exactly those of `lua`'s handlers. Called as
+/// the engine parks a match's state: another state built meanwhile (a pack
+/// check, a test) registers into the same set, which may only add to it, so
+/// the parked state's handlers are never skipped.
+pub(crate) fn worm_message_rebuild(lua: &Lua) {
+    let hooks = lua.globals().get::<Table>("wa").and_then(|wa| wa.get::<Table>("_hooks")).ok();
+    let any = hooks
+        .as_ref()
+        .and_then(|h| h.get::<Table>("worm_message_any").ok())
+        .is_some_and(|t| t.raw_len() > 0);
+    let wanted: BTreeSet<u32> = hooks
+        .as_ref()
+        .and_then(|h| h.get::<Table>("worm_message_by_msg").ok())
+        .map(|t| t.pairs::<u32, Value>().filter_map(|p| p.ok().map(|(k, _)| k)).collect())
+        .unwrap_or_default();
+    WORM_MSG_ANY.with(|a| a.set(any));
+    WORM_MSG_WANTED.with(|w| *w.borrow_mut() = wanted);
 }
 
 fn worm_message_wanted(msg: u32) -> bool {
