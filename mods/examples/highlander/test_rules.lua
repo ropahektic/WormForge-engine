@@ -558,7 +558,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("56 slots replaced, each once", #replaced == 56 and not dupes, tostring(#replaced))
+  check("57 slots replaced, each once", #replaced == 57 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -578,7 +578,8 @@ do
   end
   local own_file = true
   for slot, spec in pairs(by_slot) do
-    if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi" or slot == "prod" or slot == "armageddon" then
+    if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi" or slot == "prod" or slot == "armageddon"
+      or slot == "petrol_bomb" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
@@ -972,7 +973,7 @@ do
   end
   local count = 0
   for _ in pairs(holds) do count = count + 1 end
-  check("eight PX holds claimed", count == 8, tostring(count))
+  check("ten PX holds claimed", count == 10, tostring(count))
   check("Sticky Bomb has a weapon and the lower radial hand",
     holds.grenade.sheet == "sprites/px_hold/sticky_bomb"
     and holds.grenade.hand == "sprites/px_hold/hand_rad_lower"
@@ -1135,6 +1136,34 @@ do
   check("with no clear point within 40 pixels she starts at the worm",
     #M.launched == 4 and M.launched[4].x == w.x and M.launched[4].y == w.y)
   M.solid = nil
+end
+
+print("valyrian fire: PX's bottle, thrown further out, refunded from the water")
+do
+  new_match()
+  local P = 0x10000
+  local spec
+  for _, r in ipairs(replaced) do
+    if r.weapon == "petrol_bomb" then spec = r end
+  end
+  check("Valyrian Fire takes the scheme's record, its icon and PX's bottle in hand and flight", spec
+    and spec.wep == "weps/petrol_bomb.wep" and spec.panel_icon == "sprites/valyrian_fire/icon.png"
+    and spec.sprite == "petrolbm" and type(spec.on_fire) == "function"
+    and spec.hold and spec.hold.sheet == "sprites/px_hold/valyrian_fire.png")
+  local w = worm(17)
+  w.x, w.y = 100 * P, 100 * P
+  spec.on_fire({ worm = w, x = 110 * P, y = 100 * P, vx = 3 * P, vy = -4 * P })
+  local l = M.launched and M.launched[1]
+  check("the bottle starts 15 pixels further along the throw, at the throw's speed", l
+    and l.weapon == "petrol_bomb" and l.owner == w and l.vx == 3 * P and l.vy == -4 * P
+    and l.x == 110 * P + 9 * P and l.y == 100 * P - 12 * P,
+    l and (l.x / P .. "," .. l.y / P))
+  M.water = 90 * P
+  ammo[w.ammo_group].petrol_bomb = 0
+  spec.on_fire({ worm = w, x = 110 * P, y = 100 * P, vx = 3 * P, vy = -4 * P })
+  check("from the water nothing is thrown and the bottle goes back to the team",
+    #M.launched == 1 and ammo[w.ammo_group].petrol_bomb == 1)
+  M.water = nil
 end
 
 print("chilli bomb: five more Chillis burst out")
