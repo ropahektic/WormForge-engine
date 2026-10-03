@@ -25,6 +25,19 @@ local SOUND_TELEPORT, SOUND_COMMUNICATOR, SOUND_WORM_POP = 67, 68, 54
 -- the worm appears, this many frames later.
 local PLACEMENT_POP_FRAMES = 21
 
+-- During manual placement WA keeps unplaced worms at (960, -10000).
+local function unplaced(worm) return worm.y == -10000 * 0x10000 end
+
+-- WA's own teleport places a worm at the click, with no wind-up. Super
+-- Tele's record is a click weapon, which winds up first: for an unplaced
+-- worm the wind-up is skipped, so the click places it at once. On the fire
+-- message, before WA starts the wind-up; at the frame's end as a fallback.
+local function skip_placement_windup(worm)
+  if worm.weapon == "teleport" and unplaced(worm) and worm.windup == nil then
+    worm.windup = 0
+  end
+end
+
 fires.super_tele_click = function(ev)
   local worm = ev.worm
   if worm.hp <= 0 then return end
@@ -32,10 +45,10 @@ fires.super_tele_click = function(ev)
   if wa.world.cavern() and y < 19 * 0x10000 then y = 19 * 0x10000 end
   local previous = fires.teleports[worm.id]
   if previous and previous.marker then previous.marker:despawn() end
-  -- During manual placement WA keeps unplaced worms at (960, -10000).
-  -- Waiting 50 frames there makes the worm fall and take damage before the
-  -- arrival, so it is placed now. It sounds like WA's own placement.
-  if worm.y == -10000 * 0x10000 then
+  -- Waiting 50 frames there makes an unplaced worm fall and take damage
+  -- before the arrival, so it is placed now. It sounds like WA's own
+  -- placement.
+  if unplaced(worm) then
     super_tele_arrive(worm, ev.x, y)
     worm:set_state("teleporting")
     wa.sound.play(worm, SOUND_COMMUNICATOR, TELE_SOUND_PRIORITY)
@@ -54,7 +67,11 @@ fires.super_tele_click = function(ev)
 end
 
 wa.on.worm_message(function(worm, msg)
-  if msg ~= wa.msg.FRAME_FINISH then return end
+  if msg == wa.msg.FIRE_WEAPON then
+    skip_placement_windup(worm)
+    return
+  end
+  if worm.state == "prefiring" then skip_placement_windup(worm) end
   local tele = fires.teleports[worm.id]
   if not tele then return end
   if tele.placed then
@@ -82,5 +99,5 @@ wa.on.worm_message(function(worm, msg)
   tele.marker:despawn()
   fires.teleports[worm.id] = nil
   super_tele_arrive(worm, tele.x, tele.y)
-end, { msgs = { wa.msg.FRAME_FINISH } })
+end, { msgs = { wa.msg.FRAME_FINISH, wa.msg.FIRE_WEAPON } })
 end

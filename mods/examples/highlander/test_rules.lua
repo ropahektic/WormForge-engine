@@ -2103,6 +2103,28 @@ do
   for _ = 1, 51 do M.message(w, wa.msg.FRAME_FINISH) end
   check("manual placement has no second arrival or sound",
     w.x == place_x and w.y == place_y and #M.digs == 3 and #M.sounds == 2)
+
+  -- The wind-up: none for an unplaced worm, as WA's own placement; PX's in
+  -- a turn.
+  new_match()
+  w = worm(16)
+  w.x, w.y, w.weapon = 960 * P, -10000 * P, "teleport"
+  M.message(w, wa.msg.FIRE_WEAPON)
+  check("firing Super Tele from an unplaced worm skips the wind-up", w.windup == 0)
+  local placed = worm(17)
+  placed.x, placed.y, placed.weapon = 40 * P, 70 * P, "teleport"
+  M.message(placed, wa.msg.FIRE_WEAPON)
+  placed.state = "prefiring"
+  M.message(placed, wa.msg.FRAME_FINISH)
+  check("in a turn Super Tele keeps its wind-up", placed.windup == nil)
+  local late = worm(32)
+  late.x, late.y, late.weapon, late.state = 960 * P, -10000 * P, "teleport", "prefiring"
+  M.message(late, wa.msg.FRAME_FINISH)
+  check("an unplaced worm already winding up has it skipped at the frame's end", late.windup == 0)
+  local other = worm(33)
+  other.x, other.y, other.weapon = 960 * P, -10000 * P, "bazooka"
+  M.message(other, wa.msg.FIRE_WEAPON)
+  check("other weapons keep their wind-up in placement", other.windup == nil)
 end
 
 print("lightning strike: warning, hit, grave identity and copied hand")
