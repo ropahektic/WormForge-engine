@@ -231,12 +231,17 @@ local function release_taze(key)
   tazed[key] = nil
 end
 
+-- The worm that last fired the Electric Grenade, as PX keeps it at the
+-- fire: the grenade's arc never zaps its thrower. The explosion's own
+-- worm (ev.worm) need not be the thrower.
+local thrower
+
 -- A tazed worm is the pack's (worm:take): the engine eats its moves and
 -- jumps; it cannot start a shot either.
 wa.on.worm_message(function(worm, msg)
-  if msg == wa.msg.FIRE_WEAPON and tazed[target_key(worm)] then
-    return "eat"
-  end
+  if msg ~= wa.msg.FIRE_WEAPON then return end
+  if tazed[target_key(worm)] then return "eat" end
+  if worm.weapon == "earthquake" then thrower = worm end
 end, { msgs = { wa.msg.FIRE_WEAPON } })
 
 local function zap_target(arc, pending)
@@ -251,6 +256,15 @@ local function zap_target(arc, pending)
   elseif obj.kind == "crate" or obj.kind == "oil" then
     obj:hit(12, pending.side * 1.2 * EP, -4 * EP)
   end
+end
+
+-- The arc keeps every point it passed, from the grenade to where it ends,
+-- links included: the whole chain stays drawn until the arc dies.
+-- wa.draw.ribbon draws at most 256.
+local ARC_MAX_POINTS = 256
+local function add_point(arc)
+  arc.points[#arc.points + 1] = { arc.x, arc.y }
+  if #arc.points > ARC_MAX_POINTS then table.remove(arc.points, 1) end
 end
 
 local function progress_arc(arc)
@@ -291,8 +305,7 @@ local function progress_arc(arc)
       arc.x, arc.y = target.x, target.y
       arc.life = 20
       arc.pause = 14
-      for i = #arc.points, 2, -1 do table.remove(arc.points, i) end
-      arc.points[#arc.points + 1] = { arc.x, arc.y }
+      add_point(arc)
       return
     end
     local pull = math.min(1, math.sqrt(10 * EP / d))
@@ -321,14 +334,14 @@ local function progress_arc(arc)
   else
     arc.x, arc.y = arc.x + arc.dx * 10 * EP, arc.y + arc.dy * 10 * EP
   end
-  arc.points[#arc.points + 1] = { arc.x, arc.y }
-  if #arc.points > 33 then table.remove(arc.points, 1) end
+  add_point(arc)
 end
 
 shared.electric_grenade_explode = function(ev)
   local arc = { x = ev.x, y = ev.y, dx = 0, dy = -1, life = 16, pause = 0,
     points = { { ev.x, ev.y } }, ignore = {}, pending = {}, explosion = 0,
     burst_x = ev.x, burst_y = ev.y, sound_age = 0 }
+  if thrower then arc.ignore[target_key(thrower)] = true end
   if ev.worm then arc.ignore[target_key(ev.worm)] = true end
   arcs[#arcs + 1] = arc
   -- An explosion without a worm would leave the driver owned by the exploding
@@ -488,8 +501,12 @@ if wa.on.draw and wa.draw.ribbon then
         -- its path by fractal noise made afresh each game frame, a glow at
         -- every point and a big one at the tip; all fading as the arc dies.
         if arc.shape_tick ~= arc.sound_age then
+          -- One noise value per point; PX's fractal noise needs a power of
+          -- two plus one values.
+          local divs = 33
+          while divs < #arc.points do divs = 2 * divs - 1 end
           arc.noise = arc.noise or {}
-          noise_span(arc.noise, 0, 33, 1.0, 0, 0)
+          noise_span(arc.noise, 0, divs, 1.0, 0, 0)
           arc.shape_tick = arc.sound_age
         end
         local num = #arc.points - 1
