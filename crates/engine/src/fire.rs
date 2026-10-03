@@ -129,9 +129,12 @@ fn anim_for(frame: u32, frames: u32) -> u32 {
 /// Full-colour copies of WA's fire sprites, for the GPU atlas: each frame
 /// through WA's own GetSpriteFrameForBlit, its palette indices through the
 /// sprite's layer palette, index 0 clear. A sprite WA keeps elsewhere (a
-/// sprite bank) or cannot give a frame of is left out.
+/// sprite bank) or cannot give a frame of is left out. All the colour copies
+/// first, then their shapes: a tinted fire needs both, the atlas keeps what
+/// fits from the front.
 pub unsafe fn copies(display: *mut u8) -> Vec<(String, gfx::SpriteStrip)> {
     let mut out = Vec::new();
+    let mut shapes = Vec::new();
     if display.is_null() {
         return out;
     }
@@ -182,11 +185,12 @@ pub unsafe fn copies(display: *mut u8) -> Vec<(String, gfx::SpriteStrip)> {
                 strip.frames.push(gfx::RgbaFrame { width: w as u32, height: h as u32, rgba });
             }
             if strip.frames.len() as u32 == frames {
-                out.push((mask_key(id), shape_of(&strip)));
+                shapes.push((mask_key(id), shape_of(&strip)));
                 out.push((copy_key(id), strip));
             }
         }
     }
+    out.extend(shapes);
     out
 }
 
