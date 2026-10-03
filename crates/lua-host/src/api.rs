@@ -409,8 +409,8 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
 
 /// Pack-scoped virtual worm inventories.
 ///
-/// WA's real ammo remains alliance-scoped. These stores are deliberately
-/// keyed by stable worm id and only touch the live TeamArena row when
+/// WA's real ammo remains scoped to its physical ammo rows. These stores are
+/// deliberately keyed by stable worm id and only touch the live TeamArena row when
 /// `apply()` is called. Keeping the state in this match's Lua interpreter
 /// also gives it the same lifetime as pack state and avoids process-global
 /// state leaking into the next round.
@@ -602,8 +602,8 @@ function inventory_api.create(spec)
     if opts.clear then
       local seen = {}
       for _, live in ipairs(wa.worms.all()) do
-        if not seen[live.alliance] then
-          seen[live.alliance] = true
+        if not seen[live.ammo_group] then
+          seen[live.ammo_group] = true
           for _, name in ipairs(slots) do live:ammo(name, { set = 0 }) end
         end
       end
@@ -784,7 +784,7 @@ fn spec_slot(spec: &Table) -> mlua::Result<StockWeapon> {
     parse_stock_weapon(&name).map_err(mlua::Error::external)
 }
 
-/// WA's team colours: alliance 0 (red) to 5 (cyan).
+/// WA's coalition colours: alliance 0 (red) to 5 (cyan).
 const WORM_SPRITE_TEAMS: usize = 6;
 
 /// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse,
@@ -2006,15 +2006,17 @@ mod tests {
               return lo + ((draw - 1) % (hi - lo + 1))
             end
             local live = {}
-            local function worm(id, alliance)
-              local w = { id = id, alliance = alliance, live = {} }
+            local function worm(id, alliance, ammo_group)
+              local w = { id = id, alliance = alliance, ammo_group = ammo_group, live = {} }
               function w:ammo(name, change)
                 if change ~= nil then self.live[name] = change.set end
                 return self.live[name] or 0
               end
               return w
             end
-            a, b, c = worm(16, 0), worm(32, 1), worm(33, 1)
+            a, b, c = worm(16, 1, 0), worm(32, 1, 1), worm(33, 0, 1)
+            assert(a.alliance == b.alliance and a.ammo_group ~= b.ammo_group)
+            assert(b.alliance ~= c.alliance and b.ammo_group == c.ammo_group)
             wa.worms.all = function() return { a, b, c } end
 
             inv_a = wa.inventory.create({
@@ -2032,7 +2034,7 @@ mod tests {
             inv_a:apply(b, { clear = true, each = 1 })
             assert(a.live.bazooka == 0 and a.live.grenade == 0)
             assert(b.live.bazooka == 1 and b.live.grenade == 1)
-            -- b/c share an alliance: clear visits that physical row once.
+            -- b/c share an ammo row despite having different coalition colours.
             assert(c.live.bazooka == nil)
         "#,
         )

@@ -11,7 +11,11 @@
 //! eighth worm, so Highlander never took the scheme's weapons from the cyan
 //! team and sentries could not see those worms at all.
 
-use crate::offsets::{MAX_TEAMS, MAX_WORMS_PER_TEAM};
+use crate::entity::read_i32;
+use crate::offsets::{
+    ENT_WORLD, ENT_WORM_TEAM, GAME_INFO_TEAM_COLOUR, GAME_INFO_TEAM_RECORDS,
+    GAME_INFO_TEAM_RECORD_STRIDE, GAME_WORLD_GAME_INFO, MAX_TEAMS, MAX_WORMS_PER_TEAM,
+};
 use core::ops::RangeInclusive;
 
 /// Every possible team number: 1 to 6.
@@ -22,6 +26,32 @@ pub fn team_numbers() -> RangeInclusive<u32> {
 /// Every possible worm number within a team: 1 to 8.
 pub fn worm_numbers() -> RangeInclusive<u32> {
     1..=MAX_WORMS_PER_TEAM
+}
+
+/// WA's visible coalition colour, 0 red through 5 cyan. This comes from the
+/// lobby's GameInfo team record, not the TeamArena ammo row or player slot.
+pub unsafe fn worm_team_colour(worm: *mut u8) -> Option<u8> {
+    if worm.is_null() {
+        return None;
+    }
+    let world = unsafe { read_i32(worm, ENT_WORLD) } as *mut u8;
+    if world.is_null() {
+        return None;
+    }
+    let info = unsafe { read_i32(world, GAME_WORLD_GAME_INFO) } as *const u8;
+    let team = unsafe { read_i32(worm, ENT_WORM_TEAM) };
+    unsafe { colour_from_game_info(info, team) }
+}
+
+unsafe fn colour_from_game_info(info: *const u8, team: i32) -> Option<u8> {
+    if info.is_null() || !(1..=MAX_TEAMS as i32).contains(&team) {
+        return None;
+    }
+    let offset = GAME_INFO_TEAM_RECORDS
+        + (team as usize - 1) * GAME_INFO_TEAM_RECORD_STRIDE
+        + GAME_INFO_TEAM_COLOUR;
+    let colour = unsafe { *info.add(offset) };
+    (colour < MAX_TEAMS as u8).then_some(colour)
 }
 
 #[cfg(test)]
@@ -54,5 +84,16 @@ mod tests {
             .collect();
         assert_eq!(&ids[..8], &[17, 18, 19, 20, 21, 22, 23, 24]);
         assert_eq!(&ids[8..], &[33, 34, 35, 36, 37, 38, 39, 40]);
+    }
+
+    #[test]
+    fn team_colour_uses_lobby_colour_not_record_order() {
+        let mut info = vec![0u8; GAME_INFO_TEAM_RECORDS + 2 * GAME_INFO_TEAM_RECORD_STRIDE];
+        info[GAME_INFO_TEAM_RECORDS] = 4; // owner/player slot is separate
+        info[GAME_INFO_TEAM_RECORDS + GAME_INFO_TEAM_COLOUR] = 1; // blue
+        info[GAME_INFO_TEAM_RECORDS + GAME_INFO_TEAM_RECORD_STRIDE + GAME_INFO_TEAM_COLOUR] = 0;
+        assert_eq!(unsafe { colour_from_game_info(info.as_ptr(), 1) }, Some(1));
+        assert_eq!(unsafe { colour_from_game_info(info.as_ptr(), 2) }, Some(0));
+        assert_eq!(unsafe { colour_from_game_info(info.as_ptr(), 0) }, None);
     }
 }

@@ -1343,22 +1343,22 @@ unsafe fn mark_panel_dirty(world: *mut u8) {
     }
 }
 
-/// The ammo/delay row a team uses: its alliance, read exactly where WA's own
+/// The ammo/delay row a team uses, read exactly where WA's own
 /// `TeamArena__GetAmmo` / `AddAmmo` read it. Teams are 1-based (the first team
-/// is 1, as in the worm's `ENT_WORM_TEAM` and wkFOW's team records), and allied
-/// teams share a row.
+/// is 1, as in the worm's `ENT_WORM_TEAM` and wkFOW's team records). This row
+/// is independent of the visible coalition colour.
 unsafe fn ammo_row(arena: *mut u8, team: u32) -> Option<usize> {
     if arena.is_null() || team == 0 || team > MAX_TEAMS {
         return None;
     }
-    let alliance = read_i32(
+    let ammo_group = read_i32(
         arena,
-        TEAM_ARENA_ALLIANCE + team as usize * WORLD_TEAM_STRIDE,
+        TEAM_ARENA_AMMO_GROUP + team as usize * WORLD_TEAM_STRIDE,
     );
-    if alliance < 0 || alliance >= MAX_TEAMS as i32 {
+    if ammo_group < 0 || ammo_group >= MAX_TEAMS as i32 {
         return None;
     }
-    Some(alliance as usize * TEAM_AMMO_STRIDE)
+    Some(ammo_group as usize * TEAM_AMMO_STRIDE)
 }
 
 unsafe fn ammo_index(arena: *mut u8, team: u32, slot: u32) -> Option<usize> {

@@ -8,7 +8,8 @@ use game::offsets::{
     ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SEQ, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE,
     CLASS_MINE, WORM_INDEX,
     CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
-    ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
+    ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, MAX_TEAMS, WORLD_TEAM_AMMO_GROUP,
+    WORLD_TEAM_STRIDE,
     ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_TUMBLING, ENT_COLLISION_MASK,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
@@ -1073,6 +1074,12 @@ impl UserData for WormHandle {
             Ok(native_hp().map(|f| f(this.0)).unwrap_or(0))
         });
         fields.add_field_method_get("alliance", |_, this| {
+            Ok(unsafe { game::team::worm_team_colour(this.0 as *mut u8) }
+                .unwrap_or(0) as i32)
+        });
+        // WA indexes physical ammo by this separate owner/player row. It can
+        // differ from the visible coalition colour exposed as `alliance`.
+        fields.add_field_method_get("ammo_group", |_, this| {
             if this.0 == 0 {
                 return Ok(0i32);
             }
@@ -1083,12 +1090,12 @@ impl UserData for WormHandle {
                     return Ok(0);
                 }
                 let team = read_i32(worm, ENT_WORM_TEAM);
-                if team < 0 {
+                if !(1..=MAX_TEAMS as i32).contains(&team) {
                     return Ok(0);
                 }
                 Ok(read_i32(
                     world,
-                    WORLD_TEAM_ALLIANCE + (team as usize) * WORLD_TEAM_STRIDE,
+                    WORLD_TEAM_AMMO_GROUP + (team as usize) * WORLD_TEAM_STRIDE,
                 ))
             }
         });

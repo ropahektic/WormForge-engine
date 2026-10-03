@@ -22,10 +22,7 @@
 use crate::{log_line, sprite};
 use game::{
     entity::read_i32,
-    offsets::{
-        ENT_WORLD, ENT_WORM_TEAM, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE, WORM_SELECTED_WEAPON,
-        WORM_SLOPE_DIR, WORM_STATE,
-    },
+    offsets::{WORM_SELECTED_WEAPON, WORM_SLOPE_DIR, WORM_STATE},
 };
 use std::{
     ffi::c_void,
@@ -469,14 +466,9 @@ pub fn claim(slot: usize, mod_id: &str, poses: &[(i32, Option<u8>, String)], ani
     }
 }
 
-/// The drawing worm's team colour (0 red .. 5 cyan), as `worm.alliance`.
+/// The drawing worm's coalition colour (0 red .. 5 cyan), as `worm.alliance`.
 unsafe fn worm_alliance(worm: *mut u8) -> Option<u8> {
-    let world = read_i32(worm, ENT_WORLD) as *mut u8;
-    let team = read_i32(worm, ENT_WORM_TEAM);
-    if world.is_null() || team < 0 {
-        return None;
-    }
-    u8::try_from(read_i32(world, WORLD_TEAM_ALLIANCE + team as usize * WORLD_TEAM_STRIDE)).ok()
+    game::team::worm_team_colour(worm)
 }
 
 /// This worm's colour of `sheet`, when the pack gave one for `pose`.
