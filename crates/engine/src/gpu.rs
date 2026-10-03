@@ -648,11 +648,15 @@ pub(crate) fn enqueue_hold(x: i32, y: i32, sheet: u32, frame: u32,
     }
 }
 
-/// Take over a stock sprite's draw with `sheet`, a GPU copy of it, tinted
-/// and at `depth` (WA's own queue depth for it). Declined without the
+/// Take over a stock sprite's draw with GPU copies of it, at `depth` (WA's
+/// own queue depth for it): half its own colours, half `tint` (0xAARRGGBB,
+/// Project X's SetColorMod mode 1). `sheet` is the full-colour copy, drawn
+/// at half strength; `shape` its white shape, tinted half the colour and
+/// added (alpha 0, as an additive vertex colour). Declined without the
 /// shader renderer: WA then draws its own, untinted.
-fn intercept_tinted(x: i32, y: i32, sprite: u32, sheet: u32, anim: u32, tint: u32, depth: u32) -> bool {
-    if !crate::shader::is_ready() || !crate::sprite::is_gpu_sheet(sheet) {
+#[allow(clippy::too_many_arguments)]
+fn intercept_tinted(x: i32, y: i32, sprite: u32, sheet: u32, shape: u32, anim: u32, tint: u32, depth: u32) -> bool {
+    if !crate::shader::is_ready() || !crate::sprite::is_gpu_sheet(sheet) || !crate::sprite::is_gpu_sheet(shape) {
         return false;
     }
     let anim = crate::sprite::draw_phase(sprite, anim);
@@ -660,8 +664,16 @@ fn intercept_tinted(x: i32, y: i32, sprite: u32, sheet: u32, anim: u32, tint: u3
     let Ok(mut pending) = PENDING.lock() else {
         return false;
     };
-    pending.push(Pending { x, y, sprite: sheet | mirror, anim, angle: 0.0, scale: 1.0, tint, depth });
+    let (half, added) = mix_tints(tint);
+    pending.push(Pending { x, y, sprite: sheet | mirror, anim, angle: 0.0, scale: 1.0, tint: half, depth });
+    pending.push(Pending { x, y, sprite: shape | mirror, anim, angle: 0.0, scale: 1.0, tint: added, depth });
     true
+}
+
+/// The two vertex tints (premultiplied) of a half-and-half mix with `tint`:
+/// the copy at half strength, and the colour's half added.
+fn mix_tints(tint: u32) -> (u32, u32) {
+    (0xFF80_8080, (tint & 0x00FE_FEFE) >> 1)
 }
 
 /// Take over one sprite draw, or decline it.
@@ -948,8 +960,8 @@ unsafe extern "C" fn rq_should_intercept(layer: u32, x: i32, y: i32, sprite: u32
         return 0;
     }
     // A tinted fire's flame: its full-colour copy, tinted, at the fire's depth.
-    if let Some((copy, tint)) = crate::fire::tinted_draw(layer, sprite) {
-        return intercept_tinted(x, y, sprite, copy, anim, tint, layer) as u8;
+    if let Some((copy, shape, tint)) = crate::fire::tinted_draw(layer, sprite) {
+        return intercept_tinted(x, y, sprite, copy, shape, anim, tint, layer) as u8;
     }
     // Virtual ids are 0x01000000|n — never mask to 16 bits here. Worm aim
     // sheets (worm_sprites) arrive with the mirror bit OR'd in and must match
@@ -1046,7 +1058,12 @@ mod depth_order_tests {
 
 #[cfg(test)]
 mod quad_tint_tests {
-    use super::quad_tint;
+    use super::{mix_tints, quad_tint};
+
+    #[test]
+    fn a_mix_is_the_copy_at_half_and_half_the_colour_added() {
+        assert_eq!(mix_tints(0xFF4B_E14B), (0xFF80_8080, 0x0025_7025));
+    }
 
     #[test]
     fn quad_colours_are_premultiplied_and_additive_has_no_alpha() {
