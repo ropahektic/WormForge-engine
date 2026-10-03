@@ -18,6 +18,15 @@ local OLD_WOMAN_LAUNCHER_PATCH = {
   fire_method = 3, -- CreateWeaponProjectile, intercepted by on_fire
 }
 
+-- Our own changes over the generated record patches (tools/embed_weps.py),
+-- kept here so WEP_PATCH can be generated again.
+local PATCH_FIXES = {
+  -- S.M.A.R.T Bomb: homing bits leave the bomb's red trail circles (stock 250,
+  -- drawn as sprites/smart_bomb/trail), not WA's green gas cloud (608) the
+  -- record named.
+  mortar = { c_homing_sprite = 250 },
+}
+
 for _, list in ipairs({ PORTED, PX_ART }) do
   for _, w in ipairs(list) do
     -- copy_from + name + named patch (stock base); was weps/<slot>.wep
@@ -27,6 +36,12 @@ for _, list in ipairs({ PORTED, PX_ART }) do
       spec.on_fire = function(fire) fires.old_woman(fire) end
     elseif not w.wep and WEP_PATCH[w.weapon] then
       spec.patch = WEP_PATCH[w.weapon]
+    end
+    if PATCH_FIXES[w.weapon] then
+      local patch = {}
+      for k, v in pairs(spec.patch or {}) do patch[k] = v end
+      for k, v in pairs(PATCH_FIXES[w.weapon]) do patch[k] = v end
+      spec.patch = patch
     end
     for key, value in pairs(w) do
       spec[key] = value
