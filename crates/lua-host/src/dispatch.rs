@@ -5,9 +5,9 @@
 //! owner. Do not add a second global FireFinal-style chain here.
 
 use game::entity::Motion;
-use mlua::{Function, Lua, Table, Value};
+use mlua::{AnyUserData, Function, Lua, Table, Value};
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::PARKED_LUA;
 use weapons::StockWeapon;
@@ -226,13 +226,72 @@ pub(crate) fn register_worm_message(lua: &Lua, hooks: &Table, handler: Function,
     Ok(())
 }
 
+/// What dispatch reuses for the parked match: its hook table, the Lua-side
+/// loops (`wf_*` in the registry, see api.rs), and one handle per worm.
+struct Fast {
+    hooks: Table,
+    each: Function,
+    eat_each: Function,
+    missile: Function,
+    worms: HashMap<u32, AnyUserData>,
+}
+
+thread_local! {
+    static FAST: RefCell<Option<Fast>> = const { RefCell::new(None) };
+}
+
+/// Called as the engine parks a match's state.
+pub(crate) fn fast_rebuild(lua: &Lua) {
+    let fast = (|| -> mlua::Result<Fast> {
+        Ok(Fast {
+            hooks: lua.globals().get::<Table>("wa")?.get::<Table>("_hooks")?,
+            each: lua.named_registry_value("wf_each")?,
+            eat_each: lua.named_registry_value("wf_eat_each")?,
+            missile: lua.named_registry_value("wf_missile")?,
+            worms: HashMap::new(),
+        })
+    })()
+    .ok();
+    FAST.with(|f| *f.borrow_mut() = fast);
+}
+
+/// Something cloned out of the cache (never held across a call into Lua,
+/// which may dispatch again).
+fn fast<T>(f: impl FnOnce(&Fast) -> T) -> Option<T> {
+    FAST.with(|c| c.borrow().as_ref().map(f))
+}
+
+/// The worm's handle, made once per match.
+fn worm_handle(lua: &Lua, worm_id: u32) -> Result<AnyUserData, String> {
+    if let Some(Some(ud)) = fast(|f| f.worms.get(&worm_id).cloned()) {
+        return Ok(ud);
+    }
+    let ud = crate::actor::worm_userdata(lua, worm_id)?;
+    FAST.with(|c| {
+        if let Some(f) = c.borrow_mut().as_mut() {
+            f.worms.insert(worm_id, ud.clone());
+        }
+    });
+    Ok(ud)
+}
+
 fn hook_list<'a>(lua: &'a Lua, name: &str) -> Result<Table, String> {
+    if let Some(hooks) = fast(|f| f.hooks.clone()) {
+        return hooks.get(name).map_err(|e| e.to_string());
+    }
     let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
     let hooks: Table = wa.get("_hooks").map_err(|e| e.to_string())?;
     hooks.get(name).map_err(|e| e.to_string())
 }
 
 fn call_each(lua: &Lua, list: &Table, args: impl Clone + mlua::IntoLuaMulti) -> Result<(), String> {
+    if !crate::perf::profiling_packs() {
+        if let Some(each) = fast(|f| f.each.clone()) {
+            let mut args = args.into_lua_multi(lua).map_err(|e| e.to_string())?;
+            args.push_front(Value::Table(list.clone()));
+            return each.call::<()>(args).map_err(|e| e.to_string());
+        }
+    }
     let n = list.len().map_err(|e| e.to_string())?;
     for i in 1..=n {
         let f: Function = list.get(i).map_err(|e| e.to_string())?;
@@ -241,10 +300,10 @@ fn call_each(lua: &Lua, list: &Table, args: impl Clone + mlua::IntoLuaMulti) -> 
     Ok(())
 }
 
-/// Call one hook handler; when profiling, its time goes to the pack that
-/// registered it (the hook wrapper sets `wa._mod` to that pack).
+/// Call one hook handler; when profiling packs, its time goes to the pack
+/// that registered it (the hook wrapper sets `wa._mod` to that pack).
 fn timed_call<R: mlua::FromLuaMulti>(lua: &Lua, f: &Function, args: impl mlua::IntoLuaMulti) -> Result<R, String> {
-    if !crate::perf::profiling() {
+    if !crate::perf::profiling_packs() {
         return f.call::<R>(args).map_err(|e| e.to_string());
     }
     let start = std::time::Instant::now();
@@ -346,6 +405,11 @@ pub fn missile_frame(
         if list.len().map_err(|e| e.to_string())? == 0 {
             return Ok(motion);
         }
+        if !crate::perf::profiling_packs() && (phase == "pre" || phase == "post") {
+            if let Some(dispatch) = fast(|f| f.missile.clone()) {
+                return missile_frame_fast(lua, &dispatch, list, motion, msg, phase == "post", slot, sprite, mask);
+            }
+        }
         let t = motion_to_table(lua, &motion)?;
         t.set("msg", msg).map_err(|e| e.to_string())?;
         t.set("phase", phase).map_err(|e| e.to_string())?;
@@ -359,6 +423,50 @@ pub fn missile_frame(
         *sprite = t.get("sprite").unwrap_or(*sprite);
         *mask = t.get::<i64>("collision_mask").map(|v| v as u32 as i32).unwrap_or(*mask);
         table_to_motion(&t, motion)
+    })
+}
+
+/// A missile frame in one call into Lua (`wf_missile`): the table built
+/// with a constructor, the handlers run, and the fields packs may write
+/// read back, as `table_to_motion` and the slow path read them.
+#[allow(clippy::too_many_arguments)]
+fn missile_frame_fast(
+    lua: &Lua,
+    dispatch: &Function,
+    list: Table,
+    motion: Motion,
+    msg: u32,
+    post: bool,
+    slot: Option<usize>,
+    sprite: &mut i32,
+    mask: &mut i32,
+) -> Result<Motion, String> {
+    let int = |v: i64| Value::Integer(v as mlua::Integer);
+    let args = mlua::MultiValue::from_vec(vec![
+        Value::Table(list),
+        int(motion.id as i64), int(motion.class_type as i64), int(motion.damp as i64),
+        int(motion.wind_scale as i64), int(motion.gravity_scale as i64), int(motion.moved as i64),
+        int(motion.x as i64), int(motion.y as i64), int(motion.vx as i64), int(motion.vy as i64),
+        int(motion.cm_gravity as i64), int(motion.cm_wind as i64), int(msg as i64), Value::Boolean(post),
+        slot.filter(|s| StockWeapon::from_index(*s as u32).is_some()).map_or(Value::Nil, |s| int(s as i64)),
+        int(*sprite as i64), int(*mask as u32 as i64),
+    ]);
+    type Back = (Value, Value, Value, Value, Value, Value, Value, Value, Value, Value);
+    let (damp, wind_scale, gravity_scale, moved, x, y, vx, vy, s, m): Back =
+        dispatch.call(args).map_err(|e| e.to_string())?;
+    let i32_or = |v: Value, base: i32| -> i32 { mlua::FromLua::from_lua(v, lua).unwrap_or(base) };
+    *sprite = i32_or(s, *sprite);
+    *mask = <i64 as mlua::FromLua>::from_lua(m, lua).map(|v| v as u32 as i32).unwrap_or(*mask);
+    Ok(Motion {
+        damp: i32_or(damp, motion.damp),
+        wind_scale: i32_or(wind_scale, motion.wind_scale),
+        gravity_scale: i32_or(gravity_scale, motion.gravity_scale),
+        moved: i32_or(moved, motion.moved),
+        x: i32_or(x, motion.x),
+        y: i32_or(y, motion.y),
+        vx: i32_or(vx, motion.vx),
+        vy: i32_or(vy, motion.vy),
+        ..motion
     })
 }
 
@@ -382,7 +490,12 @@ pub fn worm_message(worm_id: u32, team: u32, msg: u32) -> Result<bool, String> {
             return Ok(false);
         }
         let _ = team;
-        let worm = crate::actor::worm_userdata(lua, worm_id)?;
+        let worm = worm_handle(lua, worm_id)?;
+        if !crate::perf::profiling_packs() {
+            if let Some(eat_each) = fast(|f| f.eat_each.clone()) {
+                return eat_each.call::<bool>((list, worm, msg)).map_err(|e| e.to_string());
+            }
+        }
         let mut eat = false;
         for i in 1..=n {
             let f: Function = list.get(i).map_err(|e| e.to_string())?;

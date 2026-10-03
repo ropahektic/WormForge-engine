@@ -1,4 +1,4 @@
-//! Frame timing, turned on by a pack's `wa.perf.enable{ counter, profile }`.
+//! Frame timing, turned on by a pack's `wa.perf.enable{ counter, profile, packs }`.
 //!
 //! - `counter`: a one-line FPS counter at the top right of the screen: the
 //!   live frame rate (the last quarter second), the average over the last
@@ -417,6 +417,10 @@ fn lua_line(frames: u64, b: &lua_host::LuaBreakdown) -> String {
             .collect::<Vec<_>>()
             .join(", ")
     };
+    if b.by_pack.is_empty() {
+        // Per-pack times are only kept with `wa.perf.enable{ packs = true }`.
+        return format!("perf lua: by call {}", part(&b.by_label));
+    }
     format!("perf lua: by call {} | by pack (hook handlers) {}", part(&b.by_label), part(&b.by_pack))
 }
 
@@ -504,5 +508,14 @@ mod tests {
         assert_eq!(line, "perf lua: by call worm_message 3.00 ms (100.0/frame, 30 us/call), \
             actor 1.00 ms (20.0/frame, 50 us/call) | by pack (hook handlers) \
             example.highlander 2.50 ms (95.0/frame, 26 us/call), ? 0.50 ms (5.0/frame, 100 us/call)");
+    }
+
+    #[test]
+    fn lua_line_leaves_out_packs_when_they_are_not_timed() {
+        let b = lua_host::LuaBreakdown {
+            by_label: vec![("actor".into(), 2 * MS, 40)],
+            by_pack: vec![],
+        };
+        assert_eq!(lua_line(2, &b), "perf lua: by call actor 1.00 ms (20.0/frame, 50 us/call)");
     }
 }

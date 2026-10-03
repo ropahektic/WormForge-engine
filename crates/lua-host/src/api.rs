@@ -2,7 +2,7 @@ use crate::dispatch::{self, HudLine};
 use crate::spawn::{self, get_bool, get_i32, get_string};
 use actors::kind_id;
 use gfx::{is_sheet_path, load_sprite_path, sprite_key, stock_sprite_id, SpriteStrip};
-use mlua::{Function, Lua, MultiValue, Table, Value};
+use mlua::{Function, Lua, Table, Value};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -169,6 +169,61 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     Ok(())
 }
 
+/// The Lua side of hook dispatch, kept in the registry: wrapping a handler
+/// so it runs as its pack, the loops over a hook list, and a missile frame
+/// built, dispatched and read back in one call. Run in Lua, a hook list costs
+/// one call from the engine instead of two per handler.
+const DISPATCH_LUA: &str = r#"
+local wa, NAMES = ...
+local function wrap(owner, cb)
+  return function(...)
+    wa._mod = owner
+    return cb(...)
+  end
+end
+local function each(list, ...)
+  for i = 1, #list do list[i](...) end
+end
+local function eat_each(list, ...)
+  local eat = false
+  for i = 1, #list do
+    if list[i](...) == "eat" then eat = true end
+  end
+  return eat
+end
+local function missile(list, id, class_type, damp, wind_scale, gravity_scale, moved, x, y, vx, vy,
+    cm_gravity, cm_wind, msg, post, slot, sprite, mask)
+  local m = {
+    id = id, class_type = class_type, damp = damp, wind_scale = wind_scale,
+    gravity_scale = gravity_scale, moved = moved, x = x, y = y, vx = vx, vy = vy,
+    cm_gravity = cm_gravity, cm_wind = cm_wind, msg = msg,
+    phase = post and "post" or "pre", weapon = slot and NAMES[slot], sprite = sprite,
+    collision_mask = mask,
+  }
+  for i = 1, #list do list[i](m) end
+  return m.damp, m.wind_scale, m.gravity_scale, m.moved, m.x, m.y, m.vx, m.vy, m.sprite, m.collision_mask
+end
+return wrap, each, eat_each, missile
+"#;
+
+fn install_dispatch(lua: &Lua, wa: &Table) -> Result<(), String> {
+    let names = lua.create_table().map_err(|e| e.to_string())?;
+    for i in 0..128u32 {
+        if let Some(w) = StockWeapon::from_index(i) {
+            names.set(i, w.name()).map_err(|e| e.to_string())?;
+        }
+    }
+    let (wrap, each, eat_each, missile): (Function, Function, Function, Function) = lua
+        .load(DISPATCH_LUA)
+        .set_name("wormforge/dispatch")
+        .call((wa.clone(), names))
+        .map_err(|e| e.to_string())?;
+    for (key, f) in [("wf_wrap", wrap), ("wf_each", each), ("wf_eat_each", eat_each), ("wf_missile", missile)] {
+        lua.set_named_registry_value(key, f).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Build the `wa` table if this Lua state has none yet.
 fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     let globals = lua.globals();
@@ -176,6 +231,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         return Ok(wa);
     }
     let wa = lua.create_table().map_err(|e| e.to_string())?;
+    install_dispatch(lua, &wa)?;
     wa.set("weapons", lua.create_table().map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
     wa.set("sprites", lua.create_table().map_err(|e| e.to_string())?)
@@ -197,13 +253,15 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     msg.set("IMPACT", 0x76).map_err(|e| e.to_string())?;
     wa.set("msg", msg).map_err(|e| e.to_string())?;
 
-    // `wa.perf.enable{ counter = true, profile = true }`: this machine's FPS
-    // counter and profiler. With no table, both. Nothing is readable back.
+    // `wa.perf.enable{ counter = true, profile = true, packs = true }`: this
+    // machine's FPS counter and profiler; `packs` also times each hook handler
+    // for its pack, which makes every hook call slower. With no table, counter
+    // and profile. Nothing is readable back.
     let perf = lua.create_table().map_err(|e| e.to_string())?;
     let enable = lua
         .create_function(|_, opts: Option<Table>| {
             let flags = match opts {
-                None => crate::PerfFlags { counter: true, profile: true },
+                None => crate::PerfFlags { counter: true, profile: true, packs: false },
                 Some(t) => {
                     let mut flags = crate::PerfFlags::default();
                     for pair in t.pairs::<Value, Value>() {
@@ -212,16 +270,17 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
                             Value::Boolean(b) => b,
                             _ => {
                                 return Err(mlua::Error::external(
-                                    "wa.perf.enable: counter and profile take true or false",
+                                    "wa.perf.enable: counter, profile and packs take true or false",
                                 ))
                             }
                         };
                         match k.as_str().as_deref() {
                             Some("counter") => flags.counter = on,
                             Some("profile") => flags.profile = on,
+                            Some("packs") => flags.packs = on,
                             _ => {
                                 return Err(mlua::Error::external(
-                                    "wa.perf.enable: unknown option (counter, profile)",
+                                    "wa.perf.enable: unknown option (counter, profile, packs)",
                                 ))
                             }
                         }
@@ -601,14 +660,12 @@ fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
             // nobody had set `_mod` yet; such a hook keeps the old
             // stale-field behaviour rather than guessing a pack.
             let owner: String = wa.get("_mod").unwrap_or_default();
-            // MultiValue so every hook shape passes through untouched --
-            // arguments in, and return values (worm_message's "eat", hurt's
-            // rewritten amount) back out.
-            let wrapped = lua.create_function(move |lua, args: MultiValue| {
-                let wa: Table = lua.globals().get("wa")?;
-                wa.set("_mod", owner.clone())?;
-                cb.call::<MultiValue>(args)
-            })?;
+            // A Lua closure (wf_wrap) that sets `_mod` and calls the handler:
+            // every hook shape passes through untouched -- arguments in, and
+            // return values (worm_message's "eat", hurt's rewritten amount)
+            // back out -- without a trip through the engine per handler.
+            let wrap: Function = lua.named_registry_value("wf_wrap")?;
+            let wrapped: Function = wrap.call((owner, cb))?;
             if name == "worm_message" {
                 return crate::dispatch::register_worm_message(lua, &hooks, wrapped, msgs);
             }

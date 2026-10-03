@@ -16,6 +16,7 @@ use std::time::Instant;
 
 static COUNTER: AtomicBool = AtomicBool::new(false);
 static PROFILE: AtomicBool = AtomicBool::new(false);
+static PACKS: AtomicBool = AtomicBool::new(false);
 static LUA_NANOS: AtomicU64 = AtomicU64::new(0);
 static LUA_CALLS: AtomicU32 = AtomicU32::new(0);
 
@@ -48,9 +49,9 @@ pub fn take_lua_breakdown() -> LuaBreakdown {
     }
 }
 
-/// Whether the profiler is on (so callers can skip their own timing).
-pub(crate) fn profiling() -> bool {
-    PROFILE.load(Ordering::Relaxed)
+/// Whether hook handlers are timed one by one, for the per-pack breakdown.
+pub(crate) fn profiling_packs() -> bool {
+    PROFILE.load(Ordering::Relaxed) && PACKS.load(Ordering::Relaxed)
 }
 
 /// One hook handler's time, for the pack that registered it.
@@ -67,6 +68,10 @@ pub(crate) fn add_pack_time(pack: String, ns: u64) {
 pub struct PerfFlags {
     pub counter: bool,
     pub profile: bool,
+    /// With `profile`: time every hook handler on its own, for the per-pack
+    /// breakdown. It costs a clock read and a lookup per handler, so hook
+    /// lists then run handler by handler from the engine, slower.
+    pub packs: bool,
 }
 
 /// What the loaded packs asked for.
@@ -74,6 +79,7 @@ pub fn perf_flags() -> PerfFlags {
     PerfFlags {
         counter: COUNTER.load(Ordering::Relaxed),
         profile: PROFILE.load(Ordering::Relaxed),
+        packs: PACKS.load(Ordering::Relaxed),
     }
 }
 
@@ -93,12 +99,16 @@ pub(crate) fn enable(flags: PerfFlags) {
     if flags.profile {
         PROFILE.store(true, Ordering::Relaxed);
     }
+    if flags.packs {
+        PACKS.store(true, Ordering::Relaxed);
+    }
 }
 
 /// A new match's packs decide afresh.
 pub(crate) fn reset() {
     COUNTER.store(false, Ordering::Relaxed);
     PROFILE.store(false, Ordering::Relaxed);
+    PACKS.store(false, Ordering::Relaxed);
     take_lua_time();
     take_lua_breakdown();
 }
@@ -136,7 +146,7 @@ mod tests {
 
     #[test]
     fn time_goes_to_the_outermost_label_and_hooks_to_their_pack() {
-        enable(PerfFlags { counter: false, profile: true });
+        enable(PerfFlags { counter: false, profile: true, packs: true });
         take_lua_breakdown();
         time("worm_message", || {
             // A nested call into Lua is part of the outer one.

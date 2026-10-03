@@ -45,6 +45,7 @@ thread_local! {
 
 pub fn park_lua(lua: Lua) {
     dispatch::worm_message_rebuild(&lua);
+    dispatch::fast_rebuild(&lua);
     PARKED_LUA.with(|slot| {
         *slot.borrow_mut() = Some(lua);
     });
@@ -1916,7 +1917,7 @@ seen = {}
 wa.on.worm_message(function(_, m) seen[#seen + 1] = "f" .. m end, { msgs = { 2 } })
 "#);
         park_lua(run_mods(&[pack]).unwrap().lua);
-        perf::enable(PerfFlags { counter: false, profile: true });
+        perf::enable(PerfFlags { counter: false, profile: true, packs: false });
         take_lua_time();
         assert!(!worm_message(1, 0, 5).unwrap());
         assert_eq!(take_lua_time().1, 0, "no call into Lua for an unwanted message");
@@ -1940,6 +1941,92 @@ wa.on.worm_message(function(_, m) seen[#seen + 1] = "f" .. m end, { msgs = { 2 }
         let _second = run_mods(&[other]).unwrap();
         worm_message(1, 0, 2).unwrap();
         assert_eq!(parked_seen(), ["f2"], "the parked state's handler still runs");
+    }
+
+    /// Dispatch cost per call, Highlander-shaped: 13 worm_message handlers
+    /// (most of them filtered to FRAME_FINISH) and 5 missile_frame handlers
+    /// that, like most real ones, look at the missile and return. Run it in
+    /// release, as the DLL is built:
+    /// `cargo test --release -p lua-host bench_dispatch -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn bench_dispatch() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-bench");
+        let mut script = String::from("local W = {}\n");
+        for i in 1..=13 {
+            let msgs = if i % 4 == 0 { "{ 2, 0x26 }" } else { "{ 2 }" };
+            script.push_str(&format!(
+                "wa.on.worm_message(function(w, m) if m ~= 2 then return end W[{i}] = m end, {{ msgs = {msgs} }})\n"
+            ));
+        }
+        for _ in 1..=5 {
+            script.push_str("wa.on.missile_frame(function(m) if m.phase ~= 'post' then return end if m.weapon == 'prod' then m.vx = m.vx end end)\n");
+        }
+        let pack = filter_pack(&root, &script);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        let motion = game::entity::Motion {
+            id: 0xF000_0001, class_type: 0, damp: 0x10000, wind_scale: 0x10000, gravity_scale: 0x10000,
+            moved: 1, x: 100 << 16, y: 200 << 16, vx: 0x8000, vy: -0x8000, cm_gravity: 0x1000, cm_wind: 0,
+        };
+        let n = 20_000u32;
+        let run = |label: &str| {
+            let t = std::time::Instant::now();
+            for _ in 0..n {
+                worm_message(1, 0, 2).unwrap();
+            }
+            let wm = t.elapsed().as_nanos() as f64 / n as f64 / 1e3;
+            let (mut sprite, mut mask) = (48, 0x7C);
+            let t = std::time::Instant::now();
+            for i in 0..n {
+                let phase = if i % 2 == 0 { "pre" } else { "post" };
+                missile_frame(motion, 2, phase, Some(6), &mut sprite, &mut mask).unwrap();
+            }
+            let mf = t.elapsed().as_nanos() as f64 / n as f64 / 1e3;
+            println!("bench_dispatch {label}: worm_message {wm:.2} us/call, missile_frame {mf:.2} us/call");
+        };
+        run("profiler off");
+        perf::enable(PerfFlags { counter: false, profile: true, packs: false });
+        run("profiler on ");
+        perf::enable(PerfFlags { counter: false, profile: true, packs: true });
+        run("packs on    ");
+        perf::reset();
+    }
+
+    #[test]
+    fn missile_frame_fast_and_slow_paths_agree() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-missile-paths");
+        let pack = filter_pack(&root, r#"
+seen = {}
+wa.on.missile_frame(function(m)
+  seen[#seen + 1] = m.phase .. ":" .. tostring(m.weapon) .. ":" .. m.msg
+  if m.phase ~= "post" then return end
+  m.x, m.vx, m.sprite, m.collision_mask = m.x + 7, -m.vx, 0, 0x400000
+  m.damp = "not a number"
+end)
+"#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        let motion = game::entity::Motion {
+            id: 0xF000_0002, class_type: 0, damp: 0x10000, wind_scale: 3, gravity_scale: 4,
+            moved: 1, x: 100, y: 200, vx: 5, vy: -6, cm_gravity: 0, cm_wind: 0,
+        };
+        let run = || {
+            let (mut sprite, mut mask) = (48, 0x7C);
+            let pre = missile_frame(motion, 2, "pre", Some(6), &mut sprite, &mut mask).unwrap();
+            let post = missile_frame(motion, 2, "post", Some(6), &mut sprite, &mut mask).unwrap();
+            (pre, post, sprite, mask, parked_seen())
+        };
+        let fast = run();
+        perf::enable(PerfFlags { counter: false, profile: true, packs: true });
+        let slow = run();
+        perf::reset();
+        assert_eq!(fast, slow);
+        let (pre, post, sprite, mask, seen) = fast;
+        assert_eq!(pre, motion, "an untouched frame comes back as it went");
+        assert_eq!((post.x, post.vx, post.damp, post.y), (107, -5, 0x10000, 200));
+        assert_eq!((sprite, mask), (0, 0x400000));
+        assert_eq!(seen, ["pre:grenade:2", "post:grenade:2"]);
     }
 
     #[test]
@@ -2829,10 +2916,10 @@ wa.weapons.replace({
             "wa.perf.enable({ counter = true })",
         );
         run_mods(&[counter]).unwrap();
-        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: false });
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: false, packs: false });
         let both = pack(&root.join("b"), "p.both", &manifest("p.both"), "wa.perf.enable()");
         run_mods(&[both]).unwrap();
-        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: true });
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: true, packs: false });
         let none = pack(&root.join("n"), "p.none", &manifest("p.none"), "");
         run_mods(&[none]).unwrap();
         assert_eq!(perf_flags(), PerfFlags::default(), "a new match's packs decide afresh");
