@@ -107,6 +107,7 @@ local PX_ART = {
     sprites = { "sprites/px_hold/valyrian_fire.png" },
     params = { gpu_prefix = "sprites/px_hold/" },
     on_fire = function(fire) fires.valyrian_fire(fire) end,
+    on_explode = function(ev) fires.valyrian_burst(ev) end,
   },
   { -- Lightning Strike: the PX strike is an effect, not WA's napalm plane.
     weapon = "napalm_strike",

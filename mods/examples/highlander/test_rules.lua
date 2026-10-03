@@ -356,6 +356,14 @@ local function new_match(opts)
         return a
       end,
     },
+    -- wa.fire.spawn: the fires a pack starts, as given.
+    fire = {
+      spawn = function(spec)
+        M.fires = M.fires or {}
+        M.fires[#M.fires + 1] = spec
+        return #M.fires
+      end,
+    },
     weapons = {
       replace = function(spec)
         assert(IS_STOCK[spec.weapon], "replace of a slot that does not exist: " .. tostring(spec.weapon))
@@ -1164,6 +1172,22 @@ do
   check("from the water nothing is thrown and the bottle goes back to the team",
     #M.launched == 1 and ammo[w.ammo_group].petrol_bomb == 1)
   M.water = nil
+  -- The impact: PX's 51 fires on a 3-pixel ring, for the turn's worm.
+  w.turn = true
+  spec.on_explode({ worm = worm(32), x = 300 * P, y = 200 * P })
+  local f = M.fires or {}
+  local near, pxs = true, true
+  for _, fire in ipairs(f) do
+    local dx, dy = (fire.x - 300 * P) / P, (fire.y - 200 * P) / P
+    if dx * dx + dy * dy > 9.0001 then near = false end
+    if fire.owner ~= w or fire.count ~= 0 or fire.duration ~= 6000 or fire.up_power ~= 0
+      or fire.damage ~= 0 then pxs = false end
+  end
+  check("51 fires on a 3-pixel ring around the impact", #f == 51 and near, tostring(#f))
+  check("each with PX's fire values, for the turn's worm", pxs)
+  check("PX's first fire: x + 3 cos(360), y - 3 sin(360)",
+    f[1] and f[1].x == 300 * P - 55776 and f[1].y == 200 * P - 188531)
+  w.turn = nil
 end
 
 print("chilli bomb: five more Chillis burst out")

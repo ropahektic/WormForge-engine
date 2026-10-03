@@ -188,7 +188,7 @@ PX's 0 draws no worm in WA 3.8.1.
 | low_gravity | Gravity Control | icon, its two sounds | 1-5 choose the gravity, firing holds it for the turn |
 | ninja_rope | Jump | icon, the worm aiming it | the worm leaves with the shot's speed |
 | parachute | Hang-Glider | icon, the glider, its pack-away, its two sounds | PX's glider, flown by the pack once WA's parachute opens |
-| petrol_bomb | Valyrian Fire | icon, the bottle (held and in flight) | the hold and the spinning bottle drawn at run time; thrown 15 pixels further out, and from the water the bottle goes back to the team. Not yet: PX's 51 green, stronger fires at the impact, its "WILDFIRE !!!" and the bottle bursting on the water (engine work); WA's own petrol fire burns meanwhile |
+| petrol_bomb | Valyrian Fire | icon, the bottle (held and in flight) | the hold and the spinning bottle drawn at run time; thrown 15 pixels further out, and from the water the bottle goes back to the team; PX's 51 fires on a 3-pixel ring at the impact (`wa.fire.spawn`, PX's fire values). Not yet: the fires' green and their stronger hits, "WILDFIRE !!!" and the bottle bursting on the water |
 
 Played in game: the Fire Jump, the Sticky Bomb and Igniter holds, the
 Shadow-Bolt, the Sniper Rifle and the Helicopter.
