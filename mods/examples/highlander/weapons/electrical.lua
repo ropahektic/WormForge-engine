@@ -353,10 +353,37 @@ if wa.on.draw and wa.draw.ribbon then
   local function colour(a, r, g, b)
     return (math.floor(a) << 24) | (r << 16) | (g << 8) | b
   end
+  -- wa.draw.quad and wa.draw.ribbon copy their table before returning, so
+  -- one spec is refilled for every quad and every ribbon. A frame with
+  -- dozens of arcs draws about a thousand glows: new tables for each made
+  -- enough garbage to run Lua's GC inside the draw on most frames.
+  local QUAD = { points = { {0, 0}, {0, 0}, {0, 0}, {0, 0} } }
+  -- An axis-aligned square of half size hw by hh around x, y.
+  local function square(sprite, frame, blend, color, depth, x, y, hw, hh)
+    QUAD.sprite, QUAD.frame, QUAD.blend, QUAD.color, QUAD.depth = sprite, frame, blend, color, depth
+    local p = QUAD.points
+    p[1][1], p[1][2] = x - hw, y - hh
+    p[2][1], p[2][2] = x + hw, y - hh
+    p[3][1], p[3][2] = x + hw, y + hh
+    p[4][1], p[4][2] = x - hw, y + hh
+    wa.draw.quad(QUAD)
+  end
   local function glow(x, y, size, color)
     local h = size * EP / 2
-    wa.draw.quad({ sprite = GLOW, blend = "add", color = color, depth = ELECTRIC_DEPTH,
-      points = { {x-h,y-h}, {x+h,y-h}, {x+h,y+h}, {x-h,y+h} } })
+    square(GLOW, 0, "add", color, ELECTRIC_DEPTH, x, y, h, h)
+  end
+  -- One ribbon's points, refilled: point(i, ...) sets the i-th, ribbon(n)
+  -- draws the first n.
+  local RIBBON = { sprite = BEAM, blend = "add", depth = ELECTRIC_DEPTH, points = {} }
+  local function point(i, x, y, width, u, color)
+    local p = RIBBON.points[i]
+    if not p then p = {}; RIBBON.points[i] = p end
+    p.x, p.y, p.width, p.u, p.color = x, y, width, u, color
+  end
+  local function ribbon(n)
+    local pts = RIBBON.points
+    for i = #pts, n + 1, -1 do pts[i] = nil end
+    wa.draw.ribbon(RIBBON)
   end
   -- PX's lightningstrike RenderLightning. Its shape is fractal noise, made
   -- afresh each game frame while the beam holds: each point is the middle of
@@ -399,28 +426,24 @@ if wa.on.draw and wa.draw.ribbon then
     local dd = math.sqrt(dx * dx + dy * dy)
     if dd <= 0 then return end
     dx, dy = dx / dd, dy / dd
-    local pts, d = {}, divs - 1
+    local d = divs - 1
     for i = 0, divs - 1 do
       local f = i / d
       local n = noise[off + i] or 0
       local x = lerp(f, x1, x2) + scale * dy * n * EP
       local y = lerp(f, y1, y2) - scale * dx * n * EP
-      pts[#pts + 1] = { x = x, y = y, width = 2 * lerp(f, width, endwidth), u = f,
-        color = colour(255, LR, LG, LB) }
+      point(i + 1, x, y, 2 * lerp(f, width, endwidth), f, colour(255, LR, LG, LB))
       local a = 255 * glowalpha * (1 - f)
       if a >= 1 then glow(x, y, 64, colour(a, LR, LG, LB)) end
     end
-    wa.draw.ribbon({ sprite = BEAM, blend = "add", depth = ELECTRIC_DEPTH, points = pts })
+    ribbon(divs)
   end
   local function draw_strike(s)
     -- The cloud, dark and alpha-blended over the sky.
     for _, p in ipairs(s.cloud) do
       local t = p.age / p.life
       local size = lerp(t, p.s0, p.s1)
-      local hw, hh = 64 * size * EP, 40 * size * EP
-      wa.draw.quad({ sprite = CLOUD, blend = "alpha", depth = CLOUD_DEPTH,
-        color = colour(255 * t, 45, 40, 60),
-        points = { { p.x - hw, p.y - hh }, { p.x + hw, p.y - hh }, { p.x + hw, p.y + hh }, { p.x - hw, p.y + hh } } })
+      square(CLOUD, 0, "alpha", colour(255 * t, 45, 40, 60), CLOUD_DEPTH, p.x, p.y, 64 * size * EP, 40 * size * EP)
     end
     for _, p in ipairs(s.sparks) do
       local t = p.age / 50
@@ -457,10 +480,7 @@ if wa.on.draw and wa.draw.ribbon then
     for _, arc in ipairs(arcs) do
       if arc.explosion < 10 then
         local h = 75 * EP
-        wa.draw.quad({ sprite=GRENADE_BURST, frame=arc.explosion,
-          blend="add", color=0x551E14EB, depth=ELECTRIC_DEPTH,
-          points={{arc.burst_x-h,arc.burst_y-h},{arc.burst_x+h,arc.burst_y-h},
-            {arc.burst_x+h,arc.burst_y+h},{arc.burst_x-h,arc.burst_y+h}} })
+        square(GRENADE_BURST, arc.explosion, "add", 0x551E14EB, ELECTRIC_DEPTH, arc.burst_x, arc.burst_y, h, h)
       end
       if #arc.points >= 2 then
         -- PX's CTazerShot: one strip through the arc's points, thickest in
@@ -468,11 +488,11 @@ if wa.on.draw and wa.draw.ribbon then
         -- its path by fractal noise made afresh each game frame, a glow at
         -- every point and a big one at the tip; all fading as the arc dies.
         if arc.shape_tick ~= arc.sound_age then
-          arc.noise = {}
+          arc.noise = arc.noise or {}
           noise_span(arc.noise, 0, 33, 1.0, 0, 0)
           arc.shape_tick = arc.sound_age
         end
-        local pts, num = {}, #arc.points - 1
+        local num = #arc.points - 1
         local fade = math.min(1, arc.life / 6)
         for i = 0, num do
           local t = i / num
@@ -489,10 +509,10 @@ if wa.on.draw and wa.draw.ribbon then
           local f = math.min(1, 4 * t * (1 - t) + 0.1)
           local f2 = f * fade
           local c = colour(255, math.floor(80 * f2), math.floor(100 * f2), math.floor(255 * f2))
-          pts[i + 1] = { x = x, y = y, width = 2 * 9 * f, u = t, color = c }
+          point(i + 1, x, y, 2 * 9 * f, t, c)
           glow(x, y, i == num - 1 and 115 or 38, c)
         end
-        wa.draw.ribbon({ sprite = BEAM, blend = "add", depth = ELECTRIC_DEPTH, points = pts })
+        ribbon(num + 1)
       end
     end
     for key, hold in pairs(tazed) do
@@ -500,8 +520,7 @@ if wa.on.draw and wa.draw.ribbon then
       if worm then
         local x, y = worm.x, worm.y
         local h = 30 * EP
-        wa.draw.quad({ sprite=hold.sheet, frame=math.floor(wa.draw.random()*4), blend="alpha", depth=ELECTRIC_DEPTH,
-          points={{x-h,y-h},{x+h,y-h},{x+h,y+h},{x-h,y+h}} })
+        square(hold.sheet, math.floor(wa.draw.random() * 4), "alpha", 0xFFFFFFFF, ELECTRIC_DEPTH, x, y, h, h)
         -- PX's tazed worm: a glow 0.4 to 0.7 of the sheet, flickering.
         glow(x, y, 128 * (0.4 + 0.3 * wa.draw.random()), colour(255, 80, 100, 255))
       end

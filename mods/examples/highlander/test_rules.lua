@@ -114,6 +114,14 @@ function Worm:fits(x, y)
     or M.solid(x, y - h) or M.solid(x, y + h))
 end
 
+-- A copy of `v` and every table in it.
+local function deep_copy(v)
+  if type(v) ~= "table" then return v end
+  local out = {}
+  for k, x in pairs(v) do out[k] = deep_copy(x) end
+  return out
+end
+
 local function inventory_api()
   local api = {}
 
@@ -298,8 +306,10 @@ local function new_match(opts)
       solid = function(x, y) return M.solid ~= nil and M.solid(x, y) or false end,
     },
     draw = {
-      quad = function(q) M.quads[#M.quads + 1] = q end,
-      ribbon = function(q) M.ribbons[#M.ribbons + 1] = q end,
+      -- The engine reads the table before returning, so a pack may refill
+      -- one table for every call: keep a copy, as the engine does.
+      quad = function(q) M.quads[#M.quads + 1] = deep_copy(q) end,
+      ribbon = function(q) M.ribbons[#M.ribbons + 1] = deep_copy(q) end,
       random = function() return 0.5 end,
     },
     sound = {
@@ -2070,6 +2080,29 @@ do
   local function tick(n)
     local a = M.spawned[#M.spawned]
     for _ = 1, n do if not a.dead then a.on(a) end end
+  end
+  -- Dozens of live arcs, drawn: the draw refills its tables rather than
+  -- making garbage for every glow, so Lua's GC does not run inside it.
+  do
+    local spec, owner = setup()
+    for i = 1, 40 do spec.on_explode({ worm = owner, x = i * 40 * P, y = 0 }) end
+    for _ = 1, 12 do
+      for _, a in ipairs(M.spawned) do if not a.dead then a.on(a) end end
+    end
+    local quad, ribbon = wa.draw.quad, wa.draw.ribbon
+    local quads, ribbons = 0, 0
+    wa.draw.quad = function() quads = quads + 1 end
+    wa.draw.ribbon = function() ribbons = ribbons + 1 end
+    M.draw()
+    quads, ribbons = 0, 0
+    collectgarbage("stop")
+    local before = collectgarbage("count")
+    M.draw()
+    local kb = collectgarbage("count") - before
+    collectgarbage("restart")
+    wa.draw.quad, wa.draw.ribbon = quad, ribbon
+    check("40 arcs drawn without new tables per glow", ribbons == 40 and quads > 400 and kb < 4,
+      string.format("%d ribbons, %d quads, %.1f KB", ribbons, quads, kb))
   end
   local spec, owner = setup()
   check("a stock grenade for the worm's throw sheet, PX's hold over it",
