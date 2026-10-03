@@ -573,6 +573,14 @@ impl OverlayParams {
     pub fn uses_lua_projectile(&self) -> bool {
         self.on_fire_id != 0 || self.fire_spawn.is_some()
     }
+
+    /// Whether the slot's WA missiles carry its explode step. Only a Lua
+    /// actor projectile (`on_fire = { spawn = ... }`) replaces them: an
+    /// `on_fire` function may relaunch WA's own missile of the slot
+    /// (`wa.weapons.launch`), which is that slot's missile to every hook.
+    pub fn explodes_as_missile(&self) -> bool {
+        self.fire_spawn.is_none() && (self.explode_spawn.is_some() || self.on_explode_id != 0)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -715,6 +723,18 @@ mod tests {
             slot,
             params: OverlayParams::default(),
         }
+    }
+
+    #[test]
+    fn a_relaunching_on_fire_keeps_the_missiles_explode_step() {
+        let mut p = OverlayParams::default();
+        assert!(!p.explodes_as_missile(), "no explode step at all");
+        p.on_explode_id = 3;
+        assert!(p.explodes_as_missile());
+        p.on_fire_id = 4;
+        assert!(p.explodes_as_missile(), "an on_fire function may relaunch WA's missile");
+        p.fire_spawn = Some(ActorSpawn::default());
+        assert!(!p.explodes_as_missile(), "a Lua actor projectile has no WA missile");
     }
 
     #[test]
