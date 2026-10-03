@@ -263,14 +263,21 @@ fn preview(slot: usize, hi: &[u8], lo: &[u8], rgb: &[[u8; 3]; 256]) {
             }
         }
         let path = dir.join(format!("panel-icon-{slot}-{name}.png"));
-        let written = std::fs::File::create(&path).ok().and_then(|f| {
-            let mut enc = png::Encoder::new(std::io::BufWriter::new(f), w, h);
+        // Encoded in memory, then written through game::overwrite: the
+        // previews of the last match are already there, and the user's Wine
+        // cannot truncate a file in place (os error 120).
+        let mut png_bytes = Vec::new();
+        let encoded = {
+            let mut enc = png::Encoder::new(&mut png_bytes, w, h);
             enc.set_color(png::ColorType::Rgba);
             enc.set_depth(png::BitDepth::Eight);
-            enc.write_header().ok()?.write_image_data(&rgba).ok()
-        });
-        if written.is_none() {
-            log_error(&format!("panel icon preview: could not write {}", path.display()));
+            enc.write_header().and_then(|mut wr| wr.write_image_data(&rgba))
+        };
+        let written = encoded
+            .map_err(|e| e.to_string())
+            .and_then(|()| game::overwrite::write(&path, &png_bytes).map_err(|e| e.to_string()));
+        if let Err(e) = written {
+            log_error(&format!("panel icon preview: could not write {}: {e}", path.display()));
         }
     }
 }
