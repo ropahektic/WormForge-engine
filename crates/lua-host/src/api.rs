@@ -44,8 +44,18 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     let logs = Rc::clone(&ctx.logs);
     let mod_id_log = ctx.mod_id.clone();
     let log_fn = lua
-        .create_function(move |_, msg: String| {
-            let line = format!("[{mod_id_log}] {msg}");
+        .create_function(move |lua, msg: String| {
+            // The pack running now. `wa` is one table for every pack, so this
+            // function is whichever pack loaded last; its own id named that
+            // pack for every log line written from a hook. Hooks and weapon
+            // steps set `wa._mod` to their own pack while they run.
+            let running = lua
+                .globals()
+                .get::<Table>("wa")
+                .ok()
+                .and_then(|wa| wa.get::<Option<String>>("_mod").ok().flatten())
+                .filter(|m| !m.is_empty());
+            let line = format!("[{}] {msg}", running.as_deref().unwrap_or(&mod_id_log));
             // Straight to wkLua.log, so a pack logging from a hook or a brain
             // is visible. The Vec below is only the load-time transcript, and
             // it is snapshotted once after loading -- anything pushed to it
@@ -1757,6 +1767,24 @@ mod tests {
         assert_eq!(hits.get::<String>(1).unwrap(), "packa");
         assert_eq!(hits.get::<String>(2).unwrap(), "packb");
         assert_eq!(hits.len().unwrap(), 2);
+    }
+
+    /// `wa.log` is the last-loaded pack's function (one `wa` for every pack),
+    /// so it used to tag a line logged from pack a's hook with pack b's id.
+    #[test]
+    fn a_hooks_log_line_names_its_own_pack() {
+        let lua = Lua::new();
+        install(&lua, &ctx("packa")).unwrap();
+        lua.load(r#"wa.on.hud(function() wa.log("from a's hook") end)"#).exec().unwrap();
+        let b = ctx("packb");
+        install(&lua, &b).unwrap();
+        lua.load(r#"wa.log("b loading")"#).exec().unwrap();
+        let wa: Table = lua.globals().get("wa").unwrap();
+        let hud: mlua::Function = wa.get::<Table>("_hooks").unwrap().get::<Table>("hud").unwrap().get(1).unwrap();
+        hud.call::<()>(()).unwrap();
+        let logs = b.logs.borrow();
+        assert_eq!(logs.first().map(String::as_str), Some("[packb] b loading"));
+        assert_eq!(logs.last().map(String::as_str), Some("[packa] from a's hook"));
     }
 
     /// The wrapper must stay transparent: worm_message dispatch reads the
