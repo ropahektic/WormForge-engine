@@ -801,3 +801,12 @@ pattern = "83 EC 18 8B 44 24 24 8B 50 18 53 55 8B E9 8B 48 14 8B 44 24 30 85 C0 
 derive = "match"
 target_section = ".text"
 required = false
+
+[[locator]]
+name = "DISPLAY_PRESENT_FRAME"
+required = false
+reference_va = 0x0059c8a0
+section = ".text"
+pattern = "55 8B EC 83 E4 F8 51 53 56 8B F1 8B 46 20 8B 4E 1C 57 50 51 8B FE 8B DA E8 ?? ?? ?? ?? 8B 46 40 8B 10 6A 00 6A 00 6A 00 6A 00 50 8B 42 44 FF D0"
+derive = "match"
+target_section = ".text"
