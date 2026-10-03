@@ -1028,6 +1028,27 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn wa_sprites_get_a_true_colour_copy_unless_a_pack_says_not() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-truecolor");
+        let _ = std::fs::remove_dir_all(&root);
+        let claim = |dir: &str, id: &str, params: &str| {
+            pack(
+                &root.join(dir),
+                id,
+                &format!("id = \"{id}\"\napi_version = 1\nentry = \"weapons.lua\"\n[weapons]\nreplace = [\"cluster_bomb\"]\n"),
+                &format!("wa.weapons.replace({{ weapon = \"cluster_bomb\", {params} }})"),
+            )
+        };
+        let default = claim("a", "t.default", "");
+        let off = claim("b", "t.off", "params = { truecolor = false }");
+        let on = run_mods(&[default]).unwrap();
+        assert!(on.resolved.applied[0].params.truecolor);
+        let off = run_mods(&[off]).unwrap();
+        assert!(!off.resolved.applied[0].params.truecolor);
+    }
+
+    #[test]
     fn a_strike_takes_its_own_plane() {
         let _guard = lock_host();
         let root = std::env::temp_dir().join("wklua-strike-plane");

@@ -664,7 +664,14 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mu
     // flags alongside the id (the mirror bit, and others); `sheet_id` drops
     // them. A stock sprite a pack overrides on the GPU draws as that sheet.
     let mirror = sprite & game::offsets::SPRITE_MIRROR_X;
-    let id = crate::sprite::gpu_alias(crate::sprite::sheet_id(sprite));
+    let wa_id = crate::sprite::sheet_id(sprite);
+    let id = crate::sprite::gpu_alias(wa_id);
+    // A real WA sprite drawn as a GPU sheet (`sprite_overrides`, a true-colour
+    // copy) still has WA's own copy: without the shader renderer, which would
+    // leave our quad undrawn, let WA draw that instead.
+    if id != wa_id && !crate::shader::is_ready() {
+        return false;
+    }
     let sprite = id | mirror;
     if !crate::sprite::is_gpu_sheet(id) {
         // A virtual id that reached here without a sheet must NOT be passed

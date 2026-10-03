@@ -914,12 +914,13 @@ pub fn is_virtual(id: i32) -> bool {
     id >= VIRTUAL_SPRITE_BASE
 }
 
-/// Stock sprite id -> the GPU sheet drawn in its place (`sprite_overrides`).
+/// WA sprite id -> the GPU sheet drawn in its place: a stock sprite a pack
+/// overrides (`sprite_overrides`), or a pack's own sprite's true-colour copy.
 /// WA keeps its own sprite at that id, so every size, frame-count and phase
 /// lookup still answers as before; only the draw is ours, in true colour.
 static GPU_ALIASES: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
 
-/// Draw `sheet`, a GPU sheet, wherever WA draws stock sprite `target`.
+/// Draw `sheet`, a GPU sheet, wherever WA draws sprite `target`.
 /// The first claim wins; false when `target` is already drawn as another.
 pub fn alias_gpu(target: i32, sheet: i32) -> bool {
     let Ok(mut g) = GPU_ALIASES.lock() else {
@@ -929,7 +930,7 @@ pub fn alias_gpu(target: i32, sheet: i32) -> bool {
         return false;
     }
     g.push((target as u32, sheet as u32));
-    log_line(&format!("stock sprite {target} drawn as GPU sheet {sheet:#x}"));
+    log_line(&format!("sprite {target} drawn as GPU sheet {sheet:#x}"));
     true
 }
 
