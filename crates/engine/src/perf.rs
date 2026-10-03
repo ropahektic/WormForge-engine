@@ -18,10 +18,12 @@
 //!   draw     RQ_RenderDrawingQueue: WA draws the queue (GPU capture inside)
 //!   present  our GPU sprites, after D3D9ShaderPresent (0 with none to draw)
 //!   hud      wa.on.hud and its text, this counter included
+//!   flip     WA's present (0x59C8A0, around IDirect3DDevice9::Present):
+//!            waiting for vsync and the GPU, and WA's own pacing there
 //!   lua      every engine call into Lua, wherever it happens (a part of the
 //!            sections above, not added to them), broken down by hook and by
 //!            pack on a second report line
-//!   other    the rest of the frame: WA's own work and waiting for vsync
+//!   other    the rest of the frame: WA's own work outside these
 //! ```
 //!
 //! Root messages nest (a handler sending the root another message); only the
@@ -31,8 +33,10 @@
 //! read a timing back. Off, a probe is one relaxed load.
 
 use crate::log_line;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
+use std::ffi::c_void;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::time::Instant;
 
 #[derive(Clone, Copy)]
@@ -43,10 +47,11 @@ pub enum Section {
     Draw,
     Present,
     Hud,
+    Flip,
 }
 
-const SECTIONS: usize = 6;
-const NAMES: [&str; SECTIONS] = ["sim", "scene", "root", "draw", "present", "hud"];
+const SECTIONS: usize = 7;
+const NAMES: [&str; SECTIONS] = ["sim", "scene", "root", "draw", "present", "hud", "flip"];
 
 /// The counter's spike covers this much time, and it keeps frames this long.
 const WINDOW_NS: u64 = 5_000_000_000;
@@ -180,6 +185,66 @@ struct State {
 
 thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::default());
+}
+
+// ------------------------------------------------------------------ flip
+
+static ORIG_FLIP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+thread_local! {
+    static FLIP_START: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+extern "C" fn flip_before() {
+    if profiling() {
+        FLIP_START.with(|t| t.set(Some(Instant::now())));
+    }
+}
+
+extern "C" fn flip_after() {
+    let Some(start) = FLIP_START.with(|t| t.take()) else { return };
+    let ns = start.elapsed().as_nanos() as u64;
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.frame[Section::Flip as usize] += ns;
+        s.calls[Section::Flip as usize] += 1;
+    });
+}
+
+/// WA's present (0x59C8A0) is usercall: ECX the display, EDX where its result
+/// goes, a plain `ret`. Time it without touching those, nor what it returns.
+#[unsafe(naked)]
+unsafe extern "C" fn flip_hook() {
+    core::arch::naked_asm!(
+        "push ecx",
+        "push edx",
+        "call {before}",
+        "pop edx",
+        "pop ecx",
+        "call dword ptr [{orig}]",
+        "push eax",
+        "push ecx",
+        "push edx",
+        "call {after}",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "ret",
+        before = sym flip_before,
+        after = sym flip_after,
+        orig = sym ORIG_FLIP,
+    );
+}
+
+/// Time WA's present, when this WA has it (else `flip` stays 0 and its time
+/// is in `other`).
+pub fn install() -> Result<(), String> {
+    let Some(target) = crate::wa::try_address("DISPLAY_PRESENT_FRAME") else {
+        return Err("DISPLAY_PRESENT_FRAME not located".into());
+    };
+    let trampoline = unsafe { crate::wa::create_hook(target as *mut c_void, flip_hook as *mut c_void) }?;
+    ORIG_FLIP.store(trampoline, Ordering::SeqCst);
+    Ok(())
 }
 
 /// Close a rendered frame. Called once per GameRender, at the HUD hook.
