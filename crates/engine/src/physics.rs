@@ -1291,7 +1291,11 @@ fn apply_carry(this: *mut u8) {
     }) else {
         return;
     };
-    if let_loose {
+    // Dead while held (a pack's damage, or a blast WA did not knock it
+    // flying with): WA starts a worm's death only once it has come to rest,
+    // which a held worm never does, so the match would wait for it, its turn
+    // frozen if the hold froze it. WA owns it again, in whatever state it is.
+    if let_loose || crate::world::worm_hp(handle) <= 0 {
         let_go(handle, None);
         return;
     }
