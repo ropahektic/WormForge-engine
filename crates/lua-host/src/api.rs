@@ -259,7 +259,6 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
             .map_err(|e| e.to_string())?;
     }
     wa.set("_hooks", hooks).map_err(|e| e.to_string())?;
-    crate::dispatch::worm_message_reset();
     wa.set("_brains", lua.create_table().map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
     wa.set("_fires", lua.create_table().map_err(|e| e.to_string())?)
