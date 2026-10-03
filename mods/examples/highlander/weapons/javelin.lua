@@ -14,9 +14,9 @@ do
     if m.weapon == "prod" then speed[m.id] = { m.vx, m.vy } end
   end)
 
-  -- How the part of the stamp inside the land fades: over 2 pixels from the
-  -- spear's outline, dithered. Tuned by eye in game.
-  local JAVELIN_BURIED = { soften = 2, blend = "dither" }
+  -- How the part of the stamp inside the land fades: over 3 pixels from the
+  -- spear's outline, its colour mixed with the earth's. Tuned by eye in game.
+  local JAVELIN_BURIED = { soften = 3, blend = "mix" }
 
   local function trunc(n) return n < 0 and math.ceil(n) or math.floor(n) end
   local function orientation(vx, vy)

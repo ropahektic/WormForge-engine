@@ -2224,8 +2224,8 @@ do
   end
   check("cardinals, ratio bins and clamps choose PX's centered 60px stamp", good)
   local last = M.stamps[#M.stamps]
-  check("the half in the land fades into it", last.buried and last.buried.soften == 2
-    and last.buried.blend == "dither")
+  check("the half in the land fades into it", last.buried and last.buried.soften == 3
+    and last.buried.blend == "mix")
   check("sticking plays the registered impact sound on the turn's worm, never the missile's owner",
     M.sounds[#M.sounds] == "sounds/javelin_impact.wav" and M.sound_targets[#M.sound_targets] == owner)
   local n = #M.stamps
