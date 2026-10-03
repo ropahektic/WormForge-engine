@@ -1181,10 +1181,11 @@ do
     local dx, dy = (fire.x - 300 * P) / P, (fire.y - 200 * P) / P
     if dx * dx + dy * dy > 9.0001 then near = false end
     if fire.owner ~= w or fire.count ~= 0 or fire.duration ~= 6000 or fire.up_power ~= 0
-      or fire.damage ~= 0 or fire.damage_scale ~= 1.25 or fire.knock_scale ~= 2 then pxs = false end
+      or fire.damage ~= 0 or fire.damage_scale ~= 1.25 or fire.knock_scale ~= 2
+      or fire.tint ~= 0x4BE14B then pxs = false end
   end
   check("51 fires on a 3-pixel ring around the impact", #f == 51 and near, tostring(#f))
-  check("each with PX's fire values, hitting 25% harder and knocking twice as far, for the turn's worm", pxs)
+  check("each with PX's fire values, green, hitting 25% harder and knocking twice as far, for the turn's worm", pxs)
   check("PX's first fire: x + 3 cos(360), y - 3 sin(360)",
     f[1] and f[1].x == 300 * P - 55776 and f[1].y == 200 * P - 188531)
   w.turn = nil
