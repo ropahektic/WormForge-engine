@@ -617,6 +617,17 @@ derive = "match"
 target_section = ".text"
 
 [[locator]]
+# handle_PreFiring: usercall EAX = worm, plain `ret`. Waits for the wind-up
+# (by fire type, table 0x517EA0), counts worm+0x2A4 down, then releases.
+name = "WORM_HANDLE_PREFIRING"
+required = false
+reference_va = 0x00517be0
+section = ".text"
+pattern = "83 EC 08 53 56 8B F0 8B 86 6C 03 00 00 8B 40 30 83 C0 FF 83 F8 03 57 0F 87 ?? ?? ?? ?? FF 24 85 ?? ?? ?? ?? 83 BE B8 02"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
 # FireEntity::Free: thiscall (this, flags), RET 4: unlinks the fire from the
 # world's fire table, runs the base destructor, frees it when flags & 1.
 name = "FIRE_ENTITY_FREE"
@@ -624,6 +635,18 @@ required = false
 reference_va = 0x0054f680
 section = ".text"
 pattern = "56 8B F1 8B 46 2C 8B 4E 74 C7 06 ?? ?? ?? ?? 8B 90 18 05 00 00 39 34 8A 8D 04 8A 75 ?? C7 00 00 00 00 00 8B CE C7 06"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+# handle_PreFiring's release block: release_weapon_0 (ESI = worm), 0x51F1C0,
+# then SetState(0x6A) for a non-special weapon still prefiring; exits with
+# `pop edi; pop esi; pop ebx; add esp,8; ret`.
+name = "WORM_PREFIRING_RELEASE"
+required = false
+reference_va = 0x00517ca5
+section = ".text"
+pattern = "E8 ?? ?? ?? ?? 8B C6 E8 ?? ?? ?? ?? 8B 46 44 83 F8 69 74 0B 3D 8A 00 00 00 0F 85 ?? ?? ?? ?? 8B 86 6C 03 00 00 83 78 30 04"
 derive = "match"
 target_section = ".text"
 

@@ -1141,6 +1141,10 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if hurt {
         eat = crate::hurt::before(this, a, msg, b, c);
     }
+    // A pack's wind-up never outlives the turn it was set in.
+    if msg == MSG_START_TURN {
+        crate::windup::clear();
+    }
     eat = eat || worm_message_reporting_errors(this as u32, team, msg);
     // After the pack's hooks (which read the keys), before WA's handler.
     eat = eat || owned_input(this, msg);

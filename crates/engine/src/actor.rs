@@ -184,6 +184,8 @@ pub fn install() -> Result<(), String> {
         is_taken: crate::physics::taken,
         fits: crate::physics::fits,
         jetpack_steer: crate::physics::jetpack_steer,
+        set_windup: crate::windup::set,
+        windup: crate::windup::get,
         look: native_look,
         keys: crate::world::keys,
         networked: crate::world::is_networked,
