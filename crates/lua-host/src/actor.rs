@@ -448,7 +448,7 @@ pub fn weapon_fire(
     if fire_id == 0 {
         return Ok(());
     }
-    with_lua(|lua| {
+    with_lua("weapon_fire", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let fires: Table = wa.get("_fires").map_err(|e| e.to_string())?;
         let spec = match fires.get::<Value>(fire_id).map_err(|e| e.to_string())? {
@@ -486,7 +486,7 @@ pub fn weapon_click(
     if click_id == 0 {
         return Ok(());
     }
-    with_lua(|lua| {
+    with_lua("weapon_click", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let clicks: Table = wa.get("_clicks").map_err(|e| e.to_string())?;
         let spec = match clicks.get::<Value>(click_id).map_err(|e| e.to_string())? {
@@ -518,7 +518,7 @@ pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String>
         return Ok(());
     }
     let (x, y, _) = native_pointer().map(|f| f()).unwrap_or((0, 0, false));
-    with_lua(|lua| {
+    with_lua("weapon_select", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let selects: Table = wa.get("_selects").map_err(|e| e.to_string())?;
         let spec = match selects.get::<Value>(select_id).map_err(|e| e.to_string())? {
@@ -559,7 +559,7 @@ pub fn weapon_emit(
     if emit_id == 0 {
         return Ok(());
     }
-    with_lua(|lua| {
+    with_lua("weapon_emit", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let fns: Table = wa.get(table).map_err(|e| e.to_string())?;
         let spec = match fns.get::<Value>(emit_id).map_err(|e| e.to_string())? {
@@ -595,7 +595,7 @@ pub fn actor_frame(handle: u32, brain_id: u32, ev: ActorEvent) -> Result<(), Str
     if handle == 0 || brain_id == 0 {
         return Ok(());
     }
-    with_lua(|lua| {
+    with_lua("actor", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let brains: Table = wa.get("_brains").map_err(|e| e.to_string())?;
         let spec = match brains.get::<Value>(brain_id).map_err(|e| e.to_string())? {
@@ -643,13 +643,13 @@ fn event_table(lua: &Lua, ev: &ActorEvent) -> Result<Table, String> {
     Ok(t)
 }
 
-fn with_lua<T>(f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
+fn with_lua<T>(label: &'static str, f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
     PARKED_LUA.with(|slot| {
         let guard = slot.borrow();
         let Some(lua) = guard.as_ref() else {
             return Err("no lua state".into());
         };
-        crate::perf::time(|| crate::sim_context::with_sim(|| f(lua)))
+        crate::perf::time(label, || crate::sim_context::with_sim(|| f(lua)))
     })
 }
 

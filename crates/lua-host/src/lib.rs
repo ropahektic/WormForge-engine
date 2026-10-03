@@ -15,7 +15,7 @@ mod sim_context;
 mod spawn;
 
 pub use bundles::ComponentPlan;
-pub use perf::{perf_flags, take_lua_time, PerfFlags};
+pub use perf::{perf_flags, take_lua_breakdown, take_lua_time, LuaBreakdown, PerfFlags};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
     weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
