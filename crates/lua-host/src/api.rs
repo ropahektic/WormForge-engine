@@ -253,15 +253,16 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     msg.set("IMPACT", 0x76).map_err(|e| e.to_string())?;
     wa.set("msg", msg).map_err(|e| e.to_string())?;
 
-    // `wa.perf.enable{ counter = true, profile = true, packs = true }`: this
-    // machine's FPS counter and profiler; `packs` also times each hook handler
-    // for its pack, which makes every hook call slower. With no table, counter
-    // and profile. Nothing is readable back.
+    // `wa.perf.enable{ counter = true, profile = true, packs = true,
+    // spikes = true }`: this machine's FPS counter and profiler; `packs` also
+    // times each hook handler for its pack, and `spikes` samples the Lua lines
+    // long calls spend their time on. Both slow Lua down while on. With no
+    // table, counter and profile. Nothing is readable back.
     let perf = lua.create_table().map_err(|e| e.to_string())?;
     let enable = lua
-        .create_function(|_, opts: Option<Table>| {
+        .create_function(|lua, opts: Option<Table>| {
             let flags = match opts {
-                None => crate::PerfFlags { counter: true, profile: true, packs: false },
+                None => crate::PerfFlags { counter: true, profile: true, ..Default::default() },
                 Some(t) => {
                     let mut flags = crate::PerfFlags::default();
                     for pair in t.pairs::<Value, Value>() {
@@ -270,7 +271,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
                             Value::Boolean(b) => b,
                             _ => {
                                 return Err(mlua::Error::external(
-                                    "wa.perf.enable: counter, profile and packs take true or false",
+                                    "wa.perf.enable: counter, profile, packs and spikes take true or false",
                                 ))
                             }
                         };
@@ -278,9 +279,10 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
                             Some("counter") => flags.counter = on,
                             Some("profile") => flags.profile = on,
                             Some("packs") => flags.packs = on,
+                            Some("spikes") => flags.spikes = on,
                             _ => {
                                 return Err(mlua::Error::external(
-                                    "wa.perf.enable: unknown option (counter, profile, packs)",
+                                    "wa.perf.enable: unknown option (counter, profile, packs, spikes)",
                                 ))
                             }
                         }
@@ -288,6 +290,9 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
                     flags
                 }
             };
+            if flags.profile && flags.spikes {
+                crate::perf::install_sampler(lua);
+            }
             crate::perf::enable(flags);
             Ok(())
         })
