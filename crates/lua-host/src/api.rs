@@ -242,6 +242,8 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "gravity_after",
         "missile_frame",
         "worm_message",
+        "worm_message_any",
+        "worm_message_by_msg",
         "hurt",
         "turn_start",
         "turn_retreat",
@@ -257,6 +259,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
             .map_err(|e| e.to_string())?;
     }
     wa.set("_hooks", hooks).map_err(|e| e.to_string())?;
+    crate::dispatch::worm_message_reset();
     wa.set("_brains", lua.create_table().map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
     wa.set("_fires", lua.create_table().map_err(|e| e.to_string())?)
@@ -582,7 +585,16 @@ end
 /// covers hooks added later for free.
 fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
     let f = lua
-        .create_function(move |lua, cb: Function| {
+        .create_function(move |lua, (cb, opts): (Function, Option<Table>)| {
+            let msgs = match (name, opts) {
+                (_, None) => None,
+                ("worm_message", Some(opts)) => Some(worm_message_msgs(&opts)?),
+                (_, Some(_)) => {
+                    return Err(mlua::Error::external(format!(
+                        "wa.on.{name} takes only a function; options are for wa.on.worm_message"
+                    )))
+                }
+            };
             let wa: Table = lua.globals().get("wa")?;
             let hooks: Table = wa.get("_hooks")?;
             let list: Table = hooks.get(name)?;
@@ -598,12 +610,42 @@ fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
                 wa.set("_mod", owner.clone())?;
                 cb.call::<MultiValue>(args)
             })?;
+            if name == "worm_message" {
+                return crate::dispatch::register_worm_message(lua, &hooks, wrapped, msgs);
+            }
             let n = list.len()?;
             list.set(n + 1, wrapped)?;
             Ok(())
         })
         .map_err(|e| e.to_string())?;
     on.set(name, f).map_err(|e| e.to_string())
+}
+
+/// `{ msgs = { wa.msg.FRAME_FINISH, ... } }`: the messages a worm_message
+/// handler wants.
+fn worm_message_msgs(opts: &Table) -> mlua::Result<Vec<u32>> {
+    let bad = |why: &str| mlua::Error::external(format!("wa.on.worm_message: {why}"));
+    for pair in opts.pairs::<Value, Value>() {
+        let (k, _) = pair?;
+        if k.as_str().as_deref() != Some("msgs") {
+            return Err(bad("the only option is msgs = { message numbers }"));
+        }
+    }
+    let list: Table = opts.get::<Option<Table>>("msgs")?.ok_or_else(|| bad("msgs = { message numbers }"))?;
+    let mut msgs = Vec::new();
+    for v in list.sequence_values::<Value>() {
+        let n = match v? {
+            Value::Integer(n) if (0..=0xFFFF).contains(&n) => n as u32,
+            other => return Err(bad(&format!("msgs lists message numbers, got {other:?}"))),
+        };
+        if !msgs.contains(&n) {
+            msgs.push(n);
+        }
+    }
+    if msgs.is_empty() {
+        return Err(bad("msgs must name at least one message"));
+    }
+    Ok(msgs)
 }
 
 /// Total order over Lua keys so `wa.sorted` is deterministic.

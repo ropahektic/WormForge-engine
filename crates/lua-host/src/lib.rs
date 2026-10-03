@@ -1858,6 +1858,90 @@ end)
         assert!(!worm_message(1, 0, 0x34).unwrap());
     }
 
+    fn filter_pack(root: &std::path::Path, script: &str) -> LoadedMod {
+        let _ = std::fs::remove_dir_all(root);
+        pack(
+            &root.join("w"),
+            "w.filter",
+            r#"
+id = "w.filter"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = []
+"#,
+            script,
+        )
+    }
+
+    fn parked_seen() -> Vec<String> {
+        PARKED_LUA.with(|slot| {
+            let guard = slot.borrow();
+            let lua = guard.as_ref().unwrap();
+            let seen: mlua::Table = lua.globals().get("seen").unwrap();
+            let out = seen.sequence_values::<String>().map(|v| v.unwrap()).collect();
+            lua.load("seen = {}").exec().unwrap();
+            out
+        })
+    }
+
+    #[test]
+    fn worm_message_filters_keep_registration_order() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-worm-filter");
+        let pack = filter_pack(&root, r#"
+seen = {}
+local function note(tag) return function(_, m) seen[#seen + 1] = tag .. m end end
+wa.on.worm_message(note("a"))
+wa.on.worm_message(note("b"), { msgs = { 2 } })
+wa.on.worm_message(note("c"))
+wa.on.worm_message(note("d"), { msgs = { 2, 36 } })
+"#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        worm_message(1, 0, 2).unwrap();
+        assert_eq!(parked_seen(), ["a2", "b2", "c2", "d2"]);
+        worm_message(1, 0, 5).unwrap();
+        assert_eq!(parked_seen(), ["a5", "c5"]);
+        worm_message(1, 0, 36).unwrap();
+        assert_eq!(parked_seen(), ["a36", "c36", "d36"]);
+    }
+
+    #[test]
+    fn a_message_no_handler_wants_never_enters_lua() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-worm-filter-skip");
+        let pack = filter_pack(&root, r#"
+seen = {}
+wa.on.worm_message(function(_, m) seen[#seen + 1] = "f" .. m end, { msgs = { 2 } })
+"#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        perf::enable(PerfFlags { counter: false, profile: true });
+        take_lua_time();
+        assert!(!worm_message(1, 0, 5).unwrap());
+        assert_eq!(take_lua_time().1, 0, "no call into Lua for an unwanted message");
+        worm_message(1, 0, 2).unwrap();
+        assert_eq!(take_lua_time().1, 1);
+        perf::reset();
+        assert_eq!(parked_seen(), ["f2"]);
+    }
+
+    #[test]
+    fn worm_message_options_are_checked() {
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let f = "local f = function() end ";
+        for bad in [
+            "wa.on.worm_message(f, {})",
+            "wa.on.worm_message(f, { msgs = {} })",
+            "wa.on.worm_message(f, { msgs = { 'jump' } })",
+            "wa.on.worm_message(f, { msgs = { 2 }, also = 1 })",
+            "wa.on.hud(f, { msgs = { 2 } })",
+        ] {
+            assert!(lua.load(format!("{f}{bad}")).exec().is_err(), "{bad}");
+        }
+        lua.load(format!("{f}wa.on.worm_message(f, {{ msgs = {{ 2, 2, 36 }} }})")).exec().unwrap();
+    }
+
     #[test]
     fn missile_frame_names_the_missiles_weapon() {
         let _host = lock_host();
