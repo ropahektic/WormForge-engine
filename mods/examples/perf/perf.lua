@@ -4,7 +4,10 @@
 --   the last 2 s, and the longest frame in the last 5 s, in ms.
 -- profile: every 10 s, a "perf:" line in wkLua.log with each part of a
 --   rendered frame: its average and worst ms per frame, its share of the
---   frame, and how often it ran.
+--   frame, and how often it ran. A "perf lua:" line splits the Lua time by
+--   call.
+-- packs: with profile, that line also shows each pack's hook handler time.
+--   Off by default: timing every handler makes each hook call slower.
 --
 -- Presentation only: no timing reaches the game, so it is safe online.
 wa.perf.enable({ counter = true, profile = true })
