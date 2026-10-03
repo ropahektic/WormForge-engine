@@ -18,7 +18,7 @@ pub use bundles::ComponentPlan;
 pub use perf::{perf_flags, take_lua_breakdown, take_lua_spikes, take_lua_time, LuaBreakdown, PerfFlags, Spike};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
-    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs, LaunchArgs, SpawnArgs,
     StampBuried,
 };
 pub use dispatch::{
@@ -580,6 +580,49 @@ wa.weapons.replace({
         assert!(lua.load(call).eval::<bool>().is_err());
         assert!(sim_context::with_sim(|| lua.load(call).eval::<bool>().unwrap()));
         FROZEN.with(|v| assert_eq!(v.get(), 0x1234));
+    }
+
+    #[test]
+    fn fire_spawn_reaches_native_only_during_simulation() {
+        let _guard = lock_host();
+        thread_local! {
+            static STARTED: std::cell::RefCell<Vec<actor::FireArgs>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            spawn_fire: |a| { STARTED.with(|l| l.borrow_mut().push(*a)); Ok(7) },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let bare = "return wa.fire.spawn{ owner = wa.worms.all()[1], x = 0x100000, y = 0x200000 }";
+        assert!(lua.load(bare).exec().is_err(), "outside a simulation callback");
+        let n: u32 = sim_context::with_sim(|| lua.load(bare).eval().unwrap());
+        assert_eq!(n, 7);
+        sim_context::with_sim(|| {
+            lua.load("wa.fire.spawn{ owner = wa.worms.all()[1], x = 1, y = 2, vx = 3, vy = 0, \
+                      count = 0, duration = 6000, up_power = 0, damage = 0 }")
+                .exec()
+                .unwrap();
+            let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
+            assert!(err("wa.fire.spawn{ x = 0, y = 0 }").contains("needs owner"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0 }").contains("needs y"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, duration = 0 }")
+                .contains("duration"));
+        });
+        STARTED.with(|l| {
+            let d = actor::FIRE_DEFAULTS;
+            assert_eq!(
+                l.borrow().as_slice(),
+                &[
+                    actor::FireArgs { owner: 0x1234, x: 0x100000, y: 0x200000, ..d },
+                    actor::FireArgs {
+                        owner: 0x1234, x: 1, y: 2, vx: 3, vy: 0, count: 0, duration: 6000, up_power: 0, damage: 0,
+                    },
+                ],
+                "a bare spawn is WA's Petrol Bomb fire; every field can be given"
+            )
+        });
     }
 
     #[test]

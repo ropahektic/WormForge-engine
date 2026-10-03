@@ -133,6 +133,27 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     }
 
     {
+        // `wa.fire.spawn{ owner, x, y, vx, vy, count, duration, up_power,
+        // damage }`: one of WA's fires, as the Petrol Bomb starts its own.
+        let fire = lua.create_table().map_err(|e| e.to_string())?;
+        let f = lua
+            .create_function(|_, spec: Table| {
+                let args = fire_args(&spec)?;
+                if !crate::sim_context::active() {
+                    return Err(mlua::Error::external(
+                        "fire.spawn: only valid in simulation callbacks",
+                    ));
+                }
+                let spawn = crate::actor::native_spawn_fire()
+                    .ok_or_else(|| mlua::Error::external("fire.spawn: native not bound"))?;
+                spawn(&args).map_err(mlua::Error::external)
+            })
+            .map_err(|e| e.to_string())?;
+        fire.set("spawn", f).map_err(|e| e.to_string())?;
+        wa.set("fire", fire).map_err(|e| e.to_string())?;
+    }
+
+    {
         let push_claim = Rc::clone(&push_claim);
         let mod_id = ctx.mod_id.clone();
         let root = ctx.root.clone();
@@ -797,6 +818,36 @@ const WORM_SPRITE_TEAMS: usize = 6;
 
 /// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse,
 /// sound, explode_into, countdown, explode_on_space }`.
+/// `wa.fire.spawn`'s table: owner, x and y required, the rest WA's Petrol
+/// Bomb's (FIRE_DEFAULTS).
+fn fire_args(spec: &Table) -> mlua::Result<crate::FireArgs> {
+    let owner = spawn::parse_owner(&spec.get::<Value>("owner")?)?;
+    if owner == 0 {
+        return Err(mlua::Error::external("fire.spawn needs owner = a worm or actor"));
+    }
+    let d = crate::actor::FIRE_DEFAULTS;
+    let need = |key: &str| {
+        get_i32(spec, key)?.ok_or_else(|| mlua::Error::external(format!("fire.spawn needs {key} (16.16)")))
+    };
+    let args = crate::FireArgs {
+        owner,
+        x: need("x")?,
+        y: need("y")?,
+        vx: get_i32(spec, "vx")?.unwrap_or(d.vx),
+        vy: get_i32(spec, "vy")?.unwrap_or(d.vy),
+        count: get_i32(spec, "count")?.unwrap_or(d.count),
+        duration: get_i32(spec, "duration")?.unwrap_or(d.duration),
+        up_power: get_i32(spec, "up_power")?.unwrap_or(d.up_power),
+        damage: get_i32(spec, "damage")?.unwrap_or(d.damage),
+    };
+    // WA's constructor gives up on a fire with no duration (its burn rate
+    // divides by it).
+    if args.duration <= 0 {
+        return Err(mlua::Error::external("fire.spawn: duration must be above 0"));
+    }
+    Ok(args)
+}
+
 fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
     let name: String = spec
         .get("weapon")

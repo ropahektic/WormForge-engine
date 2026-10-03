@@ -30,6 +30,30 @@ pub struct ActorEvent {
     pub damage: i32,
 }
 
+/// `wa.fire.spawn`: one of WA's fires, started as the Petrol Bomb starts its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FireArgs {
+    /// The worm or actor it is started for: its world's fire store is the
+    /// fire's parent, and a worm's team owns it.
+    pub owner: u32,
+    /// Position and speed, 16.16 (PX's CFireDesc X, Y, SpX, SpY).
+    pub x: i32,
+    pub y: i32,
+    pub vx: i32,
+    pub vy: i32,
+    /// PX's CFireDesc Count, Duration, UpPower and Damage.
+    pub count: i32,
+    pub duration: i32,
+    pub up_power: i32,
+    pub damage: i32,
+}
+
+/// `wa.fire.spawn` defaults: what WA's Petrol Bomb passes (CreateFire1 with
+/// the stock record), so a bare spawn is a petrol fire.
+pub const FIRE_DEFAULTS: FireArgs = FireArgs {
+    owner: 0, x: 0, y: 0, vx: 0, vy: 0x4_0000, count: 8, duration: 4000, up_power: 100, damage: 20,
+};
+
 /// `wa.weapons.launch`: a real WA missile, fired from a weapon slot's fire
 /// params, as `FireWeapon__CreateWeaponProjectile` fires one.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -249,6 +273,8 @@ pub struct ActorNative {
     /// Fire a real WA missile from a weapon slot's fire params. Returns the
     /// missile's handle, the id `wa.on.missile_frame` gives it.
     pub launch: fn(&LaunchArgs) -> Result<u32, String>,
+    /// `wa.fire.spawn{...}`: one of WA's fires. Returns its number.
+    pub spawn_fire: fn(&FireArgs) -> Result<u32, String>,
     /// WA's own WormEntity::SetState, so the state's setup runs.
     pub set_worm_state: fn(handle: u32, state: u32),
     /// Enter WA's frozen worm state when the worm is alive and eligible.
@@ -340,6 +366,7 @@ impl Default for ActorNative {
             hurt: |_, _, _| {},
             retarget_weapon_sprites: |_, _, _| Err("retarget not bound".into()),
             launch: |_| Err("launch not bound".into()),
+            spawn_fire: |_| Err("fire.spawn not bound".into()),
         }
     }
 }
@@ -1798,6 +1825,10 @@ fn ammo_change(v: Value) -> mlua::Result<Option<AmmoChange>> {
 
 fn native_hurt() -> Option<fn(u32, u32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hurt)
+}
+
+pub(crate) fn native_spawn_fire() -> Option<fn(&FireArgs) -> Result<u32, String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.spawn_fire)
 }
 
 pub(crate) fn native_launch() -> Option<fn(&LaunchArgs) -> Result<u32, String>> {

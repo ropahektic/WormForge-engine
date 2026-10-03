@@ -35,6 +35,7 @@ mod transfer;
 mod truecolor;
 mod shader;
 pub mod render_queue;
+mod fire;
 mod gpu;
 mod version;
 mod wa;

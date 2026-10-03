@@ -725,6 +725,14 @@ pub const CLASS_MISSILE: i32 = 11;
 pub const CLASS_ARROW: i32 = 12;
 pub const CLASS_CRATE: i32 = 15;
 pub const CLASS_WORM: i32 = 18;
+/// FireEntity: WA allocates this much and zeroes the first FIRE_ENTITY_ZEROED
+/// bytes before its constructor (0x54F4C0), as MissileEntity::CreateFire1
+/// (0x509D70) does.
+pub const FIRE_ENTITY_SIZE: usize = 0xD8;
+pub const FIRE_ENTITY_ZEROED: usize = 0xB8;
+/// The shared-data key of the fires' parent, the fire store (PX's
+/// `Root->GetObject(TI_FireStore, 0)`).
+pub const SHARED_FIRE_STORE: u32 = 0x17;
 pub const CLASS_OIL: i32 = 30;
 /// WA CrossEntity, the gravestone left by a dead worm.
 pub const CLASS_GRAVE: i32 = 21;
