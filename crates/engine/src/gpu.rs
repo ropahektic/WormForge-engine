@@ -648,6 +648,22 @@ pub(crate) fn enqueue_hold(x: i32, y: i32, sheet: u32, frame: u32,
     }
 }
 
+/// Take over a stock sprite's draw with `sheet`, a GPU copy of it, tinted
+/// and at `depth` (WA's own queue depth for it). Declined without the
+/// shader renderer: WA then draws its own, untinted.
+fn intercept_tinted(x: i32, y: i32, sprite: u32, sheet: u32, anim: u32, tint: u32, depth: u32) -> bool {
+    if !crate::shader::is_ready() || !crate::sprite::is_gpu_sheet(sheet) {
+        return false;
+    }
+    let anim = crate::sprite::draw_phase(sprite, anim);
+    let mirror = sprite & game::offsets::SPRITE_MIRROR_X;
+    let Ok(mut pending) = PENDING.lock() else {
+        return false;
+    };
+    pending.push(Pending { x, y, sprite: sheet | mirror, anim, angle: 0.0, scale: 1.0, tint, depth });
+    true
+}
+
 /// Take over one sprite draw, or decline it.
 ///
 /// Returns true when this draw is ours, in which case the caller must NOT
@@ -930,6 +946,10 @@ unsafe extern "C" fn rq_should_intercept(layer: u32, x: i32, y: i32, sprite: u32
     // RQ_DrawSpriteLocal call can drop the aim cursor / crosshair.
     if !is_active() {
         return 0;
+    }
+    // A tinted fire's flame: its full-colour copy, tinted, at the fire's depth.
+    if let Some((copy, tint)) = crate::fire::tinted_draw(layer, sprite) {
+        return intercept_tinted(x, y, sprite, copy, anim, tint, layer) as u8;
     }
     // Virtual ids are 0x01000000|n — never mask to 16 bits here. Worm aim
     // sheets (worm_sprites) arrive with the mirror bit OR'd in and must match

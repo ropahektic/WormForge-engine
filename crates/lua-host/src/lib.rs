@@ -602,7 +602,7 @@ wa.weapons.replace({
         sim_context::with_sim(|| {
             lua.load("wa.fire.spawn{ owner = wa.worms.all()[1], x = 1, y = 2, vx = 3, vy = 0, \
                       count = 0, duration = 6000, up_power = 0, damage = 0, \
-                      damage_scale = 1.25, knock_scale = 2 }")
+                      damage_scale = 1.25, knock_scale = 2, tint = 0x4BE14B }")
                 .exec()
                 .unwrap();
             let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
@@ -612,6 +612,8 @@ wa.weapons.replace({
                 .contains("duration"));
             assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, knock_scale = -1 }")
                 .contains("knock_scale"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, tint = 0x1000000 }")
+                .contains("tint"));
         });
         STARTED.with(|l| {
             let d = actor::FIRE_DEFAULTS;
@@ -621,7 +623,7 @@ wa.weapons.replace({
                     actor::FireArgs { owner: 0x1234, x: 0x100000, y: 0x200000, ..d },
                     actor::FireArgs {
                         owner: 0x1234, x: 1, y: 2, vx: 3, vy: 0, count: 0, duration: 6000, up_power: 0, damage: 0,
-                        damage_scale: 0x1_4000, knock_scale: 0x2_0000,
+                        damage_scale: 0x1_4000, knock_scale: 0x2_0000, tint: Some(0x4B_E14B),
                     },
                 ],
                 "a bare spawn is WA's Petrol Bomb fire; every field can be given"

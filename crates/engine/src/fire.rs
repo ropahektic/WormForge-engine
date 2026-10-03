@@ -9,16 +9,33 @@
 //! X's M_GUNEXP). A fire spawned with `damage_scale` / `knock_scale` has those
 //! hits scaled before WA (and `wa.on.hurt`) see them, as Project X's Valyrian
 //! Fire does. Such fires are known by address and pool slot together, so a
-//! later fire at a freed one's address is not taken for it.
+//! later fire at a freed one's address is not taken for it, and forgotten as
+//! WA frees them (FireEntity::Free).
+//!
+//! A fire spawned with `tint` is drawn tinted, as Project X's SetColorMod
+//! draws its Valyrian Fire. A fire queues its flame (WA's petrol sprites) at
+//! render-queue depth FIRE_DRAW_DEPTH + its pool slot; for a tinted fire's
+//! slot the GPU renderer draws a full-colour copy of that sprite instead,
+//! tinted. The copies are made at match start from WA's own loaded sprites,
+//! through WA's own frame getter, coloured by the sprite's layer palette.
 
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
-    CLASS_WORM, ENT_CLASS_TYPE, ENT_WORM_TEAM, FIRE_ENTITY_POOL_SLOT, FIRE_ENTITY_SIZE,
-    FIRE_ENTITY_ZEROED, HIT_AMOUNT, HIT_FLAG, HIT_KIND_FIRE, HIT_KNOCK_X, HIT_KNOCK_Y, MSG_HIT,
-    SHARED_FIRE_STORE,
+    BITGRID_BITS, BITGRID_STRIDE, CLASS_WORM, DISPLAY_LAYER_CONTEXTS, DISPLAY_SLOT_GET_SPRITE_FRAME,
+    DISPLAY_SPRITE_LAYERS, DISPLAY_SPRITE_PTRS, ENT_CLASS_TYPE, ENT_WORM_TEAM, FIRE_DRAW_DEPTH,
+    FIRE_ENTITY_POOL_SLOT, FIRE_ENTITY_SIZE, FIRE_ENTITY_ZEROED, FIRE_SPRITE_FIRST,
+    FIRE_SPRITE_LAST, HIT_AMOUNT, HIT_FLAG, HIT_KIND_FIRE, HIT_KNOCK_X, HIT_KNOCK_Y, MSG_HIT,
+    SHARED_FIRE_STORE, SPRITE_MAX_FRAMES,
 };
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::ffi::c_void;
+use std::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use std::sync::Mutex;
+
+/// Tinted fires: (address, pool slot, ARGB tint).
+static TINTED: Mutex<Vec<(u32, i32, u32)>> = Mutex::new(Vec::new());
+/// WA's fire sprites' full-colour copies: (stock sprite, GPU sheet).
+static COPIES: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+static ORIG_FREE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 /// A fire whose hits are scaled: (address, pool slot, damage, knock), the
 /// scales 16.16.
@@ -37,6 +54,145 @@ pub fn clear() {
     if let Ok(mut g) = SCALED.lock() {
         g.clear();
     }
+    if let Ok(mut g) = TINTED.lock() {
+        g.clear();
+    }
+    if let Ok(mut g) = COPIES.lock() {
+        g.clear();
+    }
+}
+
+/// WA frees `fire`: it is no longer one of ours, whatever comes to its
+/// address or its pool slot next.
+fn forget(fire: u32) {
+    if let Ok(mut g) = SCALED.lock() {
+        g.retain(|(f, _, _, _)| *f != fire);
+    }
+    if let Ok(mut g) = TINTED.lock() {
+        g.retain(|(f, _, _)| *f != fire);
+    }
+}
+
+type FreeFn = unsafe extern "thiscall" fn(*mut u8, u32) -> *mut u8;
+
+unsafe extern "thiscall" fn free_hook(this: *mut u8, flags: u32) -> *mut u8 {
+    forget(this as u32);
+    let orig: FreeFn = unsafe { std::mem::transmute(ORIG_FREE.load(Ordering::SeqCst)) };
+    unsafe { orig(this, flags) }
+}
+
+pub fn install() -> Result<(), String> {
+    let Some(target) = crate::wa::try_address("FIRE_ENTITY_FREE") else {
+        return Err("FIRE_ENTITY_FREE not located".into());
+    };
+    let trampoline = unsafe { crate::wa::create_hook(target as *mut c_void, free_hook as *mut c_void) }?;
+    ORIG_FREE.store(trampoline, Ordering::SeqCst);
+    Ok(())
+}
+
+/// The atlas key of stock sprite `id`'s copy.
+fn copy_key(id: u32) -> String {
+    format!("wa-fire:{id}")
+}
+
+type FrameFn = unsafe extern "thiscall" fn(
+    display: *mut u8, sprite: u32, anim: u32, w: *mut i32, h: *mut i32,
+    left: *mut i32, top: *mut i32, right: *mut i32, bottom: *mut i32, frac: *mut u32,
+) -> *mut u8;
+
+/// The animation value WA turns into `frame` of `frames`, rounding or not
+/// (`(frames * anim) >> 16`, +0x8000 when the sprite rounds).
+fn anim_for(frame: u32, frames: u32) -> u32 {
+    ((frame << 16) + frames - 1) / frames
+}
+
+/// Full-colour copies of WA's fire sprites, for the GPU atlas: each frame
+/// through WA's own GetSpriteFrameForBlit, its palette indices through the
+/// sprite's layer palette, index 0 clear. A sprite WA keeps elsewhere (a
+/// sprite bank) or cannot give a frame of is left out.
+pub unsafe fn copies(display: *mut u8) -> Vec<(String, gfx::SpriteStrip)> {
+    let mut out = Vec::new();
+    if display.is_null() {
+        return out;
+    }
+    unsafe {
+        let vtable = *(display as *const *const usize);
+        let get: FrameFn = std::mem::transmute(*vtable.add(DISPLAY_SLOT_GET_SPRITE_FRAME));
+        for id in FIRE_SPRITE_FIRST..=FIRE_SPRITE_LAST {
+            let sprite = *(display.add(DISPLAY_SPRITE_PTRS) as *const *const u8).add(id as usize);
+            if sprite.is_null() {
+                continue;
+            }
+            let frames = (sprite.add(SPRITE_MAX_FRAMES) as *const u16).read_unaligned() as u32;
+            let layer = *(display.add(DISPLAY_SPRITE_LAYERS) as *const u32).add(id as usize);
+            let ctx = read_i32(display, DISPLAY_LAYER_CONTEXTS + layer as usize * 4) as *const u8;
+            if frames == 0 || frames > 256 || ctx.is_null() {
+                continue;
+            }
+            let mut strip = gfx::SpriteStrip { frames: Vec::new(), fps: 10, looping: false };
+            for f in 0..frames {
+                let (mut w, mut h, mut l, mut t, mut r, mut b, mut frac) = (0, 0, 0, 0, 0, 0, 0u32);
+                let grid = get(display, id, anim_for(f, frames), &mut w, &mut h, &mut l, &mut t, &mut r, &mut b, &mut frac);
+                if grid.is_null() || w <= 0 || h <= 0 || w > 512 || h > 512 {
+                    break;
+                }
+                let data = read_i32(grid, BITGRID_BITS) as *const u8;
+                let stride = read_i32(grid, BITGRID_STRIDE) as usize;
+                let (w, h) = (w as usize, h as usize);
+                let mut rgba = vec![0u8; w * h * 4];
+                if !data.is_null() {
+                    for y in 0..(b - t).max(0) as usize {
+                        for x in 0..(r - l).max(0) as usize {
+                            let (cx, cy) = (l as usize + x, t as usize + y);
+                            if cx >= w || cy >= h {
+                                continue;
+                            }
+                            let index = *data.add(y * stride + x) as usize;
+                            if index == 0 {
+                                continue;
+                            }
+                            let o = (cy * w + cx) * 4;
+                            rgba[o] = *ctx.add(4 + index * 4);
+                            rgba[o + 1] = *ctx.add(5 + index * 4);
+                            rgba[o + 2] = *ctx.add(6 + index * 4);
+                            rgba[o + 3] = 255;
+                        }
+                    }
+                }
+                strip.frames.push(gfx::RgbaFrame { width: w as u32, height: h as u32, rgba });
+            }
+            if strip.frames.len() as u32 == frames {
+                out.push((copy_key(id), strip));
+            }
+        }
+    }
+    out
+}
+
+/// After the atlas is built: which GPU sheet each copied sprite became.
+pub fn bind_copies() {
+    let Ok(mut g) = COPIES.lock() else {
+        return;
+    };
+    g.clear();
+    for id in FIRE_SPRITE_FIRST..=FIRE_SPRITE_LAST {
+        if let Some(copy) = crate::sprite::lookup_key(&copy_key(id)).filter(|s| crate::sprite::is_virtual(s.id)) {
+            g.push((id, copy.id as u32));
+        }
+    }
+}
+
+/// A draw WA queues at `depth` with `sprite`: a tinted fire's flame gives
+/// the copy to draw instead and the tint.
+pub fn tinted_draw(depth: u32, sprite: u32) -> Option<(u32, u32)> {
+    if depth & 0xFFFF_0000 != FIRE_DRAW_DEPTH {
+        return None;
+    }
+    let slot = (depth & 0xFFFF) as i32;
+    let tint = TINTED.lock().ok()?.iter().find(|(_, s, _)| *s == slot).map(|(_, _, t)| *t)?;
+    let id = crate::sprite::sheet_id(sprite);
+    let copy = COPIES.lock().ok()?.iter().find(|(s, _)| *s == id).map(|(_, c)| *c)?;
+    Some((copy, tint))
 }
 
 /// `v` times a 16.16 scale, in integers, the same on every machine.
@@ -106,11 +262,18 @@ pub fn spawn(args: &lua_host::FireArgs) -> Result<u32, String> {
         if p.is_null() {
             return Err("wa.fire.spawn: the fire constructor failed".into());
         }
+        let slot = read_i32(p, FIRE_ENTITY_POOL_SLOT);
         if args.damage_scale != ONE || args.knock_scale != ONE {
-            let slot = read_i32(p, FIRE_ENTITY_POOL_SLOT);
             if let Ok(mut g) = SCALED.lock() {
                 g.retain(|(fire, _, _, _)| *fire != p as u32);
                 g.push((p as u32, slot, args.damage_scale, args.knock_scale));
+            }
+        }
+        if let Some(rgb) = args.tint {
+            if let Ok(mut g) = TINTED.lock() {
+                // A slot is one fire's at a time: an older fire there is gone.
+                g.retain(|(fire, s, _)| *fire != p as u32 && *s != slot);
+                g.push((p as u32, slot, 0xFF00_0000 | (rgb & 0x00FF_FFFF)));
             }
         }
     }
@@ -128,6 +291,33 @@ mod tests {
             owner: 1, ..lua_host::FIRE_DEFAULTS
         };
         assert_eq!(setup(&args, 2), [10, 20, 3, 4, 0, 8, 1, 4000, 100, 20, 1, 2]);
+    }
+
+    #[test]
+    fn the_anim_value_for_a_frame_gives_that_frame_rounded_or_not() {
+        for frames in [1u32, 4, 6, 7, 32, 255] {
+            for f in 0..frames {
+                let a = anim_for(f, frames);
+                assert_eq!((frames * a) >> 16, f, "{f} of {frames}");
+                assert_eq!((frames * a + 0x8000) >> 16, f, "{f} of {frames}, rounded");
+            }
+        }
+    }
+
+    #[test]
+    fn a_tinted_fires_flame_draws_its_copy_and_freeing_forgets_it() {
+        clear();
+        TINTED.lock().unwrap().push((0x5000, 9, 0xFF4B_E14B));
+        COPIES.lock().unwrap().push((121, 0x0100_0042));
+        let depth = FIRE_DRAW_DEPTH + 9;
+        assert_eq!(tinted_draw(depth, 121), Some((0x0100_0042, 0xFF4B_E14B)));
+        assert_eq!(tinted_draw(depth, 121 | 0x4_0000), Some((0x0100_0042, 0xFF4B_E14B)), "mirrored");
+        assert_eq!(tinted_draw(depth, 48), None, "not a fire sprite");
+        assert_eq!(tinted_draw(FIRE_DRAW_DEPTH + 8, 121), None, "another fire");
+        assert_eq!(tinted_draw(0xD_0009, 121), None, "not a fire's depth");
+        forget(0x5000);
+        assert_eq!(tinted_draw(depth, 121), None, "freed");
+        clear();
     }
 
     #[test]

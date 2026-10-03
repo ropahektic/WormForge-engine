@@ -266,9 +266,13 @@ pub fn on_gfx_ready(display: *mut u8) {
         }
     }
 
-    // Most wanted first: what does not fit the atlas is left out from the end.
-    let copies = truecolor.iter().map(|(_, key, sheet)| (key.clone(), sheet.clone())).collect();
+    // Most wanted first: a pack sprite's colours, then WA's fire sprites in
+    // full colour, for fires a pack tints. What does not fit the atlas is
+    // left out from the end.
+    let mut copies: Vec<_> = truecolor.iter().map(|(_, key, sheet)| (key.clone(), sheet.clone())).collect();
+    copies.extend(unsafe { crate::fire::copies(display) });
     install_gpu_atlas(gpu_sheets, copies);
+    crate::fire::bind_copies();
     for (id, key, _) in &truecolor {
         if let Some(copy) = sprite::lookup_key(key).filter(|s| sprite::is_virtual(s.id)) {
             sprite::alias_gpu(*id, copy.id);

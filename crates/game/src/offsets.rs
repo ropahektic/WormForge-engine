@@ -741,6 +741,18 @@ pub const SHARED_FIRE_STORE: u32 = 0x17;
 /// FireEntity: its slot in the world's 256-entry fire pool, set by the
 /// constructor (world+0x7304 counter & 0xFF).
 pub const FIRE_ENTITY_POOL_SLOT: usize = 0xA8;
+/// A fire queues its flame at render-queue depth FIRE_DRAW_DEPTH + its pool
+/// slot (0x5505BE, 0x55062D), through 0x547F30 -> RQ_DrawSpriteLocal.
+pub const FIRE_DRAW_DEPTH: u32 = 0x11_0000;
+/// WA's fire sprites: petrol_1..4 (120..123, a fire's flame by size) and
+/// petrol1..6 (124..129).
+pub const FIRE_SPRITE_FIRST: u32 = 120;
+pub const FIRE_SPRITE_LAST: u32 = 129;
+/// Sprite object: its frame count (u16).
+pub const SPRITE_MAX_FRAMES: usize = 0x16;
+/// DisplayGfx vtable slot 33: GetSpriteFrameForBlit, thiscall (display,
+/// sprite, anim, &w, &h, &left, &top, &right, &bottom, &frac) -> BitGrid*.
+pub const DISPLAY_SLOT_GET_SPRITE_FRAME: usize = 33;
 pub const CLASS_OIL: i32 = 30;
 /// WA CrossEntity, the gravestone left by a dead worm.
 pub const CLASS_GRAVE: i32 = 21;

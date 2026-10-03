@@ -854,6 +854,13 @@ fn fire_args(spec: &Table) -> mlua::Result<crate::FireArgs> {
         damage: get_i32(spec, "damage")?.unwrap_or(d.damage),
         damage_scale: scale(spec, "damage_scale")?.unwrap_or(d.damage_scale),
         knock_scale: scale(spec, "knock_scale")?.unwrap_or(d.knock_scale),
+        tint: match get_i32(spec, "tint")? {
+            None => None,
+            Some(rgb) if (0..=0xFF_FFFF).contains(&rgb) => Some(rgb as u32),
+            Some(rgb) => {
+                return Err(mlua::Error::external(format!("fire.spawn: tint is 0xRRGGBB, got {rgb:#x}")))
+            }
+        },
     };
     // WA's constructor gives up on a fire with no duration (its burn rate
     // divides by it).

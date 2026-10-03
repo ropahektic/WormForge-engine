@@ -617,6 +617,17 @@ derive = "match"
 target_section = ".text"
 
 [[locator]]
+# FireEntity::Free: thiscall (this, flags), RET 4: unlinks the fire from the
+# world's fire table, runs the base destructor, frees it when flags & 1.
+name = "FIRE_ENTITY_FREE"
+required = false
+reference_va = 0x0054f680
+section = ".text"
+pattern = "56 8B F1 8B 46 2C 8B 4E 74 C7 06 ?? ?? ?? ?? 8B 90 18 05 00 00 39 34 8A 8D 04 8A 75 ?? C7 00 00 00 00 00 8B CE C7 06"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
 name = "WORM_ENTITY_CTOR"
 reference_va = 0x0050bfb0
 section = ".text"

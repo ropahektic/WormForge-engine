@@ -50,13 +50,15 @@ pub struct FireArgs {
     /// their damage and their knockback.
     pub damage_scale: i32,
     pub knock_scale: i32,
+    /// Drawn tinted, 0xRRGGBB (PX's SetColorMod), on the GPU renderer.
+    pub tint: Option<u32>,
 }
 
 /// `wa.fire.spawn` defaults: what WA's Petrol Bomb passes (CreateFire1 with
 /// the stock record), so a bare spawn is a petrol fire.
 pub const FIRE_DEFAULTS: FireArgs = FireArgs {
     owner: 0, x: 0, y: 0, vx: 0, vy: 0x4_0000, count: 8, duration: 4000, up_power: 100, damage: 20,
-    damage_scale: 0x1_0000, knock_scale: 0x1_0000,
+    damage_scale: 0x1_0000, knock_scale: 0x1_0000, tint: None,
 };
 
 /// `wa.weapons.launch`: a real WA missile, fired from a weapon slot's fire
