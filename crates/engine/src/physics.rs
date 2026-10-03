@@ -1001,11 +1001,9 @@ fn tick_particles() {
 }
 
 unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
-    let _perf = match msg {
-        MSG_FRAME_FINISH => crate::perf::probe(crate::perf::Section::Sim),
-        MSG_RENDER_SCENE => crate::perf::probe(crate::perf::Section::Scene),
-        _ => None,
-    };
+    // Every message the root handles, by number: WA sends it several each
+    // frame besides these two, and each walks the whole entity tree.
+    let _perf = crate::perf::root_probe(msg);
     // BEFORE stock entity blits fill the GPU pending list. Clearing after
     // would wipe quads between enqueue and dispatch (ghost trails).
     if msg == MSG_RENDER_SCENE {

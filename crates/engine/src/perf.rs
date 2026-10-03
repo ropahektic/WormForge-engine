@@ -13,13 +13,19 @@
 //! ```text
 //!   sim      the world root's FRAME_FINISH: WA's physics step, with our hooks
 //!   scene    the world root's RENDER_SCENE: entities queue their draws
+//!   root     every other message the world root handles (each walks the
+//!            entity tree), broken down by message number on the report
 //!   draw     RQ_RenderDrawingQueue: WA draws the queue (GPU capture inside)
-//!   present  our GPU sprites, after D3D9ShaderPresent
+//!   present  our GPU sprites, after D3D9ShaderPresent (0 with none to draw)
 //!   hud      wa.on.hud and its text, this counter included
 //!   lua      every engine call into Lua, wherever it happens (a part of the
-//!            sections above, not added to them)
+//!            sections above, not added to them), broken down by hook and by
+//!            pack on a second report line
 //!   other    the rest of the frame: WA's own work and waiting for vsync
 //! ```
+//!
+//! Root messages nest (a handler sending the root another message); only the
+//! outermost is timed, so nothing counts twice.
 //!
 //! Presentation only. Nothing here is read by the simulation, and Lua cannot
 //! read a timing back. Off, a probe is one relaxed load.
@@ -33,13 +39,14 @@ use std::time::Instant;
 pub enum Section {
     Sim,
     Scene,
+    Root,
     Draw,
     Present,
     Hud,
 }
 
-const SECTIONS: usize = 5;
-const NAMES: [&str; SECTIONS] = ["sim", "scene", "draw", "present", "hud"];
+const SECTIONS: usize = 6;
+const NAMES: [&str; SECTIONS] = ["sim", "scene", "root", "draw", "present", "hud"];
 
 /// The counter's spike covers this much time, and it keeps frames this long.
 const WINDOW_NS: u64 = 5_000_000_000;
@@ -83,6 +90,53 @@ impl Drop for Probe {
     }
 }
 
+thread_local! {
+    static ROOT_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// A message the world root handles: FRAME_FINISH is `sim`, RENDER_SCENE
+/// `scene`, any other `root`, by number. Nested ones are part of the outer.
+pub fn root_probe(msg: u32) -> Option<RootProbe> {
+    if !profiling() {
+        return None;
+    }
+    let depth = ROOT_DEPTH.with(|d| {
+        let v = d.get();
+        d.set(v + 1);
+        v
+    });
+    Some(RootProbe { msg, start: (depth == 0).then(Instant::now) })
+}
+
+pub struct RootProbe {
+    msg: u32,
+    start: Option<Instant>,
+}
+
+impl Drop for RootProbe {
+    fn drop(&mut self) {
+        ROOT_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+        let Some(start) = self.start else { return };
+        let ns = start.elapsed().as_nanos() as u64;
+        let section = match self.msg {
+            game::offsets::MSG_FRAME_FINISH => Section::Sim,
+            game::offsets::MSG_RENDER_SCENE => Section::Scene,
+            _ => Section::Root,
+        };
+        STATE.with(|s| {
+            let mut s = s.borrow_mut();
+            let i = section as usize;
+            s.frame[i] += ns;
+            s.calls[i] += 1;
+            if let Section::Root = section {
+                let e = s.report.root_msgs.entry(self.msg).or_insert((0, 0));
+                e.0 += ns;
+                e.1 += 1;
+            }
+        });
+    }
+}
+
 #[derive(Default)]
 struct Stat {
     sum: u64,
@@ -103,7 +157,11 @@ struct Report {
     start: Option<Instant>,
     frames: u64,
     frame: Stat,
+    /// Every frame's time in the window, for its percentiles.
+    frame_ns: Vec<u64>,
     sections: [Stat; SECTIONS],
+    /// Root messages other than sim and scene: number -> (ns, calls).
+    root_msgs: std::collections::BTreeMap<u32, (u64, u64)>,
     lua: Stat,
 }
 
@@ -168,6 +226,7 @@ pub fn frame() {
             let start = *r.start.get_or_insert(last);
             r.frames += 1;
             r.frame.add(dt, 1);
+            r.frame_ns.push(dt);
             for i in 0..SECTIONS {
                 r.sections[i].add(s.frame[i], s.calls[i]);
             }
@@ -175,6 +234,7 @@ pub fn frame() {
             let span = now.duration_since(start).as_nanos() as u64;
             if span >= REPORT_NS {
                 log_line(&report_line(span, r));
+                log_line(&lua_line(r.frames, &lua_host::take_lua_breakdown()));
                 s.report = Report::default();
             }
         }
@@ -215,15 +275,29 @@ fn ms(ns: u64) -> f64 {
     ns as f64 / 1e6
 }
 
+/// The `p`th percentile (0..=100) of `values`, nearest rank.
+fn percentile(sorted: &[u64], p: u64) -> u64 {
+    if sorted.is_empty() {
+        return 0;
+    }
+    let rank = (p * sorted.len() as u64).div_ceil(100).max(1) as usize;
+    sorted[rank.min(sorted.len()) - 1]
+}
+
 fn report_line(span: u64, r: &Report) -> String {
     let frames = r.frames.max(1);
     let total = r.frame.sum.max(1);
+    let mut sorted = r.frame_ns.clone();
+    sorted.sort_unstable();
     let mut line = format!(
-        "perf: {:.1} s, {} frames ({:.1} fps), frame avg {:.2} max {:.2} ms",
+        "perf: {:.1} s, {} frames ({:.1} fps), frame avg {:.2} p50 {:.2} p95 {:.2} p99 {:.2} max {:.2} ms",
         span as f64 / 1e9,
         r.frames,
         r.frames as f64 * 1e9 / span.max(1) as f64,
         ms(r.frame.sum / frames),
+        ms(percentile(&sorted, 50)),
+        ms(percentile(&sorted, 95)),
+        ms(percentile(&sorted, 99)),
         ms(r.frame.max),
     );
     let mut part = |name: &str, s: &Stat| {
@@ -246,7 +320,39 @@ fn report_line(span: u64, r: &Report) -> String {
         ms(other / frames),
         other as f64 * 100.0 / total as f64
     ));
+    if !r.root_msgs.is_empty() {
+        let mut msgs: Vec<_> = r.root_msgs.iter().collect();
+        msgs.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(b.0)));
+        let parts: Vec<String> = msgs
+            .iter()
+            .map(|(m, (ns, n))| format!("{m:#x} {:.2} ms ({:.1}/frame)", ms(ns / frames), *n as f64 / frames as f64))
+            .collect();
+        line.push_str(&format!(" | root by message: {}", parts.join(", ")));
+    }
     line
+}
+
+/// The Lua breakdown for the same window: by what the engine called Lua
+/// for, and by the pack whose hook ran, each by time per frame.
+fn lua_line(frames: u64, b: &lua_host::LuaBreakdown) -> String {
+    let frames = frames.max(1);
+    let part = |list: &[(String, u64, u32)]| -> String {
+        let mut list: Vec<_> = list.iter().collect();
+        list.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        list.iter()
+            .map(|(name, ns, n)| {
+                format!(
+                    "{} {:.2} ms ({:.1}/frame, {:.0} us/call)",
+                    if name.is_empty() { "?" } else { name },
+                    ms(ns / frames),
+                    *n as f64 / frames as f64,
+                    *ns as f64 / 1e3 / (*n).max(1) as f64,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    format!("perf lua: by call {} | by pack (hook handlers) {}", part(&b.by_label), part(&b.by_pack))
 }
 
 #[cfg(test)]
@@ -290,14 +396,48 @@ mod tests {
         let mut r = Report { frames: 2, ..Default::default() };
         r.frame.add(20 * MS, 1);
         r.frame.add(30 * MS, 1);
+        r.frame_ns = vec![20 * MS, 30 * MS];
         r.sections[Section::Sim as usize].add(10 * MS, 2);
         r.sections[Section::Draw as usize].add(5 * MS, 1);
         r.lua.add(4 * MS, 6);
         let line = report_line(1_000 * MS, &r);
-        assert!(line.starts_with("perf: 1.0 s, 2 frames (2.0 fps), frame avg 25.00 max 30.00 ms"), "{line}");
+        assert!(line.starts_with(
+            "perf: 1.0 s, 2 frames (2.0 fps), frame avg 25.00 p50 20.00 p95 30.00 p99 30.00 max 30.00 ms"), "{line}");
         assert!(line.contains("| sim avg 5.00 max 10.00 ms (20%, 1.0/frame)"), "{line}");
         assert!(line.contains("| draw avg 2.50 max 5.00 ms (10%, 0.5/frame)"), "{line}");
         assert!(line.contains("| lua avg 2.00 max 4.00 ms (8%, 3.0/frame)"), "{line}");
         assert!(line.ends_with("| other avg 17.50 ms (70%)"), "{line}");
+    }
+
+    #[test]
+    fn percentiles_are_nearest_rank() {
+        let v: Vec<u64> = (1..=100).collect();
+        assert_eq!((percentile(&v, 50), percentile(&v, 95), percentile(&v, 99)), (50, 95, 99));
+        assert_eq!(percentile(&[7], 99), 7);
+        assert_eq!(percentile(&[], 50), 0);
+    }
+
+    #[test]
+    fn root_messages_count_in_root_and_by_number_slowest_first() {
+        let mut r = Report { frames: 2, ..Default::default() };
+        r.frame.add(40 * MS, 2);
+        r.sections[Section::Root as usize].add(6 * MS, 4);
+        r.root_msgs.insert(0x1, (2 * MS, 2));
+        r.root_msgs.insert(0x5, (4 * MS, 2));
+        let line = report_line(1_000 * MS, &r);
+        assert!(line.contains("| root avg 3.00 max 6.00 ms (15%, 2.0/frame)"), "{line}");
+        assert!(line.ends_with("| root by message: 0x5 2.00 ms (1.0/frame), 0x1 1.00 ms (1.0/frame)"), "{line}");
+    }
+
+    #[test]
+    fn lua_line_breaks_time_down_by_call_and_by_pack() {
+        let b = lua_host::LuaBreakdown {
+            by_label: vec![("actor".into(), 2 * MS, 40), ("worm_message".into(), 6 * MS, 200)],
+            by_pack: vec![("".into(), MS, 10), ("example.highlander".into(), 5 * MS, 190)],
+        };
+        let line = lua_line(2, &b);
+        assert_eq!(line, "perf lua: by call worm_message 3.00 ms (100.0/frame, 30 us/call), \
+            actor 1.00 ms (20.0/frame, 50 us/call) | by pack (hook handlers) \
+            example.highlander 2.50 ms (95.0/frame, 26 us/call), ? 0.50 ms (5.0/frame, 100 us/call)");
     }
 }
