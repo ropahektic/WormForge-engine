@@ -5,8 +5,10 @@ api_version = 1
 kind = "gameplay"
 entry = "stress.lua"
 
-# Fires two batches of projectiles in the first turn, stock then custom, and
-# turns on the FPS counter and profiler. Mine Strike is claimed only to carry
+# Fires three batches of projectiles in the first turn: stock, custom, then
+# 50 of Highlander's Electric Grenades at random points (enable highlander or
+# highlander_test with it, or set ELECTRIC_GRENADES to 0), and turns on the
+# FPS counter and profiler. Mine Strike is claimed only to carry
 # the pack's sheets into the GPU atlas; the weapon stays WA's.
 [weapons]
 register = []

@@ -20,8 +20,17 @@
 -- orb (one every fourth frame, so it lingers), and an additive flash, growing to about 320 pixels across, for a
 -- second where each one explodes.
 --
--- Both batches start from the same positions and speeds, so the two halves of
--- the turn compare like for like. Everything that decides what happens runs
+-- Batch 3, BATCH_GAP frames after batch 2: ELECTRIC_GRENADES of Highlander's
+-- Electric Grenade (its claim on the Earthquake slot), launched as real WA
+-- missiles at random open-air points across the map, with short staggered
+-- fuses. Highlander's own hooks treat them as its grenades: its art draws
+-- them and its chaining arc runs where each one blows. Enable `highlander` or
+-- `highlander_test` with this pack; without one the Earthquake slot is WA's
+-- own, which is no projectile, so leave ELECTRIC_GRENADES at 0 then. A launch
+-- WA refuses (its object pool full) is counted and logged, not fatal.
+--
+-- Batches 1 and 2 start from the same positions and speeds, so the two halves
+-- of the turn compare like for like. Everything that decides what happens runs
 -- in simulation callbacks, from a private generator with a fixed seed: the
 -- same on every machine, and again in every replay of the match. The drawing
 -- only reads it.
@@ -40,6 +49,10 @@ local DAMAGE = 15       -- each explosion's damage
 local BLAST = 40        -- each custom explosion's size (CreateExplosion's id)
 local PROFILE = true
 local SEED = 12345
+local ELECTRIC_GRENADES = 50 -- batch 3; needs highlander or highlander_test
+local ELECTRIC_SLOT = "earthquake"
+local ELECTRIC_FUSE = 3000   -- ms, plus up to ELECTRIC_SPREAD
+local ELECTRIC_SPREAD = 1500
 
 local FX = 0x10000
 local ORB, GLOW = "sprites/orb", "sprites/glow"
@@ -91,6 +104,44 @@ local function plan()
     }
   end
   return shots
+end
+
+-- Random open-air points across the whole map, above the water: a few tries
+-- each, so a point inside land is drawn again.
+local function electric_points()
+  local size = wa.world.size()
+  local water = wa.world.water() // FX
+  if water <= 0 then water = size.h end -- not known: the whole height
+  local points = {}
+  for i = 1, ELECTRIC_GRENADES do
+    for _ = 1, 20 do
+      local x = 20 + rand(math.max(1, size.w - 40))
+      local y = 20 + rand(math.max(1, math.min(size.h, water) - 40))
+      if not wa.land.solid(x * FX, y * FX) then
+        points[#points + 1] = { x = x * FX, y = y * FX }
+        break
+      end
+    end
+  end
+  return points
+end
+
+local function electric_batch(owner)
+  local launched, refused, reason = 0, 0, nil
+  for _, p in ipairs(electric_points()) do
+    local ok, err = pcall(wa.weapons.launch, {
+      weapon = ELECTRIC_SLOT, owner = owner,
+      x = p.x, y = p.y, vx = (rand(5) - 2) * FX // 2, vy = 0,
+      fuse = ELECTRIC_FUSE + rand(ELECTRIC_SPREAD),
+    })
+    if ok then
+      launched = launched + 1
+    else
+      refused, reason = refused + 1, reason or tostring(err)
+    end
+  end
+  wa.log(string.format("stress: batch 3, %d of %d Electric Grenades launched%s", launched,
+    ELECTRIC_GRENADES, refused > 0 and (", " .. refused .. " refused: " .. reason) or ""))
 end
 
 local function stock_batch(owner, shots)
@@ -201,7 +252,16 @@ wa.on.turn_start(function(ev)
           wa.log("stress: batch 2 skipped, no worm alive to fire it for")
         end
       end
-      if now > BATCH_GAP and next(orbs) == nil and #flashes == 0 then
+      if now == 2 * BATCH_GAP and ELECTRIC_GRENADES > 0 then
+        local w = live_owner(owner)
+        if w then
+          electric_batch(w)
+        else
+          wa.log("stress: batch 3 skipped, no worm alive to fire it for")
+        end
+      end
+      local last = ELECTRIC_GRENADES > 0 and 2 * BATCH_GAP or BATCH_GAP
+      if now > last and next(orbs) == nil and #flashes == 0 then
         a:despawn()
       end
     end,
