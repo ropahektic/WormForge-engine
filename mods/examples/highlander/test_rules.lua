@@ -1043,6 +1043,18 @@ do
   check("no missile id, or one never seen flying: nothing", #M.launched == 1 and #M.digs == 1)
 end
 
+print("s.m.a.r.t bomb: homing bits leave the red trail")
+do
+  new_match()
+  local spec
+  for _, r in ipairs(replaced) do
+    if r.weapon == "mortar" then spec = r end
+  end
+  check("homing bits draw the trail's red circles, not WA's green gas, on the generated record",
+    spec and spec.patch.c_homing_sprite == 250 and spec.patch.c_homing_kind == 1
+      and spec.patch.cluster_count == 7)
+end
+
 print("old woman launcher: launch the Old Woman from a clear point")
 do
   new_match()
