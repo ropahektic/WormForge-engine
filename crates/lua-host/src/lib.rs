@@ -19,6 +19,7 @@ pub use perf::{perf_flags, take_lua_time, PerfFlags};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
     weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
+    StampBuried,
 };
 pub use dispatch::{
     contact, Contact,
@@ -630,10 +631,15 @@ wa.weapons.replace({
             static STAMP: std::cell::Cell<Option<(i32, u32, i32, i32)>> = const { std::cell::Cell::new(None) };
             static CUT: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
             static DIG: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
+            static BURIED: std::cell::Cell<Option<actor::StampBuried>> = const { std::cell::Cell::new(None) };
         }
         actor::bind_actor_native(actor::ActorNative {
             resolve_sprite: |_| Some((10001, 0, 60, 60)),
-            land_stamp: |id, frame, x, y| { STAMP.with(|c| c.set(Some((id, frame, x, y)))); Ok(()) },
+            land_stamp: |id, frame, x, y, buried| {
+                STAMP.with(|c| c.set(Some((id, frame, x, y))));
+                BURIED.with(|c| c.set(buried));
+                Ok(())
+            },
             land_cut: |shape, x, y| { CUT.with(|c| c.set(Some((shape, x, y)))); Ok(()) },
             land_dig: |x, y, radius| { DIG.with(|c| c.set(Some((x, y, radius)))); Ok(()) },
             ..Default::default()
@@ -651,6 +657,17 @@ wa.weapons.replace({
             lua.load("wa.land.dig{ x = 0x10000, y = 0x20000, radius = 12 }").exec().unwrap();
         });
         STAMP.with(|c| assert_eq!(c.get(), Some((10001, 31, -65536, 131072))));
+        BURIED.with(|c| assert_eq!(c.get(), None, "no buried table: drawn over the land as before"));
+        let buried = |table: &str| stamp.replace(" }", &format!(", buried = {table} }}"));
+        sim_context::with_sim(|| {
+            lua.load(buried("{}")).exec().unwrap();
+            BURIED.with(|c| assert_eq!(c.get(), Some(actor::StampBuried { soften: 2, mix: false })));
+            lua.load(buried("{ soften = 5, blend = 'mix' }")).exec().unwrap();
+            BURIED.with(|c| assert_eq!(c.get(), Some(actor::StampBuried { soften: 5, mix: true })));
+            assert!(lua.load(buried("{ soften = 0 }")).exec().is_err());
+            assert!(lua.load(buried("{ soften = 33 }")).exec().is_err());
+            assert!(lua.load(buried("{ blend = 'smear' }")).exec().is_err());
+        });
         CUT.with(|c| assert_eq!(c.get(), Some((10, 0x12340000, 0x56780000))));
         DIG.with(|c| assert_eq!(c.get(), Some((0x10000, 0x20000, 12))));
     }

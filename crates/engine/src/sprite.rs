@@ -63,6 +63,9 @@ pub struct RgbaSheet {
     pub frames: Vec<Vec<u8>>,
     // Source alpha is gameplay data for land.stamp, independent of the GPU atlas.
     pub terrain_frames: Vec<gfx::RgbaFrame>,
+    /// Per terrain frame, each pixel's distance to the frame's outline, for
+    /// a buried stamp's soft edges. Computed once here, at install.
+    pub terrain_depths: Vec<Vec<u8>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -514,6 +517,7 @@ fn remember_rgba(id: i32, strip: &SpriteStrip) {
             h,
             looping: strip.looping,
             terrain_frames: terrain_frames(strip),
+            terrain_depths: terrain_depths(strip),
             frames,
         });
     }
@@ -1009,6 +1013,7 @@ pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) 
             // a frame COUNT must use frame_count(), which checks GPU_SHEETS
             // first for exactly this reason.
             terrain_frames: terrain_frames(strip),
+            terrain_depths: terrain_depths(strip),
             frames: Vec::new(),
         });
     }
@@ -1078,9 +1083,16 @@ fn terrain_frames(strip: &SpriteStrip) -> Vec<gfx::RgbaFrame> {
     } else { Vec::new() }
 }
 
-pub fn terrain_frame(id: i32, frame: u32) -> Result<gfx::RgbaFrame, String> {
+fn terrain_depths(strip: &SpriteStrip) -> Vec<Vec<u8>> {
+    terrain_frames(strip).iter().map(crate::terrain::edge_depths).collect()
+}
+
+/// A stamp frame and its pixels' distances to its outline.
+pub fn terrain_frame(id: i32, frame: u32) -> Result<(gfx::RgbaFrame, Vec<u8>), String> {
     let sheets = RGBA_SHEETS.lock().map_err(|_| "land.stamp: sprite store unavailable")?;
     let sheet = sheets.iter().find(|s| s.id == id).ok_or("land.stamp: unknown sheet")?;
-    sheet.terrain_frames.get(frame as usize).cloned()
-        .ok_or_else(|| "land.stamp: frame out of range or sheet exceeds 256x256".into())
+    let image = sheet.terrain_frames.get(frame as usize).cloned()
+        .ok_or("land.stamp: frame out of range or sheet exceeds 256x256")?;
+    let depth = sheet.terrain_depths.get(frame as usize).cloned().unwrap_or_default();
+    Ok((image, depth))
 }
