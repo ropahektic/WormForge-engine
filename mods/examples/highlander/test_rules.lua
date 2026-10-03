@@ -1056,6 +1056,15 @@ do
   check("other missiles keep theirs", b.sprite == 48)
   M.message(worm(32), wa.msg.FRAME_FINISH)
   check("launched once", #M.launched == 5)
+  -- The blast hurt the thrower, which ends WA's turn: no worm holds the turn
+  -- while the five fly, and they are drawn all the same.
+  M.turn_start({ worm = w })
+  for _, x in ipairs(wa.worms.all()) do x.turn = false end
+  M.spawned = {}
+  local child = { id = 620, phase = "post", weapon = "super_banana", x = 0, y = 0, vx = P, vy = -P, sprite = 0 }
+  M.missile(child)
+  check("the five are drawn after the turn ends, for the last turn's worm",
+    M.spawned[1] and M.spawned[1].sprite == "sprites/px_hold/chilli_bomb" and M.spawned[1].owner == w)
   for i = 1, 5 do
     spec.on_explode({ x = 1, y = 1, slot = 42, missile = 9000 + i })
   end

@@ -78,6 +78,15 @@ function current_worm()
   end
 end
 
+-- A missile can outlive the turn it was fired in: a Chilli's five burst
+-- after a blast that hurt the thrower, which ends WA's turn. With no worm
+-- holding the turn, the last turn's worm owns the sprite, or it would not
+-- be drawn at all while WA still flies the missile.
+local last_turn_worm
+wa.on.turn_start(function(event)
+  last_turn_worm = event.worm
+end)
+
 wa.on.missile_frame(function(m)
   local p = PX_WEAP_SPRITES[m.weapon]
   if p and p.hide and m.phase == "pre" then
@@ -89,7 +98,7 @@ wa.on.missile_frame(function(m)
   end
   local f = flying[m.id]
   if not f then
-    local owner = current_worm()
+    local owner = current_worm() or last_turn_worm
     if not owner then
       return
     end
