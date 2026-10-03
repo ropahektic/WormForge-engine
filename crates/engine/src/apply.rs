@@ -586,9 +586,7 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 claim.mod_id,
                 claim.params.damage.unwrap_or(100)
             ));
-        } else if !claim.params.uses_lua_projectile()
-            && (claim.params.explode_spawn.is_some() || claim.params.on_explode_id != 0)
-        {
+        } else if claim.params.explodes_as_missile() {
             // Same attach pattern as mines: stock MissileEntity (HM/bazooka/…)
             // keeps its fire path; Lua bits spawn on detonate.
             let sprite = pass
