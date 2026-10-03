@@ -6,7 +6,8 @@
 
 use game::entity::Motion;
 use mlua::{Function, Lua, Table, Value};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::collections::BTreeSet;
 
 use crate::PARKED_LUA;
 use weapons::StockWeapon;
@@ -147,6 +148,69 @@ fn with_lua_impl<T>(
 
 fn with_lua<T>(label: &'static str, f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
     with_lua_impl(label, true, f)
+}
+
+// worm_message filters. WA sends every worm several messages a frame, and
+// calling into Lua for each one was most of the frame's Lua time. A handler
+// may name the messages it wants (`wa.on.worm_message(fn, { msgs = {...} })`);
+// the engine then skips Lua entirely for a message no handler asked for.
+//
+// In Lua, `_hooks.worm_message_by_msg[msg]` lists, in registration order,
+// the handlers that run for that message: the ones that named it and every
+// unfiltered one. `_hooks.worm_message_any` lists the unfiltered ones, which
+// run for a message nobody named. `_hooks.worm_message` keeps all of them.
+thread_local! {
+    /// Some handler takes every message.
+    static WORM_MSG_ANY: Cell<bool> = const { Cell::new(false) };
+    /// The messages some filtered handler named.
+    static WORM_MSG_WANTED: RefCell<BTreeSet<u32>> = const { RefCell::new(BTreeSet::new()) };
+}
+
+/// A new Lua state starts with no worm_message handlers.
+pub(crate) fn worm_message_reset() {
+    WORM_MSG_ANY.with(|a| a.set(false));
+    WORM_MSG_WANTED.with(|w| w.borrow_mut().clear());
+}
+
+fn worm_message_wanted(msg: u32) -> bool {
+    WORM_MSG_ANY.with(|a| a.get()) || WORM_MSG_WANTED.with(|w| w.borrow().contains(&msg))
+}
+
+/// Register a worm_message handler, for every message (`msgs` None) or for
+/// the listed ones.
+pub(crate) fn register_worm_message(lua: &Lua, hooks: &Table, handler: Function, msgs: Option<Vec<u32>>) -> mlua::Result<()> {
+    let push = |list: &Table, f: &Function| -> mlua::Result<()> { list.set(list.len()? + 1, f.clone()) };
+    push(&hooks.get::<Table>("worm_message")?, &handler)?;
+    let any: Table = hooks.get("worm_message_any")?;
+    let by_msg: Table = hooks.get("worm_message_by_msg")?;
+    match msgs {
+        None => {
+            push(&any, &handler)?;
+            for pair in by_msg.pairs::<u32, Table>() {
+                push(&pair?.1, &handler)?;
+            }
+            WORM_MSG_ANY.with(|a| a.set(true));
+        }
+        Some(msgs) => {
+            for msg in msgs {
+                let list = match by_msg.get::<Option<Table>>(msg)? {
+                    Some(list) => list,
+                    None => {
+                        // Every unfiltered handler so far, which all came first.
+                        let list = lua.create_table()?;
+                        for f in any.sequence_values::<Function>() {
+                            push(&list, &f?)?;
+                        }
+                        by_msg.set(msg, list.clone())?;
+                        list
+                    }
+                };
+                push(&list, &handler)?;
+                WORM_MSG_WANTED.with(|w| w.borrow_mut().insert(msg));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn hook_list<'a>(lua: &'a Lua, name: &str) -> Result<Table, String> {
@@ -291,8 +355,15 @@ pub fn missile_frame(
 /// Swallowing them is extra and only safe when the scheme already ignores
 /// jump (anchored). Prefer observing the message and leaving stock alone.
 pub fn worm_message(worm_id: u32, team: u32, msg: u32) -> Result<bool, String> {
+    if !worm_message_wanted(msg) {
+        return Ok(false);
+    }
     with_lua("worm_message", |lua| {
-        let list = hook_list(lua, "worm_message")?;
+        let hooks = hook_list(lua, "worm_message_by_msg")?;
+        let list = match hooks.get::<Option<Table>>(msg).map_err(|e| e.to_string())? {
+            Some(list) => list,
+            None => hook_list(lua, "worm_message_any")?,
+        };
         let n = list.len().map_err(|e| e.to_string())?;
         if n == 0 {
             return Ok(false);
