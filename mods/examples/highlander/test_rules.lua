@@ -355,15 +355,30 @@ local function new_match(opts)
       end,
     },
     on = {
-      -- Every handler, in registration order, as the engine keeps them.
-      worm_message = function(f)
+      -- Every handler, in registration order, as the engine keeps them,
+      -- each run only for the messages it names (no options: every one).
+      worm_message = function(f, opts)
         M.handlers = M.handlers or {}
+        M.handler_msgs = M.handler_msgs or {}
+        local wants = false
+        if opts then
+          assert(type(opts.msgs) == "table" and #opts.msgs > 0, "worm_message: msgs = { ... }")
+          wants = {}
+          for _, m in ipairs(opts.msgs) do
+            assert(math.type(m) == "integer", "worm_message: msgs lists message numbers")
+            wants[m] = true
+          end
+        end
         M.handlers[#M.handlers + 1] = f
+        M.handler_msgs[#M.handlers] = wants
         -- "eat" from any handler swallows the message, as the engine's.
         M.message = function(w, msg)
           local eat
-          for _, h in ipairs(M.handlers) do
-            if h(w, msg) == "eat" then eat = "eat" end
+          for i, h in ipairs(M.handlers) do
+            local wanted = M.handler_msgs[i]
+            if not wanted or wanted[msg] then
+              if h(w, msg) == "eat" then eat = "eat" end
+            end
           end
           return eat
         end
@@ -2364,6 +2379,18 @@ local function baseline()
 end
 
 local BASELINE = "mods/examples/highlander/baseline.txt"
+print("worm_message: every handler names its messages")
+do
+  new_match()
+  local open = 0
+  for i = 1, #M.handlers do
+    if not M.handler_msgs[i] then open = open + 1 end
+  end
+  -- One handler without a filter makes the engine call into Lua for every
+  -- message every worm gets, several a frame each.
+  check("no handler takes every message", open == 0, open .. " of " .. #M.handlers)
+end
+
 print("baseline: the pack's claims, hooks, globals and deals")
 do
   local now = baseline()

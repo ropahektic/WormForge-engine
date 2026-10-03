@@ -107,7 +107,7 @@ wa.on.worm_message(function(worm, msg)
     wa.sound.play(worm, "sounds/gravity_control/activate.wav")
     wa.world.set_gravity(trunc(gravity_initial * gravity_factor))
   end
-end)
+end, { msgs = { wa.msg.FRAME_FINISH, wa.msg.FIRE_WEAPON } })
 
 -- Reset when this turn ends; doing it at the next turn start can softlock.
 wa.on.turn_end(function()

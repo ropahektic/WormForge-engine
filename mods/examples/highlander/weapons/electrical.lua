@@ -237,7 +237,7 @@ wa.on.worm_message(function(worm, msg)
   if msg == wa.msg.FIRE_WEAPON and tazed[target_key(worm)] then
     return "eat"
   end
-end)
+end, { msgs = { wa.msg.FIRE_WEAPON } })
 
 local function zap_target(arc, pending)
   local obj = find_target(pending.key)
