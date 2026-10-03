@@ -15,7 +15,7 @@ for k in pairs(_G) do
 end
 --
 -- The pack is data, not a crate, so this is not part of `cargo test`. Ammo
--- is modelled per alliance row, as WA stores it, and `{ set = n }` is
+-- is modelled per ammo group, as WA stores it, and `{ set = n }` is
 -- absolute, infinite included, as the engine implements it. Which row a team
 -- writes to is the engine's job (`world::ammo_row`), not the pack's, so it is
 -- not something this mock can test.
@@ -77,7 +77,7 @@ local Worm = {}
 Worm.__index = Worm
 function Worm:ammo(name, change)
   assert(IS_STOCK[name], "pack asked for a weapon that does not exist: " .. tostring(name))
-  local store = ammo[self.alliance]
+  local store = ammo[self.ammo_group]
   if change == nil then
     return store[name] or 0
   end
@@ -198,8 +198,8 @@ local function inventory_api()
       if opts.clear then
         local seen = {}
         for _, live in ipairs(wa.worms.all()) do
-          if not seen[live.alliance] then
-            seen[live.alliance] = true
+          if not seen[live.ammo_group] then
+            seen[live.ammo_group] = true
             for _, name in ipairs(slots) do live:ammo(name, { set = 0 }) end
           end
         end
@@ -233,7 +233,8 @@ local function new_match(opts)
     ammo[team - 1] = {}
     for index = 0, per_team - 1 do
       worms[#worms + 1] = setmetatable({
-        id = (per_team > 2 and team * 1000 or team * 16) + index, team = team, alliance = team - 1, hp = 100,
+        id = (per_team > 2 and team * 1000 or team * 16) + index, team = team,
+        alliance = team - 1, ammo_group = team - 1, hp = 100,
         kind = "worm", x = 0, y = 0, facing = 1,
         gravity = 0x10000, -- WA's normal
       }, Worm)
@@ -877,7 +878,7 @@ do
   frame()
   local w = worm(16)
   w.weapon, w.facing, w.vx, w.vy = "fire_punch", -1, 0, 0
-  ammo[w.alliance].fire_punch = 1
+  ammo[w.ammo_group].fire_punch = 1
   M.message(w, wa.msg.FIRE_WEAPON)
   -- WA's wind-up: the worm stands still, and nothing may move it.
   for _ = 1, 12 do M.message(w, wa.msg.FRAME_FINISH) end
@@ -914,7 +915,7 @@ do
   frame()
   local w = worm(16)
   w.weapon, w.vy = "fire_punch", 0
-  ammo[w.alliance].fire_punch = 1
+  ammo[w.ammo_group].fire_punch = 1
   M.message(w, wa.msg.FIRE_WEAPON)
   for _ = 1, 100 do M.message(w, wa.msg.FRAME_FINISH) end
   w.vy = -3 * 0x10000 -- a later jump of some other kind
@@ -995,7 +996,7 @@ do
   M.quads = {}
   w.aiming = false
   M.message(w, wa.msg.FRAME_FINISH)
-  ammo[w.alliance].handgun = 1
+  ammo[w.ammo_group].handgun = 1
   M.message(w, wa.msg.FIRE_WEAPON)
   check("its own shot sound on firing", M.sounds[1] == "sounds/sniper_firing.wav")
 end
@@ -1016,7 +1017,7 @@ do
     and type(spec.on_explode) == "function")
   local w = worm(16)
   w.weapon = "bazooka"
-  ammo[w.alliance].bazooka = 1
+  ammo[w.ammo_group].bazooka = 1
   M.message(w, wa.msg.FIRE_WEAPON)
   M.missile({ id = 500, phase = "pre", weapon = "bazooka", x = 90 * P, y = 52 * P, vx = 0, vy = 0 })
   M.missile({ id = 500, phase = "post", weapon = "bazooka", x = 100 * P, y = 50 * P, vx = 6 * P, vy = -P })
@@ -2035,7 +2036,7 @@ do
   local grave = { id=701, kind="grave", worm_id=17, x=140*P, y=100*P }
   function grave:revive(id, hp)
     assert(id == 17 and hp == 10)
-    local revived = setmetatable({ id=id, kind="worm", team=1, alliance=0,
+    local revived = setmetatable({ id=id, kind="worm", team=1, alliance=0, ammo_group=0,
       hp=hp, x=self.x, y=self.y-5*P, facing=1 }, Worm)
     worms[#worms+1] = revived
     M.graves = {}

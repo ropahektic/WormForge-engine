@@ -31,17 +31,17 @@ pub const GAME_WORLD_WEAPON_TABLE: usize = 0x510;
 pub const GAME_WORLD_TEAM_ARENA: usize = 0x4628;
 pub const TEAM_GET_AMMO: u32 = 0x0052_25E0;
 pub const TEAM_ADD_AMMO: u32 = 0x0052_2640;
-/// TeamArena ammo dword table. Index `alliance * 142 + weapon`.
+/// TeamArena ammo dword table. Index `ammo_group * 142 + weapon`.
 pub const TEAM_ARENA_AMMO: usize = 0x1EB4;
 /// TeamArena delay dword table. Same index as ammo.
 pub const TEAM_ARENA_DELAY: usize = 0x1FD0;
-/// Per-team alliance (team colour) -- the ammo/delay ROW. Read at
-/// `arena + TEAM_ARENA_ALLIANCE + team * WORLD_TEAM_STRIDE`, team 1-based.
+/// Per-team ammo/delay row. Read at
+/// `arena + TEAM_ARENA_AMMO_GROUP + team * WORLD_TEAM_STRIDE`, team 1-based.
 /// This is what WA's own `TeamArena__GetAmmo` (0x5225E0) and
-/// `TeamArena__AddAmmo` (0x522640) read; `WORLD_TEAM_ALLIANCE` is the same
-/// field measured from GameWorld. Not OpenWA's logical-record `+0x508`:
-/// writing through that put every team's ammo into one row.
-pub const TEAM_ARENA_ALLIANCE: usize = 0x4;
+/// `TeamArena__AddAmmo` (0x522640) read; `WORLD_TEAM_AMMO_GROUP` is the same
+/// field measured from GameWorld. WA initializes it from the team's owner
+/// player slot, which need not equal its visible colour or coalition.
+pub const TEAM_ARENA_AMMO_GROUP: usize = 0x4;
 pub const TEAM_AMMO_STRIDE: usize = 142;
 /// WormEntity__SelectWeapon — usercall EDI=this, stdcall (weapon, ammo) RET 8.
 pub const WORM_SELECT_WEAPON: u32 = 0x0051_AE50;
@@ -351,6 +351,10 @@ pub const TEAM_OWNER_MACHINE: usize = 0x40;
 /// GameWorld's GameInfo, and in it this machine's index (`local_team_index`,
 /// set per machine by `InitTeamsFromLobby`: 0 the host, 1.. the clients).
 pub const GAME_WORLD_GAME_INFO: usize = 0x24;
+/// GameInfo's 1-based team records: visible colour is byte +1 of each record.
+pub const GAME_INFO_TEAM_RECORDS: usize = 0x450;
+pub const GAME_INFO_TEAM_RECORD_STRIDE: usize = 0xBB8;
+pub const GAME_INFO_TEAM_COLOUR: usize = 0x1;
 pub const GAME_INFO_LOCAL_MACHINE: usize = 0xD9DC;
 /// GameInfo: the match's gravity, 16.16, from the scheme. Every frame
 /// `TurnManager__ProcessFrame` (0x55FDA0, at 0x5603CF) sets the collision
@@ -488,8 +492,8 @@ pub const WORM_INDEX: usize = 0x100;
 /// Per-tick poison amount. ApplyPoison (msg 0x3E) subtracts this, floor 1 HP.
 pub const WORM_POISON: usize = 0x148;
 pub const ARENA_WORM_HP: usize = 0x40EC;
-/// Team alliance id. Index `world + 0x462C + team * 0x51C`.
-pub const WORLD_TEAM_ALLIANCE: usize = 0x462C;
+/// Team ammo row. Index `world + 0x462C + team * 0x51C`.
+pub const WORLD_TEAM_AMMO_GROUP: usize = 0x462C;
 /// ExplosionMessage / SpecialImpactMessage.damage
 pub const BLAST_AMOUNT: usize = 0x10;
 pub const BLAST_TEAM: usize = 0x18;
@@ -851,7 +855,10 @@ mod tests {
         assert_eq!(TEAM_ARENA_AMMO, 0x1EB4);
         assert_eq!(TEAM_ARENA_DELAY, 0x1FD0);
         // Two names for one field; they must never drift apart.
-        assert_eq!(GAME_WORLD_TEAM_ARENA + TEAM_ARENA_ALLIANCE, WORLD_TEAM_ALLIANCE);
+        assert_eq!(
+            GAME_WORLD_TEAM_ARENA + TEAM_ARENA_AMMO_GROUP,
+            WORLD_TEAM_AMMO_GROUP
+        );
         // Delays sit right after the 71 ammo counts of each row.
         assert_eq!(TEAM_ARENA_DELAY, TEAM_ARENA_AMMO + 71 * 4);
         assert_eq!(PLAY_SOUND_LOCAL, 0x004FDFE0);
