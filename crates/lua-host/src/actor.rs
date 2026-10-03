@@ -50,8 +50,8 @@ pub struct FireArgs {
     /// their damage and their knockback.
     pub damage_scale: i32,
     pub knock_scale: i32,
-    /// Drawn half its own colours, half this 0xRRGGBB (PX's SetColorMod mode
-    /// 1), on the GPU renderer.
+    /// Drawn added to the scene, its colours multiplied by this 0xRRGGBB
+    /// (PX's SetColorMod mode 1), on the GPU renderer.
     pub tint: Option<u32>,
 }
 

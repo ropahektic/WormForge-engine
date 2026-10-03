@@ -12,14 +12,15 @@
 //! later fire at a freed one's address is not taken for it, and forgotten as
 //! WA frees them (FireEntity::Free).
 //!
-//! A fire spawned with `tint` is drawn half its own colours, half the tint,
-//! as Project X's SetColorMod(rgb, 1) draws its Valyrian Fire. A fire queues
-//! its flame (WA's petrol sprites) at render-queue depth FIRE_DRAW_DEPTH +
-//! its pool slot; for a tinted fire's slot the GPU renderer draws two copies
-//! of that sprite instead, at that depth: the full-colour copy at half
-//! strength, then a white copy of its shape tinted half the colour and
-//! added. The copies are made at match start from WA's own loaded sprites,
-//! through WA's own frame getter, coloured by the sprite's layer palette.
+//! A fire spawned with `tint` is drawn as Project X's SetColorMod(tint, 1)
+//! draws its Valyrian Fire: additively, its colours multiplied by the tint
+//! (PX's BlendType 1: render additive, diffuse by modulation), and twice on
+//! every tenth game frame. A fire queues its flame (WA's petrol sprites) at
+//! render-queue depth FIRE_DRAW_DEPTH + its pool slot; for a tinted fire's
+//! slot the GPU renderer draws a full-colour copy of that sprite instead, at
+//! that depth. The copies are made at match start from WA's own loaded
+//! sprites, through WA's own frame getter, coloured by the sprite's layer
+//! palette.
 
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
@@ -35,8 +36,8 @@ use std::sync::Mutex;
 
 /// Tinted fires: (address, pool slot, ARGB tint).
 static TINTED: Mutex<Vec<(u32, i32, u32)>> = Mutex::new(Vec::new());
-/// WA's fire sprites' copies: (stock sprite, full-colour sheet, white shape).
-static COPIES: Mutex<Vec<(u32, u32, u32)>> = Mutex::new(Vec::new());
+/// WA's fire sprites' full-colour copies: (stock sprite, GPU sheet).
+static COPIES: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
 static ORIG_FREE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 /// A fire whose hits are scaled: (address, pool slot, damage, knock), the
@@ -92,27 +93,9 @@ pub fn install() -> Result<(), String> {
     Ok(())
 }
 
-/// The atlas keys of stock sprite `id`'s copies.
+/// The atlas key of stock sprite `id`'s copy.
 fn copy_key(id: u32) -> String {
     format!("wa-fire:{id}")
-}
-
-fn mask_key(id: u32) -> String {
-    format!("wa-fire-shape:{id}")
-}
-
-/// `strip` in white, its alpha kept: the shape a tint is added in.
-fn shape_of(strip: &gfx::SpriteStrip) -> gfx::SpriteStrip {
-    let frames = strip
-        .frames
-        .iter()
-        .map(|f| gfx::RgbaFrame {
-            width: f.width,
-            height: f.height,
-            rgba: f.rgba.chunks(4).flat_map(|p| [255, 255, 255, p[3]]).collect(),
-        })
-        .collect();
-    gfx::SpriteStrip { frames, fps: strip.fps, looping: strip.looping }
 }
 
 type FrameFn = unsafe extern "thiscall" fn(
@@ -129,12 +112,9 @@ fn anim_for(frame: u32, frames: u32) -> u32 {
 /// Full-colour copies of WA's fire sprites, for the GPU atlas: each frame
 /// through WA's own GetSpriteFrameForBlit, its palette indices through the
 /// sprite's layer palette, index 0 clear. A sprite WA keeps elsewhere (a
-/// sprite bank) or cannot give a frame of is left out. All the colour copies
-/// first, then their shapes: a tinted fire needs both, the atlas keeps what
-/// fits from the front.
+/// sprite bank) or cannot give a frame of is left out.
 pub unsafe fn copies(display: *mut u8) -> Vec<(String, gfx::SpriteStrip)> {
     let mut out = Vec::new();
-    let mut shapes = Vec::new();
     if display.is_null() {
         return out;
     }
@@ -185,12 +165,10 @@ pub unsafe fn copies(display: *mut u8) -> Vec<(String, gfx::SpriteStrip)> {
                 strip.frames.push(gfx::RgbaFrame { width: w as u32, height: h as u32, rgba });
             }
             if strip.frames.len() as u32 == frames {
-                shapes.push((mask_key(id), shape_of(&strip)));
                 out.push((copy_key(id), strip));
             }
         }
     }
-    out.extend(shapes);
     out
 }
 
@@ -204,23 +182,23 @@ pub fn bind_copies() {
         crate::sprite::lookup_key(&key).filter(|s| crate::sprite::is_virtual(s.id)).map(|s| s.id as u32)
     };
     for id in FIRE_SPRITE_FIRST..=FIRE_SPRITE_LAST {
-        if let (Some(copy), Some(shape)) = (sheet(copy_key(id)), sheet(mask_key(id))) {
-            g.push((id, copy, shape));
+        if let Some(copy) = sheet(copy_key(id)) {
+            g.push((id, copy));
         }
     }
 }
 
 /// A draw WA queues at `depth` with `sprite`: a tinted fire's flame gives
-/// the copies to draw instead (full colour, white shape) and the tint.
-pub fn tinted_draw(depth: u32, sprite: u32) -> Option<(u32, u32, u32)> {
+/// the copy to draw instead and the tint.
+pub fn tinted_draw(depth: u32, sprite: u32) -> Option<(u32, u32)> {
     if depth & 0xFFFF_0000 != FIRE_DRAW_DEPTH {
         return None;
     }
     let slot = (depth & 0xFFFF) as i32;
     let tint = TINTED.lock().ok()?.iter().find(|(_, s, _)| *s == slot).map(|(_, _, t)| *t)?;
     let id = crate::sprite::sheet_id(sprite);
-    let (copy, shape) = COPIES.lock().ok()?.iter().find(|(s, _, _)| *s == id).map(|&(_, c, m)| (c, m))?;
-    Some((copy, shape, tint))
+    let copy = COPIES.lock().ok()?.iter().find(|(s, _)| *s == id).map(|&(_, c)| c)?;
+    Some((copy, tint))
 }
 
 /// `v` times a 16.16 scale, in integers, the same on every machine.
@@ -336,26 +314,16 @@ mod tests {
     fn a_tinted_fires_flame_draws_its_copy_and_freeing_forgets_it() {
         clear();
         TINTED.lock().unwrap().push((0x5000, 9, 0xFF4B_E14B));
-        COPIES.lock().unwrap().push((121, 0x0100_0042, 0x0100_0043));
+        COPIES.lock().unwrap().push((121, 0x0100_0042));
         let depth = FIRE_DRAW_DEPTH + 9;
-        assert_eq!(tinted_draw(depth, 121), Some((0x0100_0042, 0x0100_0043, 0xFF4B_E14B)));
-        assert_eq!(tinted_draw(depth, 121 | 0x4_0000), Some((0x0100_0042, 0x0100_0043, 0xFF4B_E14B)), "mirrored");
+        assert_eq!(tinted_draw(depth, 121), Some((0x0100_0042, 0xFF4B_E14B)));
+        assert_eq!(tinted_draw(depth, 121 | 0x4_0000), Some((0x0100_0042, 0xFF4B_E14B)), "mirrored");
         assert_eq!(tinted_draw(depth, 48), None, "not a fire sprite");
         assert_eq!(tinted_draw(FIRE_DRAW_DEPTH + 8, 121), None, "another fire");
         assert_eq!(tinted_draw(0xD_0009, 121), None, "not a fire's depth");
         forget(0x5000);
         assert_eq!(tinted_draw(depth, 121), None, "freed");
         clear();
-    }
-
-    #[test]
-    fn a_shape_is_white_with_the_flames_alpha() {
-        let strip = gfx::SpriteStrip {
-            frames: vec![gfx::RgbaFrame { width: 2, height: 1, rgba: vec![200, 100, 0, 255, 0, 0, 0, 0] }],
-            fps: 10,
-            looping: false,
-        };
-        assert_eq!(shape_of(&strip).frames[0].rgba, vec![255, 255, 255, 255, 255, 255, 255, 0]);
     }
 
     #[test]
