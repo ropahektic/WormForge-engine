@@ -55,12 +55,29 @@ local TOUCH = 2
 -- strike reaches it within its 12-pixel hit circle of the ball's 16.
 local ZAPPED_FRICTION = -0.05
 local ZAP_REACH = 12
+
+-- PX's electrified look (CBowlingBall::Render and UpdateZPlane), PX's own
+-- art: its lightning glow, 0.3 to 0.4 of its 128 pixels across, added three
+-- times in RGB(80, 110, 128); its 10-frame spark, turning with the ball,
+-- played over 50 frames then paused 20 (SparkCycle, 0.02 a frame to 1.4);
+-- and while awake a glow left behind every frame, 30 frames fading to
+-- black, 0.3 to 0.5 across, drifting up to 0.3 a frame. Drawn where the
+-- ball's sprite is, in PX's order: the glows behind the ball (a halo; over
+-- it, added three times, they wash it out to white), the spark in front.
+local GLOW_SHEET = "sprites/bowling_ball/glow.png"
+local SPARK_SHEET = "sprites/bowling_ball/spark.png"
+local GLOW_SIZE = 128
+local SPARK_SIZE, SPARK_FRAMES = 60, 10
+local SPARK_SPEED, SPARK_CYCLE = 0.02, 1.4
+local ZAP_R, ZAP_G, ZAP_B = 80, 110, 128
+local TRAIL_LIFE = 30
 -- The ball is drawn this far below where its circle is, in pixels: at the
 -- circle's own place it looked to float over the ground. In front of the
 -- terrain (actors are behind it by default), behind the worms (0xD0000).
 local SPRITE_DROP = 4
 local LIFT = 0x8000           -- half a pixel, 16.16
 local BALL_DEPTH = 0x000E0000
+local GLOW_DEPTH, SPARK_DEPTH = BALL_DEPTH + 1, BALL_DEPTH - 1
 local P = 0x10000
 
 -- What the ball rolls on: PX's DefaultColGroup, and without worms when fast
@@ -275,6 +292,7 @@ local function balls_in_order()
 end
 
 local function zap(b)
+  if not b.zapped then b.spark, b.trail, b.seed = 0, {}, b.trail_seed end
   b.zapped = true
   wake(b)
   local ang = (wa.random(0, 2000) - 1000) / 10000
@@ -314,6 +332,30 @@ shared.bowling_ball_on_beam = function(x0, y0, dx, dy, len)
   if best then return x0 + trunc(best * dx * P), y0 + trunc(best * dy * P) end
 end
 
+-- The electrified look, a game frame on: the spark's cycle, and the trail
+-- left behind, from the ball's own generator (looks only: nothing reads it,
+-- and WA's RNG is not drawn).
+local function electrified_frame(b)
+  b.spark = b.spark + SPARK_SPEED
+  if b.spark > SPARK_CYCLE then b.spark = b.spark - SPARK_CYCLE end
+  for i = #b.trail, 1, -1 do
+    local p = b.trail[i]
+    p.age = p.age + 1
+    if p.age >= TRAIL_LIFE then
+      table.remove(b.trail, i)
+    else
+      p.x, p.y = p.x + p.vx, p.y + p.vy
+    end
+  end
+  if not b.asleep then
+    b.seed = (b.seed * 1103515245 + 12345) % 0x80000000
+    local a = b.seed / 0x80000000 * 2 * math.pi
+    b.seed = (b.seed * 1103515245 + 12345) % 0x80000000
+    local v = b.seed / 0x80000000 * 0.3 * P
+    b.trail[#b.trail + 1] = { x = b.x, y = b.y, vx = math.cos(a) * v, vy = math.sin(a) * v, age = 0 }
+  end
+end
+
 local function spawn_ball(owner, x, y, vx, vy)
   local b = {
     x = x, y = y, vx = vx, vy = vy, lvx = vx, lvy = vy, rvx = 0, rvy = 0, lx = x, ly = y,
@@ -329,6 +371,7 @@ local function spawn_ball(owner, x, y, vx, vy)
         return
       end
       tick(a.id)
+      if b.zapped then electrified_frame(b) end
       spin(b)
       local speed = think(b)
       if speed > PUSH_SPEED then push_balls(a.id, b, speed) end
@@ -338,6 +381,7 @@ local function spawn_ball(owner, x, y, vx, vy)
     end,
   })
   shared.bowling_balls[a.id] = b
+  b.trail_seed = a.id * 7919 % 0x80000000
   return a, b
 end
 shared.spawn_bowling_ball = spawn_ball
@@ -367,4 +411,45 @@ fires.bowling_strike = function(ev)
     local offset = (i - (STRIKE_BALLS + 1) / 2) * STRIKE_SPACING
     spawn_ball(ev.worm, ev.x - back + math.floor(offset * P), y0, STRIKE_SPEED * dir, 0)
   end
+end
+
+if wa.on.draw and wa.draw.quad then
+  -- One spec refilled for every quad (the engine copies it).
+  local QUAD = { points = { { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } } }
+  local function quad(sheet, frame, color, depth, x, y, half, rot)
+    QUAD.sprite, QUAD.frame, QUAD.blend, QUAD.color, QUAD.depth = sheet, frame, "add", color, depth
+    local c, s = math.cos(rot), math.sin(rot)
+    local p = QUAD.points
+    local function corner(i, dx, dy)
+      p[i][1], p[i][2] = x + math.floor((dx * c - dy * s) * half), y + math.floor((dx * s + dy * c) * half)
+    end
+    corner(1, -1, -1)
+    corner(2, 1, -1)
+    corner(3, 1, 1)
+    corner(4, -1, 1)
+    wa.draw.quad(QUAD)
+  end
+  local function zap_color(k)
+    return 0xFF000000 | (math.floor(ZAP_R * k) << 16) | (math.floor(ZAP_G * k) << 8) | math.floor(ZAP_B * k)
+  end
+  local FULL = zap_color(1)
+  wa.on.draw(function()
+    for _, id in ipairs(balls_in_order()) do
+      local b = shared.bowling_balls[id]
+      if b.zapped then
+        local drop = SPRITE_DROP * P
+        for _, t in ipairs(b.trail) do
+          local k = t.age / TRAIL_LIFE
+          quad(GLOW_SHEET, 0, zap_color(1 - k), GLOW_DEPTH, t.x, t.y + drop, (0.3 + 0.2 * k) * GLOW_SIZE / 2 * P, 0)
+        end
+        local x, y = b.x, b.y + drop
+        local glow = (0.3 + 0.1 * wa.draw.random()) * GLOW_SIZE / 2 * P
+        for _ = 1, 3 do quad(GLOW_SHEET, 0, FULL, GLOW_DEPTH, x, y, glow, 0) end
+        if b.spark <= 1 then
+          local frame = math.min(SPARK_FRAMES - 1, math.floor(b.spark * SPARK_FRAMES))
+          quad(SPARK_SHEET, frame, 0xFFFFFFFF, SPARK_DEPTH, x, y, SPARK_SIZE / 2 * P, b.rot)
+        end
+      end
+    end
+  end)
 end
