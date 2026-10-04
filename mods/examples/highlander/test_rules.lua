@@ -1403,6 +1403,7 @@ do
   local shared = require("lib/shared")
   local function rolling(x, vx, vy, y)
     new_match()
+    shared = require("lib/shared") -- each match loads the pack afresh
     M.gravity = P // 4
     M.solid = function(_, yy) return yy >= 200 * P end
     M.spawned, M.actor_sounds = {}, {}
@@ -1480,6 +1481,23 @@ do
   check("a beam straight down meets the ball's circle at its top", bx == 400 * P
     and math.abs(by - (zapped.y - 16 * P)) < P, tostring(by and by / P))
   check("and a beam beside it misses", shared.bowling_ball_on_beam(440 * P, 0, 0, 1, 1000) == nil)
+  -- PX's electrified look, drawn for the zapped ball only.
+  run(5)
+  M.quads = {}
+  M.draw()
+  local glows, sparks, behind = 0, {}, true
+  for _, q in ipairs(M.quads) do
+    if q.sprite == "sprites/bowling_ball/glow.png" then
+      glows = glows + 1
+      if q.blend ~= "add" or q.depth <= 0xE0000 then behind = false end
+    end
+    if q.sprite == "sprites/bowling_ball/spark.png" then sparks[#sparks + 1] = q end
+  end
+  check("an electrified ball glows behind itself: PX's glow three times, a trail glow for each frame since",
+    glows == 3 + 5 and behind, tostring(glows))
+  check("and its spark plays, added, in front of the ball", #sparks == 1 and sparks[1].frame == 1
+    and sparks[1].color == 0xFFFFFFFF and sparks[1].blend == "add" and sparks[1].depth < 0xE0000,
+    sparks[1] and tostring(sparks[1].frame))
   M.gravity, M.solid = nil, nil
 end
 
