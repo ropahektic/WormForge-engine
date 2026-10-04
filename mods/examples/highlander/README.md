@@ -55,7 +55,7 @@ Electric Grenade use the scheme's full `.wep` records, extracted with
 | Slot | Weapon | Behavior |
 |---|---|---|
 | napalm_strike | Lightning Strike | Cursor-aimed 30° beam, 150-frame warning, 16-frame strike, 60-frame tail; heals live worms, revives linked graves at 10 HP, arms mines, and hits crates/oil drums. |
-| earthquake | Electric Grenade | WA grenade flight and explosion followed by PX's seeking, terrain-following, chaining tazer arc; delayed 24 damage to worms and 12 to objects, mine arming, and a temporary tazed pose. |
+| earthquake | Electric Grenade | WA grenade flight and explosion followed by PX's seeking, terrain-following, chaining tazer arc; delayed 24 damage to worms and 12 to objects, mine arming, a temporary tazed pose, and Bowling Balls as links, zapped as PX's Tazer zaps them (thrown up and electrified; thrown at 0.8 once electrified). |
 
 The beams, glows, and explosion use the GPU atlas. Gameplay runs in simulation
 callbacks; drawing only varies presentation. A grave records its original worm
@@ -181,7 +181,7 @@ PX's 0 draws no worm in WA 3.8.1.
 | low_gravity | Gravity Control | icon, its two sounds | 1-5 choose the gravity, firing holds it for the turn |
 | ninja_rope | Jump | icon, the worm aiming it | the worm leaves with the shot's speed |
 | parachute | Hang-Glider | icon, the glider, its pack-away, its two sounds | PX's glider, flown by the pack once WA's parachute opens |
-| sheep_strike | Bowling Ball Strike | icon, the ball, PX's spark and glow | three balls dropped from PX's plane height, set back by their drift so the middle one comes down on the click, rolling on PX's CBowlingBall physics: traced as a 16-pixel circle (`wa.world.trace`), bounce and friction along the surface's normal, PX's inertia, low speed and sleep. Faster than 4 a frame it hurts what it rolls into, 5 to 60 by speed (crates and oil drums 100, pushed the way it rolls), a worm at most every 12 frames and knocked the way it rolls (`worm:hurt{ amount, vx, vy }`), a standing worm crushed from above; balls push each other apart and wake. A Lightning Strike overcharges the balls where it hits (PX's Zap: thrown up, then electrified for good, speeding up as it rolls, drawn with PX's blue glow, crawling sparks and glowing trail), and a ball in the way stops the bolt. Not yet: explosions and gunfire throwing and waking it, flame trail, shake, PX's plane |
+| sheep_strike | Bowling Ball Strike | icon, the ball, PX's spark and glow | three balls dropped from PX's plane height, set back by their drift so the middle one comes down on the click, rolling on PX's CBowlingBall physics: traced as a 16-pixel circle (`wa.world.trace`), bounce and friction along the surface's normal, PX's inertia, low speed and sleep. Faster than 4 a frame it hurts what it rolls into, 5 to 60 by speed (crates and oil drums 100, pushed the way it rolls), a worm at most every 12 frames and knocked the way it rolls (`worm:hurt{ amount, vx, vy }`), a standing worm crushed from above; balls push each other apart and wake. A Lightning Strike, or an Electric Grenade's arc linking to it, overcharges the balls (PX's Zap: thrown up, then electrified for good, speeding up as it rolls, drawn with PX's blue glow, crawling sparks and glowing trail), and a ball in the way stops the bolt. Not yet: explosions and gunfire throwing and waking it, flame trail, shake, PX's plane |
 
 Played in game: the Fire Jump, the Sticky Bomb and Igniter holds, the
 Shadow-Bolt, the Sniper Rifle and the Helicopter.

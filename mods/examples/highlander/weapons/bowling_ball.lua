@@ -291,12 +291,14 @@ local function balls_in_order()
   return ids
 end
 
-local function zap(b)
+-- PX's Zap: Zap(0) electrifies (mul 1), Zap(1), for a ball already
+-- electrified, throws it at 0.8 and changes nothing else.
+local function zap(b, mul)
   if not b.zapped then b.spark, b.trail, b.seed = 0, {}, b.trail_seed end
   b.zapped = true
   wake(b)
   local ang = (wa.random(0, 2000) - 1000) / 10000
-  local speed = 5 + wa.random(0, 1000) / 200
+  local speed = (5 + wa.random(0, 1000) / 200) * (mul or 1)
   -- sin and cos by their series: |ang| <= 0.1, so exact to 1e-7, and no
   -- trig in the simulation.
   local a2 = ang * ang
@@ -312,6 +314,30 @@ shared.zap_bowling_balls = function(x, y)
     local dx, dy = (b.x - x) / P, (b.y - y) / P
     if dx * dx + dy * dy <= reach then zap(b) end
   end
+end
+
+-- The Electric Grenade's arc (PX's Tazer, whose targets include the ball):
+-- the balls as targets, at the middle of the drawn ball, in id order.
+local function as_target(id, b)
+  return { kind = "ball", id = id, x = b.x, y = b.y + SPRITE_DROP * P }
+end
+
+shared.bowling_ball_targets = function()
+  local out = {}
+  for _, id in ipairs(balls_in_order()) do out[#out + 1] = as_target(id, shared.bowling_balls[id]) end
+  return out
+end
+
+shared.bowling_ball_target = function(id)
+  local b = shared.bowling_balls[id]
+  return b and as_target(id, b)
+end
+
+-- The arc's zap (PX's CTazerDamage::Zap): Zap(0) the first time, Zap(1)
+-- once electrified. No damage, no push besides.
+shared.zap_bowling_ball = function(id)
+  local b = shared.bowling_balls[id]
+  if b then zap(b, b.zapped and 0.8 or 1) end
 end
 
 -- Where a beam from (x0, y0) along the unit (dx, dy), at most len pixels,

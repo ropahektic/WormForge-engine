@@ -2475,6 +2475,36 @@ do
   spec.on_explode({ worm=owner, x=0, y=0 })
   tick(50)
   check("arc chains to a second unvisited worm", first.hp == 76 and second.hp == 76)
+  -- Bowling Balls are links too (PX's Tazer): the arc snaps to one, glows on
+  -- it for 24 frames, then zaps it: Zap(0), thrown up and electrified; an
+  -- electrified one Zap(1), thrown at 0.8. No damage. The chain goes on.
+  spec, owner = setup()
+  local shared = require("lib/shared")
+  local _, ball = shared.spawn_bowling_ball(owner, 5 * P, 0, 0, 0)
+  local after = worm(17)
+  after.x, after.y = 14 * P, 4 * P
+  spec.on_explode({ worm = owner, x = 0, y = 0 })
+  tick(1)
+  M.quads = {}
+  M.draw()
+  local on_ball = false
+  for _, q in ipairs(M.quads) do
+    if q.sprite == "sprites/lightning/glow.png" and q.points[1][1] < 5 * P and q.points[3][1] > 5 * P
+      and q.points[3][1] - q.points[1][1] > 40 * P then on_ball = true end
+  end
+  check("the arc links to a Bowling Ball, PX's glow on it", ball and on_ball and not ball.zapped)
+  tick(23)
+  check("the ball's zap waits 24 frames", not ball.zapped)
+  tick(1)
+  check("and zaps it then: thrown up and electrified", ball.zapped and ball.vy <= -5
+    and ball.vy >= -10, tostring(ball.vy))
+  tick(60)
+  check("the chain goes on through the ball", after.hp == 76)
+  local x0, y0 = ball.x, ball.y
+  spec.on_explode({ worm = owner, x = x0, y = y0 })
+  tick(25)
+  check("an electrified ball zapped again is thrown at 0.8 (Zap(1))", ball.vy <= -4 and ball.vy >= -8,
+    tostring(ball.vy))
   -- The thrower: as PX's, the arc never zaps the worm that fired the
   -- grenade, whichever worm the explosion names.
   spec, owner = setup()
