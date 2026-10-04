@@ -281,10 +281,11 @@ local function new_match(opts)
       set_gravity = function(v) M.gravity = v end,
       set_wind = function(v) M.wind = v end,
       sky = -0xD00000,
-      -- As the engine's wa.world.trace, against M.solid only, cheaper: the
+      -- As the engine's wa.world.trace, against M.solid, cheaper: the
       -- circle's rim and centre (terrain is contiguous and the sweep moves a
       -- pixel at a time), the normal from the rim samples a pixel or two out
-      -- that are solid.
+      -- that are solid. Crates and oil drums asked for are 9-pixel circles,
+      -- as the engine's; a hit on one takes its normal from its centre.
       trace = function(q)
         local P = 0x10000
         local r = q.radius or 0
@@ -293,8 +294,20 @@ local function new_match(opts)
           local t = k * math.pi / 24
           RIM[#RIM + 1] = { math.cos(t), math.sin(t) }
         end
+        local bodies = {}
+        for _, kind in ipairs(q.with or {}) do
+          local list = (kind == "crates" and M.crates) or (kind == "oil" and M.oil) or {}
+          for _, o in ipairs(list) do bodies[#bodies + 1] = o end
+        end
+        local function body_at(x, y)
+          for _, o in ipairs(bodies) do
+            local dx, dy = (x - o.x) / P, (y - o.y) / P
+            if dx * dx + dy * dy < (r + 9) * (r + 9) then return o end
+          end
+        end
         local function solid_at(x, y) return M.solid((x // P) * P, (y // P) * P) end
         local function overlaps(x, y)
+          if body_at(x, y) then return true end
           if not M.solid then return false end
           if solid_at(x, y) then return true end
           for rr = r, 1, -4 do
@@ -305,6 +318,12 @@ local function new_match(opts)
           return false
         end
         local function normal(x, y)
+          local o = body_at(x, y)
+          if o then
+            local dx, dy = (x - o.x) / P, (y - o.y) / P
+            local len = math.sqrt(dx * dx + dy * dy)
+            if len > 0 then return dx / len, dy / len end
+          end
           local sx, sy = 0, 0
           for _, reach in ipairs({ r + 1, r + 2 }) do
             for _, d in ipairs(RIM) do
@@ -1421,15 +1440,24 @@ do
   check("falling straight on a standing worm crushes it: knocked straight down by 10", v.hp < 100
     and M.actor_sounds[1] == 33 and v.knock and v.knock[1] == 0 and v.knock[2] == 10 * P,
     table.concat(M.actor_sounds, ","))
+  -- Crates and drums are solid to the ball: it stops against one, touching,
+  -- and that counts as a hit (WA then blows it up).
+  local function took(obj) function obj:hit(damage, vx, vy) self.taken = { damage, vx, vy } end return obj end
   rolling(100, 8)
-  local crate = { id = 900, kind = "crate", x = 160 * P, y = 191 * P }
-  local mine = { id = 901, kind = "mine", x = 220 * P, y = 195 * P }
-  function crate:hit(damage, vx, vy) self.taken = { damage, vx, vy } end
-  mine.hit = crate.hit
-  M.crates, M.mines = { crate }, { mine }
+  local crate = took({ id = 900, kind = "crate", x = 160 * P, y = 191 * P })
+  M.crates = { crate }
   run(30)
-  check("a crate takes 100, pushed the way the ball rolls", crate.taken and crate.taken[1] == 100
-    and crate.taken[2] > 0 and crate.taken[3] < 0)
+  check("a crate the ball stops against takes 100, pushed the way the ball rolled", crate.taken
+    and crate.taken[1] == 100 and crate.taken[2] > 0 and crate.taken[3] < 0)
+  rolling(100, 8)
+  local drum = took({ id = 902, kind = "oil", x = 160 * P, y = 191 * P })
+  M.oil = { drum }
+  run(30)
+  check("so does an oil drum", drum.taken and drum.taken[1] == 100)
+  rolling(100, 8)
+  local mine = took({ id = 901, kind = "mine", x = 160 * P, y = 195 * P })
+  M.mines = { mine }
+  run(30)
   check("a mine takes the speed's damage", mine.taken and mine.taken[1] >= 5 and mine.taken[1] < 30)
   local _, sleeper = rolling(400, 0)
   run(200)
@@ -1439,6 +1467,19 @@ do
   run(30)
   check("another ball rolling into it wakes it and pushes it on", sleeper.x > x0 + 4 * P,
     (sleeper.x - x0) / P .. " " .. roller.x / P)
+  -- The Lightning Strike's overcharge.
+  local _, zapped = rolling(400, 0)
+  local _, far = shared.spawn_bowling_ball(worm(16), 600 * P, 183 * P, 0, 0)
+  run(200)
+  shared.zap_bowling_balls(400 * P, 199 * P)
+  check("struck within reach, a ball wakes, thrown up at 5 to 10 and nearly straight",
+    zapped.zapped and not zapped.asleep and zapped.vy <= -5 and zapped.vy >= -10
+    and math.abs(zapped.vx) <= 0.1 * 10, zapped.vx .. "," .. zapped.vy)
+  check("one out of reach is left alone", not far.zapped and far.asleep)
+  local bx, by = shared.bowling_ball_on_beam(400 * P, 0, 0, 1, 1000)
+  check("a beam straight down meets the ball's circle at its top", bx == 400 * P
+    and math.abs(by - (zapped.y - 16 * P)) < P, tostring(by and by / P))
+  check("and a beam beside it misses", shared.bowling_ball_on_beam(440 * P, 0, 0, 1, 1000) == nil)
   M.gravity, M.solid = nil, nil
 end
 
@@ -2415,6 +2456,9 @@ do
   for _, w in ipairs(worms) do
     if w ~= owner and w ~= target then w.x, w.y = 1000 * P, 1000 * P end
   end
+  local shared = require("lib/shared")
+  local zap_balls, zapped_at = shared.zap_bowling_balls, nil
+  shared.zap_bowling_balls = function(x, y) zapped_at = { x, y } end
   by_slot.napalm_strike.on_click({ worm=owner, x=100*P, y=100*P })
   local effect = M.spawned[#M.spawned]
   for _ = 1, 149 do effect.on(effect) end
@@ -2427,6 +2471,8 @@ do
   check("beam stays active for 16 frames", target.hp == 100)
   effect.on(effect)
   check("final hit heals the living worm by 25", target.hp == 125)
+  check("and overcharges the bowling balls where it hit", zapped_at ~= nil)
+  shared.zap_bowling_balls = zap_balls
   M.quads = {}
   M.draw()
   local puffs = 0

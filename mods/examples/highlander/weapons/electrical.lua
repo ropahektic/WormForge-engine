@@ -70,6 +70,7 @@ local function electrical_trace(x0, y0, dx, dy)
 end
 
 local function strike_hit(s)
+  if shared.zap_bowling_balls then shared.zap_bowling_balls(s.ex, s.ey) end
   if not s.hit then return end
   local radius2 = (6 * EP) ^ 2
   local targets = wa.world.electrical_nearby
@@ -163,6 +164,13 @@ shared.lightning_click = function(ev)
   local hit = electrical_trace(sx, sy, dirx, diry)
   local ex, ey = hit and hit.x or sx + math.floor(300 * dirx * EP),
     hit and hit.y or sy + math.floor(300 * diry * EP)
+  -- A bowling ball on the way stops the beam, as PX's does.
+  local bx, by = nil, nil
+  if shared.bowling_ball_on_beam then
+    local reach = math.sqrt(((ex - sx) / EP) ^ 2 + ((ey - sy) / EP) ^ 2)
+    bx, by = shared.bowling_ball_on_beam(sx, sy, dirx, diry, reach)
+  end
+  if bx then ex, ey, hit = bx, by, { x = bx, y = by } end
   local distance = math.sqrt(((ex - sx) / EP) ^ 2 + ((ey - sy) / EP) ^ 2)
   if hit and distance > 300 then
     sx, sy = ex - math.floor(300 * dirx * EP), ey - math.floor(300 * diry * EP)
