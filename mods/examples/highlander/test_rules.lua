@@ -2043,11 +2043,11 @@ do
   local marker = M.spawned[#M.spawned]
   check("target marker stays at the frozen click position",
     marker.sprite == "markerr" and marker.x == target_x and marker.y == target_y and not marker.dead)
-  check("click confirms target with PX sound and flags",
-    w.state ~= "teleporting" and M.sounds[1] == 68 and M.sound_flags[1] == 0)
+  check("click confirms target with PX's sound at WA's teleport priority",
+    w.state ~= "teleporting" and M.sounds[1] == 68 and M.sound_flags[1] == 3)
   M.message(w, wa.msg.FRAME_FINISH)
   check("the next frame enters WA's teleport pose and plays PX's start sound",
-    w.state == "teleporting" and M.sounds[2] == 67 and M.sound_flags[2] == 0)
+    w.state == "teleporting" and M.sounds[2] == 67 and M.sound_flags[2] == 3)
   for _ = 1, 49 do M.message(w, wa.msg.FRAME_FINISH) end
   check("worm and marker remain in place for 49 frames after starting",
     w.x == 40 * P and w.y == 70 * P and not M.digs and not marker.dead)
@@ -2091,13 +2091,18 @@ do
   spec.on_click({ worm = w, x = place_x, y = place_y })
   check("manual placement moves the unplaced worm before it can fall",
     w.x == place_x and w.y == place_y and w.state == "teleporting")
-  check("manual placement plays the start sound at the destination",
-    #M.sounds == 1 and M.sounds[1] == 67
-      and M.sound_positions[1].x == place_x and M.sound_positions[1].y == place_y)
+  check("manual placement plays WA's placement Communicator from the worm",
+    #M.sounds == 1 and M.sounds[1] == 68 and M.sound_targets[1] == w and M.sound_flags[1] == 3)
   check("manual placement carves the destination without a delayed marker",
-    #M.digs == 3 and not M.spawned)
+    #M.digs == 3 and not (M.spawned and #M.spawned > 0))
+  for _ = 1, 20 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("no WormPop before WA's placement delay", #M.sounds == 1)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("WormPop 21 frames after the click, as WA's placement",
+    #M.sounds == 2 and M.sounds[2] == 54 and M.sound_targets[2] == w and M.sound_flags[2] == 3)
   for _ = 1, 51 do M.message(w, wa.msg.FRAME_FINISH) end
-  check("manual placement has no second arrival", w.x == place_x and w.y == place_y and #M.digs == 3)
+  check("manual placement has no second arrival or sound",
+    w.x == place_x and w.y == place_y and #M.digs == 3 and #M.sounds == 2)
 end
 
 print("lightning strike: warning, hit, grave identity and copied hand")

@@ -18,6 +18,13 @@ local function super_tele_arrive(worm, x, y)
   end
 end
 
+-- WA's sound slots and the priority its teleport plays them at.
+local TELE_SOUND_PRIORITY = 3
+local SOUND_TELEPORT, SOUND_COMMUNICATOR, SOUND_WORM_POP = 67, 68, 54
+-- WA's manual placement plays Communicator at the click and WormPop when
+-- the worm appears, this many frames later.
+local PLACEMENT_POP_FRAMES = 21
+
 fires.super_tele_click = function(ev)
   local worm = ev.worm
   if worm.hp <= 0 then return end
@@ -27,11 +34,12 @@ fires.super_tele_click = function(ev)
   if previous and previous.marker then previous.marker:despawn() end
   -- During manual placement WA keeps unplaced worms at (960, -10000).
   -- Waiting 50 frames there makes the worm fall and take damage before the
-  -- arrival. Place it now so the teleport sound has an audible position.
+  -- arrival, so it is placed now. It sounds like WA's own placement.
   if worm.y == -10000 * 0x10000 then
     super_tele_arrive(worm, ev.x, y)
     worm:set_state("teleporting")
-    wa.sound.play(worm, 67, 0)
+    wa.sound.play(worm, SOUND_COMMUNICATOR, TELE_SOUND_PRIORITY)
+    fires.teleports[worm.id] = { placed = true, frames = 0 }
     return
   end
   -- FireWeapon clears WA's planted X for click-only weapons. Keep a fixed
@@ -42,13 +50,20 @@ fires.super_tele_click = function(ev)
     gravity = false, collide = false, drown = false,
   })
   fires.teleports[worm.id] = { x = ev.x, y = y, frames = 0, pending = true, marker = marker }
-  wa.sound.play(worm, 68, 0) -- PX's M_SETTARGET confirmation
+  wa.sound.play(worm, SOUND_COMMUNICATOR, TELE_SOUND_PRIORITY) -- PX's M_SETTARGET confirmation
 end
 
 wa.on.worm_message(function(worm, msg)
   if msg ~= wa.msg.FRAME_FINISH then return end
   local tele = fires.teleports[worm.id]
   if not tele then return end
+  if tele.placed then
+    tele.frames = tele.frames + 1
+    if tele.frames < PLACEMENT_POP_FRAMES then return end
+    fires.teleports[worm.id] = nil
+    if worm.hp > 0 then wa.sound.play(worm, SOUND_WORM_POP, TELE_SOUND_PRIORITY) end
+    return
+  end
   if worm.hp <= 0 then
     tele.marker:despawn()
     fires.teleports[worm.id] = nil
@@ -59,7 +74,7 @@ wa.on.worm_message(function(worm, msg)
     -- WA's teleport setup clears its activity flag. Do this after the
     -- Lua-handled FireWeapon return restores that flag, as PX's M_FRAME does.
     worm:set_state("teleporting")
-    wa.sound.play(worm, 67, 0) -- PX's teleport start
+    wa.sound.play(worm, SOUND_TELEPORT, TELE_SOUND_PRIORITY) -- PX's teleport start
     return
   end
   tele.frames = tele.frames + 1
