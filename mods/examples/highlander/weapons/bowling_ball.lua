@@ -42,6 +42,19 @@ local RECOVER_FRAMES = 12
 local PUSH_SPEED = 4.0        -- MinPushSpeed
 local PUSH_FORCE, PUSH_KEEP = 0.6, 0.7
 local SOUND_CRUSH, SOUND_HIT = 33, 101
+-- A ball counts as hitting what it touches: PX traces it with a smaller
+-- mask than the 16-pixel circle it hits with, so it overlaps a drum or
+-- crate it stops against; ours traces with the circle, which stops it a
+-- touch away from them.
+local TOUCH = 2
+
+-- PX's Zap(0), the Lightning Strike's "overcharge": the ball wakes and is
+-- thrown up, 5 to 10 a frame within 0.1 of straight up, and is electrified
+-- for good (PX never counts its ZapTurnsRemaining down): awake and not slow,
+-- its friction is negative, so it speeds up along what it rolls on. PX's
+-- strike reaches it within its 12-pixel hit circle of the ball's 16.
+local ZAPPED_FRICTION = -0.05
+local ZAP_REACH = 12
 -- The ball is drawn this far below where its circle is, in pixels: at the
 -- circle's own place it looked to float over the ground. In front of the
 -- terrain (actors are behind it by default), behind the worms (0xD0000).
@@ -106,6 +119,8 @@ local function think(b)
   local bounce, friction, ix, iy = BOUNCE, FRICTION, INERTIA_X, INERTIA_Y
   if b.low then
     bounce, friction, ix, iy = LOW_BOUNCE, LOW_FRICTION, LOW_INERTIA_X, LOW_INERTIA_Y
+  elseif b.zapped then
+    friction = ZAPPED_FRICTION
   end
   if vx2 == 0 and vy2 == 0 then vy2 = b.vy + 0.1 end
   local with = speed > FAST and SOLID_FAST or SOLID
@@ -184,7 +199,7 @@ end
 
 local function overlaps(b, obj)
   local dx, dy = (obj.x - b.x) / P, (obj.y - b.y) / P
-  local r = RADIUS + target_radius(obj)
+  local r = RADIUS + target_radius(obj) + TOUCH
   return dx * dx + dy * dy <= r * r
 end
 
@@ -248,6 +263,55 @@ local function hit_others(a, b, speed)
   for _, group in ipairs({ wa.worms, wa.mines, wa.crates, wa.oil }) do
     for _, obj in ipairs(group.all() or {}) do hit(obj) end
   end
+end
+
+-- The balls by id, in id order: whatever draws from WA's RNG for them does
+-- so in the same order on every machine.
+local function balls_in_order()
+  local ids = {}
+  for id in pairs(shared.bowling_balls) do ids[#ids + 1] = id end
+  table.sort(ids)
+  return ids
+end
+
+local function zap(b)
+  b.zapped = true
+  wake(b)
+  local ang = (wa.random(0, 2000) - 1000) / 10000
+  local speed = 5 + wa.random(0, 1000) / 200
+  -- sin and cos by their series: |ang| <= 0.1, so exact to 1e-7, and no
+  -- trig in the simulation.
+  local a2 = ang * ang
+  b.vx = (ang - ang * a2 / 6) * speed
+  b.vy = -(1 - a2 / 2 + a2 * a2 / 24) * speed
+end
+
+-- The Lightning Strike: every ball within reach of where it hit.
+shared.zap_bowling_balls = function(x, y)
+  local reach = (ZAP_REACH + RADIUS) * (ZAP_REACH + RADIUS)
+  for _, id in ipairs(balls_in_order()) do
+    local b = shared.bowling_balls[id]
+    local dx, dy = (b.x - x) / P, (b.y - y) / P
+    if dx * dx + dy * dy <= reach then zap(b) end
+  end
+end
+
+-- Where a beam from (x0, y0) along the unit (dx, dy), at most len pixels,
+-- first meets a ball's circle (PX's ball is an oil drum to the strike's
+-- trace), or nil.
+shared.bowling_ball_on_beam = function(x0, y0, dx, dy, len)
+  local best
+  for _, id in ipairs(balls_in_order()) do
+    local b = shared.bowling_balls[id]
+    local cx, cy = (b.x - x0) / P, (b.y - y0) / P
+    local along = cx * dx + cy * dy
+    local miss = cx * cx + cy * cy - along * along
+    if miss <= RADIUS * RADIUS then
+      local t = along - math.sqrt(RADIUS * RADIUS - miss)
+      if t > 0 and t < len and (not best or t < best) then best = t end
+    end
+  end
+  if best then return x0 + trunc(best * dx * P), y0 + trunc(best * dy * P) end
 end
 
 local function spawn_ball(owner, x, y, vx, vy)
