@@ -1312,7 +1312,7 @@ do
   check("another ball rolling into it wakes it and pushes it on", sleeper.x > x0 + 4 * P,
     (sleeper.x - x0) / P .. " " .. roller.x / P)
   -- The Lightning Strike's overcharge.
-  local _, zapped = rolling(400, 0)
+  local zapped_actor, zapped = rolling(400, 0)
   local _, far = shared.spawn_bowling_ball(worm(16), 600 * P, 183 * P, 0, 0)
   run(200)
   shared.zap_bowling_balls(400 * P, 199 * P)
@@ -1328,19 +1328,23 @@ do
   run(5)
   M.quads = {}
   M.draw()
-  local glows, sparks, behind = 0, {}, true
+  local glows, sparks, behind, sheen = 0, {}, true, nil
   for _, q in ipairs(M.quads) do
     if q.sprite == "sprites/bowling_ball/glow.png" then
       glows = glows + 1
       if q.blend ~= "add" or q.depth <= 0xE0000 then behind = false end
     end
     if q.sprite == "sprites/bowling_ball/spark.png" then sparks[#sparks + 1] = q end
+    if q.sprite == "sprites/bowling_ball/sheen.png" then sheen = q end
   end
   check("an electrified ball glows behind itself: PX's glow three times, a trail glow for each frame since",
     glows == 3 + 5 and behind, tostring(glows))
   check("and its spark plays, added, in front of the ball", #sparks == 1 and sparks[1].frame == 1
     and sparks[1].color == 0xFFFFFFFF and sparks[1].blend == "add" and sparks[1].depth < 0xE0000,
     sparks[1] and tostring(sparks[1].frame))
+  check("the ball itself turns electric blue: darkened, a blue sheen added in front, under the spark",
+    zapped_actor.tint == 0x405980 and sheen and sheen.blend == "add" and sheen.color == 0xFF3C96FF
+    and sheen.depth < 0xE0000 and sheen.depth > sparks[1].depth)
   M.gravity, M.solid = nil, nil
 end
 
