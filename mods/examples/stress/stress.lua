@@ -1,4 +1,4 @@
--- Stress test: two batches of projectiles in the first turn of the match, to
+-- Stress test: four batches of projectiles in the first turn of the match, to
 -- measure WA's own projectiles against WormForge's, and to record into a
 -- replay that can be played back again and again for sync and performance.
 --
@@ -20,14 +20,23 @@
 -- orb (one every fourth frame, so it lingers), and an additive flash, growing to about 320 pixels across, for a
 -- second where each one explodes.
 --
--- Batch 3, BATCH_GAP frames after batch 2: ELECTRIC_GRENADES of Highlander's
+-- Batch 3, BATCH_GAP frames after batch 2: BOWLING_STRIKES of Highlander's
+-- Bowling Ball Strike (its claim on the Sheep Strike slot), spread evenly
+-- across the map's width, alternately from the left and the right, each on
+-- the ground under its point: three balls each, rolling on Highlander's
+-- physics, hitting what they meet. Fired through `wa.weapons.click`, as a
+-- click there would; without Highlander no pack claims the slot, which is
+-- logged, not fatal.
+--
+-- Batch 4, BATCH_GAP frames after batch 3: ELECTRIC_GRENADES of Highlander's
 -- Electric Grenade (its claim on the Earthquake slot), launched as real WA
 -- missiles at random open-air points across the map, with short staggered
 -- fuses. Highlander's own hooks treat them as its grenades: its art draws
 -- them and its chaining arc runs where each one blows. Enable `highlander` or
--- `highlander_test` with this pack; without one the Earthquake slot is WA's
--- own, which is no projectile, so leave ELECTRIC_GRENADES at 0 then. A launch
--- WA refuses (its object pool full) is counted and logged, not fatal.
+-- `highlander_test` with this pack (for batches 3 and 4); without one the
+-- Earthquake slot is WA's own, which is no projectile, so leave
+-- ELECTRIC_GRENADES at 0 then. A launch WA refuses (its object pool full) is
+-- counted and logged, not fatal.
 --
 -- Batches 1 and 2 start from the same positions and speeds, so the two halves
 -- of the turn compare like for like. Everything that decides what happens runs
@@ -49,7 +58,9 @@ local DAMAGE = 15       -- each explosion's damage
 local BLAST = 40        -- each custom explosion's size (CreateExplosion's id)
 local PROFILE = true
 local SEED = 12345
-local ELECTRIC_GRENADES = 50 -- batch 3; needs highlander or highlander_test
+local BOWLING_STRIKES = 7    -- batch 3; needs highlander or highlander_test
+local BOWLING_SLOT = "sheep_strike"
+local ELECTRIC_GRENADES = 50 -- batch 4; needs highlander or highlander_test
 local ELECTRIC_SLOT = "earthquake"
 local ELECTRIC_FUSE = 3000   -- ms, plus up to ELECTRIC_SPREAD
 local ELECTRIC_SPREAD = 1500
@@ -140,8 +151,33 @@ local function electric_batch(owner)
       refused, reason = refused + 1, reason or tostring(err)
     end
   end
-  wa.log(string.format("stress: batch 3, %d of %d Electric Grenades launched%s", launched,
+  wa.log(string.format("stress: batch 4, %d of %d Electric Grenades launched%s", launched,
     ELECTRIC_GRENADES, refused > 0 and (", " .. refused .. " refused: " .. reason) or ""))
+end
+
+-- The ground under x: the first land from the top (on a cavern, the roof's
+-- underside is not ground, so the first land below open air).
+local function ground(x)
+  local size = wa.world.size()
+  local y = 20
+  while y < size.h and wa.land.solid(x * FX, y * FX) do y = y + 4 end
+  while y < size.h and not wa.land.solid(x * FX, y * FX) do y = y + 4 end
+  return y
+end
+
+local function bowling_batch(owner)
+  local size = wa.world.size()
+  local fired, reason = 0, nil
+  for i = 1, BOWLING_STRIKES do
+    local x = size.w * i // (BOWLING_STRIKES + 1)
+    local ok, err = pcall(wa.weapons.click, {
+      weapon = BOWLING_SLOT, worm = owner, x = x * FX, y = ground(x) * FX,
+      vx = (i % 2 == 1) and FX or -FX, -- the strike's direction: odd ones from the left
+    })
+    if ok then fired = fired + 1 else reason = reason or tostring(err) end
+  end
+  wa.log(string.format("stress: batch 3, %d of %d Bowling Ball Strikes%s", fired, BOWLING_STRIKES,
+    reason and (", " .. reason) or ""))
 end
 
 local function stock_batch(owner, shots)
@@ -252,15 +288,23 @@ wa.on.turn_start(function(ev)
           wa.log("stress: batch 2 skipped, no worm alive to fire it for")
         end
       end
-      if now == 2 * BATCH_GAP and ELECTRIC_GRENADES > 0 then
+      if now == 2 * BATCH_GAP and BOWLING_STRIKES > 0 then
         local w = live_owner(owner)
         if w then
-          electric_batch(w)
+          bowling_batch(w)
         else
           wa.log("stress: batch 3 skipped, no worm alive to fire it for")
         end
       end
-      local last = ELECTRIC_GRENADES > 0 and 2 * BATCH_GAP or BATCH_GAP
+      if now == 3 * BATCH_GAP and ELECTRIC_GRENADES > 0 then
+        local w = live_owner(owner)
+        if w then
+          electric_batch(w)
+        else
+          wa.log("stress: batch 4 skipped, no worm alive to fire it for")
+        end
+      end
+      local last = ELECTRIC_GRENADES > 0 and 3 * BATCH_GAP or BOWLING_STRIKES > 0 and 2 * BATCH_GAP or BATCH_GAP
       if now > last and next(orbs) == nil and #flashes == 0 then
         a:despawn()
       end
