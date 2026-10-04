@@ -4,8 +4,9 @@ local shared = require("lib/shared")
 local fires = shared.fires
 
 -- The strike: PX's plane drops three balls 48 pixels apart, moving 5 a frame
--- the way it flies. Here they drop together from the sky over the click,
--- the way the worm faces; PX's plane is not drawn.
+-- the way it flies. Here they drop together from the sky over the click, the
+-- way WA's strike arrow points: the arrow keys set it by turning the worm,
+-- and the strike flies against the worm's facing. PX's plane is not drawn.
 local STRIKE_BALLS = 3
 local STRIKE_SPACING = 48
 local STRIKE_SPEED = 5
@@ -141,7 +142,7 @@ end
 shared.spawn_bowling_ball = spawn_ball
 
 fires.bowling_strike = function(ev)
-  local dir = ev.worm.facing < 0 and -1 or 1
+  local dir = ev.worm.facing < 0 and 1 or -1
   for i = 1, STRIKE_BALLS do
     local offset = (i - (STRIKE_BALLS + 1) / 2) * STRIKE_SPACING
     spawn_ball(ev.worm, ev.x + math.floor(offset * P), wa.world.sky, STRIKE_SPEED * dir, 0)

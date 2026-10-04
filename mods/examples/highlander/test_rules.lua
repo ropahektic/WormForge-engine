@@ -1173,7 +1173,7 @@ do
     table.concat(xs, ","))
   local ball = M.spawned[2]
   run(1)
-  check("moving the way the worm faces", ball.x > 300 * P)
+  check("moving the way WA's strike arrow points: against the worm's facing", ball.x < 300 * P)
   run(600)
   local rest = ball.y / P
   check("it comes to rest on the floor, its 16-pixel circle on it", rest > 182 and rest < 184,
