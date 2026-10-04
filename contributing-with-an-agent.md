@@ -44,7 +44,7 @@ Needs: WA **3.8.1** + WormKit, this repo, `wkLua.dll` next to `WA.exe`. Test in 
 
 Lua sees `wa` and handles (`a`, `worm`). Not C++ names, not `unknownC`, not pointers.
 
-A weapon is usually a **LuaActor**: `wa.weapons.replace` then `on_click` / `on_fire` spawn a body with a brain. Status tables (`gravity = true`, …) are the GUI path (`gif_donkey`). Overlay a stock missile (`params`, `wa.on.gravity_*`) only when you still want stock flight (`circle_bazooka`).
+A weapon is usually a **LuaActor**: `wa.weapons.replace` then `on_click` / `on_fire` spawn a body with a brain. An `on_click` event has `worm`, `x`, `y` (the click, from WA's fire context), `sky`, `slot` and `vx`, `vy`: the shot's speed in that context, 16.16 (0 when the click is eaten before WA fires, as with `eat_fire`); for a strike the sign of `vx` is the direction WA's arrow keys set, as Project X's airstrikes read it (0 or more: from the left). Status tables (`gravity = true`, …) are the GUI path (`gif_donkey`). Overlay a stock missile (`params`, `wa.on.gravity_*`) only when you still want stock flight (`circle_bazooka`).
 
 - Positions / speeds are WA **16.16** integers (`0x10000` = 1 pixel).
 - Space is shoot (hold to charge bazooka-type, release to fire). Enter / Backspace are `wa.msg.JUMP` / `JUMP_UP`. `wa.world.keys().jump` is W (POOZ), not Space.

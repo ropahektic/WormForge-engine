@@ -2899,7 +2899,7 @@ wa.weapons.replace({
             },
             ..Default::default()
         });
-        crate::weapon_click(p.on_click_id, 0x11, 5, 1, 2, -0x00D0_0000).unwrap();
+        crate::weapon_click(p.on_click_id, 0x11, 5, 1, 2, -0x00D0_0000, (-0x5_0000, 0)).unwrap();
         assert_eq!(OWNER.with(|c| c.get()), 0x11);
     }
 
