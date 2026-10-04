@@ -235,7 +235,7 @@ pub fn trace_fixed(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)> {
     Some((hit.0 << 16, hit.1 << 16))
 }
 
-fn electrical_targets(include_graves: bool) -> Vec<u32> {
+pub(crate) fn electrical_targets(include_graves: bool) -> Vec<u32> {
     let root = unsafe { session_root_ptr() };
     if root.is_null() { return Vec::new(); }
     let mut out = Vec::new();
@@ -1631,7 +1631,7 @@ pub fn session_world() -> *mut u8 {
     unsafe { session_world_ptr() }
 }
 
-struct GridView {
+pub(crate) struct GridView {
     bits: *mut u8,
     stride: usize,
     width: usize,
@@ -1640,7 +1640,7 @@ struct GridView {
 }
 
 impl GridView {
-    fn solid_px(&self, x: i32, y: i32) -> bool {
+    pub(crate) fn solid_px(&self, x: i32, y: i32) -> bool {
         if x < 0 || y < 0 {
             return false;
         }
@@ -1688,7 +1688,7 @@ impl GridView {
     }
 }
 
-fn live_grid() -> Option<GridView> {
+pub(crate) fn live_grid() -> Option<GridView> {
     unsafe { read_grid() }
 }
 

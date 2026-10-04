@@ -209,6 +209,8 @@ pub fn install() -> Result<(), String> {
         retreat_ms: crate::world::retreat_ms,
         turn_clock_ms: crate::world::turn_clock_ms,
         launch: crate::missile_boom::launch,
+        shape_trace: crate::shape::trace,
+        shape_collides: crate::shape::collides,
         retarget_weapon_sprites: |slot, body, cluster| {
             crate::apply::retarget_sprites(
                 slot as usize,
