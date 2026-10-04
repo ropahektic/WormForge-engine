@@ -578,6 +578,17 @@ derive = "match"
 target_section = ".text"
 
 [[locator]]
+# CollisionManager's test of an entity at (x, y): stdcall (manager, entity,
+# x, y, collision helper +0xDC, mask), RET 0x18; non-zero when it touches
+# something. WA's landing check (0x5018F0) and the wind step (0x4FCBF4) use it.
+name = "ENTITY_COLLIDES_AT"
+reference_va = 0x004fb9d0
+section = ".text"
+pattern = "83 EC 10 53 8B 5C 24 18 8B 83 40 02 00 00 8B 40 24 05 24 D9 00 00 80 78 38 00 56 89 44 24 14 C7"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
 name = "WORM_SET_STATE"
 reference_va = 0x0050e850
 section = ".text"

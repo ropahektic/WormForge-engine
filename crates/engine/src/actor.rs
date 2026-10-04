@@ -178,6 +178,7 @@ pub fn install() -> Result<(), String> {
         take: crate::physics::take,
         release: crate::physics::release,
         is_taken: crate::physics::taken,
+        fits: crate::physics::fits,
         jetpack_steer: crate::physics::jetpack_steer,
         look: native_look,
         keys: crate::world::keys,

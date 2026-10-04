@@ -188,10 +188,12 @@ pub struct ActorNative {
     pub drop_carry: fn(handle: u32),
     /// `worm:take{ hide, turn }`: (handle, hide, freeze the turn).
     pub take: fn(handle: u32, hide: bool, freeze: bool),
-    /// `worm:release(vx, vy, { tumble })`: (handle, vx, vy, tumble).
-    pub release: fn(handle: u32, vx: i32, vy: i32, tumble: bool),
+    /// `worm:release(vx, vy, { tumble, suppress_auto_parachute })`.
+    pub release: fn(handle: u32, vx: i32, vy: i32, tumble: bool, suppress_auto_parachute: bool),
     /// `worm.taken`: the engine still holds it for the pack.
     pub is_taken: fn(handle: u32) -> bool,
+    /// `worm:fits(x, y)`: WA's own collision test of the worm there.
+    pub fits: fn(handle: u32, x: i32, y: i32) -> bool,
     /// `worm:jetpack_steer(on)`.
     pub jetpack_steer: fn(handle: u32, on: bool),
     /// Switch this actor's installed sheet and reset the animation phase.
@@ -302,8 +304,9 @@ impl Default for ActorNative {
             carry: |_, _, _| {},
             drop_carry: |_| {},
             take: |_, _, _| {},
-            release: |_, _, _, _| {},
+            release: |_, _, _, _, _| {},
             is_taken: |_| false,
+            fits: |_, _, _| true,
             jetpack_steer: |_, _| {},
             look: |_, _, _, _, _| {},
             keys: || 0,
@@ -1199,7 +1202,9 @@ impl UserData for WormHandle {
         // at (vx, vy), 16.16. A held worm is shown again and let go; any worm
         // then falls under WA's control (as from a closed parachute), and WA
         // flies and lands it with its own states. `tumble = true`: out of
-        // control instead, as after a hit; in water WA drowns it.
+        // control instead, as after a hit; in water WA drowns it. A hard
+        // vehicle landing can suppress automatic parachute reopening until
+        // WA moves the worm out of the falling or tumbling state.
         methods.add_method(
             "release",
             |_, this, (vx, vy, opts): (Option<i32>, Option<i32>, Option<Table>)| {
@@ -1208,14 +1213,27 @@ impl UserData for WormHandle {
                     Some(t) => t.get::<Option<bool>>("tumble")?.unwrap_or(false),
                     None => false,
                 };
+                let suppress_auto_parachute = match &opts {
+                    Some(t) => t.get::<Option<bool>>("suppress_auto_parachute")?.unwrap_or(false),
+                    None => false,
+                };
                 if this.0 != 0 {
                     if let Some(release) = native_release() {
-                        release(this.0, vx.unwrap_or(0), vy.unwrap_or(0), tumble);
+                        release(this.0, vx.unwrap_or(0), vy.unwrap_or(0), tumble, suppress_auto_parachute);
                     }
                 }
                 Ok(())
             },
         );
+        // `worm:fits(x, y)`: whether the worm would touch nothing at (x, y),
+        // 16.16, by WA's own collision test and the worm's own shape (for a
+        // taken worm, with the mask it had before it was taken). A read.
+        methods.add_method("fits", |_, this, (x, y): (i32, i32)| {
+            if this.0 == 0 {
+                return Ok(true);
+            }
+            Ok(native_fits().map(|f| f(this.0, x, y)).unwrap_or(true))
+        });
         // `worm:jetpack_steer(on)`: while WA's jet pack runs, the pack steers
         // it (speed, fuel) and WA neither thrusts nor burns fuel from the keys;
         // WA keeps its collisions, fuel HUD and landing. Lapses when the jet
@@ -1470,11 +1488,15 @@ fn native_take() -> Option<fn(u32, bool, bool)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.take)
 }
 
+fn native_fits() -> Option<fn(u32, i32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.fits)
+}
+
 fn native_is_taken() -> Option<fn(u32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.is_taken)
 }
 
-fn native_release() -> Option<fn(u32, i32, i32, bool)> {
+fn native_release() -> Option<fn(u32, i32, i32, bool, bool)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.release)
 }
 
