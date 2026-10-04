@@ -83,7 +83,10 @@ end
 -- holding the turn, the last turn's worm owns the sprite, or it would not
 -- be drawn at all while WA still flies the missile. That worm may have
 -- died since, and WA frees a dead worm: it is kept by id and looked up
--- among the living, and if it is gone nothing owns (or draws) the sprite.
+-- among the living, and if it is gone any living worm owns the sprite.
+-- Left undrawn instead, the missile would show WA's own sprite, which
+-- another weapon may have taken over (the Electric Grenade's is the stock
+-- grenade, which the Sticky Bomb redraws as its bomb).
 local last_turn_id
 wa.on.turn_start(function(event)
   last_turn_id = event.worm and event.worm.id
@@ -92,9 +95,13 @@ end)
 local function sprite_owner()
   local turn = current_worm()
   if turn then return turn end
+  if not last_turn_id then return nil end
+  local any
   for _, w in ipairs(wa.worms.all()) do
     if w.id == last_turn_id then return w end
+    any = any or w
   end
+  return any
 end
 
 wa.on.missile_frame(function(m)

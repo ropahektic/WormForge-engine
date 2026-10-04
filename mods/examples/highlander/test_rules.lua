@@ -2134,8 +2134,9 @@ do
   check("thrown: WA's sprite hidden, PX's grenade follows it", m.sprite == 0
     and M.spawned[1] and M.spawned[1].sprite == "sprites/px_hold/electric_grenade.png")
   -- Its sprite's owner when no worm holds the turn: the last turn's worm;
-  -- if that one died since (WA frees a dead worm, its handle dangles), no
-  -- sprite rather than one owned by the dead worm.
+  -- if that one died since (WA frees a dead worm, its handle dangles), a
+  -- living worm, never the dead one, so PX's grenade is still drawn (WA's
+  -- own sprite is the stock grenade, which the Sticky Bomb redraws).
   do
     local before = M.spawned
     owner.turn = false
@@ -2153,10 +2154,13 @@ do
     M.missile(late)
     late.phase = "post"
     M.missile(late)
-    check("a grenade flying after the last turn's worm died is not given the dead worm for owner;"
-      .. " WA's own sprite stays", #M.spawned == 0 and late.sprite == 50)
+    check("a grenade flying after the last turn's worm died is drawn for a living worm,"
+      .. " WA's own sprite hidden", #M.spawned == 1 and M.spawned[1].owner ~= owner
+      and M.spawned[1].owner ~= nil and late.sprite == 0)
     wa.worms.all = listed
-    M.missile(late)
+    M.spawned = {}
+    local later = { id = 503, phase = "post", weapon = "earthquake", x = 10*P, y = 20*P, vx = P, vy = 0, sprite = 0 }
+    M.missile(later)
     check("while that worm lives, it owns the sprite", M.spawned[1] and M.spawned[1].owner == owner)
     owner.turn = true
     M.spawned = before
