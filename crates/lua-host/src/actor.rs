@@ -525,6 +525,9 @@ pub fn weapon_fire(
     })
 }
 
+/// An `on_click`: the click at (x, y), and `speed`, the shot's speed in WA's
+/// fire context (16.16; for a strike, the sign of its x is the direction WA's
+/// arrow keys set: Project X's PxAirstrike reads it so), (0, 0) without one.
 pub fn weapon_click(
     click_id: u32,
     worm: u32,
@@ -532,6 +535,7 @@ pub fn weapon_click(
     x: i32,
     y: i32,
     sky: i32,
+    speed: (i32, i32),
 ) -> Result<(), String> {
     if click_id == 0 {
         return Ok(());
@@ -555,6 +559,8 @@ pub fn weapon_click(
         click.set("y", y).map_err(|e| e.to_string())?;
         click.set("sky", sky).map_err(|e| e.to_string())?;
         click.set("slot", slot).map_err(|e| e.to_string())?;
+        click.set("vx", speed.0).map_err(|e| e.to_string())?;
+        click.set("vy", speed.1).map_err(|e| e.to_string())?;
         click
             .set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;

@@ -283,6 +283,7 @@ unsafe extern "thiscall" fn team_msg_hook(this: *mut u8, a: u32, msg: u32, b: u3
                         let worm = turn_worm();
                         if !worm.is_null() {
                             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                // Eaten before WA fires: no shot, no speed.
                                 if let Err(e) = lua_host::weapon_click(
                                     claim.click_id,
                                     worm as u32,
@@ -290,6 +291,7 @@ unsafe extern "thiscall" fn team_msg_hook(this: *mut u8, a: u32, msg: u32, b: u3
                                     x,
                                     y,
                                     DROP_SKY_Y,
+                                    (0, 0),
                                 ) {
                                     log_error(&format!("on_click: {e}"));
                                 }
@@ -662,8 +664,16 @@ unsafe fn try_spawn_drop(worm: *mut u8, ctx: *mut u8) -> bool {
     };
     let (cursor_x, cursor_y) = cursor_xy(worm, ctx);
     if claim.click_id != 0 {
+        // The shot's speed in WA's fire context: a strike's direction is its
+        // x's sign, as Project X's PxAirstrike takes it.
+        let speed = if ctx.is_null() {
+            (0, 0)
+        } else {
+            (read_i32(ctx, CTX_VEL_X), read_i32(ctx, CTX_VEL_Y))
+        };
         crate::log::log_line(&format!(
-            "on_click dispatch slot={slot} at {cursor_x:#x},{cursor_y:#x}"
+            "on_click dispatch slot={slot} at {cursor_x:#x},{cursor_y:#x} speed {:#x},{:#x}",
+            speed.0, speed.1
         ));
         if let Err(e) = lua_host::weapon_click(
             claim.click_id,
@@ -672,6 +682,7 @@ unsafe fn try_spawn_drop(worm: *mut u8, ctx: *mut u8) -> bool {
             cursor_x,
             cursor_y,
             DROP_SKY_Y,
+            speed,
         ) {
             log_error(&format!("on_click: {e}"));
             return false;
