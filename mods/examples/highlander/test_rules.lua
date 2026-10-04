@@ -268,6 +268,68 @@ local function new_match(opts)
       keys = function() return { sprint = M.shift or false, digit = M.digit } end,
       set_gravity = function(v) M.gravity = v end,
       set_wind = function(v) M.wind = v end,
+      sky = -0xD00000,
+      -- As the engine's wa.world.trace, against M.solid only, cheaper: the
+      -- circle's rim and centre (terrain is contiguous and the sweep moves a
+      -- pixel at a time), the normal from the rim samples a pixel or two out
+      -- that are solid.
+      trace = function(q)
+        local P = 0x10000
+        local r = q.radius or 0
+        local RIM = {}
+        for k = 0, 47 do
+          local t = k * math.pi / 24
+          RIM[#RIM + 1] = { math.cos(t), math.sin(t) }
+        end
+        local function solid_at(x, y) return M.solid((x // P) * P, (y // P) * P) end
+        local function overlaps(x, y)
+          if not M.solid then return false end
+          if solid_at(x, y) then return true end
+          for rr = r, 1, -4 do
+            for _, d in ipairs(RIM) do
+              if solid_at(x + math.floor(d[1] * rr * P), y + math.floor(d[2] * rr * P)) then return true end
+            end
+          end
+          return false
+        end
+        local function normal(x, y)
+          local sx, sy = 0, 0
+          for _, reach in ipairs({ r + 1, r + 2 }) do
+            for _, d in ipairs(RIM) do
+              if solid_at(x + math.floor(d[1] * reach * P), y + math.floor(d[2] * reach * P)) then
+                sx, sy = sx - d[1], sy - d[2]
+              end
+            end
+          end
+          if sx == 0 and sy == 0 then sx, sy = -(q.x1 - q.x0), -(q.y1 - q.y0) end
+          local len = math.sqrt(sx * sx + sy * sy)
+          if len == 0 then return 0, -1 end
+          return sx / len, sy / len
+        end
+        local dx, dy = q.x1 - q.x0, q.y1 - q.y0
+        local n = math.max(1, math.max(math.abs(dx), math.abs(dy)) // P + 1)
+        local function at(i) return q.x0 + (dx * i) // n, q.y0 + (dy * i) // n end
+        local out, from = { starts_solid = false, hit = false }, 0
+        if overlaps(at(0)) then
+          out.starts_solid = true
+          for i = 1, n do
+            if not overlaps(at(i)) then out.left_x, out.left_y = at(i); from = i; break end
+          end
+          if not out.left_x then return out end
+        end
+        for i = from + 1, n do
+          local x, y = at(i)
+          if overlaps(x, y) then
+            out.hit = true
+            out.x, out.y = at(i - 1)
+            out.nx, out.ny = normal(x, y)
+            out.tx, out.ty = -out.ny, out.nx
+            return out
+          end
+        end
+        if out.starts_solid then return out end
+        return nil
+      end,
     },
     -- A fixed LCG: the pack must not care which numbers, only that it draws
     -- through here.
@@ -339,8 +401,9 @@ local function new_match(opts)
         if spec.owner == nil then
           error("spawn needs an owner worm or actor", 2)
         end
-        local a = { sprite = spec.sprite, x = spec.x, y = spec.y, dead = false, explode = spec.explode, on = spec.on,
-                    owner = spec.owner }
+        M.next_actor_id = (M.next_actor_id or 0) + 1
+        local a = { id = M.next_actor_id, sprite = spec.sprite, x = spec.x, y = spec.y, dead = false,
+                    explode = spec.explode, on = spec.on, owner = spec.owner }
         function a:gfx(g)
           self.angle, self.scale, self.tint, self.blend, self.depth = g.angle, g.scale, g.tint, g.blend, g.depth
         end
@@ -546,7 +609,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("54 slots replaced, each once", #replaced == 54 and not dupes, tostring(#replaced))
+  check("55 slots replaced, each once", #replaced == 55 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -566,7 +629,8 @@ do
   end
   local own_file = true
   for slot, spec in pairs(by_slot) do
-    if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi" or slot == "prod" then
+    if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi" or slot == "prod"
+      or slot == "sheep_strike" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
@@ -1078,6 +1142,64 @@ do
   spec.on_fire({ worm = w, x = 114 * P, y = w.y, vx = 12 * P, vy = 0 })
   check("a clear muzzle keeps WA's original launch point",
     #M.launched == 2 and M.launched[2].x == 114 * P)
+end
+
+print("bowling ball strike: three balls from the sky, rolling on PX's physics")
+do
+  new_match()
+  local P = 0x10000
+  local spec
+  for _, r in ipairs(replaced) do
+    if r.weapon == "sheep_strike" then spec = r end
+  end
+  check("the strike takes the scheme's record, its icon, the ball and a click", spec
+    and spec.wep == "weps/sheep_strike.wep" and spec.panel_icon == "sprites/bowling_ball/strike_icon.png"
+    and type(spec.on_click) == "function" and spec.on_select and spec.on_select.cursor)
+  local function run(n)
+    for _ = 1, n do
+      for _, a in ipairs(M.spawned or {}) do if not a.dead then a.on(a) end end
+    end
+  end
+  local w = worm(16)
+  w.facing = 1
+  M.gravity = P // 4
+  M.solid = function(_, y) return y >= 200 * P end
+  M.spawned = {}
+  spec.on_click({ worm = w, x = 300 * P, y = 100 * P })
+  local xs = {}
+  for i, a in ipairs(M.spawned) do xs[i] = a.x // P end
+  check("three balls 48 apart over the click, from the sky", #M.spawned == 3
+    and xs[1] == 252 and xs[2] == 300 and xs[3] == 348 and M.spawned[2].y == -0xD00000,
+    table.concat(xs, ","))
+  local ball = M.spawned[2]
+  run(1)
+  check("moving the way the worm faces", ball.x > 300 * P)
+  run(600)
+  local rest = ball.y / P
+  check("it comes to rest on the floor, its 16-pixel circle on it", rest > 182 and rest < 184,
+    tostring(rest))
+  local x0 = ball.x
+  run(50)
+  check("and stays there, asleep", ball.x == x0 and ball.y / P == rest)
+  check("it spun while it rolled", ball.angle ~= nil)
+  -- A slope down to the right: solid below y = 200 + x / 2.
+  new_match()
+  for _, r in ipairs(replaced) do
+    if r.weapon == "sheep_strike" then spec = r end
+  end
+  w = worm(16)
+  w.facing = -1
+  M.gravity = P // 4
+  M.solid = function(x, y) return 2 * (y // P) >= 400 + x // P end
+  M.spawned = {}
+  spec.on_click({ worm = w, x = 200 * P, y = 0 })
+  ball = M.spawned[2]
+  run(120)
+  local landed = ball.x
+  run(60)
+  check("on a slope it rolls downhill, whichever way it fell", ball.x > landed,
+    (landed // P) .. " -> " .. (ball.x // P))
+  M.gravity, M.solid = nil, nil
 end
 
 print("chilli bomb: five more Chillis burst out")
