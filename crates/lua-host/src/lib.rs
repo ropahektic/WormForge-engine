@@ -744,6 +744,38 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn worm_hurt_carries_a_knock() {
+        let _guard = lock_host();
+        thread_local! {
+            static HITS: std::cell::RefCell<Vec<(u32, i32, i32, i32)>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            hurt: |w, _, amount, vx, vy| HITS.with(|l| l.borrow_mut().push((w, amount, vx, vy))),
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        assert!(lua.load("wa.worms.all()[1]:hurt(5)").exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            lua.load(r#"
+                local w = wa.worms.all()[1]
+                w:hurt(10)
+                w:hurt({ amount = 12, vx = 0x30000, vy = -0x50000 })
+                w:hurt({ vx = 0x10000 })
+                w:hurt({ amount = 0 })
+                w:hurt(-3)
+            "#).exec().unwrap();
+            assert!(lua.load("wa.worms.all()[1]:hurt('x')").exec().is_err());
+        });
+        HITS.with(|l| assert_eq!(
+            l.borrow().as_slice(),
+            &[(0x1234, 10, 0, 0), (0x1234, 12, 0x30000, -0x50000), (0x1234, 0, 0x10000, 0)],
+            "a number hurts in place; a table may knock, and with a knock no damage is a push"
+        ));
+    }
+
+    #[test]
     fn launch_reaches_native_only_during_simulation() {
         let _guard = lock_host();
         thread_local! {
