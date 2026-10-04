@@ -1112,7 +1112,10 @@ do
     and c.explode_into == "fire")
   check("and WA's sprite 0: only the chilli is drawn", c.sprite == 0)
   local m = { id = 610, phase = "pre", weapon = "super_banana", x = 0, y = 0, vx = P, vy = 0, sprite = 51 }
+  local was_turn = w.turn
+  w.turn = true -- thrown in its turn
   M.missile(m)
+  w.turn = was_turn
   check("the thrown Chilli's own banana hidden in flight", m.sprite == 0)
   local b = { id = 611, phase = "pre", weapon = "bazooka", x = 0, y = 0, vx = P, vy = 0, sprite = 48 }
   M.missile(b)
@@ -2130,6 +2133,34 @@ do
   M.missile(m)
   check("thrown: WA's sprite hidden, PX's grenade follows it", m.sprite == 0
     and M.spawned[1] and M.spawned[1].sprite == "sprites/px_hold/electric_grenade.png")
+  -- Its sprite's owner when no worm holds the turn: the last turn's worm;
+  -- if that one died since (WA frees a dead worm, its handle dangles), no
+  -- sprite rather than one owned by the dead worm.
+  do
+    local before = M.spawned
+    owner.turn = false
+    M.turn_start({ worm = owner })
+    local listed = wa.worms.all
+    wa.worms.all = function()
+      local alive = {}
+      for _, w in ipairs(listed()) do if w ~= owner then alive[#alive + 1] = w end end
+      return alive
+    end
+    M.spawned = {}
+    local late = { id = 502, phase = "post", weapon = "earthquake", x = 10*P, y = 20*P, vx = P, vy = 0, sprite = 0 }
+    late.phase = "pre"
+    late.sprite = 50
+    M.missile(late)
+    late.phase = "post"
+    M.missile(late)
+    check("a grenade flying after the last turn's worm died is not given the dead worm for owner;"
+      .. " WA's own sprite stays", #M.spawned == 0 and late.sprite == 50)
+    wa.worms.all = listed
+    M.missile(late)
+    check("while that worm lives, it owns the sprite", M.spawned[1] and M.spawned[1].owner == owner)
+    owner.turn = true
+    M.spawned = before
+  end
   -- It spins as a grenade (its record's WAT_Rotation), not faces its flight:
   -- flying right at 4 px a frame, 0.5 * 4 * 0.15 = 0.3 rad a frame.
   m.vx, m.vy = 4*P, 0
