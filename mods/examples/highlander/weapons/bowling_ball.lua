@@ -62,10 +62,16 @@ local ZAP_REACH = 12
 -- played over 50 frames then paused 20 (SparkCycle, 0.02 a frame to 1.4);
 -- and while awake a glow left behind every frame, 30 frames fading to
 -- black, 0.3 to 0.5 across, drifting up to 0.3 a frame. Drawn where the
--- ball's sprite is, in PX's order: the glows behind the ball (a halo; over
--- it, added three times, they wash it out to white), the spark in front.
+-- ball's sprite is: the glows behind the ball (a halo; PX draws them over
+-- it, which washes the ball out to white), the spark in front. Our own on
+-- top of PX's: the ball itself turns electric blue, darkened (its sprite's
+-- tint) and given a blue sheen that follows its shading (sheen.png, the
+-- ball in grey, added in front of it).
 local GLOW_SHEET = "sprites/bowling_ball/glow.png"
 local SPARK_SHEET = "sprites/bowling_ball/spark.png"
+local SHEEN_SHEET = "sprites/bowling_ball/sheen.png"
+local ZAPPED_TINT = 0x405980  -- the ball's colours times (0.25, 0.35, 0.5)
+local SHEEN_COLOR = 0xFF3C96FF -- RGB(60, 150, 255), added
 local GLOW_SIZE = 128
 local SPARK_SIZE, SPARK_FRAMES = 60, 10
 local SPARK_SPEED, SPARK_CYCLE = 0.02, 1.4
@@ -77,7 +83,7 @@ local TRAIL_LIFE = 30
 local SPRITE_DROP = 4
 local LIFT = 0x8000           -- half a pixel, 16.16
 local BALL_DEPTH = 0x000E0000
-local GLOW_DEPTH, SPARK_DEPTH = BALL_DEPTH + 1, BALL_DEPTH - 1
+local GLOW_DEPTH, SHEEN_DEPTH, SPARK_DEPTH = BALL_DEPTH + 1, BALL_DEPTH - 1, BALL_DEPTH - 2
 local P = 0x10000
 
 -- What the ball rolls on: PX's DefaultColGroup, and without worms when fast
@@ -403,7 +409,7 @@ local function spawn_ball(owner, x, y, vx, vy)
       if speed > PUSH_SPEED then push_balls(a.id, b, speed) end
       if speed > FAST then hit_others(a, b, speed) end
       a.x, a.y, a.vx, a.vy = b.x, b.y + SPRITE_DROP * P, 0, 0
-      a:gfx({ angle = math.deg(b.rot) % 360, depth = BALL_DEPTH })
+      a:gfx({ angle = math.deg(b.rot) % 360, depth = BALL_DEPTH, tint = b.zapped and ZAPPED_TINT or 0xFFFFFF })
     end,
   })
   shared.bowling_balls[a.id] = b
@@ -471,6 +477,7 @@ if wa.on.draw and wa.draw.quad then
         local x, y = b.x, b.y + drop
         local glow = (0.3 + 0.1 * wa.draw.random()) * GLOW_SIZE / 2 * P
         for _ = 1, 3 do quad(GLOW_SHEET, 0, FULL, GLOW_DEPTH, x, y, glow, 0) end
+        quad(SHEEN_SHEET, 0, SHEEN_COLOR, SHEEN_DEPTH, x, y, SPARK_SIZE / 2 * P, b.rot)
         if b.spark <= 1 then
           local frame = math.min(SPARK_FRAMES - 1, math.floor(b.spark * SPARK_FRAMES))
           quad(SPARK_SHEET, frame, 0xFFFFFFFF, SPARK_DEPTH, x, y, SPARK_SIZE / 2 * P, b.rot)
