@@ -164,6 +164,7 @@ pub(crate) fn run(
             allowed_register: HashSet::new(),
             claims: Rc::clone(claims),
             logs: Rc::clone(logs),
+            debug_worm_state: false,
         };
         api::install(lua, &ctx)?;
         let Some(install) = &d.install else {
