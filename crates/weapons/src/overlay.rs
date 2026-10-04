@@ -257,6 +257,10 @@ pub struct ActorSpawn {
     pub persist: bool,
     /// Die when the body is below the water line.
     pub drown: bool,
+    /// In WA's oil-drum collision layer (17) instead of the missiles' (15),
+    /// as Project X's `SetLayerOverride(LAYER_OILDRUM)`: WA's fires hit it,
+    /// and its guns, missiles and worms treat it as an object.
+    pub as_object: bool,
     /// Draw the body. `false` / `sprite = false` uses the 1023 blit reject.
     pub visible: bool,
     /// Bake opaque silhouette(s) from the GIF/PNG. Sub-toggles below choose
@@ -300,6 +304,7 @@ impl Default for ActorSpawn {
             damage_worms: true,
             persist: false,
             drown: true,
+            as_object: false,
             visible: true,
             mask: false,
             mask_worms: false,

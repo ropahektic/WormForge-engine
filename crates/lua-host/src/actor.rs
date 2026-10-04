@@ -430,8 +430,9 @@ pub fn register_brain(
     lua: &Lua,
     frame: Option<Function>,
     land: Option<Function>,
+    hit: Option<Function>,
 ) -> mlua::Result<u32> {
-    if frame.is_none() && land.is_none() {
+    if frame.is_none() && land.is_none() && hit.is_none() {
         return Ok(0);
     }
     let id = NEXT_BRAIN.fetch_add(1, Ordering::SeqCst).max(1);
@@ -445,6 +446,9 @@ pub fn register_brain(
     }
     if let Some(f) = land {
         spec.set("land", f)?;
+    }
+    if let Some(f) = hit {
+        spec.set("hit", f)?;
     }
     brains.set(id, spec)?;
     Ok(id)
@@ -679,6 +683,87 @@ pub fn actor_freed(handle: u32) {
     if let Ok(mut g) = LIVE_ACTORS.lock() {
         g.remove(&handle);
     }
+}
+
+/// What hit a LuaActor whose brain has a `hit` handler: WA's blast (0x1C)
+/// or hit (0x4B, Project X's M_GUNEXP), which the engine then leaves to the
+/// handler instead of applying to the actor's speed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ActorHit {
+    /// A blast, else a hit.
+    pub blast: bool,
+    /// A hit's kind, WA's first field: 1 is a fire's.
+    pub kind: i32,
+    /// Where it came from, 16.16.
+    pub x: i32,
+    pub y: i32,
+    /// The push WA would have given the actor, 16.16 speed.
+    pub vx: i32,
+    pub vy: i32,
+    pub damage: i32,
+    pub team: i32,
+}
+
+/// Whether brain `brain_id` takes its hits itself (`on = { hit = fn }`).
+pub fn actor_takes_hits(brain_id: u32) -> bool {
+    if brain_id == 0 {
+        return false;
+    }
+    PARKED_LUA.with(|slot| {
+        let guard = slot.borrow();
+        let Some(lua) = guard.as_ref() else { return false };
+        (|| -> mlua::Result<bool> {
+            let wa: Table = lua.globals().get("wa")?;
+            let brains: Table = wa.get("_brains")?;
+            Ok(match brains.get::<Value>(brain_id)? {
+                Value::Table(spec) => matches!(spec.get::<Value>("hit")?, Value::Function(_)),
+                _ => false,
+            })
+        })()
+        .unwrap_or(false)
+    })
+}
+
+/// Run brain `brain_id`'s `hit` handler: `hit(actor, { kind = "blast" |
+/// "hit", hit_kind, x, y, vx, vy, damage, team })`.
+pub fn actor_hit(handle: u32, brain_id: u32, hit: ActorHit) -> Result<(), String> {
+    if handle == 0 || brain_id == 0 {
+        return Ok(());
+    }
+    with_lua("actor hit", |lua| {
+        let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
+        let brains: Table = wa.get("_brains").map_err(|e| e.to_string())?;
+        let spec = match brains.get::<Value>(brain_id).map_err(|e| e.to_string())? {
+            Value::Table(t) => t,
+            _ => return Ok(()),
+        };
+        let f = match spec.get::<Value>("hit").map_err(|e| e.to_string())? {
+            Value::Function(f) => f,
+            _ => return Ok(()),
+        };
+        let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
+        if let Ok(m) = spec.get::<String>("mod") {
+            let _ = wa.set("_mod", m);
+        }
+        let t = lua.create_table().map_err(|e| e.to_string())?;
+        (|| -> mlua::Result<()> {
+            t.set("kind", if hit.blast { "blast" } else { "hit" })?;
+            t.set("hit_kind", hit.kind)?;
+            t.set("x", hit.x)?;
+            t.set("y", hit.y)?;
+            t.set("vx", hit.vx)?;
+            t.set("vy", hit.vy)?;
+            t.set("damage", hit.damage)?;
+            t.set("team", hit.team)?;
+            Ok(())
+        })()
+        .map_err(|e| e.to_string())?;
+        let actor = lua.create_userdata(ActorHandle(handle)).map_err(|e| e.to_string())?;
+        let owner = read_handle(handle, ACTOR_OWNER) as u32;
+        let result = with_spawn_owner(owner, || f.call::<()>((actor, t)).map_err(|e| e.to_string()));
+        let _ = wa.set("_mod", caller);
+        result
+    })
 }
 
 pub fn actor_frame(handle: u32, brain_id: u32, ev: ActorEvent) -> Result<(), String> {

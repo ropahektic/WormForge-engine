@@ -504,6 +504,9 @@ pub const BLAST_AMOUNT: usize = 0x10;
 pub const BLAST_TEAM: usize = 0x18;
 pub const HIT_AMOUNT: usize = 0x14;
 pub const HIT_TEAM: usize = 0x18;
+/// The hit's knockback, 16.16 (Project X's fparams[3] and [4]).
+pub const HIT_KNOCK_X: usize = 0x0C;
+pub const HIT_KNOCK_Y: usize = 0x10;
 /// SpecialImpact `flag`. `10` = percent of current HP (battle axe).
 pub const HIT_FLAG: usize = 0x00;
 pub const HIT_PERCENT: i32 = 10;
@@ -513,6 +516,9 @@ pub const MAX_TEAMS: u32 = 6;
 pub const MAX_WORMS_PER_TEAM: u32 = 8;
 pub const GAME_RUNTIME_WORLD_ROOT: usize = 0x8;
 pub const COLLISION_LAYER_MISSILE: u32 = 0xF;
+/// The oil drums' collision layer (OilDrumEntity's constructor, 0x504B17).
+/// WA's fire hits what is in layers 2..=5 and 17 (mask 0x2003C at 0x54FB6A).
+pub const COLLISION_LAYER_OBJECT: u32 = 0x11;
 pub const DROP_SKY_Y: i32 = -0x00D0_0000;
 pub const LUA_ACTOR_MAGIC: u32 = 0x774B_4C41;
 /// Grown to include presentation state and the stable actor sequence id.
