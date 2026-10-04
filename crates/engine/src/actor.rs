@@ -1763,17 +1763,20 @@ unsafe fn apply_explosion_knock(this: *mut u8, data: *mut u8) {
         read_i32(data, 8) as u32,
         crate::wa::address("APPLY_EXPLOSION_KNOCK"),
     ];
+    // The arguments are read through EAX, not a register the compiler picks:
+    // EDI carries `this` into the call, so an `args` the compiler put in EDI
+    // would be overwritten by it, and the call go through the entity's own
+    // memory (it did, crashing WA, once a second caller had it inlined).
     core::arch::asm!(
         "push edi",
-        "mov edi, dword ptr [{args}]",
-        "push dword ptr [{args} + 16]",
-        "push dword ptr [{args} + 12]",
-        "push dword ptr [{args} + 8]",
-        "push dword ptr [{args} + 4]",
-        "call dword ptr [{args} + 20]",
+        "mov edi, dword ptr [eax]",
+        "push dword ptr [eax + 16]",
+        "push dword ptr [eax + 12]",
+        "push dword ptr [eax + 8]",
+        "push dword ptr [eax + 4]",
+        "call dword ptr [eax + 20]",
         "pop edi",
-        args = in(reg) args.as_ptr(),
-        out("eax") _,
+        inout("eax") args.as_ptr() => _,
         out("ecx") _,
         out("edx") _,
     );
