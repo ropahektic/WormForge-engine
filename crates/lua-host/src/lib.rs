@@ -6,6 +6,7 @@
 
 mod actor;
 mod api;
+mod bundles;
 mod dispatch;
 mod modules;
 mod perf;
@@ -13,6 +14,7 @@ mod sandbox;
 mod sim_context;
 mod spawn;
 
+pub use bundles::ComponentPlan;
 pub use perf::{perf_flags, take_lua_time, PerfFlags};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
@@ -53,6 +55,11 @@ pub struct MatchScripts {
 }
 
 pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
+    run_match(mods, None)
+}
+
+/// [`run_mods`], then the selected components of `plan`, if any.
+pub fn run_match(mods: &[LoadedMod], plan: Option<&ComponentPlan>) -> Result<MatchScripts, String> {
     actor::reset();
     perf::reset();
     let lua = sandbox::new_lua()?;
@@ -80,6 +87,10 @@ pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
             .map_err(|e| format!("{}: cannot read {}: {e}", pack.manifest.id, entry.display()))?;
         modules::run_entry(&lua, &pack.manifest.id, &pack.root, &pack.manifest.entry, &src)
             .map_err(|e| format!("{}: {e}", pack.manifest.id))?;
+    }
+
+    if let Some(plan) = plan {
+        bundles::run(&lua, plan, &claims, &logs)?;
     }
 
     let resolved = resolve_claims(claims.borrow().clone());
@@ -1525,6 +1536,180 @@ ENTRY_SAW = shared.answer
             let err = run_mods(&[p]).err().unwrap_or_default();
             assert!(err.contains(expected), "{entry}: {err}");
         }
+    }
+
+    /// A bundle on disk: its mod.toml and Lua files.
+    fn bundle(dir: &std::path::Path, toml: &str, files: &[(&str, &str)]) -> weapons::components::LoadedBundle {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join("mod.toml"), toml).unwrap();
+        for (path, src) in files {
+            let full = dir.join(path);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(full, src).unwrap();
+        }
+        weapons::components::LoadedBundle {
+            manifest: weapons::components::parse_bundle(toml).unwrap(),
+            root: dir.to_path_buf(),
+        }
+    }
+
+    fn plan(bundles: &[weapons::components::LoadedBundle], profile: &weapons::components::Profile) -> ComponentPlan {
+        let manifests: Vec<_> = bundles.iter().map(|b| b.manifest.clone()).collect();
+        ComponentPlan {
+            resolved: weapons::components::resolve(&manifests, profile).unwrap(),
+            roots: bundles.iter().map(|b| (b.manifest.id.clone(), b.root.clone())).collect(),
+        }
+    }
+
+    const CATALOG: &str = r#"
+id = "t.weapons"
+api_version = 1
+format_version = 2
+[[components]]
+id = "t.double_bazooka"
+type = "weapon"
+entry = "weapons/double_bazooka.lua"
+compatible_positions = [{ row = "F1", column = 1 }]
+[[components]]
+id = "t.unused"
+type = "weapon"
+entry = "weapons/unused.lua"
+compatible_positions = [{ row = "F1", column = 2 }]
+"#;
+
+    const SCHEMES: &str = r#"
+id = "t.schemes"
+api_version = 1
+format_version = 2
+[[components]]
+id = "t.scheme"
+type = "scheme"
+entry = "scheme.lua"
+preset = "p"
+[presets.p.weapons]
+"t.double_bazooka" = { row = "F1", column = 1 }
+[[components]]
+id = "t.feature"
+type = "feature"
+entry = "feature.lua"
+[[components.options]]
+key = "fast"
+type = "bool"
+default = false
+label = "Fast"
+"#;
+
+    fn selection(scheme_src: &str, weapon_src: &str, feature_src: &str) -> (Vec<weapons::components::LoadedBundle>, weapons::components::Profile) {
+        let root = std::env::temp_dir().join(format!("wklua-components-{}", weapon_src.len() + 7 * scheme_src.len() + 13 * feature_src.len()));
+        let _ = std::fs::remove_dir_all(&root);
+        let bundles = vec![
+            bundle(&root.join("w"), CATALOG, &[
+                ("weapons/double_bazooka.lua", weapon_src),
+                ("weapons/unused.lua", "error('an unselected weapon ran')"),
+            ]),
+            bundle(&root.join("s"), SCHEMES, &[("scheme.lua", scheme_src), ("feature.lua", feature_src)]),
+        ];
+        let profile = weapons::components::Profile {
+            scheme: Some("t.scheme".into()),
+            features: ["t.feature".to_string()].into(),
+            options: [("t.feature".to_string(), [("fast".to_string(), weapons::components::OptionValue::Bool(true))].into())].into(),
+            ..Default::default()
+        };
+        (bundles, profile)
+    }
+
+    #[test]
+    fn selected_components_declare_merge_and_install_in_order() {
+        let _guard = lock_host();
+        let (bundles, profile) = selection(
+            r#"return {
+                 weapons = { ["t.double_bazooka"] = { ammo = { turn_start = { amount = 1, mode = "replace" } }, delay = 0 },
+                             ["t.unused"] = { delay = 3 } },
+                 install = function(ctx) wa.log("scheme sees " .. ctx.weapons["t.double_bazooka"].stock_slot) end,
+               }"#,
+            r#"local shared = require("lib/shared")
+               return {
+                 defaults = { ammo = { round_start = 1, turn_start = { amount = 2, mode = "add" } }, delay = 2, ends_turn = false },
+                 install = function(ctx)
+                   local d = ctx.data
+                   wa.log(("%s at %s %d: round %d, turn %d %s, delay %d, ends %s, %s"):format(ctx.stock_slot, ctx.position.row,
+                     ctx.position.column, d.ammo.round_start, d.ammo.turn_start.amount, d.ammo.turn_start.mode, d.delay,
+                     tostring(d.ends_turn), shared))
+                   wa.weapons.replace({ weapon = ctx.stock_slot, name = "Double Bazooka" })
+                 end,
+               }"#,
+            r#"return function(ctx)
+                 wa.log("feature fast=" .. tostring(ctx.option("fast")) .. " scheme selected=" .. tostring(ctx.selected("t.scheme"))
+                   .. " unused selected=" .. tostring(ctx.selected("t.unused")))
+               end"#,
+        );
+        std::fs::create_dir_all(bundles[0].root.join("lib")).unwrap();
+        std::fs::write(bundles[0].root.join("lib/shared.lua"), "return 'shared ok'").unwrap();
+        let scripts = run_match(&[], Some(&plan(&bundles, &profile))).unwrap();
+        let logs: Vec<&str> = scripts.logs.iter().map(String::as_str).collect();
+        assert_eq!(logs, [
+            "[components] scheme override for t.unused skipped: not in the loadout",
+            "[t.double_bazooka] bazooka at F1 1: round 1, turn 1 replace, delay 0, ends false, shared ok",
+            "[t.scheme] scheme sees bazooka",
+            "[t.feature] feature fast=true scheme selected=true unused selected=false",
+        ]);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!((claim.slot, claim.mod_id.as_str()), (StockWeapon::Bazooka, "t.double_bazooka"));
+        assert_eq!(scripts.resolved.applied.len(), 1);
+    }
+
+    #[test]
+    fn the_component_demo_example_runs_with_its_readme_profile() {
+        let _guard = lock_host();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/component_demo");
+        let manifest = weapons::components::parse_bundle(&std::fs::read_to_string(root.join("mod.toml")).unwrap()).unwrap();
+        // The README's profile.
+        let profile = weapons::components::Profile {
+            scheme: Some("demo.scheme".into()),
+            features: ["demo.turn_note".to_string()].into(),
+            options: [("demo.turn_note".to_string(), [("show".to_string(), weapons::components::OptionValue::Bool(true))].into())].into(),
+            ..Default::default()
+        };
+        let bundles = [weapons::components::LoadedBundle { manifest, root }];
+        let scripts = run_match(&[], Some(&plan(&bundles, &profile))).unwrap();
+        assert_eq!(scripts.logs, [
+            "[demo.big_bazooka] Big Bazooka on bazooka at F1 1: round_start -1, delay 1",
+            "[demo.scheme] scheme places demo.big_bazooka on bazooka",
+        ]);
+        let claim = &scripts.resolved.applied[0];
+        assert_eq!((claim.slot, claim.params.name.as_deref(), claim.params.damage), (StockWeapon::Bazooka, Some("Big Bazooka"), Some(80)));
+    }
+
+    #[test]
+    fn components_are_refused_before_anything_installs() {
+        let _guard = lock_host();
+        let ok_scheme = "return {}";
+        let ok_feature = "return function() end";
+        let cases = [
+            ("wa.log('x') return {}", ok_scheme, ok_feature, "weapon t.double_bazooka: ", "wa.log while declaring"),
+            ("return { defaults = { delay = -1 } }", ok_scheme, ok_feature, "", "defaults.delay = -1 is outside 0..=99"),
+            ("return { defaults = { ammo = { rounds = 1 } } }", ok_scheme, ok_feature, "", "defaults.ammo.rounds is not a field; use round_start"),
+            ("return { defaults = { crate = { type = \"gold\" } } }", ok_scheme, ok_feature, "", "defaults.crate.type = \"gold\": use weapon"),
+            ("return { defaults = {}, extra = 1 }", ok_scheme, ok_feature, "", "returns extra: a weapon returns only defaults and install"),
+            ("return {}", "return { weapons = { [\"t.double_bazooka\"] = 5 } }", ok_feature, "scheme t.scheme: ", "weapons.t.double_bazooka must be a table"),
+            ("return {}", ok_scheme, "local x = 1", "feature t.feature: ", "returns nothing"),
+        ];
+        for (weapon, scheme, feature, prefix, expected) in cases {
+            let (bundles, profile) = selection(scheme, weapon, feature);
+            let err = run_match(&[], Some(&plan(&bundles, &profile))).err().unwrap_or_default();
+            assert!(err.contains(prefix) && err.contains(expected), "{weapon} / {scheme} / {feature}:\n{err}");
+        }
+
+        // A weapon claims only the slot it was placed on; another is skipped,
+        // as a pack's undeclared slot is.
+        let (bundles, profile) = selection(
+            ok_scheme,
+            "return { install = function(ctx) wa.weapons.replace({ weapon = 'mortar', name = 'x' }) end }",
+            ok_feature,
+        );
+        let scripts = run_match(&[], Some(&plan(&bundles, &profile))).unwrap();
+        assert!(scripts.resolved.applied.is_empty());
+        assert!(scripts.logs.iter().any(|l| l.starts_with("[t.double_bazooka] skipped replace of mortar")), "{:?}", scripts.logs);
     }
 
     #[test]

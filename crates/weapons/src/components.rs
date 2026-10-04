@@ -16,10 +16,11 @@
 //! defaults and scheme overrides in a declaration pass), and freezing the
 //! resolved profile for the network and replays.
 
-use crate::panel::PanelPosition;
+use crate::panel::{PanelPosition, PanelRow};
 use crate::StockWeapon;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 
 /// The manifest format that declares components.
 pub const COMPONENTS_FORMAT: u32 = 2;
@@ -528,6 +529,190 @@ pub fn resolve(bundles: &[BundleManifest], profile: &Profile) -> Result<Resolved
     }
 }
 
+/// The `[profile]` table of `Mods/wormforge.toml`, as written by hand (or,
+/// later, by the loader window):
+///
+/// ```toml
+/// [profile]
+/// scheme = "hl.highlander"
+/// features = ["core.utilities"]
+/// removed = ["core.mortar"]               # preset weapons taken out
+/// [profile.weapons]
+/// "core.teleport" = { row = "utility", column = 1 }  # moved
+/// "core.javelin" = true                   # added, at its first position
+/// [profile.options."core.utilities"]
+/// fow_strength = 7
+/// ```
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileSpec {
+    #[serde(default)]
+    pub scheme: Option<String>,
+    #[serde(default)]
+    pub weapons: BTreeMap<String, WeaponPick>,
+    #[serde(default)]
+    pub removed: Vec<String>,
+    #[serde(default)]
+    pub features: Vec<String>,
+    #[serde(default)]
+    pub options: BTreeMap<String, BTreeMap<String, toml::Value>>,
+}
+
+/// A weapon in the profile: `true` for its first compatible position (or the
+/// preset's), or the position to put it at.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum WeaponPick {
+    Default(bool),
+    At(PanelPosition),
+}
+
+impl ProfileSpec {
+    /// Read `[profile]` out of the loader settings' raw table.
+    pub fn from_table(table: &toml::Table) -> Result<ProfileSpec, String> {
+        toml::Value::Table(table.clone())
+            .try_into()
+            .map_err(|e: toml::de::Error| format!("[profile]: {e}"))
+    }
+
+    /// The selection, with every option value typed.
+    pub fn to_profile(&self) -> Result<Profile, Vec<String>> {
+        let mut errors = Vec::new();
+        let mut weapons = BTreeMap::new();
+        for (id, pick) in &self.weapons {
+            match pick {
+                WeaponPick::Default(true) => {
+                    weapons.insert(id.clone(), None);
+                }
+                WeaponPick::Default(false) => {
+                    errors.push(format!("[profile.weapons] {id} = false: list it in removed instead"));
+                }
+                WeaponPick::At(pos) => {
+                    weapons.insert(id.clone(), Some(*pos));
+                }
+            }
+        }
+        let mut options = BTreeMap::new();
+        for (id, values) in &self.options {
+            let mut typed = BTreeMap::new();
+            for (key, value) in values {
+                let v = match value {
+                    toml::Value::Boolean(b) => OptionValue::Bool(*b),
+                    toml::Value::Integer(i) => OptionValue::Int(*i),
+                    toml::Value::String(s) => OptionValue::Choice(s.clone()),
+                    other => {
+                        errors.push(format!("[profile.options] {id}.{key} = {other}: use true/false, a whole number or a choice"));
+                        continue;
+                    }
+                };
+                typed.insert(key.clone(), v);
+            }
+            options.insert(id.clone(), typed);
+        }
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+        Ok(Profile {
+            scheme: self.scheme.clone(),
+            weapons,
+            removed: self.removed.iter().cloned().collect(),
+            features: self.features.iter().cloned().collect(),
+            options,
+        })
+    }
+}
+
+/// An installed bundle and its folder.
+#[derive(Debug, Clone)]
+pub struct LoadedBundle {
+    pub manifest: BundleManifest,
+    pub root: PathBuf,
+}
+
+/// Every enabled bundle in `mods_dir`, and the problems of those that do not
+/// parse (by folder).
+pub fn list_bundles(mods_dir: &Path) -> (Vec<LoadedBundle>, Vec<String>) {
+    let settings = crate::LoaderSettings::load(mods_dir);
+    let mut bundles = Vec::new();
+    let mut errors = Vec::new();
+    let Ok(entries) = std::fs::read_dir(mods_dir) else {
+        return (bundles, errors);
+    };
+    let mut folders: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    folders.sort();
+    for root in folders {
+        let folder = root.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+        if crate::is_ignored_folder(&folder) {
+            continue;
+        }
+        let Ok(src) = std::fs::read_to_string(root.join("mod.toml")) else {
+            continue;
+        };
+        if !declares_components(&src) {
+            continue;
+        }
+        match parse_bundle(&src) {
+            Ok(manifest) if settings.is_disabled(&manifest.id) => {}
+            Ok(manifest) => bundles.push(LoadedBundle { manifest, root }),
+            Err(e) => errors.push(format!("{folder}: {e}")),
+        }
+    }
+    bundles.sort_by(|a, b| a.manifest.id.cmp(&b.manifest.id));
+    (bundles, errors)
+}
+
+impl ResolvedProfile {
+    /// One line per decision, in a fixed order: the same selection gives the
+    /// same text on every machine.
+    pub fn canonical(&self) -> String {
+        let mut out = String::new();
+        if let Some(s) = &self.scheme {
+            out.push_str(&format!("scheme {} {}\n", s.bundle, s.id));
+        }
+        for w in &self.weapons {
+            out.push_str(&format!("weapon {} {} {} {}\n", w.component.bundle, w.component.id, w.position, w.slot.name()));
+        }
+        for f in &self.features {
+            out.push_str(&format!("feature {} {}\n", f.bundle, f.id));
+        }
+        for (id, values) in &self.options {
+            for (key, value) in values {
+                let v = match value {
+                    OptionValue::Bool(b) => b.to_string(),
+                    OptionValue::Int(i) => i.to_string(),
+                    OptionValue::Choice(c) => format!("{c:?}"),
+                };
+                out.push_str(&format!("option {id} {key} {v}\n"));
+            }
+        }
+        out
+    }
+
+    /// The selection as one modset part, so peers with different selections
+    /// see a modset mismatch, as with different packs.
+    pub fn modset_part(&self) -> String {
+        // FNV-1a: stable across machines and Rust versions, unlike std's hasher.
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for b in self.canonical().bytes() {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+        format!("profile#{h:016x}")
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.scheme.is_none() && self.weapons.is_empty() && self.features.is_empty()
+    }
+}
+
+/// Row name as manifests write it.
+pub fn row_name(row: PanelRow) -> String {
+    match row {
+        PanelRow::F(n) => format!("F{n}"),
+        PanelRow::Utility => "utility".into(),
+    }
+}
+
 fn list(positions: &[PanelPosition]) -> String {
     positions.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ")
 }
@@ -721,6 +906,71 @@ requires = ["hl.highlander"]
         let errors = resolve(&twice, &Profile::default()).unwrap_err();
         assert!(errors.iter().all(|e| e.contains("is declared by both catalog.weapons and other.weapons")));
         assert_eq!(errors.len(), 3);
+    }
+
+    #[test]
+    fn a_profile_table_becomes_a_profile_and_resolves() {
+        let table: toml::Table = toml::from_str(r#"
+scheme = "hl.highlander"
+features = ["core.utilities"]
+removed = ["core.double_bazooka"]
+[weapons]
+"core.teleport" = { row = "utility", column = 1 }
+"core.mortar" = true
+[options."core.utilities"]
+fow_strength = 7
+crate_mode = "all"
+always_fast_walk = true
+"#).unwrap();
+        let profile = ProfileSpec::from_table(&table).unwrap().to_profile().unwrap();
+        let r = resolve(&bundles(), &profile).unwrap();
+        let placed: Vec<_> = r.weapons.iter().map(|w| (w.component.id.as_str(), w.slot)).collect();
+        assert_eq!(placed, [("core.mortar", StockWeapon::Mortar), ("core.teleport", StockWeapon::JetPack)]);
+        assert_eq!(r.options["core.utilities"]["crate_mode"], OptionValue::Choice("all".into()));
+
+        let bad: toml::Table = toml::from_str("[weapons]\n\"a\" = false\n[options.f]\nx = 1.5\n").unwrap();
+        let errors = ProfileSpec::from_table(&bad).unwrap().to_profile().unwrap_err();
+        assert_eq!(errors.len(), 2, "{errors:?}");
+        assert!(ProfileSpec::from_table(&toml::from_str("scheme = \"a\"\nsheme = \"b\"\n").unwrap()).is_err());
+    }
+
+    #[test]
+    fn the_canonical_text_is_stable_and_names_every_decision() {
+        let profile = Profile {
+            scheme: Some("hl.highlander".into()),
+            features: ["core.utilities".to_string()].into(),
+            ..Profile::default()
+        };
+        let a = resolve(&bundles(), &profile).unwrap();
+        let b = resolve(&bundles(), &profile).unwrap();
+        assert_eq!(a.canonical(), b.canonical());
+        assert_eq!(a.modset_part(), b.modset_part());
+        assert!(a.canonical().starts_with("scheme catalog.schemes hl.highlander\nweapon catalog.weapons core.double_bazooka (F1, 1) bazooka\n"));
+        assert!(a.canonical().contains("option core.utilities crate_mode \"weapons\"\n"));
+        let mut other = profile.clone();
+        other.options.insert("core.utilities".into(), [("fow_strength".to_string(), OptionValue::Int(6))].into());
+        assert_ne!(resolve(&bundles(), &other).unwrap().modset_part(), a.modset_part());
+        assert!(!a.is_empty() && resolve(&bundles(), &Profile::default()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn bundles_are_found_skipping_disabled_and_reporting_broken_ones() {
+        let root = std::env::temp_dir().join("wf-weapons-list-bundles");
+        let _ = std::fs::remove_dir_all(&root);
+        for (folder, src) in [
+            ("weapons", WEAPONS),
+            ("schemes", SCHEMES),
+            ("broken", "id = \"broken\"\napi_version = 1\nformat_version = 2\n"),
+            ("old", "id = \"old.pack\"\napi_version = 1\n"),
+        ] {
+            std::fs::create_dir_all(root.join(folder)).unwrap();
+            std::fs::write(root.join(folder).join("mod.toml"), src).unwrap();
+        }
+        std::fs::write(root.join(crate::SETTINGS_FILE), "disabled = [\"catalog.schemes\"]\n").unwrap();
+        let (found, errors) = list_bundles(&root);
+        assert_eq!(found.iter().map(|b| b.manifest.id.as_str()).collect::<Vec<_>>(), ["catalog.weapons"]);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].starts_with("broken: broken: declares no components"), "{errors:?}");
     }
 
     #[test]

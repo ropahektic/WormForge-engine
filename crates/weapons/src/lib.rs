@@ -186,6 +186,10 @@ pub struct LoaderSettings {
     /// loader tell "up to date" from "update available" without version bumps.
     #[serde(default)]
     pub installed: std::collections::BTreeMap<String, String>,
+    /// The component selection (`[profile]`), kept as written so a save by the
+    /// loader window never loses it; read with `components::ProfileSpec`.
+    #[serde(default)]
+    pub profile: Option<toml::Table>,
 }
 
 impl LoaderSettings {
@@ -218,6 +222,13 @@ impl LoaderSettings {
             for (id, sha) in &self.installed {
                 out.push_str(&format!("{id:?} = {sha:?}\n"));
             }
+        }
+        if let Some(profile) = &self.profile {
+            let mut wrapper = toml::Table::new();
+            wrapper.insert("profile".into(), toml::Value::Table(profile.clone()));
+            let text = toml::to_string(&wrapper).map_err(|e| e.to_string())?;
+            out.push_str("\n# The component selection: scheme, weapons, features, options.\n");
+            out.push_str(&text);
         }
         std::fs::create_dir_all(mods_dir).map_err(|e| e.to_string())?;
         // Not std::fs::write: that truncates the existing file in place, which
@@ -549,6 +560,27 @@ pub fn filter_requirements(mods: &[LoadedMod]) -> (Vec<LoadedMod>, Vec<String>) 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_save_keeps_the_profile() {
+        let root = std::env::temp_dir().join("wf-weapons-settings-profile");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join(SETTINGS_FILE),
+            "disabled = []\n[profile]\nscheme = \"hl.highlander\"\n[profile.weapons]\n\"core.teleport\" = { row = \"F8\", column = 4 }\n",
+        )
+        .unwrap();
+        let mut settings = LoaderSettings::load(&root);
+        settings.set_enabled("some.pack", false);
+        settings.save(&root).unwrap();
+        let again = LoaderSettings::load(&root);
+        assert_eq!(again.disabled, ["some.pack"]);
+        assert_eq!(again.profile, settings.profile);
+        let spec = components::ProfileSpec::from_table(again.profile.as_ref().unwrap()).unwrap();
+        assert_eq!(spec.scheme.as_deref(), Some("hl.highlander"));
+        assert_eq!(spec.weapons.len(), 1);
+    }
+
     #[test]
     fn a_component_bundle_is_listed_but_not_loaded_as_a_pack() {
         let root = std::env::temp_dir().join("wf-weapons-bundle-skip");
