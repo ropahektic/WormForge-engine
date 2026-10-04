@@ -55,6 +55,7 @@ pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
     spawn.damage_worms = get_bool(s, "damage_worms")?.unwrap_or(explode_on);
     spawn.persist = get_bool(s, "persist")?.unwrap_or(explode_on && auto && spawn.visible);
     spawn.drown = get_bool(s, "drown")?.unwrap_or(auto && spawn.visible);
+    spawn.as_object = get_bool(s, "as_object")?.unwrap_or(false);
     spawn.mask = get_bool(s, "mask")?.unwrap_or(false);
     let mask_default = spawn.mask;
     spawn.mask_worms = get_bool(s, "mask_worms")?.unwrap_or(mask_default);
@@ -87,11 +88,12 @@ pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
 pub fn parse_brain(lua: &Lua, s: &Table) -> mlua::Result<u32> {
     match s.get::<Value>("on")? {
         Value::Nil => Ok(0),
-        Value::Function(frame) => crate::actor::register_brain(lua, Some(frame), None),
+        Value::Function(frame) => crate::actor::register_brain(lua, Some(frame), None, None),
         Value::Table(on) => {
             let frame = get_fn(&on, "frame")?;
             let land = get_fn(&on, "land")?;
-            crate::actor::register_brain(lua, frame, land)
+            let hit = get_fn(&on, "hit")?;
+            crate::actor::register_brain(lua, frame, land, hit)
         }
         other => Err(mlua::Error::external(format!(
             "spawn.on must be a function or table, got {other:?}"

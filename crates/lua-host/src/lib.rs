@@ -17,10 +17,10 @@ mod spawn;
 pub use bundles::ComponentPlan;
 pub use perf::{perf_flags, take_lua_breakdown, take_lua_spikes, take_lua_time, LuaBreakdown, PerfFlags, Spike};
 pub use actor::{
-    gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
-    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs, LaunchArgs,
-    SpawnArgs, FIRE_DEFAULTS, ShapeHit, ShapeQuery, SHAPE_CRATES, SHAPE_GRAVES, SHAPE_MINES,
-    SHAPE_OIL, SHAPE_TERRAIN, SHAPE_WORMS,
+    gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click,
+    weapon_emit, weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs,
+    LaunchArgs, SpawnArgs, FIRE_DEFAULTS, ShapeHit, ShapeQuery, SHAPE_CRATES, SHAPE_GRAVES,
+    SHAPE_MINES, SHAPE_OIL, SHAPE_TERRAIN, SHAPE_WORMS, actor_hit, actor_takes_hits, ActorHit,
     StampBuried,
 };
 pub use dispatch::{
@@ -3134,6 +3134,48 @@ wa.weapons.replace({
         });
         crate::weapon_click(p.on_click_id, 0x11, 5, 1, 2, -0x00D0_0000, (-0x5_0000, 0)).unwrap();
         assert_eq!(OWNER.with(|c| c.get()), 0x11);
+    }
+
+    #[test]
+    fn an_actor_brain_takes_its_hits() {
+        let _host = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let spec: mlua::Table = lua
+            .load(r#"return { on = {
+                frame = function() end,
+                hit = function(a, hit)
+                    GOT = { hit.kind, hit.hit_kind, hit.x, hit.y, hit.vx, hit.vy, hit.damage, hit.team }
+                end,
+            } }"#)
+            .eval()
+            .unwrap();
+        let with_hit = crate::spawn::parse_brain(&lua, &spec).unwrap();
+        let plain: mlua::Table = lua.load("return { on = function() end }").eval().unwrap();
+        let without = crate::spawn::parse_brain(&lua, &plain).unwrap();
+        let as_object: mlua::Table = lua.load("return { as_object = true }").eval().unwrap();
+        assert!(crate::spawn::parse_spawn(&lua, &as_object).unwrap().as_object);
+        assert!(!crate::spawn::parse_spawn(&lua, &plain).unwrap().as_object, "missiles' layer by default");
+        crate::park_lua(lua);
+        assert!(crate::actor_takes_hits(with_hit));
+        assert!(!crate::actor_takes_hits(without), "a brain without hit leaves hits to WA");
+        assert!(!crate::actor_takes_hits(0));
+        // A fake actor: the handler reads its owner field.
+        let mut body = vec![0u8; 0x400];
+        let handle = body.as_mut_ptr() as u32;
+        let hit = crate::ActorHit { blast: false, kind: 1, x: 10, y: 20, vx: 0x8000, vy: -0x10000, damage: 7, team: 2 };
+        crate::actor_hit(handle, with_hit, hit).unwrap();
+        let (kind, ints): (String, Vec<i64>) = PARKED_LUA.with(|slot| {
+            let guard = slot.borrow();
+            let lua = guard.as_ref().unwrap();
+            let got: mlua::Table = lua.globals().get("GOT").unwrap();
+            let kind: String = got.get(1).unwrap();
+            let ints = (2..=8).map(|i| got.get::<i64>(i).unwrap()).collect();
+            (kind, ints)
+        });
+        assert_eq!(kind, "hit");
+        assert_eq!(ints, vec![1, 10, 20, 0x8000, -0x10000, 7, 2], "a fire's hit, as WA sent it");
+        drop(body);
     }
 
     #[test]

@@ -928,7 +928,8 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
 
     let parent = physics_parent(owner).unwrap_or(owner);
     let ctor: WorldCtorFn = std::mem::transmute(crate::wa::address("WORLD_ENTITY_CTOR") as usize);
-    ctor(this, parent, COLLISION_LAYER_MISSILE, 0);
+    let layer = if spawn.as_object { COLLISION_LAYER_OBJECT } else { COLLISION_LAYER_MISSILE };
+    ctor(this, parent, layer, 0);
 
     let vt = VTABLE.get().ok_or("vtable missing")?;
     *(this as *mut u32) = vt.as_ptr() as u32;
@@ -1210,10 +1211,15 @@ unsafe extern "thiscall" fn actor_message(
         if read_i32(this, ACTOR_DEAD) != 0 {
             return;
         }
+        let brain = read_i32(this, ACTOR_BRAIN) as u32;
         match msg {
             MSG_FRAME_FINISH => tick(this),
             MSG_RENDER_SCENE => blit(this),
+            MSG_EXPLOSION if !data.is_null() && lua_host::actor_takes_hits(brain) => {
+                blast_to_lua(this, brain, data)
+            }
             MSG_EXPLOSION => apply_explosion_knock(this, data),
+            MSG_HIT if !data.is_null() && lua_host::actor_takes_hits(brain) => hit_to_lua(this, brain, data),
             MSG_IMPACT => {}
             _ => forward_message(this, sender, msg, size, data),
         }
@@ -1840,6 +1846,52 @@ fn bit_vel(i: i32, n: i32, emit: &AttachedSpawn, cluster: &ClusterSpec) -> (i32,
     let vx = (power as f32 * rad.cos()).round() as i32;
     let vy = -(power as f32 * rad.sin()).round() as i32;
     (vx, vy)
+}
+
+/// A blast on an actor whose brain takes its hits: WA's own knock is worked
+/// out (its falloff and the actor's mass) and handed to the brain as the
+/// push, and the actor's speed is left as it was, for the brain to apply.
+unsafe fn blast_to_lua(this: *mut u8, brain: u32, data: *mut u8) {
+    let (vx, vy) = (read_i32(this, ENT_SPEED_X), read_i32(this, ENT_SPEED_Y));
+    let damage0 = read_i32(this, ENT_DAMAGE_ACCUM);
+    apply_explosion_knock(this, data);
+    let hit = lua_host::ActorHit {
+        blast: true,
+        kind: 0,
+        x: read_i32(data, 4),
+        y: read_i32(data, 8),
+        vx: read_i32(this, ENT_SPEED_X).wrapping_sub(vx),
+        vy: read_i32(this, ENT_SPEED_Y).wrapping_sub(vy),
+        damage: read_i32(this, ENT_DAMAGE_ACCUM).wrapping_sub(damage0).max(0),
+        team: -1,
+    };
+    write_i32(this, ENT_SPEED_X, vx);
+    write_i32(this, ENT_SPEED_Y, vy);
+    if hit.vx == 0 && hit.vy == 0 && hit.damage == 0 {
+        return;
+    }
+    if let Err(e) = lua_host::actor_hit(this as u32, brain, hit) {
+        log_error(&format!("LuaActor hit: {e}"));
+    }
+}
+
+/// A hit (0x4B, Project X's M_GUNEXP) on an actor whose brain takes its
+/// hits: a fire's, a gun's or a pack's. WA's base handler would add its push
+/// to the actor's speed; the brain gets it instead.
+unsafe fn hit_to_lua(this: *mut u8, brain: u32, data: *mut u8) {
+    let hit = lua_host::ActorHit {
+        blast: false,
+        kind: read_i32(data, HIT_FLAG),
+        x: read_i32(data, 4),
+        y: read_i32(data, 8),
+        vx: read_i32(data, HIT_KNOCK_X),
+        vy: read_i32(data, HIT_KNOCK_Y),
+        damage: read_i32(data, HIT_AMOUNT),
+        team: read_i32(data, HIT_TEAM),
+    };
+    if let Err(e) = lua_host::actor_hit(this as u32, brain, hit) {
+        log_error(&format!("LuaActor hit: {e}"));
+    }
 }
 
 unsafe fn apply_explosion_knock(this: *mut u8, data: *mut u8) {
