@@ -116,6 +116,17 @@ local PX_ART = {
     on_fire = function(fire) fires.valyrian_fire(fire) end,
     on_explode = function(ev) fires.valyrian_burst(ev) end,
   },
+  { -- Bowling Ball Strike: PX's three rolling balls (weapons/bowling_ball.lua),
+    -- not WA's sheep. Click-only, as the Lightning Strike: the engine ends
+    -- WA's prefire after the click.
+    weapon = "sheep_strike",
+    wep = "weps/sheep_strike.wep",
+    panel_icon = "sprites/bowling_ball/strike_icon.png",
+    sprites = { "sprites/bowling_ball/ball.png" },
+    params = { gpu_prefix = "sprites/bowling_ball/" },
+    on_select = { cursor = true },
+    on_click = function(ev) fires.bowling_strike(ev) end,
+  },
   { -- Lightning Strike: the PX strike is an effect, not WA's napalm plane.
     weapon = "napalm_strike",
     wep = "weps/napalm_strike.wep",
