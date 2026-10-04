@@ -1263,8 +1263,15 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
 /// as lost control (traced in a replay of an online round: Laser Gun hits
 /// at frames 47482..47510, then "loses turn due to loss of control" one
 /// frame into the worm's turn at 47966).
-pub fn hit_worm(target: u32, from: u32, amount: i32) {
-    if target == 0 || amount <= 0 {
+///
+/// A knock (`vx`, `vy`, 16.16, not both 0) goes in the message's force
+/// fields, where WA's own hits put theirs (Project X's `M_GUNEXP` fparams 3
+/// and 4): WA's handler throws the worm, and the worm is left as WA leaves
+/// it: nothing is put back, and its health commits when it comes to rest,
+/// as after any hit. With a knock, `amount` may be 0: a push alone.
+pub fn hit_worm(target: u32, from: u32, amount: i32, vx: i32, vy: i32) {
+    let knock = vx != 0 || vy != 0;
+    if target == 0 || amount < 0 || (amount == 0 && !knock) {
         return;
     }
     let (from, by) = crate::world::hit_sender(from);
@@ -1280,11 +1287,16 @@ pub fn hit_worm(target: u32, from: u32, amount: i32) {
         let mut data = [0i32; 8];
         data[1] = x;
         data[2] = y;
+        data[3] = vx;
+        data[4] = vy;
         data[HIT_AMOUNT / 4] = amount;
         data[HIT_TEAM / 4] = by;
         crate::state_trace::with_cause("worm:hurt", || {
             crate::hurt::synthetic(|| worm_hook(this, from, MSG_HIT, 0, data.as_mut_ptr() as *mut u8))
         });
+        if knock {
+            return;
+        }
         write_i32(this, ENT_POS_X, x);
         write_i32(this, ENT_POS_Y, y);
         write_i32(this, ENT_SPEED_X, vx);

@@ -278,8 +278,10 @@ pub struct ActorNative {
     pub set_gravity: fn(i32),
     /// Set WA's wind, 16.16, as WA's own wind change does: message 0x54.
     pub set_wind: fn(i32),
-    /// Stock SpecialImpact (msg 0x4B). No explosion. Pose restored so the worm does not move.
-    pub hurt: fn(target: u32, from: u32, amount: i32),
+    /// Stock SpecialImpact (msg 0x4B). No explosion. Without a knock (vx, vy,
+    /// 16.16) the pose is restored so the worm does not move; with one WA
+    /// throws it.
+    pub hurt: fn(target: u32, from: u32, amount: i32, vx: i32, vy: i32),
     /// Rewrite a stock weapon slot's body sprite (and optional cluster bit) on
     /// the live table. `cluster = 0` means leave the cluster sprite alone.
     pub retarget_weapon_sprites: fn(slot: u32, body: i32, cluster: i32) -> Result<(), String>,
@@ -376,7 +378,7 @@ impl Default for ActorNative {
             forces: || (0, 0),
             set_gravity: |_| {},
             set_wind: |_| {},
-            hurt: |_, _, _| {},
+            hurt: |_, _, _, _, _| {},
             retarget_weapon_sprites: |_, _, _| Err("retarget not bound".into()),
             launch: |_| Err("launch not bound".into()),
             shape_trace: |_| ShapeHit::default(),
@@ -1374,21 +1376,25 @@ impl UserData for WormHandle {
             if this.0 == 0 {
                 return Ok(());
             }
-            let amount = match arg {
-                Value::Integer(n) => n as i32,
-                Value::Number(n) => n as i32,
-                Value::Table(t) => t.get::<Option<i32>>("amount")?.unwrap_or(0),
+            let (amount, vx, vy) = match arg {
+                Value::Integer(n) => (n as i32, 0, 0),
+                Value::Number(n) => (n as i32, 0, 0),
+                Value::Table(t) => (
+                    t.get::<Option<i32>>("amount")?.unwrap_or(0),
+                    t.get::<Option<i32>>("vx")?.unwrap_or(0),
+                    t.get::<Option<i32>>("vy")?.unwrap_or(0),
+                ),
                 other => {
                     return Err(mlua::Error::external(format!(
-                        "hurt expects a number or {{ amount = n }}, got {other:?}"
+                        "hurt expects a number or {{ amount = n, vx, vy }}, got {other:?}"
                     )))
                 }
             };
-            if amount <= 0 {
+            if amount < 0 || (amount == 0 && vx == 0 && vy == 0) {
                 return Ok(());
             }
             if let Some(hurt) = native_hurt() {
-                hurt(this.0, spawn_owner(), amount);
+                hurt(this.0, spawn_owner(), amount, vx, vy);
             }
             Ok(())
         });
@@ -1826,7 +1832,7 @@ fn ammo_change(v: Value) -> mlua::Result<Option<AmmoChange>> {
     }
 }
 
-fn native_hurt() -> Option<fn(u32, u32, i32)> {
+fn native_hurt() -> Option<fn(u32, u32, i32, i32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hurt)
 }
 
