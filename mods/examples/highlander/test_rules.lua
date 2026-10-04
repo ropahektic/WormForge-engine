@@ -1318,11 +1318,11 @@ do
     end
   end
   local w = worm(16)
-  w.facing = 1
   M.gravity = P // 4
   M.solid = function(_, y) return y >= 200 * P end
   M.spawned = {}
-  spec.on_click({ worm = w, x = 300 * P, y = 100 * P })
+  -- WA's arrow turned to the right-to-left: the shot's x speed negative.
+  spec.on_click({ worm = w, x = 300 * P, y = 100 * P, vx = -5 * P, vy = 0 })
   local xs = {}
   for i, a in ipairs(M.spawned) do xs[i] = a.x // P end
   check("three balls 48 apart over the click, from the sky", #M.spawned == 3
@@ -1330,7 +1330,8 @@ do
     table.concat(xs, ","))
   local ball = M.spawned[2]
   run(1)
-  check("moving the way WA's strike arrow points: against the worm's facing", ball.x < 300 * P)
+  check("moving the way WA's strike arrow points: the shot's x speed", ball.x < 300 * P)
+  check("drawn in front of the terrain", ball.depth == 0xE0000)
   run(600)
   local rest = ball.y / P
   check("it comes to rest on the floor, its 16-pixel circle on it, drawn 4 lower", rest > 186 and rest < 188,
@@ -1345,11 +1346,13 @@ do
     if r.weapon == "sheep_strike" then spec = r end
   end
   w = worm(16)
-  w.facing = -1
   M.gravity = P // 4
   M.solid = function(x, y) return 2 * (y // P) >= 400 + x // P end
   M.spawned = {}
-  spec.on_click({ worm = w, x = 200 * P, y = 0 })
+  -- No arrow pressed: the strike comes from the left (x speed 0 or more).
+  spec.on_click({ worm = w, x = 200 * P, y = 0, vx = 0, vy = 0 })
+  run(1)
+  check("unturned, the strike comes from the left", M.spawned[2].x > 200 * P)
   ball = M.spawned[2]
   run(120)
   local landed = ball.x

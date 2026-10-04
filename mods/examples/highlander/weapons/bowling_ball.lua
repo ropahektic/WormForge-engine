@@ -5,8 +5,9 @@ local fires = shared.fires
 
 -- The strike: PX's plane drops three balls 48 pixels apart, moving 5 a frame
 -- the way it flies. Here they drop together from the sky over the click, the
--- way WA's strike arrow points: the arrow keys set it by turning the worm,
--- and the strike flies against the worm's facing. PX's plane is not drawn.
+-- way WA's strike arrow points: the sign of the shot's x speed (ev.vx), which
+-- PX's PxAirstrike reads, from the left unless the arrow keys turned it. PX's
+-- plane is not drawn.
 local STRIKE_BALLS = 3
 local STRIKE_SPACING = 48
 local STRIKE_SPEED = 5
@@ -25,8 +26,10 @@ local FAST = 4.0              -- MinDamageSpeed: faster, it rolls through worms
 local SPIN_X, SPIN_Y, MAX_SPIN = 0.06, 0.02, 0.6
 local SHEET = "sprites/bowling_ball/ball.png"
 -- The ball is drawn this far below where its circle is, in pixels: at the
--- circle's own place it looked to float over the ground.
+-- circle's own place it looked to float over the ground. In front of the
+-- terrain (actors are behind it by default), behind the worms (0xD0000).
 local SPRITE_DROP = 4
+local BALL_DEPTH = 0x000E0000
 local P = 0x10000
 
 -- What the ball rolls on: PX's DefaultColGroup, and without worms when fast
@@ -137,7 +140,7 @@ local function spawn_ball(owner, x, y, vx, vy)
       spin(b)
       think(b)
       a.x, a.y, a.vx, a.vy = b.x, b.y + SPRITE_DROP * P, 0, 0
-      a:gfx({ angle = math.deg(b.rot) % 360 })
+      a:gfx({ angle = math.deg(b.rot) % 360, depth = BALL_DEPTH })
     end,
   })
   shared.bowling_balls[a.id] = b
@@ -146,7 +149,7 @@ end
 shared.spawn_bowling_ball = spawn_ball
 
 fires.bowling_strike = function(ev)
-  local dir = ev.worm.facing < 0 and 1 or -1
+  local dir = (ev.vx or 0) < 0 and -1 or 1
   for i = 1, STRIKE_BALLS do
     local offset = (i - (STRIKE_BALLS + 1) / 2) * STRIKE_SPACING
     spawn_ball(ev.worm, ev.x + math.floor(offset * P), wa.world.sky, STRIKE_SPEED * dir, 0)
