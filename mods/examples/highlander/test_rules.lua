@@ -1326,14 +1326,14 @@ do
   local xs = {}
   for i, a in ipairs(M.spawned) do xs[i] = a.x // P end
   check("three balls 48 apart over the click, from the sky", #M.spawned == 3
-    and xs[1] == 252 and xs[2] == 300 and xs[3] == 348 and M.spawned[2].y == -0xD00000,
+    and xs[1] == 252 and xs[2] == 300 and xs[3] == 348 and M.spawned[2].y == -0xD00000 + 4 * P,
     table.concat(xs, ","))
   local ball = M.spawned[2]
   run(1)
   check("moving the way WA's strike arrow points: against the worm's facing", ball.x < 300 * P)
   run(600)
   local rest = ball.y / P
-  check("it comes to rest on the floor, its 16-pixel circle on it", rest > 182 and rest < 184,
+  check("it comes to rest on the floor, its 16-pixel circle on it, drawn 4 lower", rest > 186 and rest < 188,
     tostring(rest))
   local x0 = ball.x
   run(50)

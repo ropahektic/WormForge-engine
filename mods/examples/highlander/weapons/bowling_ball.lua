@@ -24,6 +24,9 @@ local SLEEP_PERIOD = 80
 local FAST = 4.0              -- MinDamageSpeed: faster, it rolls through worms
 local SPIN_X, SPIN_Y, MAX_SPIN = 0.06, 0.02, 0.6
 local SHEET = "sprites/bowling_ball/ball.png"
+-- The ball is drawn this far below where its circle is, in pixels: at the
+-- circle's own place it looked to float over the ground.
+local SPRITE_DROP = 4
 local P = 0x10000
 
 -- What the ball rolls on: PX's DefaultColGroup, and without worms when fast
@@ -33,10 +36,10 @@ local SOLID_FAST = { "terrain", "crates", "oil" }
 
 local function trunc(v) return v >= 0 and math.floor(v) or -math.floor(-v) end
 
-local function sleep(b, a)
+local function sleep(b)
   if b.asleep then return end
   b.asleep, b.low = true, false
-  b.sleep_x, b.sleep_y = a.x, a.y
+  b.sleep_x, b.sleep_y = b.x, b.y
   b.vx, b.vy, b.lvx, b.lvy = 0, 0, 0, 0
 end
 
@@ -52,10 +55,10 @@ end
 -- PX's PhysicsThink, a frame: the move traced with the ball's circle, a hit
 -- turned into bounce along the surface's normal and friction along it, then
 -- PX's inertia (a share of the speed's last change again), the low-speed
--- state and sleep.
-local function think(a, b)
+-- state and sleep. The ball's place is b.x, b.y; the actor only draws it.
+local function think(b)
   if b.asleep then
-    a.x, a.y = b.sleep_x, b.sleep_y
+    b.x, b.y = b.sleep_x, b.sleep_y
     return
   end
   local speed = math.sqrt(b.rvx * b.rvx + b.rvy * b.rvy)
@@ -66,7 +69,7 @@ local function think(a, b)
   end
   if vx2 == 0 and vy2 == 0 then vy2 = b.vy + 0.1 end
   local with = speed > FAST and SOLID_FAST or SOLID
-  local x, y = a.x, a.y
+  local x, y = b.x, b.y
   local function trace_from(sx, sy)
     return wa.world.trace({
       x0 = sx, y0 = sy, x1 = sx + trunc(vx2 * P), y1 = sy + trunc(vy2 * P),
@@ -78,7 +81,7 @@ local function think(a, b)
     -- Stuck in something: carry on from where the path comes free, or sleep
     -- where it is (PX's unblocking falls back to Sleep too).
     if not res.left_x then
-      sleep(b, a)
+      sleep(b)
       return
     end
     x, y = res.left_x, res.left_y
@@ -99,7 +102,7 @@ local function think(a, b)
   b.lvx, b.lvy = b.vx, b.vy
   b.rvx, b.rvy = (x - b.lx) / P, (y - b.ly) / P
   b.lx, b.ly = x, y
-  a.x, a.y, a.vx, a.vy = x, y, 0, 0
+  b.x, b.y = x, y
   -- Slow for long enough: low speed, no inertia, so it settles.
   if speed < LOW_SPEED then
     b.low_timer = b.low_timer - 1
@@ -110,7 +113,7 @@ local function think(a, b)
   b.sleep_timer = b.sleep_timer - 1
   if b.sleep_timer <= 0 then
     local dx, dy = (x - b.rec_x) / P, (y - b.rec_y) / P
-    if math.sqrt(dx * dx + dy * dy) < SLEEP_DISTANCE then sleep(b, a) end
+    if math.sqrt(dx * dx + dy * dy) < SLEEP_DISTANCE then sleep(b) end
     b.sleep_timer, b.rec_x, b.rec_y = SLEEP_PERIOD, x, y
   end
 end
@@ -119,20 +122,21 @@ shared.bowling_balls = {} -- actor id -> ball
 
 local function spawn_ball(owner, x, y, vx, vy)
   local b = {
-    vx = vx, vy = vy, lvx = vx, lvy = vy, rvx = 0, rvy = 0, lx = x, ly = y,
+    x = x, y = y, vx = vx, vy = vy, lvx = vx, lvy = vy, rvx = 0, rvy = 0, lx = x, ly = y,
     rot = 0, low = false, low_timer = 200, sleep_timer = 200, rec_x = x, rec_y = y,
     asleep = false,
   }
   local a = wa.actors.spawn({
-    sprite = SHEET, x = x, y = y, gravity = false, collide = false, owner = owner,
+    sprite = SHEET, x = x, y = y + SPRITE_DROP * P, gravity = false, collide = false, owner = owner,
     on = function(a)
-      if a.y >= wa.world.water() then
+      if b.y >= wa.world.water() then
         shared.bowling_balls[a.id] = nil
         a:despawn()
         return
       end
       spin(b)
-      think(a, b)
+      think(b)
+      a.x, a.y, a.vx, a.vy = b.x, b.y + SPRITE_DROP * P, 0, 0
       a:gfx({ angle = math.deg(b.rot) % 360 })
     end,
   })
