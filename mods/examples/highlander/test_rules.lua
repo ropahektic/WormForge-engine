@@ -427,8 +427,11 @@ local function new_match(opts)
           error("spawn needs an owner worm or actor", 2)
         end
         M.next_actor_id = (M.next_actor_id or 0) + 1
+        -- `on` is a frame function or a table of handlers (frame, land, hit).
+        local on, hit = spec.on, nil
+        if type(on) == "table" then on, hit = spec.on.frame, spec.on.hit end
         local a = { id = M.next_actor_id, sprite = spec.sprite, x = spec.x, y = spec.y, dead = false,
-                    explode = spec.explode, on = spec.on, owner = spec.owner }
+                    explode = spec.explode, on = on, hit = hit, owner = spec.owner, as_object = spec.as_object }
         function a:gfx(g)
           self.angle, self.scale, self.tint, self.blend, self.depth = g.angle, g.scale, g.tint, g.blend, g.depth
         end
@@ -1345,6 +1348,25 @@ do
   check("the ball itself turns electric blue: darkened, a blue sheen added in front, under the spark",
     zapped_actor.tint == 0x405980 and sheen and sheen.blend == "add" and sheen.color == 0xFF3C96FF
     and sheen.depth < 0xE0000 and sheen.depth > sparks[1].depth)
+  -- WA's hits: the ball is an object to WA (its oil-drum layer, as PX's), so
+  -- its fires, guns and blasts reach it. Any wakes it; a blast pushes it
+  -- whole, any other hit (a fire's) at 0.7.
+  local ball_actor, resting = rolling(500, 0)
+  run(200)
+  check("the ball is an object to WA, and takes its hits", ball_actor.as_object == true
+    and type(ball_actor.hit) == "function" and resting.asleep)
+  ball_actor.hit(ball_actor, { kind = "hit", hit_kind = 1, vx = 2 * P, vy = -3 * P, damage = 5, team = 0 })
+  check("a fire's hit wakes it and pushes it at 0.7", not resting.asleep
+    and math.abs(resting.vx - 1.4) < 1e-9 and math.abs(resting.vy + 2.1) < 1e-9,
+    resting.vx .. "," .. resting.vy)
+  local _, blasted = rolling(500, 0)
+  run(200)
+  local blasted_actor = M.spawned[1]
+  blasted_actor.hit(blasted_actor, { kind = "blast", hit_kind = 0, vx = -4 * P, vy = -6 * P, damage = 20, team = -1 })
+  check("a blast's push is taken whole", not blasted.asleep and blasted.vx == -4 and blasted.vy == -6)
+  local x_before = blasted.x
+  run(5)
+  check("and it flies off", blasted.x < x_before)
   M.gravity, M.solid = nil, nil
 end
 
