@@ -821,6 +821,14 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     if owner.is_null() {
         return Err("spawn needs an owner worm or actor".into());
     }
+    // A handle a pack kept can outlive what it names: WA frees a worm that
+    // died, a missile that burst. Its world is gone then (read 0 in a crash:
+    // WorldEntity's constructor takes the world from the parent), so such an
+    // owner is refused, not followed.
+    let world = crate::world::session_world_ptr();
+    if world.is_null() || read_i32(owner, ENT_WORLD) as *mut u8 != world {
+        return Err("spawn: its owner is gone (WA freed it: a worm that died, a missile that burst)".into());
+    }
     log_line(&format!(
         "LuaActor spawn sprite {} x={:#x} y={:#x} vx={:#x} vy={:#x} origin={:?} explode={:?}",
         body.sprite, body.x, body.y, body.vx, body.vy, spawn.origin, spawn.explode
