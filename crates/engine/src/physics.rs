@@ -1264,13 +1264,13 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
 /// at frames 47482..47510, then "loses turn due to loss of control" one
 /// frame into the worm's turn at 47966).
 ///
-/// A knock (`vx`, `vy`, 16.16, not both 0) goes in the message's force
+/// A knock (`knock_x`, `knock_y`, 16.16, not both 0) goes in the message's force
 /// fields, where WA's own hits put theirs (Project X's `M_GUNEXP` fparams 3
 /// and 4): WA's handler throws the worm, and the worm is left as WA leaves
 /// it: nothing is put back, and its health commits when it comes to rest,
 /// as after any hit. With a knock, `amount` may be 0: a push alone.
-pub fn hit_worm(target: u32, from: u32, amount: i32, vx: i32, vy: i32) {
-    let knock = vx != 0 || vy != 0;
+pub fn hit_worm(target: u32, from: u32, amount: i32, knock_x: i32, knock_y: i32) {
+    let knock = knock_x != 0 || knock_y != 0;
     if target == 0 || amount < 0 || (amount == 0 && !knock) {
         return;
     }
@@ -1287,8 +1287,8 @@ pub fn hit_worm(target: u32, from: u32, amount: i32, vx: i32, vy: i32) {
         let mut data = [0i32; 8];
         data[1] = x;
         data[2] = y;
-        data[3] = vx;
-        data[4] = vy;
+        data[3] = knock_x;
+        data[4] = knock_y;
         data[HIT_AMOUNT / 4] = amount;
         data[HIT_TEAM / 4] = by;
         crate::state_trace::with_cause("worm:hurt", || {
