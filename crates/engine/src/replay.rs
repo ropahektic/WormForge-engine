@@ -34,6 +34,7 @@ use std::io::{BufWriter, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
+use weapons::components::PackFolder;
 use weapons::{modset_fingerprint, LoadedMod};
 
 const CHECKPOINT_EVERY: i64 = 50;
@@ -42,6 +43,8 @@ enum State {
     Idle,
     Pending {
         mods: Vec<LoadedMod>,
+        /// Component bundles and the frozen selection, archived with the packs.
+        extras: Vec<PackFolder>,
         waiting_logged: bool,
     },
     Recording(Recorder),
@@ -81,7 +84,7 @@ struct Player {
 
 /// Arm recording for the newly loaded pack set. The replay name is allowed to
 /// arrive later; WA does not always fill it before LoadSprites returns.
-pub fn prepare(mods: &[LoadedMod]) -> bool {
+pub fn prepare(mods: &[LoadedMod], extras: &[PackFolder]) -> bool {
     let mut state = STATE.lock().unwrap_or_else(|p| p.into_inner());
     if let State::Playback(player) = &mut *state {
         let found = modset_fingerprint(mods);
@@ -102,6 +105,7 @@ pub fn prepare(mods: &[LoadedMod]) -> bool {
     finish_state(&mut state);
     *state = State::Pending {
         mods: mods.to_vec(),
+        extras: extras.to_vec(),
         waiting_logged: false,
     };
     true
@@ -473,6 +477,7 @@ pub fn finish_recording() {
 fn try_start(state: &mut State) {
     let State::Pending {
         mods,
+        extras,
         waiting_logged,
     } = state
     else {
@@ -486,7 +491,8 @@ fn try_start(state: &mut State) {
         return;
     };
     let mods = mods.clone();
-    match Recorder::start(wa_path, &mods) {
+    let extras = extras.clone();
+    match Recorder::start(wa_path, &mods, &extras) {
         Ok(recorder) => {
             log_line(&format!(
                 "replay recorder: recording {} (streams in {})",
@@ -500,8 +506,8 @@ fn try_start(state: &mut State) {
 }
 
 impl Recorder {
-    fn start(wa_path: PathBuf, mods: &[LoadedMod]) -> Result<Self, String> {
-        let packs = archive_packs(mods)?;
+    fn start(wa_path: PathBuf, mods: &[LoadedMod], extras: &[PackFolder]) -> Result<Self, String> {
+        let packs = archive_packs(mods, extras)?;
         let collection = collection();
         let pack = replay::encode_dedup(&packs, |sha| collection.is_some_and(|c| c.contains(sha)))
             .map_err(|e| e.to_string())?;
@@ -952,15 +958,19 @@ fn read_all(path: &Path) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn archive_packs(mods: &[LoadedMod]) -> Result<Vec<Pack>, String> {
-    let mut packs = Vec::with_capacity(mods.len());
-    for m in mods {
+fn archive_packs(mods: &[LoadedMod], extras: &[PackFolder]) -> Result<Vec<Pack>, String> {
+    let mut packs = Vec::with_capacity(mods.len() + extras.len());
+    let folders = mods
+        .iter()
+        .map(|m| (&m.manifest.id, &m.manifest.version, &m.root))
+        .chain(extras.iter().map(|e| (&e.id, &e.version, &e.root)));
+    for (id, version, root) in folders {
         let mut files = Vec::new();
-        collect_files(&m.root, &m.root, &mut files)?;
+        collect_files(root, root, &mut files)?;
         files.sort_by(|a, b| a.path.cmp(&b.path));
         packs.push(Pack {
-            id: m.manifest.id.clone(),
-            version: m.manifest.version.clone(),
+            id: id.clone(),
+            version: version.clone(),
             files,
         });
     }
@@ -999,4 +1009,31 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PackFile>) -> Result<(),
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod archive_tests {
+    use super::*;
+
+    #[test]
+    fn the_selection_and_its_bundles_are_archived_with_the_packs() {
+        let root = std::env::temp_dir().join("wf-replay-archive-extras");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = root.join("a");
+        std::fs::create_dir_all(&pack).unwrap();
+        let toml = "id = \"a.pack\"\napi_version = 1\nentry = \"init.lua\"\n";
+        std::fs::write(pack.join("mod.toml"), toml).unwrap();
+        std::fs::write(pack.join("init.lua"), "-- a").unwrap();
+        let selection = root.join("stage").join("wormforge.profile");
+        std::fs::create_dir_all(&selection).unwrap();
+        std::fs::write(selection.join("profile.toml"), "scheme = \"x\"\n").unwrap();
+        let mods = [LoadedMod { manifest: weapons::parse_manifest(toml).unwrap(), root: pack }];
+        let extras = [PackFolder { id: "wormforge.profile".into(), version: "1".into(), root: selection }];
+        let packs = archive_packs(&mods, &extras).unwrap();
+        let ids: Vec<_> = packs.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["a.pack", "wormforge.profile"]);
+        let file = &packs[1].files[0];
+        assert_eq!(file.path, "profile.toml");
+        assert_eq!(file.content, Content::Raw(b"scheme = \"x\"\n".to_vec()));
+    }
 }

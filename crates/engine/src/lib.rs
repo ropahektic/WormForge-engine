@@ -25,6 +25,7 @@ mod modloader;
 mod physics;
 mod rebase;
 mod replay;
+mod selection;
 mod sprite;
 mod state_trace;
 mod queue_census;
