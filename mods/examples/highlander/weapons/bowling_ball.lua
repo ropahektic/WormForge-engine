@@ -22,13 +22,28 @@ local LOW_BOUNCE, LOW_FRICTION = 0.03, 0.03
 local LOW_INERTIA_X, LOW_INERTIA_Y = 0.0, 0.0
 local SLEEP_DISTANCE = 2      -- moved less than this over SLEEP_PERIOD frames: asleep
 local SLEEP_PERIOD = 80
-local FAST = 4.0              -- MinDamageSpeed: faster, it rolls through worms
+local FAST = 4.0              -- MinDamageSpeed: faster, it rolls through worms and hurts
 local SPIN_X, SPIN_Y, MAX_SPIN = 0.06, 0.02, 0.6
 local SHEET = "sprites/bowling_ball/ball.png"
+
+-- PX's damage (ProcessBallOnOtherCollision): faster than FAST, whatever the
+-- ball overlaps takes 5 at that speed up to 60 at 15 and more; crates and oil
+-- drums 100. A worm then takes nothing more for 12 frames (PX's
+-- DamageRecoverTime). Balls push each other apart (ProcessBallOnBallCollision)
+-- by 0.6 * sqrt(speed), of which the pushed ball keeps 0.7 (GunForceMultiplier).
+local MAX_DAMAGE_SPEED = 15.0
+local MIN_DAMAGE, MAX_DAMAGE = 5.0, 60.0
+local OBJECT_DAMAGE = 100
+local DAMAGE_FORCE = 0.7      -- DamageForceMultiplier
+local RECOVER_FRAMES = 12
+local PUSH_SPEED = 4.0        -- MinPushSpeed
+local PUSH_FORCE, PUSH_KEEP = 0.6, 0.7
+local SOUND_CRUSH, SOUND_HIT = 33, 101
 -- The ball is drawn this far below where its circle is, in pixels: at the
 -- circle's own place it looked to float over the ground. In front of the
 -- terrain (actors are behind it by default), behind the worms (0xD0000).
 local SPRITE_DROP = 4
+local LIFT = 0x8000           -- half a pixel, 16.16
 local BALL_DEPTH = 0x000E0000
 local P = 0x10000
 
@@ -39,11 +54,26 @@ local SOLID_FAST = { "terrain", "crates", "oil" }
 
 local function trunc(v) return v >= 0 and math.floor(v) or -math.floor(-v) end
 
+-- The circles PX's masks give what the ball can hit (as wa.world.trace's).
+local function target_radius(obj)
+  if obj.kind == "worm" then return 6 end
+  if obj.kind == "mine" then return 5 end
+  return 9
+end
+
 local function sleep(b)
   if b.asleep then return end
   b.asleep, b.low = true, false
   b.sleep_x, b.sleep_y = b.x, b.y
   b.vx, b.vy, b.lvx, b.lvy = 0, 0, 0, 0
+end
+
+-- PX's Wake: moving again, its timers restarted.
+local function wake(b)
+  if not b.asleep and not b.low then return end
+  b.asleep, b.low = false, false
+  b.low_timer, b.sleep_timer = 200, 200
+  b.rec_x, b.rec_y = b.x, b.y
 end
 
 -- PX's UpdateRotation: spin from the ball's real motion, towards it.
@@ -59,10 +89,11 @@ end
 -- turned into bounce along the surface's normal and friction along it, then
 -- PX's inertia (a share of the speed's last change again), the low-speed
 -- state and sleep. The ball's place is b.x, b.y; the actor only draws it.
+-- Returns the speed the frame started with, which the hits below go by.
 local function think(b)
   if b.asleep then
     b.x, b.y = b.sleep_x, b.sleep_y
-    return
+    return 0
   end
   local speed = math.sqrt(b.rvx * b.rvx + b.rvy * b.rvy)
   local vx2, vy2 = b.vx, b.vy + wa.world.gravity() / P
@@ -73,22 +104,27 @@ local function think(b)
   if vx2 == 0 and vy2 == 0 then vy2 = b.vy + 0.1 end
   local with = speed > FAST and SOLID_FAST or SOLID
   local x, y = b.x, b.y
-  local function trace_from(sx, sy)
+  local dx, dy = trunc(vx2 * P), trunc(vy2 * P)
+  local function trace_from(sx, sy, k)
     return wa.world.trace({
-      x0 = sx, y0 = sy, x1 = sx + trunc(vx2 * P), y1 = sy + trunc(vy2 * P),
-      radius = RADIUS, with = with,
+      x0 = sx, y0 = sy, x1 = sx + k * dx, y1 = sy + k * dy, radius = RADIUS, with = with,
     })
   end
-  local res = trace_from(x, y)
+  local res = trace_from(x, y, 1)
   if res and res.starts_solid then
-    -- Stuck in something: carry on from where the path comes free, or sleep
-    -- where it is (PX's unblocking falls back to Sleep too).
+    -- Stuck in something (another ball can push it in): carry on from where
+    -- the path comes free; else, as PX's unblocking, back out along the move
+    -- eight times its length and come forward from there; else sleep where
+    -- it is, as PX does.
     if not res.left_x then
-      sleep(b)
-      return
+      res = trace_from(x, y, -8)
+      if not (res and res.left_x) then
+        sleep(b)
+        return 0
+      end
     end
     x, y = res.left_x, res.left_y
-    res = trace_from(x, y)
+    res = trace_from(x, y, 1)
   end
   if res and res.hit then
     local spt = vx2 * res.tx + vy2 * res.ty
@@ -96,6 +132,12 @@ local function think(b)
     b.vx = vx2 - spn * res.nx * (bounce + 1) - spt * res.tx * friction
     b.vy = vy2 - spn * res.ny * (bounce + 1) - spt * res.ty * friction
     x, y = res.x, res.y
+    -- Rest half a pixel off the surface, as PX's ball does (it stops a
+    -- step short, up to a pixel): touching it, a ball gliding along would
+    -- hit it at once every frame and stand still at speed.
+    local lx, ly = x + trunc(res.nx * LIFT), y + trunc(res.ny * LIFT)
+    local lift = wa.world.trace({ x0 = x, y0 = y, x1 = lx, y1 = ly, radius = RADIUS, with = with })
+    if not (lift and (lift.hit or lift.starts_solid)) then x, y = lx, ly end
   else
     b.vx, b.vy = vx2, vy2
     x, y = x + trunc(vx2 * P), y + trunc(vy2 * P)
@@ -119,9 +161,89 @@ local function think(b)
     if math.sqrt(dx * dx + dy * dy) < SLEEP_DISTANCE then sleep(b) end
     b.sleep_timer, b.rec_x, b.rec_y = SLEEP_PERIOD, x, y
   end
+  return speed
 end
 
 shared.bowling_balls = {} -- actor id -> ball
+
+-- Frames counted by the oldest ball still rolling: the worms' 12-frame
+-- recovery needs a clock, and only balls hit.
+local clock, clock_ball = 0, nil
+local recover = {} -- worm id -> clock at which it can be hurt again
+
+local function tick(id)
+  if clock_ball == nil or not shared.bowling_balls[clock_ball] then clock_ball = id end
+  if clock_ball == id then clock = clock + 1 end
+end
+
+local function overlaps(b, obj)
+  local dx, dy = (obj.x - b.x) / P, (obj.y - b.y) / P
+  local r = RADIUS + target_radius(obj)
+  return dx * dx + dy * dy <= r * r
+end
+
+-- PX's ProcessBallOnBallCollision: every other ball this one overlaps is
+-- pushed away from it, and wakes.
+local function push_balls(id, b, speed)
+  local push = PUSH_FORCE * math.sqrt(speed)
+  for other_id, o in pairs(shared.bowling_balls) do
+    if other_id ~= id then
+      local dx, dy = (o.x - b.x) / P, (o.y - b.y) / P
+      local d2 = dx * dx + dy * dy
+      if d2 > 0 and d2 <= (2 * RADIUS) * (2 * RADIUS) then
+        local d = math.sqrt(d2)
+        wake(o)
+        o.vx = o.vx + PUSH_KEEP * push * dx / d
+        o.vy = o.vy + PUSH_KEEP * push * dy / d
+      end
+    end
+  end
+end
+
+-- A standing worm hit from above, straight down, is crushed (PX's
+-- "crushable" states, the ones a worm stands in).
+local CRUSHABLE = { standing = true, firing = true, fired = true, prefiring = true }
+
+-- PX's ProcessBallOnOtherCollision: the hit's damage from the ball's speed,
+-- and its push from how the ball really moved this frame.
+local function hit_others(a, b, speed)
+  local dmg = MIN_DAMAGE + (MAX_DAMAGE - MIN_DAMAGE)
+    * (math.min(speed, MAX_DAMAGE_SPEED) - FAST) / (MAX_DAMAGE_SPEED - FAST)
+  local function hit(obj)
+    if not overlaps(b, obj) then return end
+    local damage = 0
+    if obj.kind == "worm" then
+      if obj.hp <= 0 or (recover[obj.id] or 0) > clock then return end
+      damage = dmg
+      recover[obj.id] = clock + RECOVER_FRAMES
+    elseif obj.kind == "crate" or obj.kind == "oil" then
+      damage = OBJECT_DAMAGE
+    else
+      damage = dmg
+    end
+    damage = trunc(damage)
+    if damage <= 0 then return end
+    local fx, fy = b.rvx, b.rvy
+    local ax = math.abs(fx)
+    local crushed = obj.kind == "worm" and CRUSHABLE[obj.state] and fy > FAST and ax / fy < 0.2
+    if crushed then
+      fx, fy = 0, 10
+    else
+      fy = fy < 0 and fy - ax or fy - 2 * ax
+      fx, fy = fx * DAMAGE_FORCE, fy * DAMAGE_FORCE
+    end
+    if obj.kind == "worm" then
+      -- The damage only: worm:hurt has no push (PX's knock, fx and fy).
+      obj:hurt(damage)
+    else
+      obj:hit(damage, trunc(fx * P), trunc(fy * P))
+    end
+    a:sound(crushed and SOUND_CRUSH or SOUND_HIT)
+  end
+  for _, group in ipairs({ wa.worms, wa.mines, wa.crates, wa.oil }) do
+    for _, obj in ipairs(group.all() or {}) do hit(obj) end
+  end
+end
 
 local function spawn_ball(owner, x, y, vx, vy)
   local b = {
@@ -137,8 +259,11 @@ local function spawn_ball(owner, x, y, vx, vy)
         a:despawn()
         return
       end
+      tick(a.id)
       spin(b)
-      think(b)
+      local speed = think(b)
+      if speed > PUSH_SPEED then push_balls(a.id, b, speed) end
+      if speed > FAST then hit_others(a, b, speed) end
       a.x, a.y, a.vx, a.vy = b.x, b.y + SPRITE_DROP * P, 0, 0
       a:gfx({ angle = math.deg(b.rot) % 360, depth = BALL_DEPTH })
     end,
