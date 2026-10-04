@@ -53,6 +53,12 @@ local TOUCH = 2
 -- for good (PX never counts its ZapTurnsRemaining down): awake and not slow,
 -- its friction is negative, so it speeds up along what it rolls on. PX's
 -- strike reaches it within its 12-pixel hit circle of the ball's 16.
+-- What WA hits the ball with. It is in WA's object layer (`as_object`), as
+-- PX's ball is in the oil drums' (SetLayerOverride(LAYER_OILDRUM)), so WA's
+-- fires, guns and blasts reach it. As PX's Message: any hit wakes it, a
+-- blast's push is taken whole (ExplosionForceMultiplier) and any other's,
+-- a fire's among them, at 0.7 (GunForceMultiplier).
+local BLAST_FORCE, GUN_FORCE = 1.0, 0.7
 local ZAPPED_FRICTION = -0.05
 local ZAP_REACH = 12
 
@@ -388,6 +394,13 @@ local function electrified_frame(b)
   end
 end
 
+local function take_hit(b, hit)
+  wake(b)
+  local k = hit.kind == "blast" and BLAST_FORCE or GUN_FORCE
+  b.vx = b.vx + k * hit.vx / P
+  b.vy = b.vy + k * hit.vy / P
+end
+
 local function spawn_ball(owner, x, y, vx, vy)
   local b = {
     x = x, y = y, vx = vx, vy = vy, lvx = vx, lvy = vy, rvx = 0, rvy = 0, lx = x, ly = y,
@@ -396,21 +409,25 @@ local function spawn_ball(owner, x, y, vx, vy)
   }
   local a = wa.actors.spawn({
     sprite = SHEET, x = x, y = y + SPRITE_DROP * P, gravity = false, collide = false, owner = owner,
-    on = function(a)
-      if b.y >= wa.world.water() then
-        shared.bowling_balls[a.id] = nil
-        a:despawn()
-        return
-      end
-      tick(a.id)
-      if b.zapped then electrified_frame(b) end
-      spin(b)
-      local speed = think(b)
-      if speed > PUSH_SPEED then push_balls(a.id, b, speed) end
-      if speed > FAST then hit_others(a, b, speed) end
-      a.x, a.y, a.vx, a.vy = b.x, b.y + SPRITE_DROP * P, 0, 0
-      a:gfx({ angle = math.deg(b.rot) % 360, depth = BALL_DEPTH, tint = b.zapped and ZAPPED_TINT or 0xFFFFFF })
-    end,
+    as_object = true,
+    on = {
+      hit = function(_, hit) take_hit(b, hit) end,
+      frame = function(a)
+        if b.y >= wa.world.water() then
+          shared.bowling_balls[a.id] = nil
+          a:despawn()
+          return
+        end
+        tick(a.id)
+        if b.zapped then electrified_frame(b) end
+        spin(b)
+        local speed = think(b)
+        if speed > PUSH_SPEED then push_balls(a.id, b, speed) end
+        if speed > FAST then hit_others(a, b, speed) end
+        a.x, a.y, a.vx, a.vy = b.x, b.y + SPRITE_DROP * P, 0, 0
+        a:gfx({ angle = math.deg(b.rot) % 360, depth = BALL_DEPTH, tint = b.zapped and ZAPPED_TINT or 0xFFFFFF })
+      end,
+    },
   })
   shared.bowling_balls[a.id] = b
   b.trail_seed = a.id * 7919 % 0x80000000
