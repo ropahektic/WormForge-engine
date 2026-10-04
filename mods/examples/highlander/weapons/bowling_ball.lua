@@ -66,6 +66,7 @@ local function sleep(b)
   b.asleep, b.low = true, false
   b.sleep_x, b.sleep_y = b.x, b.y
   b.vx, b.vy, b.lvx, b.lvy = 0, 0, 0, 0
+  b.rvx, b.rvy = 0, 0
 end
 
 -- PX's Wake: moving again, its timers restarted.
@@ -92,7 +93,9 @@ end
 -- Returns the speed the frame started with, which the hits below go by.
 local function think(b)
   if b.asleep then
+    -- No real speed asleep, as PX's: it stops turning too.
     b.x, b.y = b.sleep_x, b.sleep_y
+    b.rvx, b.rvy = 0, 0
     return 0
   end
   local speed = math.sqrt(b.rvx * b.rvx + b.rvy * b.rvy)
@@ -233,8 +236,7 @@ local function hit_others(a, b, speed)
       fx, fy = fx * DAMAGE_FORCE, fy * DAMAGE_FORCE
     end
     if obj.kind == "worm" then
-      -- The damage only: worm:hurt has no push (PX's knock, fx and fy).
-      obj:hurt(damage)
+      obj:hurt({ amount = damage, vx = trunc(fx * P), vy = trunc(fy * P) })
     else
       obj:hit(damage, trunc(fx * P), trunc(fy * P))
     end

@@ -86,7 +86,13 @@ function Worm:ammo(name, change)
   return change.set
 end
 function Worm:heal(amount) if self.hp > 0 then self.hp = self.hp + amount end end
-function Worm:hurt(amount) self.hp = math.max(0, self.hp - amount) end
+function Worm:hurt(amount)
+  if type(amount) == "table" then
+    self.knock = { amount.vx or 0, amount.vy or 0 }
+    amount = amount.amount or 0
+  end
+  self.hp = math.max(0, self.hp - amount)
+end
 function Worm:carry(x, y) self.x, self.y, self.carried = x, y, true end
 function Worm:drop() self.carried = false end
 function Worm:clear_keys() self.keys = {} end
@@ -1183,9 +1189,10 @@ do
   local rest = ball.y / P
   check("it comes to rest on the floor, its 16-pixel circle on it, drawn 4 lower", rest > 186 and rest < 188,
     tostring(rest))
-  local x0 = ball.x
+  local x0, angle0 = ball.x, ball.angle
   run(50)
   check("and stays there, asleep", ball.x == x0 and ball.y / P == rest)
+  check("asleep, it stops turning (PX zeroes its real speed)", ball.angle == angle0)
   check("it spun while it rolled", ball.angle ~= nil)
   -- A slope down to the right: solid below y = 200 + x / 2.
   new_match()
@@ -1226,6 +1233,9 @@ do
   check("a ball rolling at 8 hurts the worm it rolls through, once: 5 + 55 * (speed - 4) / 11",
     v.hp < 80 and v.hp >= 75 and #M.actor_sounds == 1 and M.actor_sounds[1] == 101,
     v.hp .. " " .. table.concat(M.actor_sounds, ","))
+  check("and knocks it on and up, by 0.7 of how the ball moved (worm:hurt's vx, vy)",
+    v.knock and v.knock[1] > 4 * P and v.knock[1] < 6 * P and v.knock[2] < 0,
+    v.knock and (v.knock[1] / P .. "," .. v.knock[2] / P))
   rolling(100, 3)
   v = stand(worm(17), 140)
   run(30)
@@ -1241,7 +1251,8 @@ do
   rolling(300, 0, 8, 100)
   v = stand(worm(17), 300)
   run(20)
-  check("falling straight on a standing worm crushes it", v.hp < 100 and M.actor_sounds[1] == 33,
+  check("falling straight on a standing worm crushes it: knocked straight down by 10", v.hp < 100
+    and M.actor_sounds[1] == 33 and v.knock and v.knock[1] == 0 and v.knock[2] == 10 * P,
     table.concat(M.actor_sounds, ","))
   rolling(100, 8)
   local crate = { id = 900, kind = "crate", x = 160 * P, y = 191 * P }
