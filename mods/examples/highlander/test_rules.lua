@@ -430,6 +430,10 @@ local function new_match(opts)
         end
         function a:frame(i) self.shown = i end
         function a:despawn() self.dead = true end
+        function a:sound(id)
+          M.actor_sounds = M.actor_sounds or {}
+          M.actor_sounds[#M.actor_sounds + 1] = id
+        end
         M.spawned = M.spawned or {}
         M.spawned[#M.spawned + 1] = a
         return a
@@ -1359,6 +1363,61 @@ do
   run(60)
   check("on a slope it rolls downhill, whichever way it fell", ball.x > landed,
     (landed // P) .. " -> " .. (ball.x // P))
+  -- The hits (PX's ProcessBallOnOtherCollision and BallOnBall), on a floor.
+  local shared = require("lib/shared")
+  local function rolling(x, vx, vy, y)
+    new_match()
+    M.gravity = P // 4
+    M.solid = function(_, yy) return yy >= 200 * P end
+    M.spawned, M.actor_sounds = {}, {}
+    local a, b = shared.spawn_bowling_ball(worm(16), x * P, (y or 183) * P, vx, vy or 0)
+    return a, b
+  end
+  local function stand(w, x)
+    w.x, w.y, w.state = x * P, 194 * P, "standing"
+    return w
+  end
+  rolling(100, 8)
+  local v = stand(worm(17), 160)
+  run(30)
+  check("a ball rolling at 8 hurts the worm it rolls through, once: 5 + 55 * (speed - 4) / 11",
+    v.hp < 80 and v.hp >= 75 and #M.actor_sounds == 1 and M.actor_sounds[1] == 101,
+    v.hp .. " " .. table.concat(M.actor_sounds, ","))
+  rolling(100, 3)
+  v = stand(worm(17), 140)
+  run(30)
+  check("slower than 4 it hurts nothing", v.hp == 100 and #M.actor_sounds == 0)
+  local a = rolling(100, 8)
+  v = stand(worm(17), 100)
+  for _ = 1, 30 do
+    run(1)
+    v.x = a.x
+  end
+  check("a worm it keeps overlapping is hurt again only after 12 frames (PX's DamageRecoverTime)",
+    #M.actor_sounds == 3, tostring(#M.actor_sounds))
+  rolling(300, 0, 8, 100)
+  v = stand(worm(17), 300)
+  run(20)
+  check("falling straight on a standing worm crushes it", v.hp < 100 and M.actor_sounds[1] == 33,
+    table.concat(M.actor_sounds, ","))
+  rolling(100, 8)
+  local crate = { id = 900, kind = "crate", x = 160 * P, y = 191 * P }
+  local mine = { id = 901, kind = "mine", x = 220 * P, y = 195 * P }
+  function crate:hit(damage, vx, vy) self.taken = { damage, vx, vy } end
+  mine.hit = crate.hit
+  M.crates, M.mines = { crate }, { mine }
+  run(30)
+  check("a crate takes 100, pushed the way the ball rolls", crate.taken and crate.taken[1] == 100
+    and crate.taken[2] > 0 and crate.taken[3] < 0)
+  check("a mine takes the speed's damage", mine.taken and mine.taken[1] >= 5 and mine.taken[1] < 30)
+  local _, sleeper = rolling(400, 0)
+  run(200)
+  check("a ball left alone sleeps", sleeper.asleep)
+  local _, roller = shared.spawn_bowling_ball(worm(16), 330 * P, 183 * P, 8, 0)
+  local x0 = sleeper.x
+  run(30)
+  check("another ball rolling into it wakes it and pushes it on", sleeper.x > x0 + 4 * P,
+    (sleeper.x - x0) / P .. " " .. roller.x / P)
   M.gravity, M.solid = nil, nil
 end
 
