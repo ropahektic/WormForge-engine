@@ -80,9 +80,9 @@ static PENDING: Mutex<Vec<Pending>> = Mutex::new(Vec::new());
 static QUADS: Mutex<Vec<lua_host::DrawQuad>> = Mutex::new(Vec::new());
 /// The packed atlas, held until a device exists to upload it to.
 ///
-/// Sheets are registered at `on_gfx_ready`, which runs at LoadSprites — long
-/// before WA has created its D3D9 device. Uploading there always fails, so the
-/// pixels wait here and go up on the first present instead.
+/// Sheets are registered at `on_gfx_ready`, while WA builds the world and
+/// before it may have created its D3D9 device. Uploading there can fail, so
+/// the pixels wait here and go up on the first present instead.
 static ATLAS: Mutex<Option<render::Atlas>> = Mutex::new(None);
 static ATLAS_UPLOADED: AtomicBool = AtomicBool::new(false);
 

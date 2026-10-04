@@ -83,7 +83,7 @@ struct Player {
 }
 
 /// Arm recording for the newly loaded pack set. The replay name is allowed to
-/// arrive later; WA does not always fill it before LoadSprites returns.
+/// arrive later; WA does not always fill it before the packs are loaded.
 pub fn prepare(mods: &[LoadedMod], extras: &[PackFolder]) -> bool {
     let mut state = STATE.lock().unwrap_or_else(|p| p.into_inner());
     if let State::Playback(player) = &mut *state {
@@ -463,7 +463,7 @@ pub fn finish() {
     finish_state(&mut state);
 }
 
-/// LoadSprites is also a fallback boundary for recordings whose shutdown hook
+/// Loading the next match's packs is also a fallback boundary for recordings whose shutdown hook
 /// did not run. A playback prepared by ReplayLoader belongs to the match now
 /// being constructed and must survive this boundary.
 pub fn finish_recording() {

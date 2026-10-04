@@ -28,9 +28,18 @@ struct GfxPass {
 
 static GFX: Mutex<Option<GfxPass>> = Mutex::new(None);
 
-/// PX `InitGraphic`: custom PNG/GIF sprites immediately after `LoadSprites`
-/// (`sprites.dat`). Palette overflow may wash colours; Edlud's render PR
-/// owns a real fix. Stock `SetLayerVisibility(3, 1)` later commits the table.
+/// Load the packs and install their sprites, once per match, from
+/// `InitWeaponTable`: by then WA has loaded its own sprites and placed every
+/// colour of the palette, the terrain's included, so the packs' 8-bit sprites
+/// take what is left (or the nearest colours) and never the terrain's.
+///
+/// It used to run earlier, where Project X's `InitGraphic` did, after WA's
+/// `GfxHandler::LoadSprites` (0x570B50). WA calls that from the world's
+/// constructor only when it cannot load `colours.img` from its graphics
+/// archive (and in headless replays). On an install that took that path the
+/// packs' sprites took every free palette entry before the terrain was
+/// loaded, and the terrain was drawn in one colour; on every other install
+/// the sprites went in here anyway.
 pub fn on_gfx_ready(display: *mut u8) {
     if display.is_null() {
         return;
@@ -42,7 +51,7 @@ pub fn on_gfx_ready(display: *mut u8) {
         }
     }
 
-    log_line("InitGraphic: installing custom sprites after LoadSprites");
+    log_line("InitGraphic: installing custom sprites at InitWeaponTable");
     // A network round loads the synced copy of the host's packs, decided
     // before the lobby state is dropped; replay playback still comes first.
     let synced = crate::transfer::round_packs();
@@ -283,8 +292,8 @@ pub fn on_gfx_ready(display: *mut u8) {
 
 /// The match is over: the next one must load from scratch.
 ///
-/// `on_gfx_ready` runs once per display, keyed by its address, because two
-/// hooks reach it within one match. WA frees the display at match end and can
+/// `on_gfx_ready` runs once per display, keyed by its address, as a guard
+/// against reaching it twice in one match. WA frees the display at match end and can
 /// allocate the next match's at the same address; keyed on a stale entry, the
 /// new match then skipped everything -- no Lua, no rule packs, no recorder --
 /// and a player who stayed in WA between rounds desynced at frame 0.
@@ -312,14 +321,6 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
         log_error("GameWorld.display is null; custom sprites skipped");
     } else {
         on_gfx_ready(display);
-        let installed = GFX
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(|p| p.display == display as usize))
-            .unwrap_or(false);
-        if !installed {
-            log_error("InitGraphic miss: sprites installed after palette commit (colours may be wrong)");
-        }
     }
 
     let restored = sprite::reassert();
