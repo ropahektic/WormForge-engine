@@ -121,7 +121,23 @@ pub(crate) fn sweep(q: &ShapeQuery, terrain: Option<&dyn Fn(i32, i32) -> bool>, 
     for i in from + 1..=n {
         let (x, y) = at(i);
         if let Some(touched) = overlap(x, y, q.radius, terrain, bodies) {
-            let (px, py) = at(i - 1);
+            // The last free centre, to 1/256 of the step: halve the step
+            // between the free position and the touching one.
+            let (mut lo, mut hi) = (0i64, 256i64);
+            let at_part = |k: i64| {
+                let t = (i - 1) * 256 + k;
+                ((x0 + dx * t / (n * 256)) as i32, (y0 + dy * t / (n * 256)) as i32)
+            };
+            while hi - lo > 1 {
+                let mid = (lo + hi) / 2;
+                let (mx, my) = at_part(mid);
+                if overlap(mx, my, q.radius, terrain, bodies).is_some() {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            let (px, py) = at_part(lo);
             let (nx, ny) = normal_at(x, y, q.radius, touched, terrain, bodies, dx, dy);
             out.hit = true;
             out.x = px;
@@ -198,8 +214,12 @@ mod tests {
         let floor = |_: i32, y: i32| y >= 100;
         let hit = sweep(&q(50, 50, 50, 150, 8), Some(&floor), &[]);
         assert!(hit.hit && !hit.starts_solid && hit.obj == 0);
-        // The last free centre: its circle reaches down to y 99 at most.
-        assert!((hit.y >> 16) >= 90 && (hit.y >> 16) <= 92, "{}", hit.y >> 16);
+        // The last free centre, to a fraction of a pixel. The floor's nearest
+        // pixel centre is (50.5, 100.5), half a pixel aside, so the circle
+        // touches it at a centre of 100.5 - sqrt(64 - 0.25).
+        let y = hit.y as f64 / P as f64;
+        let touch = 100.5 - (64.0f64 - 0.25).sqrt();
+        assert!(y <= touch && y > touch - 1.0 / 64.0, "{y} vs {touch}");
         assert!(hit.nx.abs() < 1e-9 && (hit.ny + 1.0).abs() < 1e-9, "{} {}", hit.nx, hit.ny);
     }
 
