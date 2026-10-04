@@ -62,6 +62,43 @@ pub const FIRE_DEFAULTS: FireArgs = FireArgs {
     damage_scale: 0x1_0000, knock_scale: 0x1_0000, tint: None,
 };
 
+/// What `wa.world.trace` / `wa.world.collides` test against (`with`).
+pub const SHAPE_TERRAIN: u32 = 1;
+pub const SHAPE_WORMS: u32 = 2;
+pub const SHAPE_CRATES: u32 = 4;
+pub const SHAPE_OIL: u32 = 8;
+pub const SHAPE_MINES: u32 = 16;
+pub const SHAPE_GRAVES: u32 = 32;
+
+/// A circle, swept from (x0, y0) to (x1, y1) or tested at (x0, y0): 16.16,
+/// radius in pixels, against the `with` bits, without `ignore`'s objects.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ShapeQuery {
+    pub x0: i32,
+    pub y0: i32,
+    pub x1: i32,
+    pub y1: i32,
+    pub radius: i32,
+    pub with: u32,
+    pub ignore: Vec<u32>,
+}
+
+/// A sweep's result. `hit`: it touched something on the way; (x, y) is the
+/// last free centre before, (nx, ny) the unit normal away from what it
+/// touched, `obj` that object (0 terrain). `starts_solid`: it overlapped at
+/// the start; `left` is where it first came free, if it did.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ShapeHit {
+    pub hit: bool,
+    pub x: i32,
+    pub y: i32,
+    pub nx: f64,
+    pub ny: f64,
+    pub obj: u32,
+    pub starts_solid: bool,
+    pub left: Option<(i32, i32)>,
+}
+
 /// `wa.weapons.launch`: a real WA missile, fired from a weapon slot's fire
 /// params, as `FireWeapon__CreateWeaponProjectile` fires one.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -290,6 +327,11 @@ pub struct ActorNative {
     /// `wa.worms.spawn{...}`: a new worm for a team (team, x, y, name,
     /// health). Returns its handle.
     pub spawn_worm: fn(u32, i32, i32, &str, i32) -> Result<u32, String>,
+    /// `wa.world.trace{...}`: a circle swept against terrain and objects.
+    pub shape_trace: fn(&ShapeQuery) -> ShapeHit,
+    /// `wa.world.collides{...}`: what a circle there overlaps: None nothing,
+    /// Some(0) terrain, Some(handle) an object.
+    pub shape_collides: fn(&ShapeQuery) -> Option<u32>,
     /// WA's own WormEntity::SetState, so the state's setup runs.
     pub set_worm_state: fn(handle: u32, state: u32),
     /// Enter WA's frozen worm state when the worm is alive and eligible.
@@ -385,6 +427,8 @@ impl Default for ActorNative {
             launch: |_| Err("launch not bound".into()),
             spawn_fire: |_| Err("fire.spawn not bound".into()),
             spawn_worm: |_, _, _, _, _| Err("worms.spawn not bound".into()),
+            shape_trace: |_| ShapeHit::default(),
+            shape_collides: |_| None,
         }
     }
 }
@@ -1875,6 +1919,10 @@ pub(crate) fn native_spawn_fire() -> Option<fn(&FireArgs) -> Result<u32, String>
 
 pub(crate) fn native_spawn_worm() -> Option<fn(u32, i32, i32, &str, i32) -> Result<u32, String>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.spawn_worm)
+}
+
+pub(crate) fn native_shape() -> Option<(fn(&ShapeQuery) -> ShapeHit, fn(&ShapeQuery) -> Option<u32>)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| (n.shape_trace, n.shape_collides))
 }
 
 pub(crate) fn native_launch() -> Option<fn(&LaunchArgs) -> Result<u32, String>> {

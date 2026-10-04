@@ -18,7 +18,9 @@ pub use bundles::ComponentPlan;
 pub use perf::{perf_flags, take_lua_breakdown, take_lua_spikes, take_lua_time, LuaBreakdown, PerfFlags, Spike};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
-    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs, LaunchArgs, SpawnArgs, FIRE_DEFAULTS,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs, LaunchArgs,
+    SpawnArgs, FIRE_DEFAULTS, ShapeHit, ShapeQuery, SHAPE_CRATES, SHAPE_GRAVES, SHAPE_MINES,
+    SHAPE_OIL, SHAPE_TERRAIN, SHAPE_WORMS,
     StampBuried,
 };
 pub use dispatch::{
@@ -692,6 +694,53 @@ wa.weapons.replace({
             ],
             "name Worm and health 100 by default"
         ));
+    }
+
+    #[test]
+    fn world_trace_and_collides_pass_the_query_and_shape_the_answer() {
+        let _guard = lock_host();
+        thread_local! {
+            static ASKED: std::cell::RefCell<Vec<actor::ShapeQuery>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            shape_trace: |q| {
+                ASKED.with(|a| a.borrow_mut().push(q.clone()));
+                if q.x1 == 0 {
+                    return actor::ShapeHit::default();
+                }
+                actor::ShapeHit { hit: true, x: 10, y: 20, nx: 0.6, ny: -0.8, obj: 0, starts_solid: true, left: Some((3, 4)) }
+            },
+            shape_collides: |q| {
+                ASKED.with(|a| a.borrow_mut().push(q.clone()));
+                (q.x0 == 1).then_some(0)
+            },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        lua.load(r#"
+            local h = wa.world.trace{ x0 = 1, y0 = 2, x1 = 5, y1 = 6, radius = 8,
+              with = { "terrain", "worms", "oil" }, ignore = { wa.worms.all()[1] } }
+            assert(h.hit and h.x == 10 and h.y == 20 and h.nx == 0.6 and h.ny == -0.8)
+            assert(h.tx == 0.8 and h.ty == 0.6, "the tangent, the normal turned")
+            assert(h.starts_solid and h.left_x == 3 and h.left_y == 4 and h.obj == nil)
+            assert(wa.world.trace{ x0 = 1, y0 = 2, x1 = 0, y1 = 0 } == nil, "nothing touched")
+            assert(wa.world.collides{ x = 1, y = 2, radius = 4 } == true)
+            assert(wa.world.collides{ x = 2, y = 2 } == false)
+            assert(not pcall(wa.world.trace, { x0 = 0, y0 = 0, x1 = 0 }))
+            assert(not pcall(wa.world.collides, { x = 0, y = 0, radius = 65 }))
+            assert(not pcall(wa.world.collides, { x = 0, y = 0, with = { "clouds" } }))
+        "#).exec().unwrap();
+        ASKED.with(|a| {
+            let a = a.borrow();
+            assert_eq!(a[0], actor::ShapeQuery {
+                x0: 1, y0: 2, x1: 5, y1: 6, radius: 8,
+                with: actor::SHAPE_TERRAIN | actor::SHAPE_WORMS | actor::SHAPE_OIL, ignore: vec![0x1234],
+            });
+            assert_eq!(a[2], actor::ShapeQuery { x0: 1, y0: 2, x1: 1, y1: 2, radius: 4, with: actor::SHAPE_TERRAIN, ignore: vec![] },
+                "a point test, terrain by default");
+        });
     }
 
     #[test]

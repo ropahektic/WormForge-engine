@@ -218,6 +218,8 @@ pub fn install() -> Result<(), String> {
         launch: crate::missile_boom::launch,
         spawn_fire: crate::fire::spawn,
         spawn_worm: crate::world::spawn_worm,
+        shape_trace: crate::shape::trace,
+        shape_collides: crate::shape::collides,
         retarget_weapon_sprites: |slot, body, cluster| {
             crate::apply::retarget_sprites(
                 slot as usize,

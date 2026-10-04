@@ -674,6 +674,49 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         Ok(Some(out))
     }).map_err(|e| e.to_string())?;
     world.set("electrical_trace", trace).map_err(|e| e.to_string())?;
+    // `wa.world.trace{ x0, y0, x1, y1, radius, with, ignore }`: a circle swept
+    // against WA's terrain and objects (Project X's TraceMaskEx).
+    let shape_trace = lua.create_function(|lua, spec: Table| {
+        let q = shape_query(&spec, true)?;
+        let Some((trace, _)) = crate::actor::native_shape() else { return Ok(None::<Table>) };
+        let hit = trace(&q);
+        if !hit.hit && !hit.starts_solid {
+            return Ok(None);
+        }
+        let out = lua.create_table()?;
+        out.set("hit", hit.hit)?;
+        out.set("starts_solid", hit.starts_solid)?;
+        if let Some((x, y)) = hit.left {
+            out.set("left_x", x)?;
+            out.set("left_y", y)?;
+        }
+        if hit.hit {
+            out.set("x", hit.x)?;
+            out.set("y", hit.y)?;
+            out.set("nx", hit.nx)?;
+            out.set("ny", hit.ny)?;
+            out.set("tx", -hit.ny)?;
+            out.set("ty", hit.nx)?;
+            if hit.obj != 0 {
+                out.set("obj", crate::actor::entity_value(lua, hit.obj).map_err(mlua::Error::external)?)?;
+            }
+        }
+        Ok(Some(out))
+    }).map_err(|e| e.to_string())?;
+    world.set("trace", shape_trace).map_err(|e| e.to_string())?;
+    // `wa.world.collides{ x, y, radius, with, ignore }`: whether a circle
+    // there overlaps terrain or an object (Project X's CheckCollisionEx), and
+    // which object.
+    let shape_collides = lua.create_function(|lua, spec: Table| {
+        let q = shape_query(&spec, false)?;
+        let Some((_, collides)) = crate::actor::native_shape() else { return Ok((false, Value::Nil)) };
+        match collides(&q) {
+            None => Ok((false, Value::Nil)),
+            Some(0) => Ok((true, Value::Nil)),
+            Some(h) => Ok((true, crate::actor::entity_value(lua, h).map_err(mlua::Error::external)?)),
+        }
+    }).map_err(|e| e.to_string())?;
+    world.set("collides", shape_collides).map_err(|e| e.to_string())?;
     world
         .set("sky", game::offsets::DROP_SKY_Y)
         .map_err(|e| e.to_string())?;
@@ -1323,4 +1366,55 @@ pub fn get_bool(table: &Table, key: &str) -> mlua::Result<Option<bool>> {
             "{key} must be a boolean, got {other:?}"
         ))),
     }
+}
+
+/// A `wa.world.trace` (`sweep`) or `wa.world.collides` table: positions
+/// 16.16, `radius` in pixels (0 to 64, default 0), `with` the kinds to test
+/// (default terrain only), `ignore` objects to leave out.
+fn shape_query(spec: &Table, sweep: bool) -> mlua::Result<crate::actor::ShapeQuery> {
+    let name = if sweep { "world.trace" } else { "world.collides" };
+    let need = |key: &str| -> mlua::Result<i32> {
+        spec.get::<Option<i32>>(key)?
+            .ok_or_else(|| mlua::Error::external(format!("{name} needs {key} (16.16)")))
+    };
+    let (x0, y0, x1, y1) = if sweep {
+        (need("x0")?, need("y0")?, need("x1")?, need("y1")?)
+    } else {
+        let (x, y) = (need("x")?, need("y")?);
+        (x, y, x, y)
+    };
+    let radius = spec.get::<Option<i32>>("radius")?.unwrap_or(0);
+    if !(0..=64).contains(&radius) {
+        return Err(mlua::Error::external(format!("{name}: radius is 0 to 64 pixels, got {radius}")));
+    }
+    use crate::actor::{SHAPE_CRATES, SHAPE_GRAVES, SHAPE_MINES, SHAPE_OIL, SHAPE_TERRAIN, SHAPE_WORMS};
+    let with = match spec.get::<Option<Table>>("with")? {
+        None => SHAPE_TERRAIN,
+        Some(t) => {
+            let mut bits = 0;
+            for v in t.sequence_values::<String>() {
+                bits |= match v?.as_str() {
+                    "terrain" => SHAPE_TERRAIN,
+                    "worms" => SHAPE_WORMS,
+                    "crates" => SHAPE_CRATES,
+                    "oil" => SHAPE_OIL,
+                    "mines" => SHAPE_MINES,
+                    "graves" => SHAPE_GRAVES,
+                    other => {
+                        return Err(mlua::Error::external(format!(
+                            "{name}: with takes terrain, worms, crates, oil, mines, graves; got {other:?}"
+                        )))
+                    }
+                };
+            }
+            bits
+        }
+    };
+    let mut ignore = Vec::new();
+    if let Some(t) = spec.get::<Option<Table>>("ignore")? {
+        for v in t.sequence_values::<Value>() {
+            ignore.push(parse_handle(&v?)?);
+        }
+    }
+    Ok(crate::actor::ShapeQuery { x0, y0, x1, y1, radius, with, ignore })
 }
