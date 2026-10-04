@@ -3,14 +3,17 @@
 local shared = require("lib/shared")
 local fires = shared.fires
 
--- The strike: PX's plane drops three balls 48 pixels apart, moving 5 a frame
--- the way it flies. Here they drop together from the sky over the click, the
+-- The strike: PX's plane drops three balls 48 pixels apart from 128 above
+-- the map, moving 5 a frame the way it flies. Here they drop together, the
 -- way WA's strike arrow points: the sign of the shot's x speed (ev.vx), which
--- PX's PxAirstrike reads, from the left unless the arrow keys turned it. PX's
--- plane is not drawn.
+-- PX's PxAirstrike reads, from the left unless the arrow keys turned it. As
+-- PX's plane drops them early by how far they drift on the way down (its
+-- SpeedCompensation), the drop line is set back by the middle ball's own
+-- drift down to the click, so it lands on the click. PX's plane is not drawn.
 local STRIKE_BALLS = 3
 local STRIKE_SPACING = 48
 local STRIKE_SPEED = 5
+local STRIKE_Y = -128         -- PX's PlaneAppearYOffset
 
 -- PX's CBowlingBall numbers.
 local RADIUS = 16             -- MakeCircleMask(16): the ball's art is 32 across
@@ -275,10 +278,29 @@ local function spawn_ball(owner, x, y, vx, vy)
 end
 shared.spawn_bowling_ball = spawn_ball
 
+-- How far a ball dropped at y0 moving vx drifts sideways before its centre
+-- falls to y1: think's flight through the air, gravity and PX's inertia,
+-- frame by frame (no trig, the same on every machine).
+local function drift(y0, y1, vx)
+  local g = wa.world.gravity() / P
+  if g <= 0 then return 0 end
+  local x, y, vy, lvy = 0, y0, 0, 0
+  for _ = 1, 3000 do
+    if y >= y1 then break end
+    local vy2 = vy + g
+    x, y = x + trunc(vx * P), y + trunc(vy2 * P)
+    vy = vy2 + INERTIA_Y * (vy2 - lvy)
+    lvy = vy
+  end
+  return x
+end
+
 fires.bowling_strike = function(ev)
   local dir = (ev.vx or 0) < 0 and -1 or 1
+  local y0 = STRIKE_Y * P
+  local back = drift(y0, ev.y - RADIUS * P, STRIKE_SPEED * dir)
   for i = 1, STRIKE_BALLS do
     local offset = (i - (STRIKE_BALLS + 1) / 2) * STRIKE_SPACING
-    spawn_ball(ev.worm, ev.x + math.floor(offset * P), wa.world.sky, STRIKE_SPEED * dir, 0)
+    spawn_ball(ev.worm, ev.x - back + math.floor(offset * P), y0, STRIKE_SPEED * dir, 0)
   end
 end

@@ -1175,15 +1175,24 @@ do
   M.solid = function(_, y) return y >= 200 * P end
   M.spawned = {}
   -- WA's arrow turned to the right-to-left: the shot's x speed negative.
-  spec.on_click({ worm = w, x = 300 * P, y = 100 * P, vx = -5 * P, vy = 0 })
+  -- The click is on the floor.
+  spec.on_click({ worm = w, x = 300 * P, y = 200 * P, vx = -5 * P, vy = 0 })
   local xs = {}
   for i, a in ipairs(M.spawned) do xs[i] = a.x // P end
-  check("three balls 48 apart over the click, from the sky", #M.spawned == 3
-    and xs[1] == 252 and xs[2] == 300 and xs[3] == 348 and M.spawned[2].y == -0xD00000 + 4 * P,
+  check("three balls 48 apart from PX's plane height, set back upwind of the click", #M.spawned == 3
+    and xs[2] > 300 and xs[1] == xs[2] - 48 and xs[3] == xs[2] + 48 and M.spawned[2].y == -128 * P + 4 * P,
     table.concat(xs, ","))
   local ball = M.spawned[2]
+  local x_start = ball.x
   run(1)
-  check("moving the way WA's strike arrow points: the shot's x speed", ball.x < 300 * P)
+  check("moving the way WA's strike arrow points: the shot's x speed", ball.x < x_start)
+  local landed_x
+  for _ = 1, 200 do
+    run(1)
+    if not landed_x and ball.y >= (200 - 16) * P then landed_x = ball.x end
+  end
+  check("the middle ball comes down on the click", landed_x and math.abs(landed_x - 300 * P) <= 6 * P,
+    landed_x and tostring(landed_x / P))
   check("drawn in front of the terrain", ball.depth == 0xE0000)
   run(600)
   local rest = ball.y / P
@@ -1205,8 +1214,9 @@ do
   M.spawned = {}
   -- No arrow pressed: the strike comes from the left (x speed 0 or more).
   spec.on_click({ worm = w, x = 200 * P, y = 0, vx = 0, vy = 0 })
+  local start2 = M.spawned[2].x
   run(1)
-  check("unturned, the strike comes from the left", M.spawned[2].x > 200 * P)
+  check("unturned, the strike comes from the left", start2 < 200 * P and M.spawned[2].x > start2)
   ball = M.spawned[2]
   run(120)
   local landed = ball.x
