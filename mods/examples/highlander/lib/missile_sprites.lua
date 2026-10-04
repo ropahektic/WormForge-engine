@@ -81,15 +81,27 @@ end
 -- A missile can outlive the turn it was fired in: a Chilli's five burst
 -- after a blast that hurt the thrower, which ends WA's turn. With no worm
 -- holding the turn, the last turn's worm owns the sprite, or it would not
--- be drawn at all while WA still flies the missile.
-local last_turn_worm
+-- be drawn at all while WA still flies the missile. That worm may have
+-- died since, and WA frees a dead worm: it is kept by id and looked up
+-- among the living, and if it is gone nothing owns (or draws) the sprite.
+local last_turn_id
 wa.on.turn_start(function(event)
-  last_turn_worm = event.worm
+  last_turn_id = event.worm and event.worm.id
 end)
+
+local function sprite_owner()
+  local turn = current_worm()
+  if turn then return turn end
+  for _, w in ipairs(wa.worms.all()) do
+    if w.id == last_turn_id then return w end
+  end
+end
 
 wa.on.missile_frame(function(m)
   local p = PX_WEAP_SPRITES[m.weapon]
-  if p and p.hide and m.phase == "pre" then
+  -- WA's sprite is hidden only where PX's is drawn in its place: with no
+  -- owner for ours, WA's stays.
+  if p and p.hide and m.phase == "pre" and (flying[m.id] or sprite_owner()) then
     m.sprite = 0
   end
   p = m.phase == "post" and p
@@ -98,7 +110,7 @@ wa.on.missile_frame(function(m)
   end
   local f = flying[m.id]
   if not f then
-    local owner = current_worm() or last_turn_worm
+    local owner = sprite_owner()
     if not owner then
       return
     end
