@@ -753,8 +753,11 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 54);
+        assert_eq!(applied.len(), 55);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
+        let crate_strike = claim(StockWeapon::Donkey);
+        assert_eq!(crate_strike.params.name.as_deref(), Some("Crate Strike"));
+        assert!(crate_strike.params.on_click_id != 0, "a click claim");
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());

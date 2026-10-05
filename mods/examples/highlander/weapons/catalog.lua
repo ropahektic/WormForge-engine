@@ -84,6 +84,14 @@ local PX_ART = {
     params = { gpu_prefix = "sprites/px_hold/" },
     on_explode = function(ev) shared.electric_grenade_explode(ev) end,
   },
+  { -- Crate Strike: PX's three parachute crates (weapons/crate_strike.lua),
+    -- not WA's donkey. Click-only, as the Lightning Strike.
+    weapon = "donkey",
+    wep = "weps/donkey.wep",
+    panel_icon = "sprites/crate_strike/icon.png",
+    on_select = { cursor = true },
+    on_click = function(ev) fires.crate_strike(ev) end,
+  },
   { -- Lightning Strike: the PX strike is an effect, not WA's napalm plane.
     weapon = "napalm_strike",
     wep = "weps/napalm_strike.wep",

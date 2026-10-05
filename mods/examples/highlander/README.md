@@ -180,6 +180,7 @@ bazooka hold, as the Cow Launcher's.
 | low_gravity | Gravity Control | icon, its two sounds | 1-5 choose the gravity, firing holds it for the turn |
 | ninja_rope | Jump | icon, the worm aiming it | the worm leaves with the shot's speed |
 | parachute | Hang-Glider | icon, the glider, its pack-away, its two sounds | PX's glider, flown by the pack once WA's parachute opens |
+| donkey | Crate Strike | icon | three crates on parachutes from 50 pixels above the map, at the click and 50 to either side (`wa.crates.spawn`); each a weapon, utility or health crate at random, WA picking what is inside; a health crate gives 20-40, 40-60 or 60-80 by its place |
 
 Played in game: the Fire Jump, the Sticky Bomb and Igniter holds, the
 Shadow-Bolt, the Sniper Rifle and the Helicopter.
