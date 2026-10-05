@@ -8,6 +8,7 @@ mod apply;
 mod panel_icon;
 #[cfg(target_os = "windows")]
 mod contact;
+mod crate_drop;
 mod crt;
 mod hook;
 mod http;

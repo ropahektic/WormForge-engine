@@ -222,6 +222,7 @@ pub fn install() -> Result<(), String> {
         spawn_worm: crate::world::spawn_worm,
         shape_trace: crate::shape::trace,
         shape_collides: crate::shape::collides,
+        spawn_crate: crate::crate_drop::spawn,
         retarget_weapon_sprites: |slot, body, cluster| {
             crate::apply::retarget_sprites(
                 slot as usize,

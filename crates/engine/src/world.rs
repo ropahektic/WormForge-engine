@@ -1976,6 +1976,11 @@ pub fn retreat_ms() -> i32 {
     }
 }
 
+/// The match's world root, null outside a match.
+pub(crate) fn session_root() -> *mut u8 {
+    unsafe { session_root_ptr() }
+}
+
 unsafe fn session_root_ptr() -> *mut u8 {
     let slot = crate::wa::address("G_GAME_SESSION") as *const *mut u8;
     if slot.is_null() {

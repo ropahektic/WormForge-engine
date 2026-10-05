@@ -210,6 +210,21 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     worms.set("spawn", spawn_worm).map_err(|e| e.to_string())?;
+    // `wa.crates.spawn{ x, y, kind, health, drop }`: one of WA's crates,
+    // its contents WA's random pick, as its turn drop makes them.
+    let crates: Table = wa.get("crates").map_err(|e| e.to_string())?;
+    let spawn_crate = lua
+        .create_function(|_, spec: Table| {
+            let args = crate_args(&spec)?;
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("crates.spawn: only valid in simulation callbacks"));
+            }
+            let spawn = crate::actor::native_spawn_crate()
+                .ok_or_else(|| mlua::Error::external("crates.spawn: native not bound"))?;
+            spawn(&args).map(crate::actor::WorldHandle).map_err(mlua::Error::external)
+        })
+        .map_err(|e| e.to_string())?;
+    crates.set("spawn", spawn_crate).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -838,6 +853,30 @@ fn spec_slot(spec: &Table) -> mlua::Result<StockWeapon> {
 
 /// WA's coalition colours: alliance 0 (red) to 5 (cyan).
 const WORM_SPRITE_TEAMS: usize = 6;
+
+/// `wa.crates.spawn`'s table: x, y (16.16), kind, health (health crates,
+/// 25 if left out), drop ("chute" if left out).
+fn crate_args(spec: &Table) -> mlua::Result<crate::CrateArgs> {
+    let bad = |why: String| mlua::Error::external(format!("crates.spawn: {why}"));
+    let need = |key: &str| get_i32(spec, key)?.ok_or_else(|| bad(format!("needs {key} (16.16)")));
+    let kind = match spec.get::<Option<String>>("kind")?.as_deref() {
+        Some("weapon") => 1,
+        Some("health") => 2,
+        Some("utility") => 4,
+        other => return Err(bad(format!("kind is \"weapon\", \"utility\" or \"health\", got {other:?}"))),
+    };
+    let health = get_i32(spec, "health")?.unwrap_or(25);
+    if kind == 2 && !(1..=1000).contains(&health) {
+        return Err(bad(format!("health is 1 to 1000, got {health}")));
+    }
+    let drop = match spec.get::<Option<String>>("drop")?.as_deref() {
+        None | Some("chute") => 2,
+        Some("teleport") => 1,
+        Some("none") => 0,
+        Some(other) => return Err(bad(format!("drop is \"chute\", \"teleport\" or \"none\", got {other:?}"))),
+    };
+    Ok(crate::CrateArgs { x: need("x")?, y: need("y")?, kind, health: if kind == 2 { health } else { 0 }, drop })
+}
 
 /// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse,
 /// sound, explode_into, countdown, explode_on_space }`.

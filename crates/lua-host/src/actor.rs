@@ -99,6 +99,21 @@ pub struct ShapeHit {
     pub left: Option<(i32, i32)>,
 }
 
+/// `wa.crates.spawn`: one of WA's crates, its contents WA's own random pick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CrateArgs {
+    /// Where, 16.16.
+    pub x: i32,
+    pub y: i32,
+    /// WA's kind (PX's ECrateType): 1 weapon, 2 health, 4 utility.
+    pub kind: i32,
+    /// A health crate's health.
+    pub health: i32,
+    /// How it arrives (PX's EDropType): 0 where it is, 1 teleported in,
+    /// 2 on a parachute.
+    pub drop: i32,
+}
+
 /// `wa.weapons.launch`: a real WA missile, fired from a weapon slot's fire
 /// params, as `FireWeapon__CreateWeaponProjectile` fires one.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -339,6 +354,8 @@ pub struct ActorNative {
     /// `wa.world.collides{...}`: what a circle there overlaps: None nothing,
     /// Some(0) terrain, Some(handle) an object.
     pub shape_collides: fn(&ShapeQuery) -> Option<u32>,
+    /// `wa.crates.spawn{...}`: one of WA's crates. Returns its handle.
+    pub spawn_crate: fn(&CrateArgs) -> Result<u32, String>,
     /// WA's own WormEntity::SetState, so the state's setup runs.
     pub set_worm_state: fn(handle: u32, state: u32),
     /// Enter WA's frozen worm state when the worm is alive and eligible.
@@ -438,6 +455,7 @@ impl Default for ActorNative {
             spawn_worm: |_, _, _, _, _| Err("worms.spawn not bound".into()),
             shape_trace: |_| ShapeHit::default(),
             shape_collides: |_| None,
+            spawn_crate: |_| Err("crates.spawn not bound".into()),
         }
     }
 }
@@ -2042,6 +2060,10 @@ pub(crate) fn native_spawn_worm() -> Option<fn(u32, i32, i32, &str, i32) -> Resu
 
 pub(crate) fn native_shape() -> Option<(fn(&ShapeQuery) -> ShapeHit, fn(&ShapeQuery) -> Option<u32>)> {
     NATIVE.lock().ok()?.as_ref().map(|n| (n.shape_trace, n.shape_collides))
+}
+
+pub(crate) fn native_spawn_crate() -> Option<fn(&CrateArgs) -> Result<u32, String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.spawn_crate)
 }
 
 pub(crate) fn native_launch() -> Option<fn(&LaunchArgs) -> Result<u32, String>> {

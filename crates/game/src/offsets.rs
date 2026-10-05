@@ -770,6 +770,38 @@ pub const SPRITE_MAX_FRAMES: usize = 0x16;
 /// DisplayGfx vtable slot 33: GetSpriteFrameForBlit, thiscall (display,
 /// sprite, anim, &w, &h, &left, &top, &right, &bottom, &frac) -> BitGrid*.
 pub const DISPLAY_SLOT_GET_SPRITE_FRAME: usize = 33;
+/// CrateEntity: WA allocates this much and zeroes the first CRATE_ENTITY_ZEROED
+/// bytes before its constructor, as its turn drop (0x561AD2) does.
+pub const CRATE_ENTITY_SIZE: usize = 0x4DC;
+pub const CRATE_ENTITY_ZEROED: usize = 0x4BC;
+/// The crate description the constructor copies (0xE5 dwords, PX's
+/// CCrateDesc): position (16.16), kind, a health crate's health, and how
+/// its contents are chosen.
+pub const CRATE_DESC_SIZE: usize = 0x394;
+pub const CRATE_DESC_X: usize = 0x04;
+pub const CRATE_DESC_Y: usize = 0x08;
+/// PX's ECrateType: 1 weapon, 2 health, 4 utility.
+pub const CRATE_DESC_KIND: usize = 0x14;
+pub const CRATE_DESC_HEALTH: usize = 0x13C;
+/// PX's EWCrateType: 2 is random, WA picking the contents itself (the
+/// constructor files such a crate in GameWorld+0x51C, 0x5027D5).
+pub const CRATE_DESC_CONTENTS: usize = 0x154;
+pub const CRATE_CONTENTS_RANDOM: i32 = 2;
+/// Contents given: a health crate's health is all it holds.
+pub const CRATE_CONTENTS_DEFINED: i32 = 0;
+/// The match's crate deck, built at its start (0x527F2B: every weapon 1-70
+/// WA allows in the match, once). A random crate draws from it when
+/// collected (CrateEntity vmethod 19, 0x503FD0), moving each draw to the
+/// drawn list until the deck is empty and refilled from it, and draws again
+/// until the weapon's kind is the crate's (0x504094): weapons 0x3E-0x46 are
+/// a utility crate's, the rest a weapon crate's. A random crate of a kind
+/// the deck lacks, a health crate among them, draws for ever.
+pub const GAME_WORLD_CRATE_DECK: usize = 0x3C5C;
+pub const GAME_WORLD_CRATE_DECK_COUNT: usize = 0x3DEC;
+pub const GAME_WORLD_CRATE_DRAWN: usize = 0x3DF0;
+pub const GAME_WORLD_CRATE_DRAWN_COUNT: usize = 0x3F80;
+pub const CRATE_UTILITY_FIRST: i32 = 0x3E;
+pub const CRATE_UTILITY_LAST: i32 = 0x46;
 pub const CLASS_OIL: i32 = 30;
 /// WA CrossEntity, the gravestone left by a dead worm.
 pub const CLASS_GRAVE: i32 = 21;
