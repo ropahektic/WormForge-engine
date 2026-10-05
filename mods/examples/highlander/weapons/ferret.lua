@@ -20,6 +20,10 @@ local MAX_ALIVE = 10        -- frt_maxfrtalw
 -- PX draws the 64-pixel frame centred on the Ferret, its feet 16 below the
 -- centre: the outline is traced with a circle that size, so they meet the land.
 local RADIUS = 15
+-- What it runs into is a smaller matter: its body, about 8 pixels about its
+-- centre. With the outline's circle it went off on worms and drums 21 and
+-- 24 pixels away, a worm beside the one that placed it on its first frame.
+local BODY = 8
 local SCALE = 0.95          -- frt_sprscale
 local DEPTH = 0xE0000       -- in front of the terrain, as the Bowling Ball
 local WALK = "sprites/ferret/walk"
@@ -77,7 +81,7 @@ local function trace(f)
       return
     end
     if f.fails >= MAX_FAILS then
-      f.tracing, f.walking, f.boom, f.fails = false, false, true, 0
+      f.tracing, f.walking, f.boom, f.fails, f.why = false, false, true, 0, "a dead end"
       return
     end
     if land_at(f.ax, f.ay) then
@@ -98,21 +102,21 @@ end
 
 -- frt_checkinteract, at a point of its way.
 local function interact(f, x, y)
-  local _, obj = wa.world.collides({ x = x, y = y, radius = RADIUS, with = { "worms", "mines", "oil" } })
+  local _, obj = wa.world.collides({ x = x, y = y, radius = BODY, with = { "worms", "mines", "oil" } })
   if obj then
     if obj.kind == "worm" then
       local current = shared.current_worm()
       if f.grace > 0 and current and current.id == obj.id then return end
       obj.vx, obj.vy = f.side * P, WORM_UP * P
-      f.boom, f.walking, f.tracing = true, false, false
+      f.boom, f.walking, f.tracing, f.why = true, false, false, "a worm"
     elseif obj.kind == "oil" then
-      f.boom, f.walking, f.tracing = true, false, false
+      f.boom, f.walking, f.tracing, f.why = true, false, false, "an oil drum"
     elseif obj.kind == "mine" then
       obj.vx, obj.vy = f.side * P, MINE_UP * P
     end
   end
   if shared.kick_bowling_balls then
-    shared.kick_bowling_balls(x, y, RADIUS, f.side, MINE_UP)
+    shared.kick_bowling_balls(x, y, BODY, f.side, MINE_UP)
   end
 end
 
@@ -175,6 +179,8 @@ local function forget(f)
 end
 
 local function explode(f, a)
+  wa.log(string.format("Ferret explodes on %s at (%d, %d), %d frames after it was placed",
+    f.why or "?", f.x // P, f.y // P, f.age))
   f.dead = true
   forget(f)
   a:explode(BOOM)
@@ -183,6 +189,7 @@ end
 
 local function frame(f, a)
   if f.dead then return end
+  f.age = f.age + 1
   if f.gone then
     f.dead = true
     a:despawn()
@@ -192,7 +199,7 @@ local function frame(f, a)
     fly(f)
     try_plant(f, a)
   end
-  if f.y >= wa.world.water() - STEP then f.boom = true end
+  if f.y >= wa.world.water() - STEP then f.boom, f.why = true, f.why or "the water" end
   if f.boom then
     explode(f, a)
     return
@@ -220,7 +227,7 @@ fires.ferret = function(fire)
     x = fire.x, y = rise_clear(fire.x, fire.y), vx = fire.vx, vy = fire.vy,
     side = (worm.facing or 1) < 0 and -1 or 1,
     looking = DOWN, looking_bk = DOWN, ops = MAX_OPS, fails = 0,
-    outline = {}, next = 1, steps = 0, angle = 0, grace = GRACE,
+    outline = {}, next = 1, steps = 0, angle = 0, grace = GRACE, age = 0,
     planted = false, tracing = false, walking = false, boom = false,
   }
   alive[#alive + 1] = f
