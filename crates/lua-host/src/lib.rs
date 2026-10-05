@@ -2720,6 +2720,8 @@ wa.weapons.replace({
             write_i32(body.as_mut_ptr(), ACTOR_BOOM_ID, 100);
             write_i32(body.as_mut_ptr(), ENT_POS_X, 0x10_0000);
         }
+        // As the engine does for every actor it spawns.
+        crate::actor_spawned(handle, spawn.brain_id);
         crate::actor_frame(
             handle,
             spawn.brain_id,
@@ -2738,6 +2740,34 @@ wa.weapons.replace({
         assert_eq!(boom.2, 100);
         assert!(boom.3);
         assert!(!DEAD.with(|c| c.get()));
+    }
+
+    #[test]
+    fn a_freed_actors_handle_reads_and_writes_nothing() {
+        use game::entity::{read_i32, write_i32};
+        use game::offsets::{ACTOR_MAGIC, ENT_POS_X, ENT_POS_Y, LUA_ACTOR_MAGIC, LUA_ACTOR_SIZE};
+        let _host = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let mut body = vec![0u8; LUA_ACTOR_SIZE];
+        let handle = body.as_mut_ptr() as u32;
+        unsafe {
+            write_i32(body.as_mut_ptr(), ACTOR_MAGIC, LUA_ACTOR_MAGIC as i32);
+            write_i32(body.as_mut_ptr(), ENT_POS_X, 0x50000);
+        }
+        crate::actor_spawned(handle, 0);
+        lua.globals().set("A", lua.create_userdata(actor::ActorHandle(handle)).unwrap()).unwrap();
+        sim_context::with_sim(|| {
+            let x: i64 = lua.load("return A.x").eval().unwrap();
+            assert_eq!(x, 0x50000, "alive, it reads through");
+            crate::actor_freed(handle);
+            // WA reuses the memory: the handle must leave it alone.
+            unsafe { write_i32(body.as_mut_ptr(), ENT_POS_X, 0x1234) };
+            lua.load("A.x = 0x70000; A.y = 0x80000; A.vx = 1").exec().unwrap();
+            assert_eq!(lua.load("return A.x").eval::<i64>().unwrap(), 0, "freed, it reads nothing");
+        });
+        assert_eq!(unsafe { read_i32(body.as_mut_ptr(), ENT_POS_X) }, 0x1234, "and writes nothing");
+        assert_eq!(unsafe { read_i32(body.as_mut_ptr(), ENT_POS_Y) }, 0);
     }
 
     #[test]
