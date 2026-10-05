@@ -9,8 +9,8 @@ local fires = shared.fires
 
 -- WA's muzzle can be inside a wall when a worm fires from beside it. A stock
 -- Old Woman constructed there explodes before her first frame. Dispatch the
--- shot to Lua so she can be launched from a clear point on the muzzle-to-worm
--- segment, keeping WA's own Old Woman movement and five-second fuse.
+-- shot to Lua so she can be launched from a clear point the worm can see,
+-- keeping WA's own Old Woman movement and five-second fuse.
 local OLD_WOMAN_LAUNCHER_PATCH = {
   uses_turn = 0,
   subtype_param = 3, -- bazooka aim sheet, not the Sheep Launcher hold
@@ -52,28 +52,50 @@ for _, list in ipairs({ PORTED, PX_ART }) do
 end
 
 do
+  -- reddaz's launch point search, playtested by him. A point is clear when
+  -- it and 8 points on a 3-pixel circle around it are free of land, and the
+  -- worm can see it (nothing between them, so never the far side of a thin
+  -- wall the muzzle poked through). The muzzle is tried first, then rings
+  -- every 4 pixels out to 40, at finer angles the wider the ring; failing
+  -- all, she starts at the worm.
   local P = 0x10000
   local CLEAR = 3 * P
+  local REACH = 40 * P
+  local RING = 4 * P
+
   local function clear(x, y)
-    return not wa.land.solid(x, y)
-      and not wa.land.solid(x - CLEAR, y)
-      and not wa.land.solid(x + CLEAR, y)
-      and not wa.land.solid(x, y - CLEAR)
-      and not wa.land.solid(x, y + CLEAR)
+    if wa.land.solid(x, y) then return false end
+    for i = 0, 7 do
+      local a = (i / 8) * 2 * math.pi
+      if wa.land.solid(x + math.floor(CLEAR * math.cos(a)), y + math.floor(CLEAR * math.sin(a))) then
+        return false
+      end
+    end
+    return true
+  end
+
+  local function launch_point(x, y, w)
+    local r = 0
+    while r <= REACH do
+      local step = (r == 0) and 360 or math.max(15, math.floor(360 / ((r / P) / 2)))
+      local deg = 0
+      while deg < 360 do
+        local a = deg * math.pi / 180
+        local tx, ty = x + math.floor(r * math.cos(a)), y + math.floor(r * math.sin(a))
+        if clear(tx, ty) then
+          local hit = wa.land.trace(tx, ty, w.x, w.y)
+          if not hit or not hit.hit then return tx, ty end
+        end
+        deg = deg + step
+      end
+      r = r + RING
+    end
+    return w.x, w.y
   end
 
   fires.old_woman = function(fire)
     local w = fire.worm
-    local x, y = fire.x, fire.y
-    -- Check the actual muzzle first; only move the start inward if it is
-    -- blocked. Fixed steps give every peer the same answer in lockstep.
-    if not clear(x, y) then
-      for step = 1, 16 do
-        local nx = x + ((w.x - x) * step) // 16
-        local ny = y + ((w.y - y) * step) // 16
-        if clear(nx, ny) then x, y = nx, ny; break end
-      end
-    end
+    local x, y = launch_point(fire.x, fire.y, w)
     wa.weapons.launch({ weapon = "old_woman", owner = w,
       x = x, y = y, vx = fire.vx, vy = fire.vy, fuse = 5000 })
   end
