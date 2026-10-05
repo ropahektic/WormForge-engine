@@ -329,6 +329,21 @@ local function zap(b, mul)
 end
 
 -- The Lightning Strike: every ball within reach of where it hit.
+-- PX's Ferret flicks a ball as it flicks a mine (the ball is one): a ball
+-- whose circle touches the Ferret's, radius `reach` at (x, y), wakes and is
+-- thrown at (vx, vy), pixels a frame. Balls in id order.
+shared.kick_bowling_balls = function(x, y, reach, vx, vy)
+  local r = reach + RADIUS
+  for _, id in ipairs(balls_in_order()) do
+    local b = shared.bowling_balls[id]
+    local dx, dy = (b.x - x) / P, (b.y - y) / P
+    if dx * dx + dy * dy <= r * r then
+      wake(b)
+      b.vx, b.vy = vx, vy
+    end
+  end
+end
+
 shared.zap_bowling_balls = function(x, y)
   local reach = (ZAP_REACH + RADIUS) * (ZAP_REACH + RADIUS)
   for _, id in ipairs(balls_in_order()) do
