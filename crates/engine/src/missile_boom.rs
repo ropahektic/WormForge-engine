@@ -197,6 +197,32 @@ unsafe extern "thiscall" fn ctor_hook(
     fire_params: *const i32,
     ctx: *mut u8,
 ) -> *mut u8 {
+    // Everything a burst needs is in place before WA's constructor runs: a
+    // missile started inside the land bursts in its constructor (a bottle
+    // thrown point-blank at a wall), and its explode step must be there by
+    // then, or the pack's on_explode never runs. The missile's world is not
+    // set yet; its parent's is the same and names the weapon table. A new
+    // missile at this address is never the old one: a new id, and whatever
+    // explode step the last missile here had goes, even if this one has none.
+    let world = if owner == 0 {
+        std::ptr::null_mut()
+    } else {
+        unsafe { read_i32(owner as *mut u8, game::offsets::ENT_WORLD) as *mut u8 }
+    };
+    assign_id(this as u32);
+    unsafe { remember_weapon(world, this, fire_params) };
+    forget_live(this as u32);
+    let slot = mine::slot_in_world(world, fire_params).or_else(launching);
+    if let Some((slot, tune)) = slot.and_then(|s| tune_for_slot(s).map(|t| (s, t))) {
+        if let Ok(mut live) = LIVE.lock() {
+            live.push(Live {
+                handle: this as u32,
+                owner,
+                slot,
+                tune,
+            });
+        }
+    }
     let orig = ORIG_CTOR.load(Ordering::SeqCst);
     let p = if orig.is_null() {
         this
@@ -205,30 +231,15 @@ unsafe extern "thiscall" fn ctor_hook(
         unsafe { f(this, owner, fire_params, ctx) }
     };
     if p.is_null() {
+        forget_weapon(this as usize);
         return p;
     }
-    // A new missile at this address is never the old one: a new id, and
-    // whatever explode step the last missile here had goes, even if this one
-    // has none.
-    assign_id(p as u32);
-    remember_weapon(p, fire_params);
-    forget_live(p as u32);
-    let Some(slot) = mine::slot_from_fire_params(p, fire_params).or_else(launching) else {
+    // Freed while being built (it burst at once): nothing left to dress.
+    if !has_id(this as u32) {
         return p;
-    };
-    if let Some(sprite) = flight_for_slot(slot) {
+    }
+    if let Some(sprite) = slot.and_then(flight_for_slot) {
         apply_flight_sprite(p, sprite);
-    }
-    let Some(tune) = tune_for_slot(slot) else {
-        return p;
-    };
-    if let Ok(mut live) = LIVE.lock() {
-        live.push(Live {
-            handle: p as u32,
-            owner,
-            slot,
-            tune,
-        });
     }
     p
 }
@@ -249,8 +260,8 @@ fn slot_in_table(table: usize, ptr: usize) -> Option<usize> {
 ///   take their parent's slot;
 /// - AirStrikeEntity::release_missile: the strike's own copy, and
 ///   CrateEntity::detonate: a world buffer. These get no slot.
-unsafe fn remember_weapon(missile: *mut u8, fire_params: *const i32) {
-    let world = unsafe { read_i32(missile, game::offsets::ENT_WORLD) } as usize;
+unsafe fn remember_weapon(world: *mut u8, missile: *mut u8, fire_params: *const i32) {
+    let world = world as usize;
     let table = if world == 0 {
         0
     } else {
@@ -302,6 +313,11 @@ fn assign_id(missile: u32) -> u32 {
         g.get_or_insert_with(HashMap::new).insert(missile, id);
     }
     id
+}
+
+/// Whether the missile at `missile` still has its id (WA has not freed it).
+fn has_id(missile: u32) -> bool {
+    ID_OF.lock().ok().is_some_and(|g| g.as_ref().is_some_and(|m| m.contains_key(&missile)))
 }
 
 /// The id of the live missile at `missile`: the one its constructor gave it.
@@ -480,15 +496,16 @@ fn live_of(this: *mut u8) -> Option<Live> {
     g.iter().find(|m| m.handle == this as u32).cloned()
 }
 
-unsafe extern "C" fn before_boom(this: *mut u8) {
+/// `x, y`: where WA bursts the missile, as it passes them to 0x509AC0. The
+/// same as the missile's position, except for one that bursts while being
+/// built (started inside the land), whose position is not set yet.
+unsafe extern "C" fn before_boom(this: *mut u8, x: i32, y: i32) {
     if this.is_null() {
         return;
     }
     let Some(live) = live_of(this) else {
         return;
     };
-    let x = unsafe { read_i32(this, 0x84) };
-    let y = unsafe { read_i32(this, 0x88) };
     fire_step(
         this,
         live.owner,
@@ -503,14 +520,19 @@ unsafe extern "C" fn before_boom(this: *mut u8) {
 
 #[unsafe(naked)]
 unsafe extern "C" fn boom_hook() {
-    // FUN_00509ac0: usercall EAX=this, stack (x, y). Emit bits then stock boom.
+    // FUN_00509ac0: usercall EAX=this, stack (x, y), the burst position. Emit
+    // bits then stock boom.
     core::arch::naked_asm!(
         "push eax",
         "push ecx",
         "push edx",
+        // (x, y) were at [esp + 4] and [esp + 8]; three pushes later, +16
+        // and +20, and each push below moves them on by 4.
+        "push dword ptr [esp + 20]",
+        "push dword ptr [esp + 20]",
         "push eax",
         "call {before}",
-        "add esp, 4",
+        "add esp, 12",
         "pop edx",
         "pop ecx",
         "pop eax",
