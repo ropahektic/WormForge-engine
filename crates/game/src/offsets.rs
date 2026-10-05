@@ -331,6 +331,11 @@ pub const WORLD_ROOT_TURN_ENDED: usize = 0x150;
 pub const WORLD_ROOT_RETREAT_TIMER: usize = 0x178;
 /// GameWorld copy of WorldRoot `worm_active`.
 pub const GAME_WORLD_WORM_ACTIVE: usize = 0x7234;
+/// Set by the world root (0x55F708) when a turn earns an instant replay (the
+/// "action replay": enough kills or damage, or a forced one). At the end of
+/// the frame 0x532C48 turns it into a replay request, cleared again either
+/// way; the replay then rebuilds the whole game from WA's saved state.
+pub const GAME_WORLD_ACTION_REPLAY_WANTED: usize = 0x98A8;
 pub const SHARED_KEY_TEAM: u32 = 0x15;
 /// `TeamEntity__reset_cursor` — thiscall, clears planted strike X.
 pub const TEAM_RESET_CURSOR: u32 = 0x0055_6D00;
@@ -782,6 +787,7 @@ mod tests {
         assert_eq!(WORLD_ROOT_WORM_ACTIVE, 0x108);
         assert_eq!(WORLD_ROOT_TURN_TIMER, 0x18C);
         assert_eq!(GAME_WORLD_WORM_ACTIVE, 0x7234);
+        assert_eq!(GAME_WORLD_ACTION_REPLAY_WANTED, 0x98A8);
         assert_eq!(TEAM_CURSOR_MARK, 0x3E0);
         assert_eq!(TEAM_DRAW_CURSOR, 0x0055_6AD0);
         assert_eq!(TEAM_RESET_CURSOR, 0x0055_6D00);

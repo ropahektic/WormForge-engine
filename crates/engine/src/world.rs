@@ -602,6 +602,23 @@ pub fn freeze_turn() {
     }
 }
 
+/// Drop WA's wish for an instant replay of this turn (see
+/// `GAME_WORLD_ACTION_REPLAY_WANTED`), logging each one.
+pub unsafe fn cancel_action_replay(root: *mut u8) {
+    if root.is_null() {
+        return;
+    }
+    let world = read_i32(root, ENT_WORLD) as *mut u8;
+    if world.is_null() || read_i32(world, GAME_WORLD_ACTION_REPLAY_WANTED) == 0 {
+        return;
+    }
+    write_i32(world, GAME_WORLD_ACTION_REPLAY_WANTED, 0);
+    crate::log_line(&format!(
+        "instant replay cancelled at f={} (WormForge plays none)",
+        read_i32(world, GAME_WORLD_FRAME_COUNTER)
+    ));
+}
+
 pub fn thaw_turn() {
     let root = unsafe { session_root_ptr() };
     let saved = FROZEN_TURN.lock().ok().and_then(|mut g| g.take());
