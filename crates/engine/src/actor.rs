@@ -1218,9 +1218,13 @@ unsafe fn tick(this: *mut u8) {
     }
     let y = read_i32(this, ENT_POS_Y);
     // Invisible tick actors (sprite sentinel) may sit on the land cursor
-    // anywhere on the map — do not cull them by Y.
+    // anywhere on the map — do not cull them by Y. Visible ones fell off the
+    // world once well below the map's own bottom (some maps are deeper than
+    // 6144 pixels: a glider's art there was freed in mid-flight).
     let invisible = read_i32(this, ACTOR_SPRITE) == CUSTOM_SPRITE_SENTINEL;
-    if !invisible && (y > 0x1800_0000 || y < -0x2000_0000) {
+    let (_, map_h) = crate::world::map_size_px();
+    let bottom = if map_h > 0 { (map_h as i64 + 1024) << 16 } else { 0x1800_0000 };
+    if !invisible && ((y as i64) > bottom || y < -0x2000_0000) {
         die(this);
         return;
     }
