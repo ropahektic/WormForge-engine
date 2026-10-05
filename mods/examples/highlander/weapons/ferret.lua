@@ -42,9 +42,22 @@ local MOVES = {
 }
 
 local alive = {} -- the Ferrets walking, oldest first
+-- WA places a Ferret at its worm, where its circle overlaps the ground:
+-- traced from inside the land, it would turn on the spot for ever. It rises
+-- until its circle is clear of the land, at most this far, and walks from
+-- the surface.
+local MAX_RISE = 64
 
 local function land_at(x, y)
   return (wa.world.collides({ x = x, y = y, radius = RADIUS }))
+end
+
+local function rise_clear(x, y)
+  for _ = 1, MAX_RISE do
+    if not land_at(x, y) then return y end
+    y = y - P
+  end
+  return y
 end
 
 local function move(f, dir)
@@ -204,7 +217,7 @@ fires.ferret = function(fire)
     oldest.gone = true
   end
   local f = {
-    x = fire.x, y = fire.y, vx = fire.vx, vy = fire.vy,
+    x = fire.x, y = rise_clear(fire.x, fire.y), vx = fire.vx, vy = fire.vy,
     side = (worm.facing or 1) < 0 and -1 or 1,
     looking = DOWN, looking_bk = DOWN, ops = MAX_OPS, fails = 0,
     outline = {}, next = 1, steps = 0, angle = 0, grace = GRACE,
