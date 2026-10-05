@@ -3137,6 +3137,36 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn an_actor_takes_the_missile_shape_and_fits_by_it() {
+        let _host = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let spec = |src: &str| -> mlua::Table { lua.load(src).eval().unwrap() };
+        assert!(crate::spawn::parse_spawn(&lua, &spec("return { shape = 'missile' }")).unwrap().missile_shape);
+        assert!(!crate::spawn::parse_spawn(&lua, &spec("return {}")).unwrap().missile_shape, "a worm's by default");
+        assert!(crate::spawn::parse_spawn(&lua, &spec("return { shape = 'cube' }")).is_err());
+        use std::cell::Cell;
+        thread_local! {
+            static ASKED: Cell<(u32, i32, i32)> = const { Cell::new((0, 0, 0)) };
+        }
+        crate::bind_actor_native(crate::ActorNative {
+            actor_fits: |h, x, y| {
+                ASKED.with(|c| c.set((h, x, y)));
+                x < 100
+            },
+            ..Default::default()
+        });
+        crate::actor_spawned(0x5000, 0);
+        let a = lua.create_userdata(crate::actor::ActorHandle(0x5000)).unwrap();
+        lua.globals().set("A", a).unwrap();
+        assert!(lua.load("return A:fits(50, 7)").eval::<bool>().unwrap());
+        assert!(!lua.load("return A:fits(150, 7)").eval::<bool>().unwrap(), "land there");
+        assert_eq!(ASKED.with(|c| c.get()), (0x5000, 150, 7), "WA's test, for this actor, at that place");
+        crate::actor_freed(0x5000);
+        assert!(lua.load("return A:fits(150, 7)").eval::<bool>().unwrap(), "a freed actor touches nothing");
+    }
+
+    #[test]
     fn an_actor_brain_takes_its_hits() {
         let _host = lock_host();
         let lua = sandbox::new_lua().unwrap();

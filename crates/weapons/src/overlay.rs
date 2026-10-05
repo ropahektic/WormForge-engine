@@ -261,6 +261,11 @@ pub struct ActorSpawn {
     /// as Project X's `SetLayerOverride(LAYER_OILDRUM)`: WA's fires hit it,
     /// and its guns, missiles and worms treat it as an object.
     pub as_object: bool,
+    /// WA's missile collision shape (`shape = "missile"`) instead of the worm
+    /// shape an actor borrows: the one WA's missile constructor takes for the
+    /// Sheep's, Skunk's and most records (table entry 2), so `a:fits` tests
+    /// the actor as WA tests a Skunk.
+    pub missile_shape: bool,
     /// Draw the body. `false` / `sprite = false` uses the 1023 blit reject.
     pub visible: bool,
     /// Bake opaque silhouette(s) from the GIF/PNG. Sub-toggles below choose
@@ -305,6 +310,7 @@ impl Default for ActorSpawn {
             persist: false,
             drown: true,
             as_object: false,
+            missile_shape: false,
             visible: true,
             mask: false,
             mask_worms: false,

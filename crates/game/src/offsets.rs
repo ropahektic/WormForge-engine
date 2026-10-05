@@ -537,10 +537,19 @@ pub const ARENA_WORM_STRIDE: usize = 0x9C;
 pub const MAX_TEAMS: u32 = 6;
 pub const MAX_WORMS_PER_TEAM: u32 = 8;
 pub const GAME_RUNTIME_WORLD_ROOT: usize = 0x8;
+/// The land's collision layer: its entity (class 0x1C, constructed at
+/// 0x50546A with layer 1 and shape 1) tests a shape against the terrain
+/// bitmap. WA's collision test (0x4FB9D0) walks the layers whose bits are in
+/// the mask it is given, so bit 1 (mask 2) is "the land".
+pub const COLLISION_LAYER_LAND: u32 = 1;
 pub const COLLISION_LAYER_MISSILE: u32 = 0xF;
 /// The oil drums' collision layer (OilDrumEntity's constructor, 0x504B17).
 /// WA's fire hits what is in layers 2..=5 and 17 (mask 0x2003C at 0x54FB6A).
 pub const COLLISION_LAYER_OBJECT: u32 = 0x11;
+/// The collision shape WA's missile constructor (0x507D3E) gives the
+/// Sheep's, Skunk's and most records: WorldEntity's constructor takes it from
+/// the world's shape table by this index (0x4FEED5).
+pub const COLLISION_SHAPE_MISSILE: u32 = 2;
 pub const DROP_SKY_Y: i32 = -0x00D0_0000;
 pub const LUA_ACTOR_MAGIC: u32 = 0x774B_4C41;
 /// Grown to include presentation state and the stable actor sequence id.

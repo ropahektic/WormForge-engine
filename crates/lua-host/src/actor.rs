@@ -264,6 +264,8 @@ pub struct ActorNative {
     pub is_taken: fn(handle: u32) -> bool,
     /// `worm:fits(x, y)`: WA's own collision test of the worm there.
     pub fits: fn(handle: u32, x: i32, y: i32) -> bool,
+    /// `a:fits(x, y)`: the actor's own shape against the land.
+    pub actor_fits: fn(handle: u32, x: i32, y: i32) -> bool,
     /// `worm:jetpack_steer(on)`.
     pub jetpack_steer: fn(handle: u32, on: bool),
     /// `worm.windup = frames | nil`: frames left before the worm releases
@@ -400,6 +402,7 @@ impl Default for ActorNative {
             release: |_, _, _, _, _| {},
             is_taken: |_| false,
             fits: |_, _, _| true,
+            actor_fits: |_, _, _| true,
             jetpack_steer: |_, _| {},
             set_windup: |_, _| {},
             windup: |_| None,
@@ -927,6 +930,15 @@ impl UserData for ActorHandle {
                 read_handle(live(this.0), ENT_POS_Y),
                 radius,
             )
+        });
+        // `a:fits(x, y)`: whether the actor's collision shape at (x, y),
+        // 16.16, touches no land, by WA's own test. A read.
+        methods.add_method("fits", |_, this, (x, y): (i32, i32)| {
+            let h = live(this.0);
+            if h == 0 {
+                return Ok(true);
+            }
+            Ok(native_actor_fits().map(|f| f(h, x, y)).unwrap_or(true))
         });
         methods.add_method("explode", |_, this, opts: Option<Table>| {
             crate::sim_context::require("actor:explode")?;
@@ -1749,6 +1761,10 @@ pub fn native_random() -> Option<fn() -> Option<u32>> {
 
 fn native_take() -> Option<fn(u32, bool, bool)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.take)
+}
+
+fn native_actor_fits() -> Option<fn(u32, i32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.actor_fits)
 }
 
 fn native_fits() -> Option<fn(u32, i32, i32) -> bool> {
