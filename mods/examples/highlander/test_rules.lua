@@ -281,6 +281,41 @@ local function new_match(opts)
       set_gravity = function(v) M.gravity = v end,
       set_wind = function(v) M.wind = v end,
       sky = -0xD00000,
+      -- As the engine's wa.world.collides: terrain from M.solid at the
+      -- circle's centre and rim; worms, mines, oil drums and crates as circles
+      -- of the engine's sizes (6, 5, 9, 9), the first in the list touched.
+      collides = function(q)
+        local P = 0x10000
+        local r = q.radius or 0
+        local want = {}
+        for _, w in ipairs(q.with or { "terrain" }) do want[w] = true end
+        if want.terrain and M.solid then
+          if M.solid(q.x, q.y) then return true end
+          for k = 0, 15 do
+            local t = k * math.pi / 8
+            if M.solid(q.x + math.floor(r * math.cos(t) * P), q.y + math.floor(r * math.sin(t) * P)) then
+              return true
+            end
+          end
+        end
+        local groups = {
+          { "worms", worms, 6, "worm" }, { "mines", M.mines or {}, 5, "mine" },
+          { "oil", M.oil or {}, 9, "oil" }, { "crates", M.crates or {}, 9, "crate" },
+        }
+        for _, g in ipairs(groups) do
+          if want[g[1]] then
+            for _, o in ipairs(g[2]) do
+              local dx, dy = (o.x - q.x) / P, (o.y - q.y) / P
+              local reach = r + g[3]
+              if (g[4] ~= "worm" or (o.hp or 1) > 0) and dx * dx + dy * dy <= reach * reach then
+                o.kind = o.kind or g[4]
+                return true, o
+              end
+            end
+          end
+        end
+        return false
+      end,
       -- As the engine's wa.world.trace, against M.solid, cheaper: the
       -- circle's rim and centre (terrain is contiguous and the sweep moves a
       -- pixel at a time), the normal from the rim samples a pixel or two out
@@ -465,6 +500,13 @@ local function new_match(opts)
         end
         function a:frame(i) self.shown = i end
         function a:despawn() self.dead = true end
+        -- a.explode is the spawn's explode spec and a:explode(opts) the
+        -- method, as on the engine's actor: a callable table.
+        a.explode = setmetatable(a.explode or {}, { __call = function(_, self, opts)
+          M.actor_booms = M.actor_booms or {}
+          M.actor_booms[#M.actor_booms + 1] = { x = self.x, y = self.y, opts = opts }
+          self.dead = true
+        end })
         function a:sound(id)
           M.actor_sounds = M.actor_sounds or {}
           M.actor_sounds[#M.actor_sounds + 1] = id
@@ -685,7 +727,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("59 slots replaced, each once", #replaced == 59 and not dupes, tostring(#replaced))
+  check("60 slots replaced, each once", #replaced == 60 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -707,7 +749,7 @@ do
   for slot, spec in pairs(by_slot) do
     if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi"
       or slot == "prod" or slot == "armageddon" or slot == "petrol_bomb" or slot == "nuclear_test"
-      or slot == "sheep_strike" then
+      or slot == "sheep_strike" or slot == "salvation_army" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
@@ -1130,7 +1172,7 @@ do
   end
   local count = 0
   for _ in pairs(holds) do count = count + 1 end
-  check("nine PX holds claimed", count == 9, tostring(count))
+  check("ten PX holds claimed", count == 10, tostring(count))
   check("Sticky Bomb has a weapon and the lower radial hand",
     holds.grenade.sheet == "sprites/px_hold/sticky_bomb"
     and holds.grenade.hand == "sprites/px_hold/hand_rad_lower"
@@ -1338,6 +1380,106 @@ do
   check("PX's first fire: x + 3 cos(360), y - 3 sin(360)",
     f[1] and f[1].x == 300 * P - 55776 and f[1].y == 200 * P - 188531)
   w.turn = nil
+end
+
+print("ferret: thrown, it walks the terrain's outline and blows up on worms")
+do
+  local P = 0x10000
+  local function setup(solid)
+    new_match()
+    M.gravity = P // 4
+    M.solid = solid
+    M.spawned, M.actor_booms, M.mines, M.oil = {}, {}, {}, {}
+    for _, w in ipairs(worms) do w.x, w.y, w.turn = -9000 * P, -9000 * P, false end
+    local spec
+    for _, r in ipairs(replaced) do
+      if r.weapon == "salvation_army" then spec = r end
+    end
+    return spec
+  end
+  local function run(n)
+    for _ = 1, n do
+      for _, a in ipairs(M.spawned) do if not a.dead then a.on(a) end end
+    end
+  end
+  local floor = function(_, y) return y >= 200 * P end
+  local spec = setup(floor)
+  check("the Ferret takes the scheme's record, its icon, its hold and a throw", spec
+    and spec.wep == "weps/salvation_army.wep" and spec.panel_icon == "sprites/ferret/icon.png"
+    and spec.hold and spec.hold.sheet == "sprites/ferret/hold.png" and type(spec.on_fire) == "function")
+  local thrower = worm(16)
+  thrower.facing, thrower.turn = 1, true
+  spec.on_fire({ worm = thrower, x = 100 * P, y = 120 * P, vx = P, vy = 0 })
+  local f = M.spawned[1]
+  run(40)
+  local landed_y = f.y
+  check("it falls to the floor and stands on it, its circle above the land",
+    landed_y > 180 * P and landed_y < 190 * P, landed_y / P)
+  check("a walking sound once it lands", #M.sounds > 0 and M.sounds[#M.sounds] == "sounds/ferret/walk.wav")
+  local x0 = f.x
+  run(30)
+  check("it walks the way its thrower faced, 2 steps of 3 pixels a frame along the floor",
+    f.x > x0 + 120 * P and math.abs(f.y - landed_y) <= 3 * P, (f.x - x0) / P)
+  check("upright on the floor, animated", f.angle ~= nil and (f.angle < 1 or f.angle > 359) and f.shown ~= nil,
+    tostring(f.angle))
+  -- A cliff: the floor at 200 up to x = 400, at 300 beyond.
+  spec = setup(function(x, y) return y >= (x < 400 * P and 200 or 300) * P end)
+  spec.on_fire({ worm = thrower, x = 300 * P, y = 120 * P, vx = 0, vy = 0 })
+  f = M.spawned[1]
+  run(200)
+  check("off a ledge it follows the cliff down instead of falling, and walks on below",
+    not f.dead and f.x > 420 * P and f.y > 270 * P and f.y < 290 * P, (f.x / P) .. "," .. (f.y / P))
+  -- A worm in the way: the turn's worm is spared at first, any other is not.
+  spec = setup(floor)
+  thrower = worm(16)
+  thrower.facing, thrower.turn = 1, true
+  local victim = worm(17)
+  victim.x, victim.y, victim.vx, victim.vy = 260 * P, 190 * P, 0, 0
+  spec.on_fire({ worm = thrower, x = 100 * P, y = 120 * P, vx = 0, vy = 0 })
+  f = M.spawned[1]
+  run(120)
+  check("it blows up on a worm, thrown up first (SpX = TurnSide, SpY = -5)",
+    f.dead and #M.actor_booms == 1 and M.actor_booms[1].opts.damage == 100 and M.actor_booms[1].opts.id == 50
+    and victim.vy == -5 * P and victim.vx == P, #M.actor_booms)
+  spec = setup(floor)
+  thrower = worm(16)
+  thrower.facing, thrower.turn = 1, true
+  thrower.x, thrower.y = 140 * P, 190 * P
+  spec.on_fire({ worm = thrower, x = 100 * P, y = 120 * P, vx = 0, vy = 0 })
+  f = M.spawned[1]
+  run(55) -- it falls for some 23 frames, then walks past its thrower
+  check("the turn's worm is spared for its first 60 frames", not f.dead and f.x > 180 * P, f.x / P)
+  -- Mines are flicked up and it walks on; oil drums and the water end it.
+  spec = setup(floor)
+  local mine = { id = 901, x = 200 * P, y = 195 * P, vx = 0, vy = 0 }
+  M.mines = { mine }
+  spec.on_fire({ worm = thrower, x = 100 * P, y = 120 * P, vx = 0, vy = 0 })
+  f = M.spawned[1]
+  run(60)
+  check("a mine is flicked up (SpX = TurnSide, SpY = -7) and it walks on",
+    mine.vy == -7 * P and mine.vx == P and not f.dead)
+  spec = setup(floor)
+  M.oil = { { id = 902, x = 200 * P, y = 191 * P } }
+  spec.on_fire({ worm = thrower, x = 100 * P, y = 120 * P, vx = 0, vy = 0 })
+  run(60)
+  check("it blows up on an oil drum", M.spawned[1].dead and #M.actor_booms == 1)
+  spec = setup(floor)
+  M.water = 150 * P
+  spec.on_fire({ worm = thrower, x = 100 * P, y = 120 * P, vx = 0, vy = 0 })
+  run(30)
+  M.water = nil
+  check("and in the water", M.spawned[1].dead and #M.actor_booms == 1)
+  -- At most ten walk: the eleventh makes the oldest vanish, without a bang.
+  spec = setup(floor)
+  for i = 1, 11 do
+    spec.on_fire({ worm = thrower, x = (100 + 20 * i) * P, y = 120 * P, vx = 0, vy = 0 })
+  end
+  run(2)
+  local walking = 0
+  for _, a in ipairs(M.spawned) do if not a.dead then walking = walking + 1 end end
+  check("at most ten walk; the oldest goes quietly", walking == 10 and M.spawned[1].dead and #M.actor_booms == 0,
+    walking)
+  M.gravity, M.solid = nil, nil
 end
 
 print("bowling ball strike: three balls from the sky, rolling on PX's physics")

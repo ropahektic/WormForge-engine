@@ -128,6 +128,17 @@ local PX_ART = {
     on_select = { cursor = true },
     on_click = function(ev) fires.bowling_strike(ev) end,
   },
+  { -- Ferret: PX's terrain-walking ferret (weapons/ferret.lua), thrown in
+    -- place of WA's Salvation Army.
+    weapon = "salvation_army",
+    wep = "weps/salvation_army.wep",
+    panel_icon = "sprites/ferret/icon.png",
+    worm_sprites = PX_POSTURE,
+    sprites = { "sprites/ferret/walk" },
+    sounds = { "sounds/ferret/walk.wav" },
+    params = { gpu_prefix = "sprites/ferret/" },
+    on_fire = function(fire) fires.ferret(fire) end,
+  },
   { -- Lightning Strike: the PX strike is an effect, not WA's napalm plane.
     weapon = "napalm_strike",
     wep = "weps/napalm_strike.wep",

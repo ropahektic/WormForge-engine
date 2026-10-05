@@ -949,7 +949,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 59);
+        assert_eq!(applied.len(), 60);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         let skip_go = claim(StockWeapon::SkipGo);
         assert_eq!(skip_go.params.name.as_deref(), Some("Skip Go/Surrender"));
@@ -965,12 +965,15 @@ wa.weapons.replace({
         let reinforcement = claim(StockWeapon::NuclearTest);
         assert_eq!(reinforcement.params.name.as_deref(), Some("Reinforcement"));
         assert!(reinforcement.params.on_click_id != 0, "a click claim");
+        let ferret = claim(StockWeapon::SalvationArmy);
+        assert_eq!(ferret.params.name.as_deref(), Some("Ferret"));
+        assert!(ferret.params.on_fire_id != 0, "thrown through on_fire");
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());
         assert!(javelin.params.on_explode_id != 0);
         let held: Vec<_> = applied.iter().filter(|c| c.params.hold.is_some()).collect();
-        assert_eq!(held.len(), 9, "each PX hold is a replacement claim");
+        assert_eq!(held.len(), 10, "each PX hold is a replacement claim");
         let rifle = claim(StockWeapon::Handgun).params.hold.as_ref().unwrap();
         assert_eq!(rifle.sheet, "sprites/px_hold/sniper_rifle");
         assert!(rifle.hand.is_none());
