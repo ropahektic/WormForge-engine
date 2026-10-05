@@ -1702,7 +1702,10 @@ unsafe fn read_grid() -> Option<GridView> {
         w = read_i32(world, GAME_WORLD_MAP_W);
         h = read_i32(world, GAME_WORLD_MAP_H);
     }
-    if bits.is_null() || stride == 0 || w <= 0 || h <= 0 || w > 4096 || h > 4096 {
+    // A sanity bound only: WA's maps can be well over 4096 pixels tall, and
+    // with a 4096 bound such a map read as no map at all (wa.world.size,
+    // trace, land.solid and the actor cull all saw nothing).
+    if bits.is_null() || stride == 0 || w <= 0 || h <= 0 || w > 0x8000 || h > 0x8000 {
         return None;
     }
     // +0x914 is the walk mask (FUN_0057cc90). +0x910/+0x91C are paint. +0x0D0 is plot scratch.
