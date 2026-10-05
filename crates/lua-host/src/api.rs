@@ -899,6 +899,17 @@ fn table_to_claim(
             return Err(mlua::Error::external(format!("fire_repeat is 1 to 20 shots at once; got {n}")))
         }
     };
+    let stock_fire_choice = match spec.get::<Option<Table>>("stock_fire_choice")? {
+        Some(choice) => {
+            let held: String = choice.get("held")?;
+            if held != "ctrl" {
+                return Err(mlua::Error::external("stock_fire_choice.held must be \"ctrl\""));
+            }
+            let alternate: String = choice.get("alternate")?;
+            Some(parse_stock_weapon(&alternate).map_err(mlua::Error::external)?)
+        }
+        None => None,
+    };
     // `wep = "hellish.wep"`: a Project X weapon file whose firing the slot
     // takes (weapons::wep). Its name is the default name.
     if copy_from.is_some() && spec.contains_key("wep")? {
@@ -1430,6 +1441,7 @@ fn table_to_claim(
             cursor_on_select,
             eat_fire,
             fire_repeat,
+            stock_fire_choice,
             on_select_id,
             spawn,
             on_click_id,
@@ -1834,6 +1846,36 @@ mod tests {
             logs: Rc::new(RefCell::new(Vec::new())),
             debug_worm_state: false,
         }
+    }
+
+    #[test]
+    fn stock_fire_choice_requires_ctrl_and_a_stock_alternate() {
+        let lua = Lua::new();
+        let spec: Table = lua
+            .load(r#"{ weapon = "skip_go", stock_fire_choice = { held = "ctrl", alternate = "surrender" } }"#)
+            .eval()
+            .unwrap();
+        let claim = table_to_claim(
+            &lua,
+            "test",
+            std::path::Path::new("."),
+            StockWeapon::SkipGo,
+            spec,
+        )
+        .unwrap();
+        assert_eq!(claim.params.stock_fire_choice, Some(StockWeapon::Surrender));
+        let bad: Table = lua
+            .load(r#"{ weapon = "skip_go", stock_fire_choice = { held = "space", alternate = "surrender" } }"#)
+            .eval()
+            .unwrap();
+        assert!(table_to_claim(
+            &lua,
+            "test",
+            std::path::Path::new("."),
+            StockWeapon::SkipGo,
+            bad,
+        )
+        .is_err());
     }
 
     /// Gap 7: hooks that no weapon dispatcher drives (`hud` here, and the same

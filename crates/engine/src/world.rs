@@ -809,7 +809,7 @@ pub fn clear_input_latch() {
     POINTER_SYNC_UNTIL.store(0, Ordering::Relaxed);
 }
 
-/// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint (shift), 64 Q, 128 Space (shoot).
+/// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint (shift), 64 Q, 128 Space, 4096 Ctrl.
 pub fn keys() -> u32 {
     keys_latched()
 }
@@ -913,6 +913,9 @@ fn poll_keys() -> u32 {
     }
     if key_down(0x20) {
         m |= 128;
+    }
+    if key_down(0x11) {
+        m |= game::sync_input::CTRL;
     }
     // The digit held, top row or keypad (the lowest, if several): 1..10 for
     // 0..9 in bits 8..11 (game::sync_input::DIGIT_SHIFT).
