@@ -1435,6 +1435,22 @@ do
   check("placed at its worm, it rises clear of the ground and walks off, sparing it",
     not f.dead and #M.actor_booms == 0 and f.x > 300 * P and math.abs(f.y - landed_y) <= 3 * P,
     (f.x / P) .. "," .. (f.y / P))
+  -- Placed beside another worm, 15 pixels off: it only goes off once it
+  -- walks into it, not on the spot.
+  spec = setup(floor)
+  thrower = worm(16)
+  thrower.facing, thrower.turn = 1, true
+  thrower.x, thrower.y = 100 * P, 192 * P
+  local neighbour = worm(17)
+  neighbour.x, neighbour.y, neighbour.vx, neighbour.vy = 115 * P, 192 * P, 0, 0
+  spec.on_fire({ worm = thrower, x = 100 * P, y = 192 * P, vx = 0, vy = 0 })
+  f = M.spawned[1]
+  run(1)
+  local first = f.dead
+  run(60)
+  check("placed beside a worm, it doesn't go off at once, but on walking into it",
+    not first and f.dead and neighbour.vy == -5 * P, tostring(first))
+  check("and says why", logs[#logs] and logs[#logs]:find("Ferret explodes on a worm") ~= nil, logs[#logs])
   -- A cliff: the floor at 200 up to x = 400, at 300 beyond.
   spec = setup(function(x, y) return y >= (x < 400 * P and 200 or 300) * P end)
   spec.on_fire({ worm = thrower, x = 300 * P, y = 120 * P, vx = 0, vy = 0 })
