@@ -438,7 +438,15 @@ local function new_match(opts)
     },
     mines = { all = function() return M.mines end },
     missiles = { all = function() return M.missiles end },
-    crates = { all = function() return M.crates end },
+    crates = {
+      all = function() return M.crates end,
+      -- As the engine's: WA's crate, its contents WA's pick; recorded.
+      spawn = function(spec)
+        M.crate_spawns = M.crate_spawns or {}
+        M.crate_spawns[#M.crate_spawns + 1] = spec
+        return { kind = "crate", x = spec.x, y = spec.y }
+      end,
+    },
     oil = { all = function() return M.oil end },
     graves = { all = function() return M.graves end },
     inventory = inventory_api(),
@@ -752,7 +760,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("61 slots replaced, each once", #replaced == 61 and not dupes, tostring(#replaced))
+  check("62 slots replaced, each once", #replaced == 62 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -774,7 +782,7 @@ do
   for slot, spec in pairs(by_slot) do
     if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi"
       or slot == "prod" or slot == "armageddon" or slot == "petrol_bomb" or slot == "nuclear_test"
-      or slot == "sheep_strike" or slot == "salvation_army" or slot == "baseball_bat" then
+      or slot == "sheep_strike" or slot == "salvation_army" or slot == "baseball_bat" or slot == "donkey" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
@@ -1872,6 +1880,56 @@ do
   run(5)
   check("and it flies off", blasted.x < x_before)
   M.gravity, M.solid = nil, nil
+end
+
+print("crate strike: PX's three parachute crates over the click")
+do
+  new_match()
+  local P = 0x10000
+  local spec
+  for _, r in ipairs(replaced) do
+    if r.weapon == "donkey" then spec = r end
+  end
+  check("the strike takes the scheme's record, its icon and a click", spec
+    and spec.wep == "weps/donkey.wep" and spec.panel_icon == "sprites/crate_strike/icon.png"
+    and type(spec.on_click) == "function" and spec.on_select and spec.on_select.cursor)
+  M.crate_spawns = {}
+  spec.on_click({ worm = worm(16), x = 300 * P + 0x8000, y = 400 * P })
+  local c = M.crate_spawns
+  local kinds = { weapon = true, utility = true, health = true }
+  check("three crates on parachutes, 50 above the map, at the click's pixel and 50 either side",
+    #c == 3 and c[1].x == 300 * P and c[2].x == 250 * P and c[3].x == 350 * P
+    and c[1].y == -50 * P and c[2].y == -50 * P and c[3].y == -50 * P
+    and c[1].drop == "chute" and c[2].drop == "chute" and c[3].drop == "chute",
+    #c == 3 and (c[1].x / P .. "," .. c[2].x / P .. "," .. c[3].x / P) or tostring(#c))
+  check("each a weapon, utility or health crate, health 20-40, 40-60, 60-80 by place",
+    kinds[c[1].kind] and kinds[c[2].kind] and kinds[c[3].kind]
+    and c[1].health >= 20 and c[1].health <= 40 and c[2].health >= 40 and c[2].health <= 60
+    and c[3].health >= 60 and c[3].health <= 80)
+  local seen = {}
+  for _ = 1, 20 do
+    M.crate_spawns = {}
+    spec.on_click({ worm = worm(16), x = 300 * P, y = 400 * P })
+    for _, s in ipairs(M.crate_spawns) do seen[s.kind] = true end
+  end
+  check("all three kinds come up", seen.weapon and seen.utility and seen.health)
+  -- A match whose crates hold no weapon: the engine refuses one.
+  local spawn = wa.crates.spawn
+  wa.crates.spawn = function(spec)
+    if spec.kind == "weapon" then error("wa.crates.spawn: this match's crates hold no weapon") end
+    return spawn(spec)
+  end
+  local healths = 0
+  for _ = 1, 20 do
+    M.crate_spawns = {}
+    spec.on_click({ worm = worm(16), x = 300 * P, y = 400 * P })
+    if #M.crate_spawns ~= 3 then healths = -1000 end
+    for _, s in ipairs(M.crate_spawns) do
+      if s.kind == "weapon" then healths = -1000 elseif s.kind == "health" then healths = healths + 1 end
+    end
+  end
+  wa.crates.spawn = spawn
+  check("a refused weapon crate drops as a health crate, still three", healths > 0)
 end
 
 print("chilli bomb: five more Chillis burst out")
