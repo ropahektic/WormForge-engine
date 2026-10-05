@@ -91,6 +91,10 @@ local LIFT = 0x8000           -- half a pixel, 16.16
 local BALL_DEPTH = 0x000E0000
 local GLOW_DEPTH, SHEEN_DEPTH, SPARK_DEPTH = BALL_DEPTH + 1, BALL_DEPTH - 1, BALL_DEPTH - 2
 local P = 0x10000
+-- WA keeps positions in 16.16, so it can place nothing past +-32767 px; a
+-- ball flung that far off the map (it flies on, WA drawing its arrow at the
+-- edge) is gone once its next move would leave that range.
+local EDGE = 32000 * P
 
 -- What the ball rolls on: PX's DefaultColGroup, and without worms when fast
 -- (NoWormsColGroup).
@@ -155,7 +159,13 @@ local function think(b)
   local with = speed > FAST and SOLID_FAST or SOLID
   local x, y = b.x, b.y
   local dx, dy = trunc(vx2 * P), trunc(vy2 * P)
+  if math.abs(x + dx) > EDGE or math.abs(y + dy) > EDGE then
+    b.gone = true
+    return 0
+  end
   local function trace_from(sx, sy, k)
+    -- Eight moves backwards may not fit where one forward does: no trace.
+    if math.abs(sx + k * dx) > EDGE or math.abs(sy + k * dy) > EDGE then return nil end
     return wa.world.trace({
       x0 = sx, y0 = sy, x1 = sx + k * dx, y1 = sy + k * dy, radius = RADIUS, with = with,
     })
@@ -422,6 +432,11 @@ local function spawn_ball(owner, x, y, vx, vy)
         if b.zapped then electrified_frame(b) end
         spin(b)
         local speed = think(b)
+        if b.gone then
+          shared.bowling_balls[a.id] = nil
+          a:despawn()
+          return
+        end
         if speed > PUSH_SPEED then push_balls(a.id, b, speed) end
         if speed > FAST then hit_others(a, b, speed) end
         a.x, a.y, a.vx, a.vy = b.x, b.y + SPRITE_DROP * P, 0, 0
