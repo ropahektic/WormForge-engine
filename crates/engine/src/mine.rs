@@ -163,14 +163,18 @@ fn live_tune(this: *mut u8) -> Option<MineTune> {
 }
 
 pub(crate) fn slot_from_fire_params(this: *mut u8, fire_params: *const i32) -> Option<usize> {
-    if this.is_null() || fire_params.is_null() {
+    if this.is_null() {
+        return None;
+    }
+    slot_in_world(unsafe { read_i32(this, game::offsets::ENT_WORLD) } as *mut u8, fire_params)
+}
+
+/// The slot whose weapon entry `fire_params` points into, in `world`'s table.
+pub(crate) fn slot_in_world(world: *mut u8, fire_params: *const i32) -> Option<usize> {
+    if world.is_null() || fire_params.is_null() {
         return None;
     }
     unsafe {
-        let world = read_i32(this, game::offsets::ENT_WORLD) as *mut u8;
-        if world.is_null() {
-            return None;
-        }
         let table = *(world.add(GAME_WORLD_WEAPON_TABLE) as *const usize);
         if table == 0 {
             return None;
