@@ -494,11 +494,24 @@ local function new_match(opts)
         local on, hit = spec.on, nil
         if type(on) == "table" then on, hit = spec.on.frame, spec.on.hit end
         local a = { id = M.next_actor_id, sprite = spec.sprite, x = spec.x, y = spec.y, dead = false,
-                    explode = spec.explode, on = on, hit = hit, owner = spec.owner, as_object = spec.as_object }
+                    explode = spec.explode, on = on, hit = hit, owner = spec.owner, as_object = spec.as_object,
+                    shape = spec.shape }
         function a:gfx(g)
           self.angle, self.scale, self.tint, self.blend, self.depth = g.angle, g.scale, g.tint, g.blend, g.depth
         end
         function a:frame(i) self.shown = i end
+        -- As the engine's a:fits: here a 3-pixel shape against M.solid.
+        function a:fits(x, y)
+          if not M.solid then return true end
+          if M.solid(x, y) then return false end
+          for k = 0, 7 do
+            local t = k * math.pi / 4
+            if M.solid(x + math.floor(3 * math.cos(t) * 0x10000), y + math.floor(3 * math.sin(t) * 0x10000)) then
+              return false
+            end
+          end
+          return true
+        end
         function a:despawn() self.dead = true end
         -- a.explode is the spawn's explode spec and a:explode(opts) the
         -- method, as on the engine's actor: a callable table.
@@ -1413,8 +1426,8 @@ do
   local f = M.spawned[1]
   run(40)
   local landed_y = f.y
-  check("it falls to the floor and stands on it, its circle above the land",
-    landed_y > 180 * P and landed_y < 190 * P, landed_y / P)
+  check("it falls to the floor and stands on it with WA's missile shape (the Skunk's), its body drawn above",
+    f.shape == "missile" and landed_y > 180 * P and landed_y < 190 * P, landed_y / P)
   check("a walking sound once it lands", #M.sounds > 0 and M.sounds[#M.sounds] == "sounds/ferret/walk.wav")
   local x0 = f.x
   run(30)
