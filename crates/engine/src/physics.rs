@@ -1021,6 +1021,16 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
     }
+    // No instant replays under WormForge. A replay rebuilds every entity
+    // from WA's saved state, which knows nothing of Lua actors or pack state:
+    // the rebuilt world root came back with zeroed camera-shake fields and
+    // divided by zero (0x5519A0). WA raises the wish only inside root
+    // messages, so dropping it here, before 0x532C48 reads it, stops every
+    // replay; online play, which has them off, never sets it. Not covered:
+    // the replay viewer's rewind key (0x52CDA5 -> 0x534540) restores saved
+    // state the same way. Saving and restoring pack state alongside WA's
+    // would let both work again; worth a look some day.
+    unsafe { crate::world::cancel_action_replay(this) };
     if msg == MSG_FRAME_FINISH {
         crate::actor::flush_deferred();
         crate::contact::flush();
