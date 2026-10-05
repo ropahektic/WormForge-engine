@@ -1078,6 +1078,23 @@ do
   spec.on_fire({ worm = w, x = 114 * P, y = w.y, vx = 12 * P, vy = 0 })
   check("a clear muzzle keeps WA's original launch point",
     #M.launched == 2 and M.launched[2].x == 114 * P)
+  -- A thin wall (105-108) between the worm and a clear muzzle beyond it:
+  -- the worm can't see the muzzle, so she starts on the worm's side.
+  M.solid = function(x) return x >= 105 * P and x < 109 * P end
+  M.trace_hit = function(x0, _, x1)
+    local wall = 107 * P
+    if (x0 - wall) * (x1 - wall) < 0 then return { hit = true, x = wall, y = w.y } end
+  end
+  spec.on_fire({ worm = w, x = 114 * P, y = w.y, vx = 12 * P, vy = 0 })
+  check("a muzzle past a thin wall moves her back to the worm's side",
+    #M.launched == 3 and M.launched[3].x < 105 * P and M.launched[3].x > w.x - 40 * P,
+    #M.launched == 3 and M.launched[3].x / P or #M.launched)
+  M.trace_hit = nil
+  M.solid = function() return true end
+  spec.on_fire({ worm = w, x = 86 * P, y = w.y, vx = -12 * P, vy = 0 })
+  check("with no clear point within 40 pixels she starts at the worm",
+    #M.launched == 4 and M.launched[4].x == w.x and M.launched[4].y == w.y)
+  M.solid = nil
 end
 
 print("chilli bomb: five more Chillis burst out")
