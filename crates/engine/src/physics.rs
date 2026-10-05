@@ -483,6 +483,32 @@ pub fn fits(handle: u32, x: i32, y: i32) -> bool {
     }
 }
 
+/// `a:fits(x, y)`: WA's own test (0x4FB9D0) of the actor's collision shape
+/// at (x, y) against the land alone: true when it touches none. With
+/// `shape = "missile"` that is the Skunk's shape.
+pub fn actor_fits(handle: u32, x: i32, y: i32) -> bool {
+    if handle == 0 {
+        return true;
+    }
+    let this = handle as *mut u8;
+    unsafe {
+        let world = read_i32(this, ENT_WORLD) as *mut u8;
+        if world.is_null() {
+            return true;
+        }
+        let cm = read_i32(world, GAME_WORLD_COLLISION_MANAGER) as *mut u8;
+        let helper = read_i32(this, ENT_HELPER);
+        let Some(addr) = crate::wa::try_address("ENTITY_COLLIDES_AT") else {
+            return true;
+        };
+        if cm.is_null() || helper == 0 {
+            return true;
+        }
+        let f: CollidesAtFn = std::mem::transmute(addr as usize);
+        f(cm, this, x, y, helper, 1 << game::offsets::COLLISION_LAYER_LAND) == 0
+    }
+}
+
 /// `worm:jetpack_steer(on)`: while WA's jet pack runs (0x78), the engine
 /// consumes the worm's move keys after the pack's hooks read them, so WA
 /// neither thrusts nor burns fuel and the pack flies the worm with its

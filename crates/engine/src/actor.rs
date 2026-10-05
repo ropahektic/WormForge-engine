@@ -179,6 +179,7 @@ pub fn install() -> Result<(), String> {
         release: crate::physics::release,
         is_taken: crate::physics::taken,
         fits: crate::physics::fits,
+        actor_fits: crate::physics::actor_fits,
         jetpack_steer: crate::physics::jetpack_steer,
         look: native_look,
         keys: crate::world::keys,
@@ -865,7 +866,11 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     let parent = physics_parent(owner).unwrap_or(owner);
     let ctor: WorldCtorFn = std::mem::transmute(crate::wa::address("WORLD_ENTITY_CTOR") as usize);
     let layer = if spawn.as_object { COLLISION_LAYER_OBJECT } else { COLLISION_LAYER_MISSILE };
-    ctor(this, parent, layer, 0);
+    // The constructor's last argument picks the collision shape from the
+    // world's table (0x4FEED5); WA's missile constructor passes its record's
+    // first fire param, 2 for the Sheep's and Skunk's.
+    let shape = if spawn.missile_shape { COLLISION_SHAPE_MISSILE } else { 0 };
+    ctor(this, parent, layer, shape);
 
     let vt = VTABLE.get().ok_or("vtable missing")?;
     *(this as *mut u32) = vt.as_ptr() as u32;
