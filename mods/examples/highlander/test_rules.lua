@@ -288,6 +288,13 @@ local function new_match(opts)
       -- as the engine's; a hit on one takes its normal from its centre.
       trace = function(q)
         local P = 0x10000
+        -- The engine takes 16.16 i32s: a Lua integer past them is an error.
+        for _, k in ipairs({ "x0", "y0", "x1", "y1" }) do
+          local v = q[k]
+          if v and (v > 0x7FFFFFFF or v < -0x80000000) then
+            error("error converting Lua integer to i32 (out of range)")
+          end
+        end
         local r = q.radius or 0
         local RIM = {}
         for k = 0, 47 do
@@ -1471,6 +1478,17 @@ do
   run(30)
   check("another ball rolling into it wakes it and pushes it on", sleeper.x > x0 + 4 * P,
     (sleeper.x - x0) / P .. " " .. roller.x / P)
+  -- Flung off the map faster than gravity brings it down: it flies on (WA
+  -- draws its arrow at the edge) until its next move would leave the range
+  -- WA keeps positions in, and then it is gone, as in the water.
+  local flung_a, flung = rolling(1000, 3000, -40)
+  local errors = 0
+  for _ = 1, 20 do
+    local ok = pcall(run, 1)
+    if not ok then errors = errors + 1 end
+  end
+  check("a ball flung far off the map flies on while WA can place it, then is removed",
+    errors == 0 and flung_a.dead and flung.x > 30000 * P and flung.x <= 32767 * P, errors .. " " .. flung.x / P)
   -- The Lightning Strike's overcharge.
   local zapped_actor, zapped = rolling(400, 0)
   local _, far = shared.spawn_bowling_ball(worm(16), 600 * P, 183 * P, 0, 0)
