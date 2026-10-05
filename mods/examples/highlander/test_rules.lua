@@ -1265,6 +1265,19 @@ do
     f.x > x0 + 120 * P and math.abs(f.y - landed_y) <= 3 * P, (f.x - x0) / P)
   check("upright on the floor, animated", f.angle ~= nil and (f.angle < 1 or f.angle > 359) and f.shown ~= nil,
     tostring(f.angle))
+  -- As WA places it: at its worm standing on the floor, no speed. Its
+  -- circle starts in the ground; it must rise clear and walk off, not turn
+  -- on the spot until the grace is over and blow up on its thrower.
+  spec = setup(floor)
+  thrower = worm(16)
+  thrower.facing, thrower.turn = 1, true
+  thrower.x, thrower.y = 100 * P, 192 * P
+  spec.on_fire({ worm = thrower, x = 100 * P, y = 192 * P, vx = 0, vy = 0 })
+  f = M.spawned[1]
+  run(120)
+  check("placed at its worm, it rises clear of the ground and walks off, sparing it",
+    not f.dead and #M.actor_booms == 0 and f.x > 300 * P and math.abs(f.y - landed_y) <= 3 * P,
+    (f.x / P) .. "," .. (f.y / P))
   -- A cliff: the floor at 200 up to x = 400, at 300 beyond.
   spec = setup(function(x, y) return y >= (x < 400 * P and 200 or 300) * P end)
   spec.on_fire({ worm = thrower, x = 300 * P, y = 120 * P, vx = 0, vy = 0 })
