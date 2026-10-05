@@ -2954,6 +2954,44 @@ wa.weapons.replace({
         assert_eq!(OWNER.with(|c| c.get()), 0x22);
     }
 
+    /// A missile can burst while another pack launches it (started inside
+    /// the land): its on_explode runs as its own pack inside that call, and
+    /// the launching pack must be the running one again after it.
+    #[test]
+    fn a_weapon_step_leaves_the_callers_pack_running() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-nested-step");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("n"),
+            "n.burst",
+            r#"
+id = "n.burst"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["grenade"]
+"#,
+            r#"
+wa.weapons.replace({ weapon = "grenade", on_explode = function() burst_ran_as = wa._mod end })
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        let id = scripts.resolved.applied[0].params.on_explode_id;
+        assert!(id != 0);
+        scripts.lua.load(r#"wa._mod = "n.launcher""#).exec().unwrap();
+        park_lua(scripts.lua);
+        crate::weapon_emit("_explodes", id, "on_explode", 0, 5, 0, 0, 0).unwrap();
+        let (ran_as, after): (String, String) = PARKED_LUA.with(|slot| {
+            let guard = slot.borrow();
+            let lua = guard.as_ref().unwrap();
+            let wa: mlua::Table = lua.globals().get("wa").unwrap();
+            (lua.globals().get("burst_ran_as").unwrap(), wa.get("_mod").unwrap())
+        });
+        assert_eq!(ran_as, "n.burst");
+        assert_eq!(after, "n.launcher");
+    }
+
     #[test]
     fn a_pack_turns_on_the_perf_counter_and_profiler() {
         let _host = lock_host();
