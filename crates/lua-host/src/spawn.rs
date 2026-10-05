@@ -56,6 +56,15 @@ pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
     spawn.persist = get_bool(s, "persist")?.unwrap_or(explode_on && auto && spawn.visible);
     spawn.drown = get_bool(s, "drown")?.unwrap_or(auto && spawn.visible);
     spawn.as_object = get_bool(s, "as_object")?.unwrap_or(false);
+    spawn.missile_shape = match get_string(s, "shape")?.as_deref() {
+        None | Some("worm") => false,
+        Some("missile") => true,
+        Some(other) => {
+            return Err(mlua::Error::external(format!(
+                "spawn: shape is \"missile\" or \"worm\", got {other:?}"
+            )))
+        }
+    };
     spawn.mask = get_bool(s, "mask")?.unwrap_or(false);
     let mask_default = spawn.mask;
     spawn.mask_worms = get_bool(s, "mask_worms")?.unwrap_or(mask_default);
