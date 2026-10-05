@@ -12,7 +12,7 @@ use lua_host::{mods_root_from, run_match};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
-use weapons::{apply_params, PanelIcon, discover_mods, filter_requirements, modset_fingerprint, ResolveResult};
+use weapons::{apply_params, PanelIcon, StockWeapon, discover_mods, filter_requirements, modset_fingerprint, ResolveResult};
 
 static NAMES: Mutex<Vec<CString>> = Mutex::new(Vec::new());
 /// Panel slots `copy_panel_icon` overwrote: (world, slot, original hi, original
@@ -376,6 +376,19 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             ));
         }
         apply_params(&mut entry, &claim.params);
+        if let Some(src) = claim.params.stock_fire_choice {
+            let mut alternate = entry;
+            alternate.copy_fire_from(&snapshot.entries[src.index()]);
+            actor::claim_stock_fire_choice(idx, alternate);
+            if idx == StockWeapon::SkipGo.index() && src == StockWeapon::Surrender {
+                crate::worm_sprite::claim_skip_go_surrender_pose();
+            }
+            log_line(&format!(
+                "{} slot {idx} fires as pristine {} while Ctrl is held",
+                claim.mod_id,
+                src.name()
+            ));
+        }
         match &claim.params.panel_icon {
             Some(PanelIcon::Stock(icon)) => {
                 unsafe {

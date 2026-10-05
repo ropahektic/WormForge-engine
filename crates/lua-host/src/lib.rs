@@ -734,8 +734,11 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 54);
+        assert_eq!(applied.len(), 55);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
+        let skip_go = claim(StockWeapon::SkipGo);
+        assert_eq!(skip_go.params.name.as_deref(), Some("Skip Go/Surrender"));
+        assert_eq!(skip_go.params.stock_fire_choice, Some(StockWeapon::Surrender));
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());

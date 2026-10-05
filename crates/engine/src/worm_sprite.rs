@@ -22,19 +22,56 @@
 use crate::{log_line, sprite};
 use game::{
     entity::read_i32,
-    offsets::{WORM_SELECTED_WEAPON, WORM_SLOPE_DIR, WORM_STATE},
+    offsets::{WORM_SELECTED_WEAPON, WORM_SLOPE_DIR, WORM_STATE, WORM_TURN_ACTIVE},
 };
 use std::{
     ffi::c_void,
     sync::{
         Mutex,
-        atomic::{AtomicPtr, Ordering},
+        atomic::{AtomicBool, AtomicPtr, Ordering},
     },
 };
+use weapons::StockWeapon;
 
 static ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_SPRITE_INFO: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_HOLD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+/// The combined Skip Go/Surrender claim can show stock Surrender's armed pose
+/// while Ctrl selects its alternate stock fire record.
+static SKIP_GO_SURRENDER_POSE: AtomicBool = AtomicBool::new(false);
+
+pub fn claim_skip_go_surrender_pose() {
+    SKIP_GO_SURRENDER_POSE.store(true, Ordering::Relaxed);
+}
+
+fn surrender_pose(sprite: u32) -> u32 {
+    if sprite & game::offsets::SPRITE_REVERSE != 0 {
+        return sprite;
+    }
+    let stock = (sprite & 0xffff) as i32;
+    let replacement = match stock {
+        391..=393 => 448 + stock - 391, // wskplnk* -> wsurlnk*: armed pose
+        263..=265 => 242 + stock - 263, // wskipgo* -> wsurndr*: fire pose
+        _ => return sprite,
+    };
+    (sprite & !0xffff) | replacement as u32
+}
+
+#[cfg(test)]
+mod surrender_pose_tests {
+    use super::surrender_pose;
+    use game::offsets::SPRITE_REVERSE;
+
+    #[test]
+    fn ctrl_pose_uses_surrender_art_and_preserves_sprite_flags() {
+        for (skip, surrender) in [(391, 448), (392, 449), (393, 450), (263, 242), (264, 243), (265, 244)] {
+            assert_eq!(surrender_pose(skip), surrender);
+            assert_eq!(surrender_pose(0x40000 | skip), 0x40000 | surrender);
+            assert_eq!(surrender_pose(SPRITE_REVERSE | skip), SPRITE_REVERSE | skip);
+        }
+        assert_eq!(surrender_pose(525), 525);
+    }
+}
 
 /// Placed weapons (fire type 2, method 2): WA picks what the worm holds from
 /// the flight sprite (+0x60), stock sprite -> held sheet (`Weapon__hold_sheet`,
@@ -349,6 +386,7 @@ unsafe extern "C" fn hold_sheet_hook() {
 }
 
 pub fn clear() {
+    SKIP_GO_SURRENDER_POSE.store(false, Ordering::Relaxed);
     if let Ok(mut held) = HELD.lock() {
         held.clear();
     }
@@ -546,6 +584,13 @@ unsafe extern "C" fn after_calc(
 
 unsafe fn after_calc_inner(worm: *mut u8, sprite_out: *mut u32, phase_out: *mut u32) {
     let selected = read_i32(worm, WORM_SELECTED_WEAPON) as usize;
+    if selected == StockWeapon::SkipGo.index()
+        && SKIP_GO_SURRENDER_POSE.load(Ordering::Relaxed)
+        && read_i32(worm, WORM_TURN_ACTIVE) != 0
+        && crate::world::keys() & game::sync_input::CTRL != 0
+    {
+        *sprite_out = surrender_pose(*sprite_out);
+    }
     let original = *sprite_out;
     let state = read_i32(worm, WORM_STATE);
     let last = last_slot(worm as usize);
