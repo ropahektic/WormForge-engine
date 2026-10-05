@@ -20,12 +20,12 @@ local MAX_ALIVE = 10        -- frt_maxfrtalw
 -- Not PX's: a Ferret goes off by itself 15 seconds after it was placed,
 -- if nothing set it off before (750 of WA's 50 frames a second).
 local FUSE = 15 * 50
--- PX draws the 64-pixel frame centred on the Ferret, its feet 16 below the
--- centre: the outline is traced with a circle that size, so they meet the land.
-local RADIUS = 15
--- What it runs into is a smaller matter: its body, about 8 pixels about its
--- centre. With the outline's circle it went off on worms and drums 21 and
--- 24 pixels away, a worm beside the one that placed it on its first frame.
+-- It touches the land with WA's missile shape, the Skunk's (shape =
+-- "missile", a:fits). PX draws its 64-pixel frame centred with the feet 16
+-- below the centre: the body is drawn this far from the traced point, away
+-- from the land, so the feet meet it.
+local LIFT = 13
+-- What it runs into is its body: 8 pixels about the body's centre.
 local BODY = 8
 local SCALE = 0.95          -- frt_sprscale
 local DEPTH = 0xE0000       -- in front of the terrain, as the Bowling Ball
@@ -55,16 +55,15 @@ local alive = {} -- the Ferrets walking, oldest first
 -- the surface.
 local MAX_RISE = 64
 
-local function land_at(x, y)
-  return (wa.world.collides({ x = x, y = y, radius = RADIUS }))
+local function land_at(f, x, y)
+  return not f.a:fits(x, y)
 end
 
-local function rise_clear(x, y)
+local function rise_clear(f)
   for _ = 1, MAX_RISE do
-    if not land_at(x, y) then return y end
-    y = y - P
+    if not land_at(f, f.x, f.y) then return end
+    f.y = f.y - P
   end
-  return y
 end
 
 local function move(f, dir)
@@ -87,7 +86,7 @@ local function trace(f)
       f.tracing, f.walking, f.boom, f.fails, f.why = false, false, true, 0, "a dead end"
       return
     end
-    if land_at(f.ax, f.ay) then
+    if land_at(f, f.ax, f.ay) then
       f.fails = 0
       if f.ax ~= f.px or f.ay ~= f.py then
         f.looking_bk = f.looking
@@ -103,8 +102,14 @@ local function trace(f)
   end
 end
 
--- frt_checkinteract, at a point of its way.
+-- Its body's centre, LIFT from the traced point along the land's normal.
+local function body(f, x, y)
+  return x + math.floor(f.ux * LIFT * P), y + math.floor(f.uy * LIFT * P)
+end
+
+-- frt_checkinteract, at a point of its way: what its body touches.
 local function interact(f, x, y)
+  x, y = body(f, x, y)
   local _, obj = wa.world.collides({ x = x, y = y, radius = BODY, with = { "worms", "mines", "oil" } })
   if obj then
     if obj.kind == "worm" then
@@ -123,12 +128,17 @@ local function interact(f, x, y)
   end
 end
 
--- frt_calc_rotation: every few steps, the sprite turns to the way walked
--- since its last turn. Looks only.
+-- frt_calc_rotation: every few steps, the Ferret turns to the way walked
+-- since its last turn, its up the land's normal (from the steps, one square
+-- root: the same on every machine; the angle is only drawn).
 local function turn(f, x, y)
   f.steps = f.steps + 1
   if f.steps % TURN_EVERY ~= 0 then return end
   local dx, dy = (x - f.rx) / P, (y - f.ry) / P
+  local len = math.sqrt(dx * dx + dy * dy)
+  if len > 0 then
+    f.ux, f.uy = f.side * dy / len, -f.side * dx / len
+  end
   f.angle = math.atan(dx, -dy) - math.pi / 2 * f.side
   f.rx, f.ry = x, y
 end
@@ -151,15 +161,18 @@ local function walk(f)
   return true
 end
 
--- Before it lands, it flies as thrown, falling, and stops where it touches.
+-- Before it lands, it falls (or flies as thrown), a pixel at a time, and
+-- stops where its shape would touch the land.
 local function fly(f)
   f.vy = f.vy + wa.world.gravity()
-  local hit = wa.world.trace({ x0 = f.x, y0 = f.y, x1 = f.x + f.vx, y1 = f.y + f.vy, radius = RADIUS })
-  if hit and (hit.hit or hit.starts_solid) then
-    if hit.hit then f.x, f.y = hit.x, hit.y end
-    f.vx, f.vy = 0, 0
-  else
-    f.x, f.y = f.x + f.vx, f.y + f.vy
+  local n = math.min(64, math.max(math.abs(f.vx), math.abs(f.vy)) // P + 1)
+  local sx, sy = f.vx // n, f.vy // n
+  for _ = 1, n do
+    if land_at(f, f.x + sx, f.y + sy) then
+      f.vx, f.vy = 0, 0
+      return
+    end
+    f.x, f.y = f.x + sx, f.y + sy
   end
 end
 
@@ -167,7 +180,7 @@ end
 -- starts there.
 local function try_plant(f, a)
   local x, y = f.x, f.y + STEP
-  if land_at(x, y) then
+  if land_at(f, x, y) then
     f.planted, f.tracing = true, true
     f.px, f.py, f.ax, f.ay, f.lx, f.ly, f.rx, f.ry = x, y, x, y, x, y, x, y
     wa.sound.play(a, SOUND)
@@ -215,7 +228,9 @@ local function frame(f, a)
     return
   end
   f.grace = f.grace - 1
-  a.x, a.y, a.vx, a.vy = f.x, f.y, 0, 0
+  local bx, by = f.x, f.y
+  if f.planted then bx, by = body(f, f.x, f.y) end
+  a.x, a.y, a.vx, a.vy = bx, by, 0, 0
   a:frame((f.steps // 2) % FRAMES)
   a:gfx({ angle = math.deg(f.angle) % 360, depth = DEPTH, scale = SCALE })
 end
@@ -228,7 +243,7 @@ fires.ferret = function(fire)
     oldest.gone = true
   end
   local f = {
-    x = fire.x, y = rise_clear(fire.x, fire.y), vx = fire.vx, vy = fire.vy,
+    x = fire.x, y = fire.y, vx = fire.vx, vy = fire.vy, ux = 0, uy = -1,
     side = (worm.facing or 1) < 0 and -1 or 1,
     looking = DOWN, looking_bk = DOWN, ops = MAX_OPS, fails = 0,
     outline = {}, next = 1, steps = 0, angle = 0, grace = GRACE, age = 0,
@@ -237,8 +252,10 @@ fires.ferret = function(fire)
   alive[#alive + 1] = f
   local a = wa.actors.spawn({
     sprite = WALK, x = f.x, y = f.y, gravity = false, collide = false, owner = worm,
-    on = function(actor) frame(f, actor) end,
+    shape = "missile", on = function(actor) frame(f, actor) end,
   })
+  f.a = a
+  rise_clear(f)
   a.facing = f.side
   a:frame(0)
 end
