@@ -1833,6 +1833,11 @@ pub fn retreat_ms() -> i32 {
     }
 }
 
+/// The match's world root, null outside a match.
+pub(crate) fn session_root() -> *mut u8 {
+    unsafe { session_root_ptr() }
+}
+
 unsafe fn session_root_ptr() -> *mut u8 {
     let slot = crate::wa::address("G_GAME_SESSION") as *const *mut u8;
     if slot.is_null() {
@@ -1849,7 +1854,7 @@ unsafe fn session_root_ptr() -> *mut u8 {
     *(runtime.add(GAME_RUNTIME_WORLD_ROOT) as *const *mut u8)
 }
 
-unsafe fn session_world_ptr() -> *mut u8 {
+pub(crate) unsafe fn session_world_ptr() -> *mut u8 {
     let root = session_root_ptr();
     if root.is_null() {
         return std::ptr::null_mut();

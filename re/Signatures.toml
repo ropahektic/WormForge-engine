@@ -597,6 +597,20 @@ derive = "match"
 target_section = ".text"
 
 [[locator]]
+# CrateEntity::Constructor: stdcall (this, parent, desc, drop), RET 0x10,
+# returns this. desc is 0xE5 dwords (PX's CCrateDesc), copied to +0x110;
+# drop is PX's EDropType (0 none, 1 teleport, 2 chute). WA's own callers
+# allocate 0x4DC bytes and zero 0x4BC first: the turn's crate drop
+# (0x561AD2, chute) and the dead worm's crate (0x5137E5, teleport).
+name = "CRATE_ENTITY_CTOR"
+required = false
+reference_va = 0x00502490
+section = ".text"
+pattern = "6A FF 64 A1 00 00 00 00 68 ?? ?? ?? ?? 50 8B 44 24 14 64 89 25 00 00 00 00 53 8B 5C 24 14 55 8B 6C 24 20 56 57 6A 06 6A 0B 50 53"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
 name = "WORM_ENTITY_CTOR"
 reference_va = 0x0050bfb0
 section = ".text"

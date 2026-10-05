@@ -18,7 +18,7 @@ pub use bundles::ComponentPlan;
 pub use perf::{perf_flags, take_lua_time, PerfFlags};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
-    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, CrateArgs, LaunchArgs, SpawnArgs,
 };
 pub use dispatch::{
     contact, Contact,
@@ -555,6 +555,44 @@ wa.weapons.replace({
         assert!(lua.load(set).exec().is_err(), "outside a simulation callback");
         sim_context::with_sim(|| lua.load(set).exec().unwrap());
         SET.with(|v| assert_eq!(v.borrow().as_slice(), [game::offsets::WORM_STATE_STANDING]));
+    }
+
+    #[test]
+    fn crates_spawn_reaches_native_only_during_simulation() {
+        let _guard = lock_host();
+        thread_local! {
+            static MADE: std::cell::RefCell<Vec<actor::CrateArgs>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            spawn_crate: |a| { MADE.with(|l| l.borrow_mut().push(*a)); Ok(0xC4A7E) },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let one = "return wa.crates.spawn{ x = 0x100000, y = -0x320000, kind = 'weapon' }";
+        assert!(lua.load(one).exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            let c: mlua::AnyUserData = lua.load(one).eval().unwrap();
+            assert!(c.is::<actor::WorldHandle>(), "a crate as wa.crates.all() gives one");
+            lua.load("wa.crates.spawn{ x = 1, y = 2, kind = 'health', health = 60, drop = 'teleport' }; \
+                      wa.crates.spawn{ x = 3, y = 4, kind = 'utility', health = 99, drop = 'none' }")
+                .exec()
+                .unwrap();
+            let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
+            assert!(err("wa.crates.spawn{ x = 0, y = 0 }").contains("kind"));
+            assert!(err("wa.crates.spawn{ x = 0, kind = 'weapon' }").contains("needs y"));
+            assert!(err("wa.crates.spawn{ x = 0, y = 0, kind = 'health', health = 0 }").contains("health"));
+            assert!(err("wa.crates.spawn{ x = 0, y = 0, kind = 'weapon', drop = 'cannon' }").contains("drop"));
+        });
+        MADE.with(|l| assert_eq!(
+            l.borrow().as_slice(),
+            &[
+                actor::CrateArgs { x: 0x100000, y: -0x320000, kind: 1, health: 0, drop: 2 },
+                actor::CrateArgs { x: 1, y: 2, kind: 2, health: 60, drop: 1 },
+                actor::CrateArgs { x: 3, y: 4, kind: 4, health: 0, drop: 0 },
+            ],
+            "WA's kinds, health for a health crate only, a parachute by default"
+        ));
     }
 
     #[test]

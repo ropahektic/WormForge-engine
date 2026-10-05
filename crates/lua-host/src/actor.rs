@@ -29,6 +29,21 @@ pub struct ActorEvent {
     pub damage: i32,
 }
 
+/// `wa.crates.spawn`: one of WA's crates, its contents WA's own random pick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CrateArgs {
+    /// Where, 16.16.
+    pub x: i32,
+    pub y: i32,
+    /// WA's kind (PX's ECrateType): 1 weapon, 2 health, 4 utility.
+    pub kind: i32,
+    /// A health crate's health.
+    pub health: i32,
+    /// How it arrives (PX's EDropType): 0 where it is, 1 teleported in,
+    /// 2 on a parachute.
+    pub drop: i32,
+}
+
 /// `wa.weapons.launch`: a real WA missile, fired from a weapon slot's fire
 /// params, as `FireWeapon__CreateWeaponProjectile` fires one.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -248,6 +263,8 @@ pub struct ActorNative {
     /// Fire a real WA missile from a weapon slot's fire params. Returns the
     /// missile's handle, the id `wa.on.missile_frame` gives it.
     pub launch: fn(&LaunchArgs) -> Result<u32, String>,
+    /// `wa.crates.spawn{...}`: one of WA's crates. Returns its handle.
+    pub spawn_crate: fn(&CrateArgs) -> Result<u32, String>,
     /// WA's own WormEntity::SetState, so the state's setup runs.
     pub set_worm_state: fn(handle: u32, state: u32),
     /// The retreat countdown in ms, 0 when retreat has not started.
@@ -332,6 +349,7 @@ impl Default for ActorNative {
             hurt: |_, _, _| {},
             retarget_weapon_sprites: |_, _, _| Err("retarget not bound".into()),
             launch: |_| Err("launch not bound".into()),
+            spawn_crate: |_| Err("crates.spawn not bound".into()),
         }
     }
 }
@@ -1726,6 +1744,10 @@ fn ammo_change(v: Value) -> mlua::Result<Option<AmmoChange>> {
 
 fn native_hurt() -> Option<fn(u32, u32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hurt)
+}
+
+pub(crate) fn native_spawn_crate() -> Option<fn(&CrateArgs) -> Result<u32, String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.spawn_crate)
 }
 
 pub(crate) fn native_launch() -> Option<fn(&LaunchArgs) -> Result<u32, String>> {
