@@ -17,6 +17,9 @@ local MAX_OPS = 12          -- frt_maxoper
 local GRACE = 60            -- frt_framesdam
 local TURN_EVERY = 6        -- frt_pixrotat: steps between turns of the sprite
 local MAX_ALIVE = 10        -- frt_maxfrtalw
+-- Not PX's: a Ferret goes off by itself 15 seconds after it was placed,
+-- if nothing set it off before (750 of WA's 50 frames a second).
+local FUSE = 15 * 50
 -- PX draws the 64-pixel frame centred on the Ferret, its feet 16 below the
 -- centre: the outline is traced with a circle that size, so they meet the land.
 local RADIUS = 15
@@ -200,6 +203,7 @@ local function frame(f, a)
     try_plant(f, a)
   end
   if f.y >= wa.world.water() - STEP then f.boom, f.why = true, f.why or "the water" end
+  if f.age >= FUSE then f.boom, f.why = true, f.why or "its 15 s fuse" end
   if f.boom then
     explode(f, a)
     return

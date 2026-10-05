@@ -1341,6 +1341,15 @@ do
   run(30)
   M.water = nil
   check("and in the water", M.spawned[1].dead and #M.actor_booms == 1)
+  -- A Ferret nothing sets off goes off by itself after 15 seconds.
+  spec = setup(function(x, y) return y >= 200 * P and x >= 0 and x < 4000 * P end)
+  spec.on_fire({ worm = thrower, x = 100 * P, y = 120 * P, vx = 0, vy = 0 })
+  f = M.spawned[1]
+  run(749)
+  local alive_at_749 = not f.dead
+  run(1)
+  check("nothing in its way, it goes off by itself after 15 s (750 frames)",
+    alive_at_749 and f.dead and #M.actor_booms == 1 and logs[#logs]:find("its 15 s fuse") ~= nil, logs[#logs])
   -- At most ten walk: the eleventh makes the oldest vanish, without a bang.
   spec = setup(floor)
   for i = 1, 11 do
