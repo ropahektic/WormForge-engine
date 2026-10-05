@@ -463,6 +463,7 @@ pub fn weapon_fire(
             Value::Function(f) => f,
             _ => return Err(format!("on_fire {fire_id} has no function")),
         };
+        let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
         if let Ok(m) = spec.get::<String>("mod") {
             let _ = wa.set("_mod", m);
         }
@@ -474,8 +475,9 @@ pub fn weapon_fire(
         fire.set("slot", slot).map_err(|e| e.to_string())?;
         fire.set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;
-        with_spawn_owner(worm, || cb.call::<()>(fire).map_err(|e| e.to_string()))?;
-        Ok(())
+        let result = with_spawn_owner(worm, || cb.call::<()>(fire).map_err(|e| e.to_string()));
+        let _ = wa.set("_mod", caller);
+        result
     })
 }
 
@@ -533,6 +535,7 @@ pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String>
             Value::Function(f) => f,
             _ => return Err(format!("on_select {select_id} has no function")),
         };
+        let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
         if let Ok(m) = spec.get::<String>("mod") {
             let _ = wa.set("_mod", m);
         }
@@ -542,8 +545,9 @@ pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String>
         sel.set("slot", slot).map_err(|e| e.to_string())?;
         sel.set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;
-        with_spawn_owner(worm, || cb.call::<()>(sel).map_err(|e| e.to_string()))?;
-        Ok(())
+        let result = with_spawn_owner(worm, || cb.call::<()>(sel).map_err(|e| e.to_string()));
+        let _ = wa.set("_mod", caller);
+        result
     })
 }
 
@@ -574,6 +578,9 @@ pub fn weapon_emit(
             Value::Function(f) => f,
             _ => return Err(format!("{label} {emit_id} has no function")),
         };
+        // The step runs as its pack and leaves the caller's running: a
+        // missile can burst inside another pack's wa.weapons.launch.
+        let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
         if let Ok(m) = spec.get::<String>("mod") {
             let _ = wa.set("_mod", m);
         }
@@ -586,8 +593,9 @@ pub fn weapon_emit(
         }
         ev.set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;
-        with_spawn_owner(worm, || cb.call::<()>(ev).map_err(|e| e.to_string()))?;
-        Ok(())
+        let result = with_spawn_owner(worm, || cb.call::<()>(ev).map_err(|e| e.to_string()));
+        let _ = wa.set("_mod", caller);
+        result
     })
 }
 

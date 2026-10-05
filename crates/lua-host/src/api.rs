@@ -175,10 +175,18 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
 /// one call from the engine instead of two per handler.
 const DISPATCH_LUA: &str = r#"
 local wa, NAMES = ...
+-- A handler runs as its pack, and leaves the caller's pack running after:
+-- a hook can run inside another pack's call (a missile bursting while a
+-- pack launches it).
+local function back(outer, ...)
+  wa._mod = outer
+  return ...
+end
 local function wrap(owner, cb)
   return function(...)
+    local outer = wa._mod
     wa._mod = owner
-    return cb(...)
+    return back(outer, cb(...))
   end
 end
 local function each(list, ...)
@@ -1891,6 +1899,29 @@ mod tests {
         let logs = b.logs.borrow();
         assert_eq!(logs.first().map(String::as_str), Some("[packb] b loading"));
         assert_eq!(logs.last().map(String::as_str), Some("[packa] from a's hook"));
+    }
+
+    /// A hook can run inside another pack's call: the caller's pack is the
+    /// running one again after it.
+    #[test]
+    fn a_nested_hook_leaves_the_callers_pack_running() {
+        let lua = Lua::new();
+        install(&lua, &ctx("packa")).unwrap();
+        lua.load(r#"wa.on.hud(function() end)"#).exec().unwrap();
+        let b = ctx("packb");
+        install(&lua, &b).unwrap();
+        lua.load(
+            r#"wa.on.hud(function()
+                 wa._hooks.hud[1]() -- pack a's, run from inside pack b's
+                 wa.log("after a's hook")
+               end)"#,
+        )
+        .exec()
+        .unwrap();
+        let wa: Table = lua.globals().get("wa").unwrap();
+        let hud: mlua::Function = wa.get::<Table>("_hooks").unwrap().get::<Table>("hud").unwrap().get(2).unwrap();
+        hud.call::<()>(()).unwrap();
+        assert_eq!(b.logs.borrow().last().map(String::as_str), Some("[packb] after a's hook"));
     }
 
     /// The wrapper must stay transparent: worm_message dispatch reads the
