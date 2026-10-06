@@ -2,6 +2,14 @@
 -- measure WA's own projectiles against WormForge's, and to record into a
 -- replay that can be played back again and again for sync and performance.
 --
+-- First, when the first turn starts: MAGNETS of Highlander's Electromagnet
+-- (its claim on the Baseball Bat slot), spread evenly across the map's
+-- width, each dropped just above the ground under its point, each at random
+-- repelling or attracting. Their fields push and pull everything the
+-- batches below throw for the rest of the test (four of their owner's
+-- turns). Fired through `wa.weapons.fire`, as a worm firing it would;
+-- without Highlander no pack claims the slot, which is logged, not fatal.
+--
 -- Batch 1, when the first turn starts: STOCK. Real WA missiles
 -- (wa.weapons.launch) that WA flies, draws and explodes itself: mortar shells
 -- that burst into clustlets on impact (drawn by WormForge as particles), and
@@ -58,6 +66,8 @@ local DAMAGE = 15       -- each explosion's damage
 local BLAST = 40        -- each custom explosion's size (CreateExplosion's id)
 local PROFILE = true
 local SEED = 12345
+local MAGNETS = 6            -- first; needs highlander or highlander_test
+local MAGNET_SLOT = "baseball_bat"
 local BOWLING_STRIKES = 7    -- batch 3; needs highlander or highlander_test
 local BOWLING_SLOT = "sheep_strike"
 local ELECTRIC_GRENADES = 50 -- batch 4; needs highlander or highlander_test
@@ -180,6 +190,28 @@ local function bowling_batch(owner)
     reason and (", " .. reason) or ""))
 end
 
+-- The Electromagnets: evenly across the map, 30 pixels above the ground
+-- under each point, each repelling or attracting at random.
+local function magnet_batch(owner)
+  local size = wa.world.size()
+  local fired, attract, reason = 0, 0, nil
+  for i = 1, MAGNETS do
+    local x = size.w * i // (MAGNETS + 1) + rand(41) - 20
+    local polarity = rand(2) == 0 and 1 or -1
+    local ok, err = pcall(wa.weapons.fire, {
+      weapon = MAGNET_SLOT, worm = owner, x = x * FX, y = (ground(x) - 30) * FX, polarity = polarity,
+    })
+    if ok then
+      fired = fired + 1
+      if polarity < 0 then attract = attract + 1 end
+    else
+      reason = reason or tostring(err)
+    end
+  end
+  wa.log(string.format("stress: %d of %d Electromagnets (%d attracting)%s", fired, MAGNETS, attract,
+    reason and (", " .. reason) or ""))
+end
+
 local function stock_batch(owner, shots)
   for i, s in ipairs(shots) do
     local cluster = i % 2 == 0
@@ -264,6 +296,7 @@ wa.on.turn_start(function(ev)
   started = true
   local owner = ev.worm
   local shots = plan()
+  if MAGNETS > 0 then magnet_batch(owner) end
   wa.log(string.format("stress: batch 1, %d stock projectiles (mortar, cluster bomb)", COUNT))
   stock_batch(owner, shots)
   -- The clock: an invisible actor whose brain counts frames, fires batch 2
