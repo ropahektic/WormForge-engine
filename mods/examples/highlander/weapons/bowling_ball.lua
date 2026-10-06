@@ -344,6 +344,21 @@ shared.kick_bowling_balls = function(x, y, reach, vx, vy)
   end
 end
 
+-- PX's magnet (CMagnet::ApplyForce): a ball in its field gets its push
+-- (16.16; the ball's speed is in pixels a frame). A sleeping ball is left
+-- alone unless `waking` (the magnet moving, discharging or exploding).
+shared.magnet_bowling_balls = function(force, waking)
+  for _, id in ipairs(balls_in_order()) do
+    local b = shared.bowling_balls[id]
+    local dx, dy = force(b.x, b.y)
+    if dx and (waking or not b.asleep) then
+      if waking then wake(b) end
+      b.vx = b.vx + dx / P
+      b.vy = b.vy + dy / P
+    end
+  end
+end
+
 shared.zap_bowling_balls = function(x, y)
   local reach = (ZAP_REACH + RADIUS) * (ZAP_REACH + RADIUS)
   for _, id in ipairs(balls_in_order()) do

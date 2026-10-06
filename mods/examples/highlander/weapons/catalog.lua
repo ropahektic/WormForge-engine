@@ -50,6 +50,26 @@ local PX_ART = {
     on_select = { cursor = true },
     on_click = function(ev) fires.reinforcement(ev) end,
   },
+  { -- Electromagnet: PX's placed, persistent field on the Baseball Bat slot.
+    weapon = "baseball_bat", wep = "weps/baseball_bat.wep",
+    panel_icon = "sprites/electromagnet/ico_magnet.png",
+    -- WA takes it out and puts it away with the Dynamite's draw (334-336);
+    -- PX swaps in the magnet's (CSpriteAnim::SetAnimEx), blue for repel.
+    worm_sprites = {
+      wdynlnk = "sprites/electromagnet/wmag2lnk",
+      wdynlnku = "sprites/electromagnet/wmag2lnku",
+      wdynlnkd = "sprites/electromagnet/wmag2lnkd",
+    },
+    sprites = {
+      "sprites/electromagnet/magnet.png", "sprites/electromagnet/magnet2.png",
+      "sprites/electromagnet/magnet_damaged.png", "sprites/electromagnet/magnet2_damaged.png",
+      "sprites/electromagnet/ring_in.png", "sprites/electromagnet/ring_out.png",
+      "sprites/electromagnet/magnetsparks",
+      "sprites/electromagnet/wmaglnk", "sprites/electromagnet/wmaglnku", "sprites/electromagnet/wmaglnkd",
+    },
+    params = { gpu_prefix = "sprites/electromagnet/" },
+    on_fire = function(fire) fires.electromagnet(fire) end,
+  },
   { -- Super Tele: the PX record is a type-3 cursor weapon on teleport's slot.
     weapon = "teleport",
     wep = "weps/teleport.wep",

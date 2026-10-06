@@ -246,7 +246,7 @@ local function new_match(opts)
       worms[#worms + 1] = setmetatable({
         id = (per_team > 2 and team * 1000 or team * 16) + index, team = team,
         alliance = team - 1, ammo_group = team - 1, hp = 100,
-        kind = "worm", x = 0, y = 0, facing = 1,
+        kind = "worm", x = 0, y = 0, vx = 0, vy = 0, facing = 1,
         gravity = 0x10000, -- WA's normal
       }, Worm)
     end
@@ -277,7 +277,9 @@ local function new_match(opts)
       size = function() return { w = M.map_w or 2000, h = M.map_h or 1000 } end,
       gravity = function() return M.gravity or 0 end,
       wind = function() return M.wind or 0 end,
-      keys = function() return { sprint = M.shift or false, digit = M.digit } end,
+      keys = function()
+        return { sprint = M.shift or false, digit = M.digit, plus_key = M.plus_key or false }
+      end,
       set_gravity = function(v) M.gravity = v end,
       set_wind = function(v) M.wind = v end,
       sky = -0xD00000,
@@ -435,6 +437,7 @@ local function new_match(opts)
       end,
     },
     mines = { all = function() return M.mines end },
+    missiles = { all = function() return M.missiles end },
     crates = { all = function() return M.crates end },
     oil = { all = function() return M.oil end },
     graves = { all = function() return M.graves end },
@@ -493,7 +496,8 @@ local function new_match(opts)
         -- `on` is a frame function or a table of handlers (frame, land, hit).
         local on, hit = spec.on, nil
         if type(on) == "table" then on, hit = spec.on.frame, spec.on.hit end
-        local a = { id = M.next_actor_id, sprite = spec.sprite, x = spec.x, y = spec.y, dead = false,
+        local a = { id = M.next_actor_id, sprite = spec.sprite, x = spec.x, y = spec.y,
+                    vx = spec.vx or 0, vy = spec.vy or 0, dead = false,
                     explode = spec.explode, on = on, hit = hit, owner = spec.owner, as_object = spec.as_object,
                     shape = spec.shape }
         function a:gfx(g)
@@ -512,6 +516,7 @@ local function new_match(opts)
           end
           return true
         end
+        function a:look(sprite) self.sprite = sprite end
         function a:despawn() self.dead = true end
         -- a.explode is the spawn's explode spec and a:explode(opts) the
         -- method, as on the engine's actor: a callable table.
@@ -610,7 +615,14 @@ local function new_match(opts)
         end
       end,
       death = function(f) M.death = f end,
-      hud = function(f) M.hud = f end,
+      -- Every pack module may draw its own HUD lines: run them all.
+      hud = function(f)
+        M.hud_handlers = M.hud_handlers or {}
+        M.hud_handlers[#M.hud_handlers + 1] = f
+        M.hud = function()
+          for _, h in ipairs(M.hud_handlers) do h() end
+        end
+      end,
       draw = function(f)
         M.draws = M.draws or {}
         M.draws[#M.draws + 1] = f
@@ -629,7 +641,7 @@ local function new_match(opts)
   }
   M.quads, M.ribbons, M.sounds, M.sound_flags, M.sound_positions, M.trace_hit, M.draws =
     {}, {}, {}, {}, {}, nil, nil
-  M.mines, M.crates, M.oil, M.graves = {}, {}, {}, {}
+  M.mines, M.missiles, M.crates, M.oil, M.graves = {}, {}, {}, {}, {}
   -- The engine's require: a pack module runs once per match, in its own
   -- environment that reads the shared globals and keeps its writes.
   local modules = {}
@@ -740,7 +752,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("60 slots replaced, each once", #replaced == 60 and not dupes, tostring(#replaced))
+  check("61 slots replaced, each once", #replaced == 61 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -762,7 +774,7 @@ do
   for slot, spec in pairs(by_slot) do
     if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi"
       or slot == "prod" or slot == "armageddon" or slot == "petrol_bomb" or slot == "nuclear_test"
-      or slot == "sheep_strike" or slot == "salvation_army" then
+      or slot == "sheep_strike" or slot == "salvation_army" or slot == "baseball_bat" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
@@ -780,6 +792,10 @@ do
     by_slot.nuclear_test and by_slot.nuclear_test.wep == "weps/nuclear_test.wep"
       and by_slot.nuclear_test.panel_icon == "sprites/reinforcement/icon.png"
       and by_slot.nuclear_test.on_select.cursor and type(by_slot.nuclear_test.on_click) == "function")
+  check("Electromagnet uses PX's placed weapon record and icon",
+    by_slot.baseball_bat and by_slot.baseball_bat.wep == "weps/baseball_bat.wep"
+      and by_slot.baseball_bat.panel_icon == "sprites/electromagnet/ico_magnet.png"
+      and type(by_slot.baseball_bat.on_fire) == "function")
   check("Super Tele owns the teleport cursor and click dispatch",
     by_slot.teleport and by_slot.teleport.on_select.cursor
       and type(by_slot.teleport.on_click) == "function"
@@ -840,6 +856,126 @@ do
   check("a full team gets no worm, and an error sound", #M.worm_spawns == 2
     and M.sounds[#M.sounds] == "sounds/gravity_control/error.wav")
   M.team_full, M.water, M.solid = nil, nil, nil
+end
+
+print("Electromagnet: plus-key polarity, stock object force and discharge")
+do
+  new_match()
+  local p, w = 0x10000, worm(16)
+  w.x, w.y, w.weapon, w.turn = 100 * p, 100 * p, "baseball_bat", true
+  local shot = assert((function()
+    for _, spec in ipairs(replaced) do if spec.weapon == "baseball_bat" then return spec.on_fire end end
+  end)())
+  local function mine_at(id, x, fuse)
+    local mine = { id = id, x = x * p, y = 100 * p, fuse = fuse }
+    function mine:arm(ms) self.armed = ms; return true end
+    function mine:impulse(dx, dy) self.dx, self.dy = dx, dy; return true end
+    return mine
+  end
+  local mine, timed = mine_at(101, 150, -1), mine_at(103, 160, 2000)
+  local missile = { id = 102, x = 50 * p, y = 100 * p }
+  function missile:impulse(dx, dy) self.dx, self.dy = dx, dy; return true end
+  M.mines, M.missiles = { mine, timed }, { missile }
+  M.hud()
+  check("the HUD names the mode", M.hud_lines and M.hud_lines[#M.hud_lines]:find("REPEL") ~= nil)
+  shot({ worm = w })
+  local repel = M.spawned[#M.spawned]
+  repel.on(repel)
+  check("default repel sends stock objects away", mine.dx > 0 and missile.dx < 0)
+  check("a random-fuse mine it catches gets 1 to 5 seconds", mine.armed >= 1000 and mine.armed <= 4999)
+  check("a mine with a fuse is triggered with its own", timed.armed == 2000)
+  local other = worm(17)
+  other.x, other.y, other.weapon = 100 * p, 100 * p, "baseball_bat"
+  M.plus_key = true
+  M.message(other, wa.msg.FRAME_FINISH)
+  check("+ held on another worm's turn changes nothing for it", (function()
+    M.plus_key = false
+    M.message(other, wa.msg.FRAME_FINISH)
+    shot({ worm = other })
+    local m = M.spawned[#M.spawned]
+    mine.dx = 0
+    m.on(m)
+    return mine.dx > 0
+  end)())
+  M.plus_key = true
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.message(w, wa.msg.FRAME_FINISH) -- held key must not switch twice
+  M.plus_key = false
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.hud()
+  check("the HUD follows the switch", M.hud_lines[#M.hud_lines]:find("ATTRACT") ~= nil)
+  shot({ worm = w })
+  local attract = M.spawned[#M.spawned]
+  mine.dx = 0
+  attract.on(attract)
+  check("one plus press switches the next magnet to attract", mine.dx < 0)
+  -- The Hellish Hand-Grenade slows in a live field; another missile doesn't.
+  local hellish = { phase = "pre", weapon = "holy_grenade", x = 120 * p, y = 100 * p, vx = 1000 * p, vy = 0 }
+  local bazooka = { phase = "pre", weapon = "bazooka", x = 120 * p, y = 100 * p, vx = 1000 * p, vy = 0 }
+  M.missile(hellish)
+  M.missile(bazooka)
+  check("the Hellish Hand-Grenade is damped in a field", hellish.vx == math.floor(1000 * p * 0.985)
+    and bazooka.vx == 1000 * p)
+  -- 300 frames after the turn ended, missiles are let go; mines are not.
+  M.turn_end({ worm = w })
+  for _ = 1, 301 do attract.on(attract) end
+  missile.dx, mine.dx = 0, 0
+  attract.on(attract)
+  check("missiles are let go 300 frames after the turn ends", missile.dx == 0 and mine.dx ~= 0)
+  M.turn_start({ worm = other, active = other })
+  missile.dx = 0
+  attract.on(attract)
+  check("and caught again from the next turn", missile.dx ~= 0)
+  -- A blast hurts it less the further off (PX's TakeExplosionDamage).
+  local function blast(m, damage, dist)
+    m.hit(m, { kind = "blast", damage = damage, x = m.x + dist * p, y = m.y, vx = 0, vy = 0 })
+  end
+  shot({ worm = w })
+  local target = M.spawned[#M.spawned]
+  blast(target, 40, 40) -- 40 * (1 - 1600 / 6400) = 30: 80 -> 50
+  blast(target, 40, 80) -- at twice the damage, nothing
+  M.actor_booms = M.actor_booms or {}
+  local before = #M.actor_booms
+  blast(target, 49, 0) -- 50 -> 1
+  target.on(target)
+  check("a blast hurts it by PX's falloff", #M.actor_booms == before)
+  blast(target, 1, 0)
+  target.on(target)
+  check("at 0 health it explodes, blast 100, damage 50", #M.actor_booms == before + 1
+    and M.actor_booms[#M.actor_booms].opts.id == 100 and M.actor_booms[#M.actor_booms].opts.damage == 50)
+  -- Four of its owner's turns discharge it; the last one triggers mines.
+  local late = mine_at(104, 140, -1)
+  M.mines = { late }
+  for _ = 1, 4 do M.turn_start({ worm = w, active = w }) end
+  check("the last turn triggers the mines in range, without a push", late.armed ~= nil and late.dx == nil)
+  mine.dx = 0
+  M.mines = { mine }
+  repel.on(repel)
+  attract.on(attract)
+  check("four owner turns discharge both magnets", mine.dx == 0)
+end
+
+print("Electromagnet: it lands and rests on the land, and sinks in the water")
+do
+  new_match()
+  local p, w = 0x10000, worm(16)
+  w.x, w.y, w.facing = 100 * p, 150 * p, 1
+  local shot = assert((function()
+    for _, spec in ipairs(replaced) do if spec.weapon == "baseball_bat" then return spec.on_fire end end
+  end)())
+  M.gravity, M.solid = p // 4, function(_, y) return y >= 200 * p end
+  shot({ worm = w })
+  local magnet = M.spawned[#M.spawned]
+  for _ = 1, 200 do magnet.on(magnet) end
+  local y = magnet.y
+  for _ = 1, 20 do magnet.on(magnet) end
+  check("it falls onto the floor and rests on it, its body above the land",
+    magnet.y == y and y > 185 * p and y < 200 * p and magnet.x > w.x, magnet.y / p)
+  check("the engine is told where, and moves nothing itself", magnet.vx == 0 and magnet.vy == 0)
+  M.water = 190 * p
+  for _ = 1, 600 do if not magnet.dead then magnet.on(magnet) end end
+  check("in the water it sinks out of sight and is gone", magnet.dead)
+  M.water, M.gravity, M.solid = nil, nil, nil
 end
 
 print("pools: every stock slot is in exactly one place")
