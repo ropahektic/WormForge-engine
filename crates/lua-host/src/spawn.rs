@@ -361,6 +361,7 @@ pub fn bind_world(lua: &Lua, actors: &Table, wa: &Table) -> Result<(), String> {
     bind_kind_list(lua, wa, "missiles", CLASS_MISSILE)?;
     bind_kind_list(lua, wa, "oil", CLASS_OIL)?;
     bind_kind_list(lua, wa, "graves", CLASS_GRAVE)?;
+    bind_kind_list(lua, wa, "arrows", game::offsets::CLASS_ARROW)?;
     bind_land(lua, wa)?;
     bind_world_info(lua, wa)?;
     bind_sound(lua, wa)?;
@@ -789,6 +790,10 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
             t.set("q", m & 64 != 0)?;
             t.set("space", m & 128 != 0)?;
             t.set("plus_key", m & game::sync_input::PLUS_KEY != 0)?;
+            t.set("ctrl", m & game::sync_input::CTRL != 0)?;
+            t.set("minus_key", m & game::sync_input::MINUS_KEY != 0)?;
+            t.set("alt", m & game::sync_input::ALT != 0)?;
+            t.set("pause_key", m & game::sync_input::PAUSE_KEY != 0)?;
             // The digit key held, 0..9 (top row or keypad), or nil.
             let digit = (m >> game::sync_input::DIGIT_SHIFT) & 0xf;
             if digit != 0 {
@@ -1066,7 +1071,7 @@ fn handles_table(lua: &Lua, ids: Vec<u32>, actors: bool) -> mlua::Result<Table> 
 fn objects_table(lua: &Lua, ids: Vec<u32>) -> mlua::Result<Table> {
     let t = lua.create_table()?;
     for (i, id) in ids.into_iter().enumerate() {
-        t.set(i + 1, WorldHandle(id))?;
+        t.set(i + 1, WorldHandle::new(id))?;
     }
     Ok(t)
 }

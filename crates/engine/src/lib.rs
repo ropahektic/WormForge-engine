@@ -13,6 +13,8 @@ mod hook;
 mod http;
 mod hud;
 mod hurt;
+mod body;
+mod air_fire;
 mod overlay;
 mod particles;
 mod perf;

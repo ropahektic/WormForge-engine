@@ -810,3 +810,22 @@ section = ".text"
 pattern = "55 8B EC 83 E4 F8 51 53 56 8B F1 8B 46 20 8B 4E 1C 57 50 51 8B FE 8B DA E8 ?? ?? ?? ?? 8B 46 40 8B 10 6A 00 6A 00 6A 00 6A 00 50 8B 42 44 FF D0"
 derive = "match"
 target_section = ".text"
+
+# Portal transport: WA 3.8.1 base destructor removes the body from both CM
+# lists (4FEF98..4FEFAA). Base ctor registers all subclasses. No vtable edits.
+[[locator]]
+name = "WORLD_ENTITY_DTOR"
+reference_va = 0x004fef30
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 56 57 8B F9 89 7C 24 08 C7 07"
+derive = "match"
+target_section = ".text"
+
+# stdcall(cm, body, index), RET 12; no register-only arguments.
+[[locator]]
+name = "COLLISION_BODY_UPDATE"
+reference_va = 0x004fcdf0
+section = ".text"
+pattern = "83 EC 08 53 8B 5C 24 14 83 7B 3C 00 55 56 57 0F 84 ?? ?? ?? ?? 83 7B 48 00 0F 85 ?? ?? ?? ?? 83 BB AC 00 00 00 00"
+derive = "match"
+target_section = ".text"

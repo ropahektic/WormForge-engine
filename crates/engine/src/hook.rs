@@ -32,6 +32,7 @@ fn install_inner() -> Result<(), String> {
         original.store(trampoline, Ordering::SeqCst);
     }
 
+    crate::body::install()?;
     physics::install()?;
     actor::install()?;
     crate::worm_sprite::install()?;

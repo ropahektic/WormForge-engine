@@ -304,6 +304,7 @@ type SetStateFn = unsafe extern "thiscall" fn(*mut u8, u32);
 /// A new match: forget every hold and steer from the last one. Its worms are
 /// gone, and a new worm may reuse an old one's address.
 pub fn clear_handoffs() {
+    crate::air_fire::clear();
     if let Ok(mut g) = CARRY.lock() {
         g.clear();
     }
@@ -1156,6 +1157,7 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         unsafe { crate::worm_sprite::toggle_frame(this) };
     }
     // After the pack's hooks (which read the keys), before WA's handler.
+    eat = eat || crate::air_fire::message(this, msg);
     eat = eat || owned_input(this, msg);
     if msg == MSG_FIRE_WEAPON { crate::worm_hold::on_fire(this as u32); }
     if msg == MSG_START_TURN {

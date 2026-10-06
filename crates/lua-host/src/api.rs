@@ -325,6 +325,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "hud",
         "draw",
         "contact",
+        "body_move",
     ] {
         hooks
             .set(name, lua.create_table().map_err(|e| e.to_string())?)
@@ -360,6 +361,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     bind_on(lua, &on, "hud")?;
     bind_on(lua, &on, "draw")?;
     bind_on(lua, &on, "contact")?;
+    bind_on(lua, &on, "body_move")?;
     wa.set("on", on).map_err(|e| e.to_string())?;
 
     let draw = lua.create_table().map_err(|e| e.to_string())?;
@@ -657,7 +659,11 @@ end
 fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
     let f = lua
         .create_function(move |lua, (cb, opts): (Function, Option<Table>)| {
+            let body_kinds = if name == "body_move" {
+                Some(crate::dispatch::body_kinds(opts.as_ref())?)
+            } else { None };
             let msgs = match (name, opts) {
+                ("body_move", _) => None,
                 (_, None) => None,
                 ("worm_message", Some(opts)) => Some(worm_message_msgs(&opts)?),
                 (_, Some(_)) => {
@@ -683,7 +689,12 @@ fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
                 return crate::dispatch::register_worm_message(lua, &hooks, wrapped, msgs);
             }
             let n = list.len()?;
-            list.set(n + 1, wrapped)?;
+            if let Some(kinds) = body_kinds {
+                let spec = lua.create_table()?;
+                spec.set("kinds", kinds)?;
+                spec.set("on", wrapped)?;
+                list.set(n + 1, spec)?;
+            } else { list.set(n + 1, wrapped)?; }
             Ok(())
         })
         .map_err(|e| e.to_string())?;

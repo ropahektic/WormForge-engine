@@ -322,6 +322,10 @@ pub const WORM_TURN_SIDE: usize = 0x1A8;
 pub const WORM_SHOW_CURSOR: usize = 0x268;
 /// WormEntity rendered aim sweep (+0x270).
 pub const WORM_AIM_ANGLE: usize = 0x270;
+/// Charging power, 16.16, 0..65536. WA 3.8.1 handle_Charging at
+/// 0x5177C4 increments it by 0x369 and caps it at 65536 (0x5177DE);
+/// release_weapon at 0x51C4EF/0x51C540 uses it to build the shot speeds.
+pub const WORM_FIRE_POWER: usize = 0x248;
 /// WorldRootEntity: non-zero pauses the HUD turn clock (grenade-in-flight).
 pub const WORLD_ROOT_WORM_ACTIVE: usize = 0x108;
 pub const WORLD_ROOT_TURN_TIMER_DISPLAY: usize = 0x188;
@@ -717,6 +721,8 @@ pub const ENT_CHILDREN_WATERMARK: usize = 0x10;
 pub const ENT_CHILDREN_DATA: usize = 0x14;
 pub const CLASS_MINE: i32 = 8;
 pub const CLASS_MISSILE: i32 = 11;
+/// WA's stock bow arrow entity, kept as its own collision body.
+pub const CLASS_ARROW: i32 = 12;
 pub const CLASS_CRATE: i32 = 15;
 pub const CLASS_WORM: i32 = 18;
 pub const CLASS_OIL: i32 = 30;

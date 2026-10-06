@@ -918,6 +918,10 @@ fn poll_keys() -> u32 {
     if key_down(0xBB) || key_down(0x6B) {
         m |= game::sync_input::PLUS_KEY;
     }
+    if key_down(0x11) { m |= game::sync_input::CTRL; }
+    if key_down(0xBD) || key_down(0x6D) { m |= game::sync_input::MINUS_KEY; }
+    if key_down(0x12) { m |= game::sync_input::ALT; }
+    if key_down(0x13) { m |= game::sync_input::PAUSE_KEY; }
     // The digit held, top row or keypad (the lowest, if several): 1..10 for
     // 0..9 in bits 8..11 (game::sync_input::DIGIT_SHIFT).
     if let Some(d) = (0..10u32).find(|&d| key_down(0x30 + d as i32) || key_down(0x60 + d as i32)) {
