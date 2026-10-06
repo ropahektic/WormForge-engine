@@ -306,6 +306,16 @@ function turret.new(cfg)
     sync(a, s)
   end
 
+  -- Who owns what the turret fires: the worm that placed it, as WA lists it
+  -- now, else the turret itself. The handle kept from the placing names WA's
+  -- freed worm once that worm has died, and a spawn refuses such an owner.
+  function t.owner(a, s)
+    for _, w in ipairs(wa.worms.all()) do
+      if w.id == s.owner_id then return w end
+    end
+    return a
+  end
+
   -- Slightly in front of the worm, unless a wall is that close.
   local function placement_x(worm, facing)
     local x = worm.x + facing * t.front_px * P
@@ -337,7 +347,7 @@ function turret.new(cfg)
       loop = false, origin = "bottom", owner = worm, kind = t.kind, persist = true, on = brain,
     })
     local s = {
-      alliance = alliance, owner = worm, planted = false, active = true, ammo = t.ammo,
+      alliance = alliance, owner = worm, owner_id = worm.id, planted = false, active = true, ammo = t.ammo,
       health = t.health, angle = idle, idle = idle, side = facing < 0 and -1 or 1,
       sweep_dir = 1, shots = 0, firing = false, anim = 0, rotating = false,
       servo_sound = 0, fire_sound = 0, beep = 0, activate = 0, cooldown = 0,
