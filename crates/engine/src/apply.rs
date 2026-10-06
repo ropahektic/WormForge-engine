@@ -92,6 +92,8 @@ pub fn on_gfx_ready(display: *mut u8) {
         _ => None,
     };
     crate::sync::set_plain_round(plain.is_some());
+    let network = !matches!(round, crate::transfer::Round::Offline);
+    crate::sync::clear_chat();
     let synced = match round {
         crate::transfer::Round::Synced(dir) => Some(dir),
         _ => None,
@@ -100,6 +102,7 @@ pub fn on_gfx_ready(display: *mut u8) {
         // An empty folder: the round loads as an offline one with no packs.
         Some(why) => {
             log_line(&format!("network round without WormForge packs: {why}"));
+            crate::sync::say_in_chat(format!("WormForge {} is installed here but off this round: {why}", crate::log::BUILD_ID));
             crate::hud::notice(&format!("WormForge is off this round: {why}. Playing plain WA."), 12);
             let empty = crate::log::wormforge_dir().join("no-packs");
             let _ = std::fs::create_dir_all(&empty);
@@ -142,6 +145,14 @@ pub fn on_gfx_ready(display: *mut u8) {
     log_line(&format!("modset {fingerprint}"));
     crate::sync::set_local_modset(fingerprint);
     crate::modloader::match_loaded(&mods);
+    if network && plain.is_none() {
+        let packs: Vec<String> = mods.iter().map(|m| format!("{} {}", m.manifest.id, m.manifest.version)).collect();
+        crate::sync::say_in_chat(if packs.is_empty() {
+            format!("WormForge {} is on here, with no packs", crate::log::BUILD_ID)
+        } else {
+            format!("WormForge {} is on here, with {}", crate::log::BUILD_ID, packs.join(", "))
+        });
+    }
     if !crate::replay::prepare(&mods, &selection.folders) {
         return;
     }

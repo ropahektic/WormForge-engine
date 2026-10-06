@@ -597,6 +597,21 @@ derive = "match"
 target_section = ".text"
 
 [[locator]]
+# Game::OnChatInput: what WA runs when the player sends a chat line in a
+# match. usercall EAX = text, ECX = GameRuntime, stack: the chat queue
+# (runtime + 0x28), RET 4. Plain text (not a /command) becomes a PlayerChat
+# message (0xF) from the local team to everyone, which the network update
+# sends to every machine and shows (Game::process_chat, 0x52C140, calls it
+# on Enter).
+name = "GAME_ON_CHAT_INPUT"
+required = false
+reference_va = 0x0052b730
+section = ".text"
+pattern = "81 EC 3C 08 00 00 55 56 57 8B F8 8A 07 84 C0 8B F1 0F 84 ?? ?? ?? ?? 3C 2F 0F 85"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
 name = "WORM_SET_STATE"
 reference_va = 0x0050e850
 section = ".text"

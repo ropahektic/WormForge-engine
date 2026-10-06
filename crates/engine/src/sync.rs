@@ -84,6 +84,61 @@ pub(crate) fn set_plain_round(plain: bool) {
     PLAIN_ROUND.store(plain, Ordering::SeqCst);
 }
 
+/// This machine's line for the match chat, said once the round runs: which
+/// WormForge it runs and with what packs, for every player to see. Stock
+/// PlayerChat, so a machine without WormForge shows it too.
+static CHAT_LINE: Mutex<Option<String>> = Mutex::new(None);
+/// Said after a second of the match, once every machine is in it.
+const CHAT_AFTER_FRAME: i32 = 50;
+/// GameRuntime's chat queue (ring buffer B), which WA's network update sends.
+const RUNTIME_CHAT_RING: usize = 0x28;
+
+/// Nothing to say this round (an offline one), or not yet.
+pub(crate) fn clear_chat() {
+    if let Ok(mut line) = CHAT_LINE.lock() {
+        *line = None;
+    }
+}
+
+pub(crate) fn say_in_chat(text: String) {
+    if let Ok(mut line) = CHAT_LINE.lock() {
+        *line = Some(text);
+    }
+}
+
+/// Send `text` as this machine's chat line, as WA does when the player types
+/// one and presses Enter (`Game::OnChatInput`, 0x52B730): from the local
+/// team, to everyone, recorded with the match.
+unsafe fn post_chat(runtime: *mut u8, text: &str) {
+    let Some(on_chat) = crate::wa::try_address("GAME_ON_CHAT_INPUT") else {
+        log_error("match chat: GAME_ON_CHAT_INPUT not found");
+        return;
+    };
+    let ring = unsafe { *(runtime.add(RUNTIME_CHAT_RING) as *const *mut u8) };
+    if ring.is_null() {
+        return;
+    }
+    // ASCII without control characters, well inside the message's 0x11C
+    // bytes; a leading '/' would make it a command.
+    let mut bytes: Vec<u8> = text.bytes().filter(|b| b.is_ascii() && !b.is_ascii_control()).take(200).collect();
+    if bytes.first() == Some(&b'/') {
+        bytes.insert(0, b' ');
+    }
+    bytes.push(0);
+    unsafe {
+        core::arch::asm!(
+            "push {ring}",
+            "call {on_chat}",
+            ring = in(reg) ring,
+            on_chat = in(reg) on_chat,
+            inout("eax") bytes.as_ptr() => _,
+            inout("ecx") runtime => _,
+            out("edx") _,
+        );
+    }
+    log_line(&format!("match chat: {text}"));
+}
+
 /// The enabled packs of this match as `modset_fingerprint`, plus how much of
 /// it has been announced to peers so far.
 struct ModsetTx {
@@ -424,10 +479,15 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
         if world.is_null() || read_i32(world, GAME_WORLD_NET_SESSION) == 0 {
             return;
         }
+        let frame = read_i32(world, GAME_WORLD_FRAME_COUNTER);
+        if frame >= CHAT_AFTER_FRAME {
+            if let Some(text) = CHAT_LINE.lock().ok().and_then(|mut l| l.take()) {
+                post_chat(runtime, &text);
+            }
+        }
         if PLAIN_ROUND.load(Ordering::SeqCst) {
             return;
         }
-        let frame = read_i32(world, GAME_WORLD_FRAME_COUNTER);
         if frame < 0 {
             return;
         }
