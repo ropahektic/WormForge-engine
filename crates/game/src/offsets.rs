@@ -93,6 +93,9 @@ pub const WORM_STATE_HIT: u32 = 0x80;
 /// Blasted: the first state of a blast's knockback (msg 0x1C), then 0x80
 /// or 0x7F. Named from traces only.
 pub const WORM_STATE_BLASTED: u32 = 0x81;
+/// WA 3.8.1's frozen worm state. Confirmed in game; Freeze's message 0x29
+/// enters it and the following thaw path tests this value.
+pub const WORM_STATE_FROZEN: u32 = 0x86;
 /// Jet pack fuel (16.16), drained by WormEntity__handle_JetPacking by the
 /// thrust / 10 each frame; 0 is unlimited, and running out sets 0x65.
 pub const WORM_JET_FUEL: usize = 0x220;
@@ -719,6 +722,7 @@ pub const ENT_CHILDREN_WATERMARK: usize = 0x10;
 pub const ENT_CHILDREN_DATA: usize = 0x14;
 pub const CLASS_MINE: i32 = 8;
 pub const CLASS_MISSILE: i32 = 11;
+pub const CLASS_ARROW: i32 = 12;
 pub const CLASS_CRATE: i32 = 15;
 pub const CLASS_WORM: i32 = 18;
 pub const CLASS_OIL: i32 = 30;

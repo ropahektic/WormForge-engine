@@ -10,7 +10,7 @@ use game::offsets::{
     CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, MAX_TEAMS, WORLD_TEAM_AMMO_GROUP,
     WORLD_TEAM_STRIDE,
-    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_TUMBLING, ENT_COLLISION_MASK,
+    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_DRILLING, WORM_STATE_FROZEN, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_TUMBLING, ENT_COLLISION_MASK,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -251,6 +251,8 @@ pub struct ActorNative {
     pub launch: fn(&LaunchArgs) -> Result<u32, String>,
     /// WA's own WormEntity::SetState, so the state's setup runs.
     pub set_worm_state: fn(handle: u32, state: u32),
+    /// Enter WA's frozen worm state when the worm is alive and eligible.
+    pub freeze_worm: fn(handle: u32) -> bool,
     /// The retreat countdown in ms, 0 when retreat has not started.
     pub retreat_ms: fn() -> i32,
     /// The turn clock in ms left, as WA counts it (it stands still while WA
@@ -279,6 +281,7 @@ impl Default for ActorNative {
             despawn: |_| {},
             networked: || false,
             set_worm_state: |_, _| {},
+            freeze_worm: |_| false,
             retreat_ms: || 0,
             turn_clock_ms: || 0,
             random: || None,
@@ -1146,6 +1149,12 @@ impl UserData for WormHandle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        // A semantic transition for Ice Arrow and other pack weapons. WA's
+        // SetState runs its own frozen-state setup; no timer is held in Lua.
+        methods.add_method("freeze", |_, this, ()| {
+            crate::sim_context::require("worm:freeze")?;
+            Ok(native_freeze_worm().map(|freeze| freeze(this.0)).unwrap_or(false))
+        });
         // `worm:set_state(...)`, through WA's own SetState. A debugging tool
         // on its way out: only for a pack whose mod.toml declares
         // `debug_worm_state = true`, every call logged. A lockstep write:
@@ -1562,6 +1571,10 @@ pub fn native_set_worm_state() -> Option<fn(u32, u32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.set_worm_state)
 }
 
+pub fn native_freeze_worm() -> Option<fn(u32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.freeze_worm)
+}
+
 pub fn native_retreat_ms() -> Option<fn() -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.retreat_ms)
 }
@@ -1593,6 +1606,7 @@ pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
         WORM_STATE_AIRBORNE => "sliding",
         WORM_STATE_BUNGEE => "bungee",
         WORM_STATE_TUMBLING => "tumbling",
+        WORM_STATE_FROZEN => "frozen",
         _ => return None,
     })
 }
@@ -1955,6 +1969,7 @@ mod tests {
         assert_eq!(worm_state_name(0x65), Some("standing"));
         assert_eq!(worm_state_name(0x69), Some("prefiring"));
         assert_eq!(worm_state_name(0x7D), Some("parachuting"));
+        assert_eq!(worm_state_name(0x86), Some("frozen"));
         // Not guessed: 0x7B's setup is Batroping, whatever it was called.
         assert_eq!(worm_state_name(0x7B), None);
         assert_eq!(settable_worm_state("sliding"), Some(0x7E));

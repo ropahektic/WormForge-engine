@@ -476,6 +476,7 @@ mod tests {
         for (slot, name, fire_type) in [
             ("earthquake", "Electric Grenade", 1),
             ("napalm_strike", "Lightning Strike", 3),
+            ("armageddon", "Ice Arrow", 1),
             ("teleport", "Super Tele", 3),
             ("prod", "Javelin", 1),
         ] {
@@ -484,6 +485,10 @@ mod tests {
             let wep = parse_wep(&path.display().to_string(), &bytes).unwrap();
             assert_eq!(wep.name, name);
             assert_eq!(wep.fire_type(), fire_type);
+            if slot == "armageddon" {
+                assert_eq!(i32::from_le_bytes(wep.record[0x38..0x3C].try_into().unwrap()), 4,
+                    "Ice Arrow must keep WA's CreateArrow fire method");
+            }
         }
     }
 }

@@ -535,6 +535,8 @@ pub struct Hurt {
     pub by: Option<i32>,
     pub attacker: u32,
     pub slot: Option<i32>,
+    /// The stock slot that created an ArrowEntity sender, if known.
+    pub source_weapon: Option<i32>,
     pub kind: &'static str,
     pub amount: i32,
     pub lost: i32,
@@ -569,6 +571,11 @@ pub fn hurt(hit: Hurt) -> Result<(bool, i32), String> {
             t.set("slot", slot).map_err(|e| e.to_string())?;
             if let Some(weapon) = StockWeapon::from_index(slot as u32) {
                 t.set("weapon", weapon.name()).map_err(|e| e.to_string())?;
+            }
+        }
+        if let Some(slot) = hit.source_weapon {
+            if let Some(weapon) = StockWeapon::from_index(slot as u32) {
+                t.set("source_weapon", weapon.name()).map_err(|e| e.to_string())?;
             }
         }
         t.set("kind", hit.kind).map_err(|e| e.to_string())?;

@@ -59,6 +59,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     sprite::clear();
     world::clear_sounds();
     crate::hurt::reset();
+    crate::arrow_source::clear();
     crate::physics::clear_handoffs();
     actor::clear_claims();
     crate::mask_collide::clear();

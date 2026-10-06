@@ -210,6 +210,7 @@ pub fn install() -> Result<(), String> {
         set_wind: crate::world::set_wind,
         hurt: crate::physics::hit_worm,
         set_worm_state: crate::physics::set_worm_state,
+        freeze_worm: crate::physics::freeze_worm,
         retreat_ms: crate::world::retreat_ms,
         turn_clock_ms: crate::world::turn_clock_ms,
         launch: crate::missile_boom::launch,

@@ -26,7 +26,7 @@ use game::offsets::{
     WORM_STATE_AIRBORNE, WORM_TURN_ACTIVE, WORLD_ROOT_TURN_ENDED,
     COLLISION_LANDSCAPE_BIT, ENT_COLLISION_MASK, MSG_JUMP, MSG_JUMP_UP, WORM_KEY_DOWN, WORM_KEY_LEFT,
     WORM_KEY_RIGHT, WORM_KEY_UP, WORM_STATE_JETPACKING, WORM_STATE_TUMBLING, WORM_STATE_HIT,
-    WORM_STATE_BLASTED, WORM_SELECTED_WEAPON,
+    WORM_STATE_BLASTED, WORM_STATE_FROZEN, WORM_SELECTED_WEAPON,
     WORLD_ROOT_TURN_TIMER, ENT_WORLD, ENT_HELPER, GAME_WORLD_COLLISION_MANAGER,
 };
 use std::ffi::c_void;
@@ -556,6 +556,20 @@ pub fn set_worm_state(handle: u32, state: u32) {
         let f: SetStateFn = std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
         crate::state_trace::with_cause("lua worm:set_state", || f(handle as *mut u8, state));
     }
+}
+
+/// Ask WA to enter its frozen state, including its collision and thaw setup.
+/// A dead or drowning worm must not be brought back by a delayed arrow hit.
+pub fn freeze_worm(handle: u32) -> bool {
+    if handle == 0 || crate::world::worm_hp(handle) <= 0 {
+        return false;
+    }
+    let state = unsafe { read_i32(handle as *mut u8, WORM_STATE) as u32 };
+    if matches!(state, WORM_STATE_FROZEN | 0x82 | 0x83 | 0x85 | 0x87) {
+        return false;
+    }
+    set_worm_state(handle, WORM_STATE_FROZEN);
+    unsafe { read_i32(handle as *mut u8, WORM_STATE) as u32 == WORM_STATE_FROZEN }
 }
 
 pub fn drop_carry(handle: u32) {
