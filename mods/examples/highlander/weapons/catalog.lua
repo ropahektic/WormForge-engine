@@ -50,6 +50,31 @@ local PX_ART = {
     on_select = { cursor = true },
     on_click = function(ev) fires.reinforcement(ev) end,
   },
+  { -- Portal Gun: custom bolts and per-team pairs, on Scales of Justice.
+    weapon = "scales_of_justice", wep = "weps/scales_of_justice.wep",
+    panel_icon = "sprites/portal_gun/icon.png",
+    -- The native shot remains usable while Lua accounts for pairs. PX's
+    -- CanFire/state hacks are replaced by uses_turn=0 and worm:air_fire.
+    patch = { uses_turn = 0, hold_pose = 3 },
+    worm_sprites = {
+      weaponlnk = "sprites/portal_gun/portal_gun_normal",
+      weaponlnku = "sprites/portal_gun/portal_gun_up",
+      weaponlnkd = "sprites/portal_gun/portal_gun_down",
+      wthrow = "sprites/portal_gun/portal_gun_link_normal",
+      wthrowu = "sprites/portal_gun/portal_gun_link_up",
+      wthrowd = "sprites/portal_gun/portal_gun_link_down",
+    },
+    sprites = {
+      "sprites/portal_gun/portal_ball", "sprites/portal_gun/portal_orange.png",
+      "sprites/portal_gun/portal_blue.png", "sprites/portal_gun/portal_glow.png",
+      "sprites/portal_gun/portal_gun_glow.png",
+      "sprites/portal_gun/lightning_glow.png", "sprites/portal_gun/portal_black_mask",
+    },
+    sounds = { "sounds/portal_gun_shoot.wav", "sounds/portal_gun_hit.wav", "sounds/portal_gun_failhit.wav",
+      "sounds/portal_active.wav", "sounds/portal_inactive.wav", "sounds/portal_teleport.wav" },
+    params = { gpu_prefix = "sprites/portal_gun/" },
+    on_fire = function(fire) fires.portal_gun(fire) end,
+  },
   { -- Electromagnet: PX's placed, persistent field on the Baseball Bat slot.
     weapon = "baseball_bat", wep = "weps/baseball_bat.wep",
     panel_icon = "sprites/electromagnet/ico_magnet.png",

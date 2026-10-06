@@ -682,3 +682,56 @@ pub fn death(death: Death) -> Result<(), String> {
         call_each(lua, &list, event)
     })
 }
+
+/// Before WA's per-body sea/gravity/collision step. No callback means no
+/// userdata allocation. Lua can warp the body; WA then moves it from there.
+pub fn body_move(handle: u32, class: i32) -> Result<(), String> {
+    with_lua("body_move", |lua| {
+        let list = hook_list(lua, "body_move")?;
+        let bit = 1u32.checked_shl(class as u32).unwrap_or(0);
+        let mut body = None;
+        for i in 1..=list.len().map_err(|e| e.to_string())? {
+            let spec: Table = list.get(i).map_err(|e| e.to_string())?;
+            let kinds: u32 = spec.get("kinds").map_err(|e| e.to_string())?;
+            if kinds & bit == 0 { continue; }
+            if body.is_none() { body = Some(crate::actor::entity_value(lua, handle)?); }
+            let cb: Function = spec.get("on").map_err(|e| e.to_string())?;
+            timed_call::<()>(lua, &cb, body.clone().unwrap())?;
+        }
+        Ok(())
+    })
+}
+
+pub(crate) fn body_kinds(opts: Option<&Table>) -> mlua::Result<u32> {
+    use game::offsets::*;
+    let names = [("worm", CLASS_WORM), ("missile", CLASS_MISSILE), ("mine", CLASS_MINE),
+        ("crate", CLASS_CRATE), ("oil", CLASS_OIL), ("grave", CLASS_GRAVE), ("arrow", CLASS_ARROW)];
+    let Some(opts) = opts else { return Ok(names.iter().fold(0, |mask, (_, c)| mask | (1 << c))); };
+    for field in opts.clone().pairs::<String, Value>() {
+        if field?.0 != "kinds" { return Err(mlua::Error::external("body_move: only kinds is accepted")); }
+    }
+    let kinds: Table = opts.get("kinds")?;
+    let mut mask = 0;
+    for name in kinds.sequence_values::<String>() {
+        let name = name?;
+        let class = names.iter().find(|(n, _)| *n == name).ok_or_else(|| mlua::Error::external(format!("body_move: unknown kind {name}")))?.1;
+        mask |= 1 << class;
+    }
+    Ok(mask)
+}
+
+thread_local! { static BODY_KINDS: Cell<u32> = const { Cell::new(0) }; }
+pub fn body_move_wanted(class: i32) -> bool {
+    let bit = 1u32.checked_shl(class as u32).unwrap_or(0);
+    BODY_KINDS.with(|k| k.get() & bit != 0)
+}
+
+pub(crate) fn body_move_rebuild(lua: &Lua) {
+    let mask = lua.globals().get::<Table>("wa").ok()
+        .and_then(|wa| wa.get::<Table>("_hooks").ok())
+        .and_then(|hooks| hooks.get::<Table>("body_move").ok())
+        .map(|list| list.sequence_values::<Table>().flatten()
+            .fold(0, |mask, spec| mask | spec.get::<u32>("kinds").unwrap_or(0)))
+        .unwrap_or(0);
+    BODY_KINDS.with(|k| k.set(mask));
+}

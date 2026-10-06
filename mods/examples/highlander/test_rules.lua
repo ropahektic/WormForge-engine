@@ -115,6 +115,7 @@ function Worm:release(vx, vy, opts)
   self.vx, self.vy = vx or 0, vy or 0
   self.release_options = opts
 end
+function Worm:air_fire(on) self.air_firing = on ~= false end
 function Worm:jetpack_steer(on) self.steered = on ~= false end
 -- WA's collision test, in the mock: the land M.solid gives, 4 pixels either
 -- side of the worm and 6 above and below.
@@ -649,6 +650,9 @@ local function new_match(opts)
           for _, h in ipairs(M.draws) do h() end
         end
       end,
+      body_move = function(f, opts)
+        M.body_move = f
+      end,
       contact = function(f)
         M.contacts = M.contacts or {}
         M.contacts[#M.contacts + 1] = f
@@ -771,7 +775,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("65 slots replaced, each once", #replaced == 65 and not dupes, tostring(#replaced))
+  check("66 slots replaced, each once", #replaced == 66 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -794,7 +798,7 @@ do
     if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi"
       or slot == "prod" or slot == "armageddon" or slot == "petrol_bomb" or slot == "nuclear_test"
       or slot == "sheep_strike" or slot == "salvation_army" or slot == "baseball_bat" or slot == "donkey"
-      or slot == "suicide_bomber" then
+      or slot == "suicide_bomber" or slot == "scales_of_justice" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif slot == "kamikaze" or slot == "dragon_ball" then
       -- The Sentry Gun and the Sentry Laser are placed as WA places a mine.
@@ -3600,7 +3604,7 @@ local function baseline()
     missile_frame = M.missile_handlers, draw = M.draws, contact = M.contacts, hurt = M.hurt_handlers,
   }
   for _, name in ipairs({
-    "contact", "death", "draw", "hud", "hurt", "missile_frame",
+  "contact", "death", "draw", "hud", "hurt", "missile_frame", "body_move",
     "turn_end", "turn_start", "worm_message",
   }) do
     local n = hooks[name] and #hooks[name] or (M[name] and 1 or 0)

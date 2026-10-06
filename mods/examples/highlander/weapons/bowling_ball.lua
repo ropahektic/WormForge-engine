@@ -461,6 +461,25 @@ local function spawn_ball(owner, x, y, vx, vy)
         tick(a.id)
         if b.zapped then electrified_frame(b) end
         spin(b)
+        -- Before its Lua terrain sweep, using the actual ball centre and
+        -- velocity rather than the display actor's deliberately zero speed.
+        if shared.portals and next(shared.portals.pairs) then
+          local proxy = {
+            id = a.id, kind = "actor", x = b.x, y = b.y,
+            vx = trunc(b.vx * P), vy = trunc(b.vy * P),
+            fits = function(_, x, y)
+              return not wa.world.collides({ x = x, y = y, radius = RADIUS, with = {"terrain"} })
+            end,
+            warp = function(_, spec)
+              b.x, b.y, b.vx, b.vy = spec.x, spec.y, spec.vx / P, spec.vy / P
+              wake(b)
+              b.lvx, b.lvy, b.rvx, b.rvy = b.vx, b.vy, b.vx, b.vy
+              a:warp({ x = b.x, y = b.y + SPRITE_DROP * P, vx = 0, vy = 0 })
+              return true
+            end,
+          }
+          shared.portals:move(proxy)
+        end
         local speed = think(b)
         if b.gone then
           shared.bowling_balls[a.id] = nil
@@ -547,4 +566,11 @@ if wa.on.draw and wa.draw.quad then
       end
     end
   end)
+end
+
+-- Live adapter identities for the portal return-cache cleanup.
+shared.portal_bowling_balls = function()
+  local out = {}
+  for _, id in ipairs(balls_in_order()) do out[#out + 1] = { id = id } end
+  return out
 end

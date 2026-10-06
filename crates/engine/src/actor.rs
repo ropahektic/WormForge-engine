@@ -152,6 +152,13 @@ pub fn install() -> Result<(), String> {
     ORIG_TEAM_MSG.store(team_tr, Ordering::SeqCst);
 
     lua_host::bind_actor_native(lua_host::ActorNative {
+        warp: crate::body::warp,
+        body_uid: crate::body::uid,
+        body_live: crate::body::live,
+        air_fire: crate::air_fire::enable,
+        fire_power: |h| if crate::body::uid(h) == 0 { 65536 } else {
+            unsafe { read_i32(h as *mut u8, WORM_FIRE_POWER).clamp(0, 65536) }
+        },
         explode: native_explode,
         despawn: native_despawn,
         in_water: native_in_water,
@@ -447,6 +454,11 @@ pub fn clear_claims() {
 
 fn drop_for_slot(slot: usize) -> Option<DropClaim> {
     DROPS.lock().ok()?.iter().cloned().find(|c| c.slot == slot)
+}
+
+/// Selected claim's Lua fire handler; shared by airborne fire dispatch.
+pub fn slot_fire(slot: u32) -> u32 {
+    fire_for_slot(slot as usize).map(|c| c.fire_id).unwrap_or(0)
 }
 
 fn fire_for_slot(slot: usize) -> Option<FireClaim> {

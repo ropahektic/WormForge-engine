@@ -15,6 +15,8 @@ mod http;
 mod hud;
 mod hurt;
 mod arrow_source;
+mod body;
+mod air_fire;
 mod overlay;
 mod particles;
 mod perf;

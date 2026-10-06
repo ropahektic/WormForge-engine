@@ -89,3 +89,17 @@ plate_comment = "Rest/wind probe used by apply_projectile_gravity."
 va = 0x00664194
 name = "CollisionManagerVtable"
 type = "void *"
+
+# Portal transport evidence: inspected the pristine installed WA 3.8.1 exe.
+# WORLD_ENTITY_CTOR (4FED50, stdcall(this,parent,layer,shape), RET 16) assigns
+# +84/+88 positions, +90/+94 speed and +AC/+B8 settle/moved, registers the body
+# in CM.entities at 4FEEBA..4FEEC0, then its layer list at 4FEEC6..4FEED0.
+# WORLD_ENTITY_DTOR (4FEF30, thiscall) unregisters both at 4FEF98..4FEFAA.
+# engine/body.rs allocates a per-world uid on construction and forgets it on
+# destruction, so reused addresses never inherit a portal's return lock.
+# No position-indexed registry needs rebuilding: both lists hold pointers.
+# update_0 (4FCDF0, stdcall(cm,body,index), RET 12): +AC > 0 may skip movement
+# at 4FCE0F..4FCE61. +B8 is cleared at 4FCE8A and set by the movement/gravity
+# paths. body:warp clears +AC and sets +B8, retaining all unrelated fields.
+# body_move runs before update_0's sea, gravity and collision, and kinds with
+# no registered handler never enter Lua. WA continues from the new position.

@@ -21,10 +21,10 @@ pub use actor::{
     weapon_emit, weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs,
     LaunchArgs, SpawnArgs, FIRE_DEFAULTS, ShapeHit, ShapeQuery, SHAPE_CRATES, SHAPE_GRAVES,
     SHAPE_MINES, SHAPE_OIL, SHAPE_TERRAIN, SHAPE_WORMS, actor_hit, actor_takes_hits, ActorHit,
-    StampBuried, CrateArgs,
+    StampBuried, CrateArgs, weapon_air_fire, WarpArgs,
 };
 pub use dispatch::{
-    contact, Contact,
+    body_move, body_move_wanted, contact, Contact,
     death, drawing, gravity_after, gravity_before, hurt, missile_frame, run_draw, run_hud,
     turn_cleanup, turn_end, turn_retreat, turn_start, worm_message,
     Death, DrawQuad, Hurt,
@@ -46,6 +46,7 @@ thread_local! {
 }
 
 pub fn park_lua(lua: Lua) {
+    dispatch::body_move_rebuild(&lua);
     dispatch::worm_message_rebuild(&lua);
     dispatch::fast_rebuild(&lua);
     PARKED_LUA.with(|slot| {
@@ -1014,7 +1015,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 65);
+        assert_eq!(applied.len(), 66);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         let skip_go = claim(StockWeapon::SkipGo);
         assert_eq!(skip_go.params.name.as_deref(), Some("Skip Go/Surrender"));
@@ -1033,6 +1034,10 @@ wa.weapons.replace({
         let ferret = claim(StockWeapon::SalvationArmy);
         assert_eq!(ferret.params.name.as_deref(), Some("Ferret"));
         assert!(ferret.params.on_fire_id != 0, "thrown through on_fire");
+        let portal = claim(StockWeapon::ScalesOfJustice);
+        assert_eq!(portal.params.name.as_deref(), Some("Portal Gun"));
+        assert!(portal.params.wep.is_some());
+        assert!(portal.params.on_fire_id != 0);
         let magnet = claim(StockWeapon::BaseballBat);
         assert_eq!(magnet.params.name.as_deref(), Some("Electromagnet"));
         assert!(magnet.params.wep.is_some());
@@ -2666,6 +2671,205 @@ end)
             assert!(seen.get::<bool>("hurt").unwrap());
             assert!(seen.get::<bool>("death").unwrap());
         });
+    }
+
+    #[test]
+    fn transport_verbs_validate_specs_and_require_simulation() {
+        let _guard = lock_host();
+        actor::bind_actor_native(ActorNative {
+            warp: |_, spec| {
+                // Native calls may reenter Lua: the binding must have released
+                // NATIVE before calling the engine callback.
+                let _keys = actor::native_keys().unwrap()();
+                assert_eq!(spec.x, 123); assert_eq!(spec.y, 456);
+                assert_eq!(spec.vx, Some(789)); assert_eq!(spec.vy, None);
+                true
+            },
+            air_fire: |_, on| on,
+            body_uid: |_| 7,
+            body_live: |_, id| id == 7,
+            actor_fits: |_, x, y| x == 100 && y == 200,
+            fits: |_, x, y| x == 200 && y == 100,
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        lua.globals().set("w", actor::WormHandle(0)).unwrap();
+        lua.globals().set("wf", actor::WormHandle(0x1234)).unwrap();
+        lua.globals().set("o", actor::WorldHandle::new(0)).unwrap();
+        lua.load(r#"
+            assert(not pcall(function() w:warp{x=123,y=456} end))
+            assert(not pcall(function() w:air_fire() end))
+            assert(o:fits(100,200) and not o:fits(200,100))
+            assert(wf:fits(200,100) and not wf:fits(100,200))
+            assert(wf:fits(100,200,"terrain") and not wf:fits(200,100,"terrain"))
+            assert(o:fits(100,200,"terrain"))
+            assert(not pcall(function() wf:fits(100,200,"bogus") end))
+            assert(o.uid==7)
+        "#).exec().unwrap();
+        sim_context::with_sim(|| lua.load(r#"
+            assert(w:warp{x=123,y=456,vx=789,facing=-1})
+            assert(o:warp{x=123,y=456,vx=789})
+            assert(w:air_fire() and not w:air_fire(false))
+            assert(not pcall(function() w:warp{x=1,y=2,foo=3} end))
+            assert(not pcall(function() w:warp{x=1,y=2,facing=0} end))
+        "#).exec()).unwrap();
+    }
+
+    #[test]
+    fn body_move_filters_keep_registration_order_and_pack_context() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-body-move");
+        let pack = filter_pack(&root, r#"
+          seen = {}
+          wa._mod = "first"
+          wa.on.body_move(function(b) seen[#seen+1] = wa._mod .. ":" .. b.kind end, {kinds={"mine"}})
+          wa._mod = "second"
+          wa.on.body_move(function(b) seen[#seen+1] = wa._mod .. ":" .. b.kind end, {kinds={"arrow", "mine"}})
+          assert(not pcall(function() wa.on.body_move(function() end, {kinds={"bogus"}}) end))
+        "#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        assert!(body_move_wanted(game::offsets::CLASS_MINE));
+        assert!(!body_move_wanted(game::offsets::CLASS_WORM));
+        let other = filter_pack(&root.join("other"), "-- no hooks");
+        let _second = run_mods(&[other]).unwrap();
+        assert!(body_move_wanted(game::offsets::CLASS_MINE), "unparked Lua must not replace the running filters");
+        let mut raw = vec![0i32; 0x200 / 4];
+        let p = raw.as_mut_ptr() as *mut u8;
+        unsafe { game::entity::write_i32(p, game::offsets::ENT_CLASS_TYPE, game::offsets::CLASS_MINE) };
+        body_move(p as u32, game::offsets::CLASS_MINE).unwrap();
+        PARKED_LUA.with(|slot| {
+            let lua = slot.borrow(); let lua = lua.as_ref().unwrap();
+            let seen: mlua::Table = lua.globals().get("seen").unwrap();
+            assert_eq!(seen.get::<String>(1).unwrap(), "first:mine");
+            assert_eq!(seen.get::<String>(2).unwrap(), "second:mine");
+        });
+    }
+
+    #[test]
+    fn highlander_portals_cover_transport_controls_and_air_firing() {
+        let lua = Lua::new();
+        lua.globals().set("HIGHLANDER_ROOT", concat!(env!("CARGO_MANIFEST_DIR"), "/../../mods/examples/highlander/")).unwrap();
+        lua.load(include_str!("../../../mods/examples/highlander/test_portals.lua"))
+            .set_name("highlander/test_portals.lua").exec().unwrap();
+    }
+
+    #[test]
+    fn portal_shot_moves_hits_and_draws_through_real_bindings() {
+        let _host = lock_host();
+        use game::{entity::{read_i32, write_i32}, offsets::*};
+        use std::cell::{Cell, RefCell};
+        const P: i32 = 0x10000;
+        thread_local! {
+            static BODIES: RefCell<Vec<(Vec<u8>, u32)>> = const { RefCell::new(Vec::new()) };
+            static WORM: Cell<u32> = const { Cell::new(0) };
+            static SOUNDS: Cell<usize> = const { Cell::new(0) };
+        }
+        BODIES.with(|v| v.borrow_mut().clear());
+        SOUNDS.with(|v| v.set(0));
+        let mut worm = vec![0u8; 0x1000];
+        let h = worm.as_mut_ptr() as u32;
+        unsafe {
+            for (off, value) in [(ENT_POS_X, 100*P), (ENT_POS_Y, 100*P),
+                (WORM_TURN_SIDE, 1), (WORM_AIM_ANGLE, 0x7fff),
+                (WORM_SELECTED_WEAPON, weapons::StockWeapon::ScalesOfJustice.index() as i32),
+                (WORM_STATE, 0x67), (WORM_TURN_ACTIVE, 1)] {
+                write_i32(worm.as_mut_ptr(), off, value);
+            }
+        }
+        WORM.with(|v| v.set(h));
+        actor::bind_actor_native(ActorNative {
+            map_size: || (2000, 1000),
+            water_y: || 1000*P,
+            list_worms: |_| WORM.with(|v| vec![v.get()]),
+            resolve_sprite: |_| Some((10001, 0, 100, 100)),
+            resolve_sound: |_| 7,
+            fire_power: |_| P,
+            ammo: |_, _, _| 3,
+            play_sound: |target, id, _| {
+                WORM.with(|v| assert_eq!(target, v.get()));
+                assert_eq!(id, 7);
+                SOUNDS.with(|v| v.set(v.get()+1));
+            },
+            spawn: |args| BODIES.with(|v| {
+                let mut bodies = v.borrow_mut();
+                let mut body = vec![0u8; LUA_ACTOR_SIZE];
+                let h = body.as_mut_ptr() as u32;
+                unsafe {
+                    for (off, value) in [(ACTOR_MAGIC, LUA_ACTOR_MAGIC as i32),
+                        (ACTOR_SEQ, bodies.len() as i32+1), (ACTOR_OWNER, args.owner as i32),
+                        (ENT_POS_X, args.x), (ENT_POS_Y, args.y)] {
+                        write_i32(body.as_mut_ptr(), off, value);
+                    }
+                }
+                actor::actor_spawned(h, args.spawn.brain_id);
+                bodies.push((body, args.spawn.brain_id));
+                Ok(h)
+            }),
+            despawn: |h| unsafe { write_i32(h as *mut u8, ACTOR_DEAD, 1) },
+            land_trace: |x, y, _, _| Some((x, y)),
+            shape_trace: |q| {
+                assert_eq!(q.with, actor::SHAPE_TERRAIN);
+                assert_eq!(q.radius, 0);
+                if q.x0 < 200*P && q.x1 >= 200*P {
+                    actor::ShapeHit { hit: true, x: 199*P, y: q.y1, nx: -1.0,
+                        ..Default::default() }
+                } else { actor::ShapeHit::default() }
+            },
+            ..Default::default()
+        });
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/highlander");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap()).unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        let fire = scripts.resolved.applied.iter()
+            .find(|c| c.slot == weapons::StockWeapon::ScalesOfJustice).unwrap().params.on_fire_id;
+        park_lua(scripts.lua);
+        actor::weapon_fire(fire, h, weapons::StockWeapon::ScalesOfJustice.index() as i32,
+            100*P, 100*P, 0, 0).unwrap();
+        let (bolt, brain) = BODIES.with(|v| {
+            let mut bodies = v.borrow_mut();
+            assert_eq!(bodies.len(), 2, "manager and visible bolt");
+            (bodies[1].0.as_mut_ptr() as u32, bodies[1].1)
+        });
+        let initial_x = unsafe { read_i32(bolt as *mut u8, ENT_POS_X) };
+        actor::actor_frame(bolt, brain, ActorEvent::default()).unwrap();
+        let moved_x = unsafe { read_i32(bolt as *mut u8, ENT_POS_X) };
+        assert!((moved_x-initial_x-35*P).abs() < 10, "bolt advances at full power");
+        actor::actor_frame(bolt, brain, ActorEvent::default()).unwrap();
+        actor::actor_frame(bolt, brain, ActorEvent::default()).unwrap();
+        assert_eq!(unsafe { read_i32(bolt as *mut u8, ACTOR_DEAD) }, 1, "terrain impact removes bolt");
+        SOUNDS.with(|v| assert_eq!(v.get(), 2, "shot and successful portal impact"));
+        let quads = run_draw().unwrap();
+        let endpoint = |quads: &[dispatch::DrawQuad]| quads.iter().any(|q| {
+            let x = q.corners.iter().map(|p| p.0).sum::<f32>() / 4.0;
+            let y = q.corners.iter().map(|p| p.1).sum::<f32>() / 4.0;
+            q.colours == [0xFFFFFFFF; 4] && q.additive
+                && (x-199.0).abs() < 0.01 && (y-100.0).abs() < 0.01
+        });
+        assert!(endpoint(&quads), "first endpoint is bright at the impact before a partner exists");
+        for q in quads {
+            for (x, y) in q.corners {
+                assert!(x.abs() < 2000.0 && y.abs() < 1000.0, "all effects stay on the map");
+            }
+        }
+        unsafe { write_i32(worm.as_mut_ptr(), WORM_TURN_ACTIVE, 0) };
+        turn_end(h).unwrap();
+        let (manager, manager_brain) = BODIES.with(|v| {
+            let mut bodies = v.borrow_mut();
+            (bodies[0].0.as_mut_ptr() as u32, bodies[0].1)
+        });
+        for _ in 0..160 {
+            actor::actor_frame(manager, manager_brain, ActorEvent::default()).unwrap();
+        }
+        assert!(endpoint(&run_draw().unwrap()), "endpoint still draws after retreat and effect expiry");
+        actor::reset();
+        actor::bind_actor_native(ActorNative::default());
+        PARKED_LUA.with(|slot| *slot.borrow_mut() = None);
+        WORM.with(|v| v.set(0));
+        BODIES.with(|v| v.borrow_mut().clear());
     }
 
     #[test]

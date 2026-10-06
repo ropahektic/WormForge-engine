@@ -576,3 +576,71 @@ stamp uses source alpha and the colours the terrain already holds; airborne
 art uses GPU sheets. Terrain writes and target selection run only during
 simulation. The impact sound plays on the turn's worm (PX plays it unplaced):
 an explosion's `ev.worm` is the missile's owner, not necessarily a worm.
+
+
+## Portal Gun
+
+Scales of Justice's slot is PX's Portal Gun. `-` selects orange, `+` blue;
+Ctrl or Alt selects the other colour for a shot. New endpoints automatically
+select the other colour. Pause/Break toggles the current team's portals.
+Ground shots keep WA's charge bar; airborne shots fire at full power, using
+Up/Down and Left/Right for PX's eight aim choices. Flight momentum and WA's
+collisions continue. Normal stock aim speed is retained (PX's Shift aim-speed
+hack is not used).
+
+A team owns one persistent pair. Both endpoints are required for transport.
+Placement follows PX's terrain normals and partner exclusion; each two
+successful impacts use one ammo, misses refunded. Native firing remains
+usable (`uses_turn = 0`); placing a pair consumes ammo without ending the
+turn. This replaces PX's state/CanFire overrides with a Lua dispatch and
+explicit ammo accounting. Portals reactivate at turn start and stop transporting
+when retreat ends. Each endpoint stays visible independently of its partner
+and activity, including between turns. Missiles, worms, mines, crates, oil drums, arrows
+(including Ice Arrow), graves and Bowling Balls can pass. Portal bolts,
+Electromagnets and flames do not; the last two were not traversed by PX's
+active Portal Gun loop.
+
+`lib/portals.lua` owns pairs, placement, reentry suppression, swept crossings
+and clearance. It accepts configurable dimensions, placement offset, grace,
+velocity and clearance functions, and a transport callback. Its default
+velocity strategy (`lib/portal_velocity.lua`) keeps PX's separate worm and
+object rules for all 8 × 8 directions, including their minimum speeds and
+facing changes. A transported body remains the same WA object. For a blocked
+exit, Lua cuts PX's 15-pixel clearance hole; an exit still blocked is refused.
+Swept entry checks also catch fast bodies before native terrain impact.
+Bowling Balls adapt their Lua motion model directly before their own sweep.
+
+`lib/portal_effects.lua` ports PX's two-layer plasma trails, 17-spark impact
+bursts (47 for rejected placement), three-frame flash, 15-frame ambient
+particles and five-particle teleport burst, using its original glow sprites,
+sizes, colours, drag, gravity and lifetimes. The team marker uses PX's two
+black-mask frames. Particle randomness is confined to looks and consumes no
+WA gameplay RNG. Transport activity gates ambience; it never hides endpoints.
+
+Added engine surface:
+
+- `worm:warp{ x, y, vx?, vy?, facing? }`, `object:warp{...}` and
+  `actor:warp{...}` atomically move a live body and wake it. Omitted speeds
+  retain momentum; facing is supported for worms/actors. A grounded or roped
+  worm moving out enters WA's controlled fall; tumble/frozen states remain.
+  Returns false for invalid/dead bodies. Clearance is decided by Lua.
+- `object:fits(x, y)` uses its own native shape against terrain.
+  `worm:fits(x, y, "terrain")` ignores other objects; omitting the mode
+  retains the worm's normal collision mask. Portals use terrain-only checks.
+- `worm:air_fire(on)` (default true) enables `on_fire` for synchronized Space
+  press edges in flight. It is bound to the selected Lua fire claim and
+  lapses on a selection change or turn end. The event has `airborne = true`;
+  native ammo/turn processing is not invoked. No aiming or steering physics
+  is changed by the verb. Ground `on_fire.power` is normalized charge 0..1.
+- `wa.on.body_move(fn, { kinds = {...} })` runs before stock sea, gravity and
+  collision. Supported kinds: worm, missile, mine, crate, oil, grave, arrow.
+  The callback receives the corresponding handle; warping it makes WA's
+  step continue at the new position. Filters avoid Lua calls for other kinds.
+- `object.uid` is a per-world construction number, unaffected by allocator
+  reuse; the old `object.id` stays compatible. `wa.arrows.all()` enumerates
+  live stock arrows. `ctrl`, `minus_key`, `alt`, `pause_key` join synchronized keys.
+
+Tests: `lua mods/examples/highlander/test_portals.lua`, plus the existing
+scheme mock and native Windows engine/Lua tests. The port was playtested in
+WA, including endpoint visibility and effects. Replay/network playback is
+still unverified.
