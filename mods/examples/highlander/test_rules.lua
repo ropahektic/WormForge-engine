@@ -2002,6 +2002,21 @@ do
   click({ worm=jumper, x=100*P, y=100*P })
   check("click leaves ending WA's prefiring pose to the engine", jumper.state == "prefiring")
 
+  -- The strike comes from where WA's arrow points (the sign of ev.vx), not
+  -- from the worm's facing. With no land the beam ends 300 pixels along it,
+  -- which is where its effect sits: left of the click when it comes from
+  -- the left.
+  new_match()
+  local facing_right = worm(16)
+  facing_right.facing = 1
+  click({ worm = facing_right, x = 100 * P, y = 100 * P, vx = -P })
+  local from_right = M.spawned[#M.spawned]
+  facing_right.facing = -1
+  click({ worm = facing_right, x = 100 * P, y = 100 * P, vx = P })
+  local from_left = M.spawned[#M.spawned]
+  check("the arrow, not the worm's facing, sets the side it strikes from",
+    from_right.x > 100 * P and from_left.x < 100 * P, (from_right.x / P) .. "," .. (from_left.x / P))
+
   new_match()
   local by_slot = {}
   for _, spec in ipairs(replaced) do by_slot[spec.weapon] = spec end

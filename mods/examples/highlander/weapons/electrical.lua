@@ -154,7 +154,9 @@ local function strike_particles(s)
 end
 
 shared.lightning_click = function(ev)
-  local dirx = 0.5 * ev.worm.facing
+  -- PX's direction: from the left unless the shot's x speed, which WA's
+  -- arrow keys set, is negative (lightningstrike.txt: SpX < 0 -> -DirX).
+  local dirx = 0.5 * ((ev.vx or 0) < 0 and -1 or 1)
   local diry = math.sqrt(3) / 2
   local sy = -270 * EP
   local sx = math.floor(ev.x - ((ev.y - sy) / EP) * dirx / diry * EP)
