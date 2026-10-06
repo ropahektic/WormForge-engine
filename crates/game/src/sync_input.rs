@@ -15,25 +15,32 @@ fn fixed_to_wire_pixel(value: i32) -> i16 {
 /// `keys` bits 8..11: the digit key held (0 none, 1..10 for 0..9), which the
 /// wire carries in bits 9..12 of the controls word.
 pub const DIGIT_SHIFT: u32 = 8;
+/// `keys` bit 13: the + key (top row or keypad), in wire bit 14.
+pub const PLUS_KEY: u32 = 1 << 13;
 const WIRE_DIGIT_SHIFT: u32 = 9;
 const WIRE_DIGIT_MASK: u32 = 0xf << WIRE_DIGIT_SHIFT;
+const WIRE_PLUS_KEY: u32 = 1 << 14;
 
 pub fn pack(sample: InputSample) -> (u32, u32) {
     let digit = (sample.keys >> DIGIT_SHIFT) & 0xf;
-    let controls =
-        (sample.keys & 0xff) | ((sample.down as u32) << 8) | (digit << WIRE_DIGIT_SHIFT);
+    let controls = (sample.keys & 0xff)
+        | ((sample.down as u32) << 8)
+        | (digit << WIRE_DIGIT_SHIFT)
+        | (if sample.keys & PLUS_KEY != 0 { WIRE_PLUS_KEY } else { 0 });
     let x = fixed_to_wire_pixel(sample.px) as u16 as u32;
     let y = fixed_to_wire_pixel(sample.py) as u16 as u32;
     (controls, x | (y << 16))
 }
 
 pub fn unpack(controls: u32, packed_pointer: u32) -> Option<InputSample> {
-    if controls & !(0x1ff | WIRE_DIGIT_MASK) != 0 {
+    if controls & !(0x1ff | WIRE_DIGIT_MASK | WIRE_PLUS_KEY) != 0 {
         return None;
     }
     let digit = (controls & WIRE_DIGIT_MASK) >> WIRE_DIGIT_SHIFT;
     Some(InputSample {
-        keys: (controls & 0xff) | (digit << DIGIT_SHIFT),
+        keys: (controls & 0xff)
+            | (digit << DIGIT_SHIFT)
+            | (if controls & WIRE_PLUS_KEY != 0 { PLUS_KEY } else { 0 }),
         px: (packed_pointer as u16 as i16 as i32) << 16,
         py: ((packed_pointer >> 16) as u16 as i16 as i32) << 16,
         down: controls & 0x100 != 0,
@@ -55,7 +62,7 @@ pub fn pack_from(sample: InputSample, sender: u8) -> (u32, u32) {
 
 /// `unpack` for a stamped record: the sample, and the sender if it said.
 pub fn unpack_from(controls: u32, packed_pointer: u32) -> Option<(InputSample, Option<u8>)> {
-    if controls & !(0x1ff | WIRE_DIGIT_MASK | SENDER_MASK) != 0 {
+    if controls & !(0x1ff | WIRE_DIGIT_MASK | WIRE_PLUS_KEY | SENDER_MASK) != 0 {
         return None;
     }
     let sender = (controls & SENDER_MASK) >> SENDER_SHIFT;
@@ -128,6 +135,15 @@ mod tests {
     }
 
     #[test]
+    fn the_plus_key_travels_with_the_keys() {
+        let plus = sample(PLUS_KEY, 1, 2, false);
+        let (controls, pointer) = pack_from(plus, 2);
+        assert_eq!(unpack_from(controls, pointer), Some((plus, Some(2))));
+        // Pressing it is a key change: sent at once.
+        assert!(should_send(Some(sample(0, 1, 2, false)), plus, 2, 1, false));
+    }
+
+    #[test]
     fn records_say_which_machine_sent_them() {
         let shift = sample(0x20, 10, 20, false);
         for sender in [0u8, 1, 5] {
@@ -153,7 +169,7 @@ mod tests {
         let (controls, pointer) = pack(original);
         assert_eq!(
             unpack(controls, pointer),
-            Some(sample(0xfff, i16::MAX as i32, i16::MIN as i32, false))
+            Some(sample(0xfff | PLUS_KEY, i16::MAX as i32, i16::MIN as i32, false))
         );
     }
 
