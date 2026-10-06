@@ -785,12 +785,16 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 55);
+        assert_eq!(applied.len(), 56);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         let sentry = claim(StockWeapon::Kamikaze);
         assert_eq!(sentry.params.name.as_deref(), Some("Sentry Gun"));
         assert!(sentry.params.on_fire_id != 0, "placed through on_fire");
         assert_eq!(sentry.params.worm_sprites_team_tint.as_ref().map(|t| t.colours.len()), Some(6));
+        let laser = claim(StockWeapon::DragonBall);
+        assert_eq!(laser.params.name.as_deref(), Some("Sentry Laser"));
+        assert!(laser.params.on_fire_id != 0, "placed through on_fire");
+        assert_eq!(laser.params.worm_sprites_team_tint.as_ref().map(|t| t.colours.len()), Some(6));
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());
