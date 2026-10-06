@@ -371,7 +371,18 @@ end
 -- The Electric Grenade's arc (PX's Tazer, whose targets include the ball):
 -- the balls as targets, at the middle of the drawn ball, in id order.
 local function as_target(id, b)
-  return { kind = "ball", id = id, x = b.x, y = b.y + SPRITE_DROP * P }
+  return { kind = "ball", id = id, x = b.x, y = b.y + SPRITE_DROP * P,
+    alliance = b.alliance, moving = b.vx ~= 0 or b.vy ~= 0 }
+end
+
+-- The Sentry Laser's disintegration (PX: Sleep, then Free): gone at once,
+-- its actor at its next frame.
+shared.remove_bowling_ball = function(id)
+  local b = shared.bowling_balls[id]
+  if not b then return end
+  sleep(b)
+  b.gone = true
+  shared.bowling_balls[id] = nil
 end
 
 shared.bowling_ball_targets = function()
@@ -445,7 +456,7 @@ local function spawn_ball(owner, x, y, vx, vy)
   local b = {
     x = x, y = y, vx = vx, vy = vy, lvx = vx, lvy = vy, rvx = 0, rvy = 0, lx = x, ly = y,
     rot = 0, low = false, low_timer = 200, sleep_timer = 200, rec_x = x, rec_y = y,
-    asleep = false,
+    asleep = false, alliance = owner and owner.alliance,
   }
   local a = wa.actors.spawn({
     sprite = SHEET, x = x, y = y + SPRITE_DROP * P, gravity = false, collide = false, owner = owner,
@@ -453,6 +464,10 @@ local function spawn_ball(owner, x, y, vx, vy)
     on = {
       hit = function(_, hit) take_hit(b, hit) end,
       frame = function(a)
+        if b.gone then
+          a:despawn()
+          return
+        end
         if b.y >= wa.world.water() then
           shared.bowling_balls[a.id] = nil
           a:despawn()

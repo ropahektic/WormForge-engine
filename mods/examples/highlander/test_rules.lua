@@ -1151,6 +1151,14 @@ do
   M.message(owner, wa.msg.START_TURN)
   for _ = 1, 60 do body.on(body) end
   check("each turn reloads it, its owner's turn too", disintegrations() == 5 and #M.missiles == 0)
+  -- An enemy's Bowling Ball rolling by is shot too.
+  local shared = require("lib/shared")
+  M.message(enemy, wa.msg.START_TURN)
+  local _, ball = shared.spawn_bowling_ball(enemy, 220 * p, 60 * p, 2, 0)
+  local _, own_ball = shared.spawn_bowling_ball(owner, 180 * p, 60 * p, 2, 0)
+  for _ = 1, 60 do body.on(body) end
+  check("an enemy's moving Bowling Ball is disintegrated too, its own colour's spared",
+    disintegrations() == 6 and ball.gone and not own_ball.gone, disintegrations())
   body.on(body, { damage = 35 })
   check("at 0 of its 35 health it explodes, damage 50, blast 100, body and barrel gone",
     #M.actor_booms == 1 and M.actor_booms[1].opts.damage == 50 and head.dead and barrel.dead)
