@@ -497,6 +497,14 @@ pub const WORM_INDEX: usize = 0x100;
 /// Per-tick poison amount. ApplyPoison (msg 0x3E) subtracts this, floor 1 HP.
 pub const WORM_POISON: usize = 0x148;
 pub const ARENA_WORM_HP: usize = 0x40EC;
+/// The health a worm's label shows, 16.16, and the value it counts towards
+/// (0x5147C0, each frame): it moves a tenth of the way a frame and, while
+/// the two differ, writes its whole part into the label text (+0x312). The
+/// target rises at once when the worm's health (ARENA_WORM_HP) is above the
+/// shown value, and falls only when the turn commits health (0x510865). The
+/// constructor (0x50C55E) starts both at the scheme's starting health.
+pub const WORM_HEALTH_SHOWN: usize = 0x178;
+pub const WORM_HEALTH_TARGET: usize = 0x17C;
 /// Team ammo row. Index `world + 0x462C + team * 0x51C`.
 pub const WORLD_TEAM_AMMO_GROUP: usize = 0x462C;
 /// ExplosionMessage / SpecialImpactMessage.damage

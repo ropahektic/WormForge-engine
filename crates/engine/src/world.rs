@@ -1293,6 +1293,7 @@ pub fn revive_grave(grave_handle: u32, worm_id: u32, health: i32) -> u32 {
         let hp = ARENA_WORM_HP + team as usize * WORLD_TEAM_STRIDE
             + index as usize * ARENA_WORM_STRIDE;
         write_i32(world, hp, health);
+        show_health(worm, health);
         // TeamArena::logical_teams[team-1].eliminated_flag. A revived last
         // worm must put its team back into selection and score calculations.
         write_i32(world, GAME_WORLD_TEAM_ARENA + 8
@@ -2011,9 +2012,38 @@ unsafe fn play_sound_local(entity: *mut u8, id: i32, flags: i32, volume: i32, pi
     }
 }
 
+/// Make `worm`'s label show `health` from its next frame, through WA's own
+/// counter: the target is the health and the shown value half a point off
+/// it, so WA's count (0x5147C0) snaps to the target and writes the label
+/// text with its own formatter. A revived worm needs it: the constructor
+/// starts the shown value at the scheme's starting health but writes the
+/// label from the health it had then (0, before revive sets it), and WA only
+/// raises a label at once, never lowers it before the turn commits.
+unsafe fn show_health(worm: *mut u8, health: i32) {
+    let target = health.clamp(0, 9999) << 16;
+    write_i32(worm, WORM_HEALTH_TARGET, target);
+    write_i32(worm, WORM_HEALTH_SHOWN, target + 0x8000);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_revived_worms_label_counts_to_its_health_next_frame() {
+        let mut worm = vec![0u8; 0x41C];
+        let p = worm.as_mut_ptr();
+        unsafe {
+            write_i32(p, WORM_HEALTH_SHOWN, 100 << 16);
+            write_i32(p, WORM_HEALTH_TARGET, 100 << 16);
+            show_health(p, 10);
+            assert_eq!(read_i32(p, WORM_HEALTH_TARGET), 10 << 16);
+            let shown = read_i32(p, WORM_HEALTH_SHOWN);
+            assert_ne!(shown, 10 << 16, "they differ, so WA rewrites the label");
+            assert_eq!(shown >> 16, 10, "but its whole part is already the health");
+            assert!((shown - (10 << 16)).abs() < 0x10000, "close enough that WA snaps, not counts");
+        }
+    }
 
     fn pixel_solid_slice(
         packed: &[u8],
