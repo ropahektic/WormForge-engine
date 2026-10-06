@@ -278,7 +278,8 @@ local function new_match(opts)
       gravity = function() return M.gravity or 0 end,
       wind = function() return M.wind or 0 end,
       keys = function()
-        return { sprint = M.shift or false, digit = M.digit, plus_key = M.plus_key or false }
+        return { sprint = M.shift or false, digit = M.digit, plus_key = M.plus_key or false,
+          ctrl = M.ctrl or false, left = M.left or false, right = M.right or false }
       end,
       set_gravity = function(v) M.gravity = v end,
       set_wind = function(v) M.wind = v end,
@@ -770,7 +771,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("64 slots replaced, each once", #replaced == 64 and not dupes, tostring(#replaced))
+  check("65 slots replaced, each once", #replaced == 65 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -792,7 +793,8 @@ do
   for slot, spec in pairs(by_slot) do
     if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi"
       or slot == "prod" or slot == "armageddon" or slot == "petrol_bomb" or slot == "nuclear_test"
-      or slot == "sheep_strike" or slot == "salvation_army" or slot == "baseball_bat" or slot == "donkey" then
+      or slot == "sheep_strike" or slot == "salvation_army" or slot == "baseball_bat" or slot == "donkey"
+      or slot == "suicide_bomber" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif slot == "kamikaze" or slot == "dragon_ball" then
       -- The Sentry Gun and the Sentry Laser are placed as WA places a mine.
@@ -1149,6 +1151,51 @@ do
   check("at 0 of its 35 health it explodes, damage 50, blast 100, body and barrel gone",
     #M.actor_booms == 1 and M.actor_booms[1].opts.damage == 50 and head.dead and barrel.dead)
   M.solid, M.gravity, M.missiles = nil, nil, {}
+end
+
+print("Kamikaze Rocket: Ctrl + Space, steered, digging, then a blast into the water")
+do
+  new_match()
+  local p = 0x10000
+  local spec
+  for _, s in ipairs(replaced) do if s.weapon == "suicide_bomber" then spec = s end end
+  check("it claims Suicide Bomber with PX's record and the Kamikaze's sheets",
+    spec and spec.wep == "weps/suicide_bomber.wep" and spec.worm_sprites.wkamlnk == "sprites/kamikaze_rocket/take_out"
+      and spec.worm_sprites.wkamjmp == "sprites/kamikaze_rocket/launch")
+  local w = worm(16)
+  w.x, w.y, w.weapon, w.turn, w.aim, w.facing, w.state = 100 * p, 100 * p, "suicide_bomber", true, 0.5, 1, "ready"
+  M.ctrl, M.digs, M.actor_booms, M.water = false, {}, {}, 500 * p
+  check("without Ctrl the fire is eaten: nothing is used", M.message(w, wa.msg.FIRE_WEAPON) == "eat")
+  M.hud_lines = {}
+  M.hud()
+  check("and the HUD says to hold Ctrl", M.hud_lines[#M.hud_lines] ~= nil and M.hud_lines[#M.hud_lines]:find("Ctrl") ~= nil)
+  M.ctrl = true
+  check("with Ctrl it fires", M.message(w, wa.msg.FIRE_WEAPON) == nil)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("nothing moves before WA's Kamikaze begins", w.x == 100 * p and w.visible ~= false)
+  w.state = "kamikaze"
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("then it flies along the aim, 8 px a frame, the worm hidden, digging 8",
+    w.x == 108 * p and w.y == 100 * p and w.visible == false and M.digs[#M.digs].radius == 8, w.x / p .. "," .. w.y / p)
+  local y = w.y
+  M.right = true
+  M.message(w, wa.msg.FRAME_FINISH)
+  M.right = false
+  check("right turns it clockwise (down, facing right)", w.y > y)
+  M.hud_lines = {}
+  M.hud()
+  check("the HUD counts down its 4 seconds", M.hud_lines[1] == "Kamikaze Rocket: 3.96", M.hud_lines[1])
+  for _ = 1, 197 do M.message(w, wa.msg.FRAME_FINISH) end
+  check("no blast before 4 seconds", #M.actor_booms == 0)
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("at 4 seconds it blows up (damage 30, blast 100) and the worm goes into the water",
+    #M.actor_booms == 1 and M.actor_booms[1].opts.damage == 30 and M.actor_booms[1].opts.id == 100
+      and w.y > M.water)
+  w.state = nil -- WA's Kamikaze ends in the water
+  M.message(w, wa.msg.FRAME_FINISH)
+  check("when WA's Kamikaze ends, the worm is shown again and the rocket gone",
+    w.visible == true and next(require("lib/shared").kamikaze_rockets) == nil)
+  M.ctrl, M.water = nil, nil
 end
 
 print("pools: every stock slot is in exactly one place")

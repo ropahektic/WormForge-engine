@@ -25,5 +25,5 @@ replace = [
   "sheep", "mb_bomb", "shotgun", "holy_grenade", "skunk", "homing_missile",
   "grenade", "fire_punch", "pneumatic_drill", "longbow", "handgun", "jet_pack", "bungee", "parachute", "super_banana", "laser_sight", "surrender", "low_gravity", "ninja_rope",
   "bazooka", "mine", "prod", "skip_go", "armageddon", "nuclear_test", "baseball_bat", "kamikaze",
-  "dragon_ball",
+  "dragon_ball", "suicide_bomber",
 ]

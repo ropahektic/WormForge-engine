@@ -1014,7 +1014,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 64);
+        assert_eq!(applied.len(), 65);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         let skip_go = claim(StockWeapon::SkipGo);
         assert_eq!(skip_go.params.name.as_deref(), Some("Skip Go/Surrender"));
