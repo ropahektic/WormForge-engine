@@ -231,6 +231,7 @@ pub fn install() -> Result<(), String> {
         spawn_worm: crate::world::spawn_worm,
         shape_trace: crate::shape::trace,
         slot_click: crate::actor::slot_click,
+        slot_fire: crate::actor::slot_fire,
         shape_collides: crate::shape::collides,
         spawn_crate: crate::crate_drop::spawn,
         retarget_weapon_sprites: |slot, body, cluster| {
@@ -457,7 +458,8 @@ fn drop_for_slot(slot: usize) -> Option<DropClaim> {
     DROPS.lock().ok()?.iter().cloned().find(|c| c.slot == slot)
 }
 
-/// Selected claim's Lua fire handler; shared by airborne fire dispatch.
+/// The on_fire handler of the pack claim on `slot`, 0 for none: what airborne
+/// fire dispatch and `wa.weapons.fire` run.
 pub fn slot_fire(slot: u32) -> u32 {
     fire_for_slot(slot as usize).map(|c| c.fire_id).unwrap_or(0)
 }

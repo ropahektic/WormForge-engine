@@ -3576,6 +3576,68 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn weapons_fire_runs_the_claims_on_fire() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-weapons-fire");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("f"),
+            "f.magnet",
+            r#"
+id = "f.magnet"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["baseball_bat"]
+"#,
+            r#"
+wa.weapons.replace({
+  weapon = "baseball_bat",
+  on_fire = function(fire)
+    FIRED = { fire.x, fire.y, fire.vx, fire.vy, fire.slot, fire.polarity, fire.weapon == nil, fire.worm ~= nil, wa._mod }
+  end,
+})
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        let id = scripts.resolved.applied[0].params.on_fire_id;
+        assert!(id != 0);
+        let lua = scripts.lua;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static FIRE: AtomicU32 = AtomicU32::new(0);
+        FIRE.store(id, Ordering::SeqCst);
+        crate::bind_actor_native(crate::ActorNative {
+            list_worms: |_| vec![0x1234],
+            slot_fire: |slot| {
+                if slot == weapons::StockWeapon::BaseballBat.index() as u32 { FIRE.load(Ordering::SeqCst) } else { 0 }
+            },
+            ..Default::default()
+        });
+        let fire = "wa.weapons.fire{ weapon = 'baseball_bat', worm = wa.worms.all()[1], x = 0x100000, y = 0x200000, \
+                    vx = 3, polarity = -1 }";
+        assert!(lua.load(fire).exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            lua.load("wa._mod = 'caller'").exec().unwrap();
+            lua.load(fire).exec().unwrap();
+            let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
+            assert!(err("wa.weapons.fire{ weapon = 'mail_strike', worm = wa.worms.all()[1], x = 0, y = 0 }")
+                .contains("no pack claims mail_strike"));
+            assert!(err("wa.weapons.fire{ weapon = 'baseball_bat', x = 0, y = 0 }").contains("needs worm"));
+            assert!(err("wa.weapons.fire{ weapon = 'baseball_bat', worm = wa.worms.all()[1], x = 0 }")
+                .contains("needs y"));
+        });
+        let got: Vec<mlua::Value> = lua.load("return table.unpack(FIRED)").eval::<mlua::MultiValue>().unwrap().into_vec();
+        let int = |i: usize| got[i].as_i64().unwrap();
+        assert_eq!((int(0), int(1), int(2), int(3)), (0x100000, 0x200000, 3, 0), "the shot, vy 0 by default");
+        assert_eq!(int(4), weapons::StockWeapon::BaseballBat.index() as i64);
+        assert_eq!(int(5), -1, "the spec's other fields reach the handler");
+        assert_eq!(got[6].as_boolean(), Some(true), "but not the slot's name");
+        assert_eq!(got[7].as_boolean(), Some(true), "for the worm given");
+        assert_eq!(got[8].as_string().unwrap().to_str().unwrap(), "f.magnet", "it runs as its own pack");
+        assert_eq!(lua.load("return wa._mod").eval::<String>().unwrap(), "caller", "and the caller's comes back");
+    }
+
+    #[test]
     fn on_select_function_does_not_use_strike() {
         let _host = lock_host();
         let root = std::env::temp_dir().join("wklua-lua-host-on-select-fn");

@@ -376,6 +376,9 @@ pub struct ActorNative {
     /// The click handler (`wa._clicks` id) of the pack claim on a stock
     /// slot, 0 for none: what `wa.weapons.click` runs.
     pub slot_click: fn(u32) -> u32,
+    /// The fire handler (`wa._fires` id) of the pack claim on a stock slot,
+    /// 0 for none: what `wa.weapons.fire` runs.
+    pub slot_fire: fn(u32) -> u32,
     /// `wa.world.collides{...}`: what a circle there overlaps: None nothing,
     /// Some(0) terrain, Some(handle) an object.
     pub shape_collides: fn(&ShapeQuery) -> Option<u32>,
@@ -487,6 +490,7 @@ impl Default for ActorNative {
             spawn_worm: |_, _, _, _, _| Err("worms.spawn not bound".into()),
             shape_trace: |_| ShapeHit::default(),
             slot_click: |_| 0,
+            slot_fire: |_| 0,
             shape_collides: |_| None,
             spawn_crate: |_| Err("crates.spawn not bound".into()),
         }
@@ -2205,6 +2209,10 @@ pub(crate) fn native_spawn_worm() -> Option<fn(u32, i32, i32, &str, i32) -> Resu
 
 pub(crate) fn native_slot_click() -> Option<fn(u32) -> u32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.slot_click)
+}
+
+pub(crate) fn native_slot_fire() -> Option<fn(u32) -> u32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.slot_fire)
 }
 
 pub(crate) fn native_shape() -> Option<(fn(&ShapeQuery) -> ShapeHit, fn(&ShapeQuery) -> Option<u32>)> {
