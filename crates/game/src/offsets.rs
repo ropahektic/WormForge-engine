@@ -526,6 +526,11 @@ pub const HIT_AMOUNT: usize = 0x14;
 pub const HIT_TEAM: usize = 0x18;
 /// SpecialImpact `flag`. `10` = percent of current HP (battle axe).
 pub const HIT_FLAG: usize = 0x00;
+/// A fire's hit on a worm carries kind 1 (Project X's M_GUNEXP check).
+pub const HIT_KIND_FIRE: i32 = 1;
+/// The hit's knockback, 16.16 (Project X's fparams[3] and [4]).
+pub const HIT_KNOCK_X: usize = 0x0C;
+pub const HIT_KNOCK_Y: usize = 0x10;
 pub const HIT_PERCENT: i32 = 10;
 pub const WORLD_TEAM_STRIDE: usize = 0x51C;
 pub const ARENA_WORM_STRIDE: usize = 0x9C;
@@ -725,6 +730,29 @@ pub const CLASS_MISSILE: i32 = 11;
 pub const CLASS_ARROW: i32 = 12;
 pub const CLASS_CRATE: i32 = 15;
 pub const CLASS_WORM: i32 = 18;
+/// FireEntity: WA allocates this much and zeroes the first FIRE_ENTITY_ZEROED
+/// bytes before its constructor (0x54F4C0), as MissileEntity::CreateFire1
+/// (0x509D70) does.
+pub const FIRE_ENTITY_SIZE: usize = 0xD8;
+pub const FIRE_ENTITY_ZEROED: usize = 0xB8;
+/// The shared-data key of the fires' parent, the fire store (PX's
+/// `Root->GetObject(TI_FireStore, 0)`).
+pub const SHARED_FIRE_STORE: u32 = 0x17;
+/// FireEntity: its slot in the world's 256-entry fire pool, set by the
+/// constructor (world+0x7304 counter & 0xFF).
+pub const FIRE_ENTITY_POOL_SLOT: usize = 0xA8;
+/// A fire queues its flame at render-queue depth FIRE_DRAW_DEPTH + its pool
+/// slot (0x5505BE, 0x55062D), through 0x547F30 -> RQ_DrawSpriteLocal.
+pub const FIRE_DRAW_DEPTH: u32 = 0x11_0000;
+/// WA's fire sprites: petrol_1..4 (120..123, a fire's flame by size) and
+/// petrol1..6 (124..129).
+pub const FIRE_SPRITE_FIRST: u32 = 120;
+pub const FIRE_SPRITE_LAST: u32 = 129;
+/// Sprite object: its frame count (u16).
+pub const SPRITE_MAX_FRAMES: usize = 0x16;
+/// DisplayGfx vtable slot 33: GetSpriteFrameForBlit, thiscall (display,
+/// sprite, anim, &w, &h, &left, &top, &right, &bottom, &frac) -> BitGrid*.
+pub const DISPLAY_SLOT_GET_SPRITE_FRAME: usize = 33;
 pub const CLASS_OIL: i32 = 30;
 /// WA CrossEntity, the gravestone left by a dead worm.
 pub const CLASS_GRAVE: i32 = 21;

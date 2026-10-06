@@ -18,7 +18,7 @@ pub use bundles::ComponentPlan;
 pub use perf::{perf_flags, take_lua_breakdown, take_lua_spikes, take_lua_time, LuaBreakdown, PerfFlags, Spike};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
-    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
+    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs, LaunchArgs, SpawnArgs, FIRE_DEFAULTS,
     StampBuried,
 };
 pub use dispatch::{
@@ -583,6 +583,55 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn fire_spawn_reaches_native_only_during_simulation() {
+        let _guard = lock_host();
+        thread_local! {
+            static STARTED: std::cell::RefCell<Vec<actor::FireArgs>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            spawn_fire: |a| { STARTED.with(|l| l.borrow_mut().push(*a)); Ok(7) },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let bare = "return wa.fire.spawn{ owner = wa.worms.all()[1], x = 0x100000, y = 0x200000 }";
+        assert!(lua.load(bare).exec().is_err(), "outside a simulation callback");
+        let n: u32 = sim_context::with_sim(|| lua.load(bare).eval().unwrap());
+        assert_eq!(n, 7);
+        sim_context::with_sim(|| {
+            lua.load("wa.fire.spawn{ owner = wa.worms.all()[1], x = 1, y = 2, vx = 3, vy = 0, \
+                      count = 0, duration = 6000, up_power = 0, damage = 0, \
+                      damage_scale = 1.25, knock_scale = 2, tint = 0x4BE14B }")
+                .exec()
+                .unwrap();
+            let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
+            assert!(err("wa.fire.spawn{ x = 0, y = 0 }").contains("needs owner"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0 }").contains("needs y"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, duration = 0 }")
+                .contains("duration"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, knock_scale = -1 }")
+                .contains("knock_scale"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, tint = 0x1000000 }")
+                .contains("tint"));
+        });
+        STARTED.with(|l| {
+            let d = actor::FIRE_DEFAULTS;
+            assert_eq!(
+                l.borrow().as_slice(),
+                &[
+                    actor::FireArgs { owner: 0x1234, x: 0x100000, y: 0x200000, ..d },
+                    actor::FireArgs {
+                        owner: 0x1234, x: 1, y: 2, vx: 3, vy: 0, count: 0, duration: 6000, up_power: 0, damage: 0,
+                        damage_scale: 0x1_4000, knock_scale: 0x2_0000, tint: Some(0x4B_E14B),
+                    },
+                ],
+                "a bare spawn is WA's Petrol Bomb fire; every field can be given"
+            )
+        });
+    }
+
+    #[test]
     fn launch_reaches_native_only_during_simulation() {
         let _guard = lock_host();
         thread_local! {
@@ -756,7 +805,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 56);
+        assert_eq!(applied.len(), 57);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         let skip_go = claim(StockWeapon::SkipGo);
         assert_eq!(skip_go.params.name.as_deref(), Some("Skip Go/Surrender"));
@@ -764,12 +813,17 @@ wa.weapons.replace({
         let ice_arrow = claim(StockWeapon::Armageddon);
         assert_eq!(ice_arrow.params.name.as_deref(), Some("Ice Arrow"));
         assert!(ice_arrow.params.wep.is_some());
+        let valyrian = claim(StockWeapon::PetrolBomb);
+        assert_eq!(valyrian.params.name.as_deref(), Some("Valyrian Fire"));
+        assert!(valyrian.params.wep.is_some());
+        assert!(valyrian.params.on_fire_id != 0, "thrown through on_fire");
+        assert_eq!(valyrian.params.hold.as_ref().unwrap().sheet, "sprites/px_hold/valyrian_fire.png");
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());
         assert!(javelin.params.on_explode_id != 0);
         let held: Vec<_> = applied.iter().filter(|c| c.params.hold.is_some()).collect();
-        assert_eq!(held.len(), 8, "each PX hold is a replacement claim");
+        assert_eq!(held.len(), 9, "each PX hold is a replacement claim");
         let rifle = claim(StockWeapon::Handgun).params.hold.as_ref().unwrap();
         assert_eq!(rifle.sheet, "sprites/px_hold/sniper_rifle");
         assert!(rifle.hand.is_none());

@@ -1135,6 +1135,8 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     };
     let hp_before = crate::world::worm_hp(this as u32);
     let hurt = crate::hurt::is_hurt(msg);
+    // A scaled fire's hit, scaled before the pack's hurt hooks and WA see it.
+    crate::fire::before_worm_message(a, msg, c);
     let mut eat = false;
     if hurt {
         eat = crate::hurt::before(this, a, msg, b, c);

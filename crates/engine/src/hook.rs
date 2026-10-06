@@ -47,6 +47,11 @@ fn install_inner() -> Result<(), String> {
         log_error(&format!("profiler flip timing disabled: {e}"));
     }
     let checkpoint = crate::wa::hook_checkpoint();
+    if let Err(e) = crate::fire::install() {
+        crate::wa::rollback_to(checkpoint);
+        log_error(&format!("fire tracking on free disabled: {e}"));
+    }
+    let checkpoint = crate::wa::hook_checkpoint();
     if let Err(e) = crate::state_trace::install() {
         crate::wa::rollback_to(checkpoint);
         log_error(&format!("worm state trace disabled: {e}"));
