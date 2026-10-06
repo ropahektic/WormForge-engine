@@ -33,6 +33,51 @@ local PORTED = {
 -- tools/px_split_strip.py. Where PX draws the worm's hold at run time with
 -- its sprite builder (p_sprite_builder), so does the engine from PX_HOLDS.
 local PX_ART = {
+  { -- Sentry Gun: PX's turret (weapons/sentry_gun.lua, lib/turret.lua) on
+    -- the Kamikaze slot, placed as WA places a mine: its timing, ammo and
+    -- retreat, with the turret as a Lua body instead of a mine.
+    weapon = "kamikaze", copy_from = "mine", name = "Sentry Gun",
+    panel_icon = "sprites/sentry_gun/icon.png",
+    is_weapon = true,
+    -- PX's take-out and placing, grey; the housing in them coloured per team
+    -- at draw time (one sheet and its housing for six colours).
+    worm_sprites = {
+      weaponlnk = "sprites/sentry_gun/equip", weaponlnku = "sprites/sentry_gun/equipu",
+      weaponlnkd = "sprites/sentry_gun/equipd",
+      wthrow = "sprites/sentry_gun/unequip", wthrowu = "sprites/sentry_gun/unequipu",
+      wthrowd = "sprites/sentry_gun/unequipd",
+    },
+    worm_sprites_team_tint = {
+      worm_sprites = {
+        weaponlnk = "sprites/sentry_gun/equip_housing", weaponlnku = "sprites/sentry_gun/equipu_housing",
+        weaponlnkd = "sprites/sentry_gun/equipd_housing",
+        wthrow = "sprites/sentry_gun/unequip_housing", wthrowu = "sprites/sentry_gun/unequipu_housing",
+        wthrowd = "sprites/sentry_gun/unequipd_housing",
+      },
+      colours = { 0xFF6447, 0x4764FF, 0x47FF64, 0xE6E647, 0xE647E6, 0x47E6E6 },
+    },
+    sprites = {
+      "sprites/sentry_gun/impact.png", "sprites/sentry_gun/casing", "sprites/sentry_gun/turret_base",
+      "sprites/sentry_gun/turret_gun", "sprites/sentry_gun/turret_flare",
+    },
+    sounds = {
+      "sounds/sentry_gun/sentryplace.wav", "sounds/sentry_gun/sentrybeeps2.wav",
+      "sounds/sentry_gun/sentryfireloop.wav", "sounds/sentry_gun/sentryfireend.wav",
+      "sounds/sentry_gun/sentryservostart.wav", "sounds/sentry_gun/sentryservoloop.wav",
+      "sounds/sentry_gun/sentryservoend.wav",
+    },
+    params = {
+      sprite_columns = 1,
+      -- The take-out and placing play frame by frame, not as aim sheets.
+      worm_sprites_animate = true,
+      -- The turret between terrain (0x180000) and soil (0x1B0000): the
+      -- landscape hides its sunk feet. The worm's sheets stay in front.
+      depth = 0x190000,
+      depth_prefix = "sprites/sentry_gun/turret_",
+      gpu_prefix = "sprites/sentry_gun/turret_",
+    },
+    on_fire = function(fire) fires.sentry_gun(fire) end,
+  },
   { -- Super Tele: the PX record is a type-3 cursor weapon on teleport's slot.
     weapon = "teleport",
     wep = "weps/teleport.wep",
