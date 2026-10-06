@@ -525,6 +525,16 @@ local function new_match(opts)
           return true
         end
         function a:look(sprite) self.sprite = sprite end
+        function a:look(sprite) self.sprite = sprite end
+        -- As the engine's auto physics, simply: gravity, a step, and land
+        -- where M.solid says.
+        function a:gravity() self.vy = (self.vy or 0) + (M.gravity or 0) end
+        function a:move()
+          self.x, self.y = self.x + (self.vx or 0), self.y + (self.vy or 0)
+          return { land = M.solid ~= nil and M.solid(self.x, self.y) or false }
+        end
+        function a:advance() end
+        function a:in_water() return self.y >= (M.water or 0x7FFFFFFF) end
         function a:despawn() self.dead = true end
         -- a.explode is the spawn's explode spec and a:explode(opts) the
         -- method, as on the engine's actor: a callable table.
@@ -760,7 +770,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("62 slots replaced, each once", #replaced == 62 and not dupes, tostring(#replaced))
+  check("63 slots replaced, each once", #replaced == 63 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -784,6 +794,9 @@ do
       or slot == "prod" or slot == "armageddon" or slot == "petrol_bomb" or slot == "nuclear_test"
       or slot == "sheep_strike" or slot == "salvation_army" or slot == "baseball_bat" or slot == "donkey" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
+    elseif slot == "kamikaze" then
+      -- The Sentry Gun is placed as WA places a mine.
+      if spec.copy_from ~= "mine" or spec.wep then own_file = false end
     elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
   check("scheme records use their intended bases; others copy stock", own_file)
@@ -984,6 +997,65 @@ do
   for _ = 1, 600 do if not magnet.dead then magnet.on(magnet) end end
   check("in the water it sinks out of sight and is gone", magnet.dead)
   M.water, M.gravity, M.solid = nil, nil, nil
+end
+
+print("Sentry Gun: placed, it plants, picks a moving enemy, fires, reloads")
+do
+  new_match()
+  local p = 0x10000
+  local spec
+  for _, s in ipairs(replaced) do if s.weapon == "kamikaze" then spec = s end end
+  check("it claims Kamikaze, placed as a mine, its housing tinted per team",
+    spec and spec.copy_from == "mine" and spec.name == "Sentry Gun" and type(spec.on_fire) == "function"
+      and spec.worm_sprites.weaponlnk == "sprites/sentry_gun/equip"
+      and spec.worm_sprites_team_tint.worm_sprites.weaponlnk == "sprites/sentry_gun/equip_housing"
+      and #spec.worm_sprites_team_tint.colours == 6)
+  local owner, enemy = worm(16), worm(32)
+  for _, w in ipairs(worms) do w.x, w.y = 5000 * p, 5000 * p end
+  owner.x, owner.y, owner.facing = 100 * p, 100 * p, 1
+  M.solid = function(_, y) return y >= 110 * p end
+  M.gravity, M.spawned, M.actor_sounds, M.actor_booms = p // 4, {}, {}, {}
+  spec.on_fire({ worm = owner })
+  local body, head = M.spawned[#M.spawned - 2], M.spawned[#M.spawned - 1]
+  check("a body, a head and a flare, in front of the worm", body.sprite == "sprites/sentry_gun/turret_base"
+    and head.sprite == "sprites/sentry_gun/turret_gun" and M.spawned[#M.spawned].sprite == "sprites/sentry_gun/turret_flare"
+    and body.x == 105 * p)
+  for _ = 1, 40 do body.on(body) end
+  check("it falls and plants on the land, with PX's sound",
+    body.y >= 110 * p and M.actor_sounds[#M.actor_sounds] == "sounds/sentry_gun/sentryplace.wav", body.y / p)
+  local function impacts()
+    local n = 0
+    for _, a in ipairs(M.spawned) do if a.sprite == "sprites/sentry_gun/impact.png" then n = n + 1 end end
+    return n
+  end
+  local function run(n)
+    for _ = 1, n do
+      enemy.x = enemy.x + p -- moving: PX notices only what moves
+      body.on(body)
+    end
+  end
+  enemy.x, enemy.y = 300 * p, 90 * p
+  run(50)
+  check("it waits 60 frames once it has a target", impacts() == 0)
+  run(40)
+  check("then it fires at the enemy, rounds bursting at it", impacts() >= 3, impacts())
+  check("its head is drawn in its owner's colour", head.tint == 0xFF6447 and head.depth == 0x10000)
+  M.message(owner, wa.msg.START_TURN)
+  local before = impacts()
+  run(60)
+  check("it holds fire on its owner's colour's turns", impacts() == before)
+  M.message(enemy, wa.msg.START_TURN)
+  enemy.x = 300 * p -- back in range: it has walked on meanwhile
+  run(100)
+  check("and fires again on the enemy's", impacts() > before, impacts() - before)
+  body.on(body, { damage = 10 })
+  before = impacts()
+  run(120)
+  check("a blast disables it for the turn", impacts() == before)
+  body.on(body, { damage = 40 })
+  check("at 0 of its 50 health it explodes, damage 50, blast 100, and its head goes",
+    #M.actor_booms == 1 and M.actor_booms[1].opts.damage == 50 and M.actor_booms[1].opts.id == 100 and head.dead)
+  M.solid, M.gravity = nil, nil
 end
 
 print("pools: every stock slot is in exactly one place")
