@@ -198,6 +198,21 @@ local PX_ART = {
     sprites = { "sprites/kamikaze_rocket/fly" },
     params = { gpu_prefix = "sprites/kamikaze_rocket/" },
   },
+  { -- Weapon Crate: a weapon crate dropped in front of the worm
+    -- (weapons/weapon_crate.lua) on the Freeze slot, placed as WA places a
+    -- mine (PX's record), the crate instead of the mine.
+    weapon = "freeze", wep = "weps/freeze.wep",
+    panel_icon = "sprites/weapon_crate/icon.png",
+    -- PX's take-out (picking the crate up) and its hold.
+    worm_sprites = {
+      weaponlnk = "sprites/weapon_crate/take_out", weaponlnku = "sprites/weapon_crate/take_outu",
+      weaponlnkd = "sprites/weapon_crate/take_outd",
+      wthrow = "sprites/weapon_crate/put_away", wthrowu = "sprites/weapon_crate/put_awayu",
+      wthrowd = "sprites/weapon_crate/put_awayd",
+    },
+    params = { worm_sprites_animate = true },
+    on_fire = function(fire) fires.weapon_crate(fire) end,
+  },
   { -- Super Tele: the PX record is a type-3 cursor weapon on teleport's slot.
     weapon = "teleport",
     wep = "weps/teleport.wep",

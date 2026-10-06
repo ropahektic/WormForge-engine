@@ -775,7 +775,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("66 slots replaced, each once", #replaced == 66 and not dupes, tostring(#replaced))
+  check("67 slots replaced, each once", #replaced == 67 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -798,7 +798,7 @@ do
     if slot == "earthquake" or slot == "napalm_strike" or slot == "teleport" or slot == "uzi"
       or slot == "prod" or slot == "armageddon" or slot == "petrol_bomb" or slot == "nuclear_test"
       or slot == "sheep_strike" or slot == "salvation_army" or slot == "baseball_bat" or slot == "donkey"
-      or slot == "suicide_bomber" or slot == "scales_of_justice" then
+      or slot == "suicide_bomber" or slot == "scales_of_justice" or slot == "freeze" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
     elseif slot == "kamikaze" or slot == "dragon_ball" then
       -- The Sentry Gun and the Sentry Laser are placed as WA places a mine.
@@ -1335,6 +1335,25 @@ do
   turn(16)
   check("the active team has 3 again", ammo[0].bungee == 3, tostring(ammo[0].bungee))
   check("and a Wind Changer", ammo[0].surrender == 1, tostring(ammo[0].surrender))
+  check("and a Weapon Crate", ammo[0].freeze == 1, tostring(ammo[0].freeze))
+end
+
+print("Weapon Crate: placed, a weapon crate teleported in front of the worm")
+do
+  new_match()
+  local p = 0x10000
+  local spec
+  for _, s in ipairs(replaced) do if s.weapon == "freeze" then spec = s end end
+  check("it claims Freeze with PX's record, placed through on_fire",
+    spec and spec.wep == "weps/freeze.wep" and type(spec.on_fire) == "function"
+      and spec.worm_sprites.weaponlnk == "sprites/weapon_crate/take_out")
+  local w = worm(16)
+  w.x, w.y, w.facing = 100 * p, 50 * p, -1
+  M.crate_spawns = {}
+  spec.on_fire({ worm = w })
+  local c = M.crate_spawns[1]
+  check("one weapon crate, teleported in 40 px in front", #M.crate_spawns == 1 and c.kind == "weapon"
+    and c.drop == "teleport" and c.x == 60 * p and c.y == 50 * p)
 end
 
 print("turn: only the active worm's hand is usable, one of each")
