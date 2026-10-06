@@ -54,7 +54,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     log_line("InitGraphic: installing custom sprites at InitWeaponTable");
     // A network round loads the synced copy of the host's packs, decided
     // before the lobby state is dropped; replay playback still comes first.
-    let synced = crate::transfer::round_packs();
+    let round = crate::transfer::round_packs();
     crate::transfer::match_started();
     sprite::clear();
     world::clear_sounds();
@@ -84,9 +84,29 @@ pub fn on_gfx_ready(display: *mut u8) {
     crate::fire::clear();
     crate::windup::clear();
 
-    let mods_dir = crate::replay::playback_mods_root()
-        .or(synced)
-        .unwrap_or_else(|| mods_root_from(&wa_directory()));
+    // A replay plays its own archived packs. Otherwise a network round never
+    // runs this machine's own Mods/: the host's synced copy, or none at all.
+    let playback = crate::replay::playback_mods_root();
+    let plain = match (&playback, &round) {
+        (None, crate::transfer::Round::Plain(why)) => Some(why.clone()),
+        _ => None,
+    };
+    crate::sync::set_plain_round(plain.is_some());
+    let synced = match round {
+        crate::transfer::Round::Synced(dir) => Some(dir),
+        _ => None,
+    };
+    let mods_dir = match &plain {
+        // An empty folder: the round loads as an offline one with no packs.
+        Some(why) => {
+            log_line(&format!("network round without WormForge packs: {why}"));
+            crate::hud::notice(&format!("WormForge is off this round: {why}. Playing plain WA."), 12);
+            let empty = crate::log::wormforge_dir().join("no-packs");
+            let _ = std::fs::create_dir_all(&empty);
+            empty
+        }
+        None => playback.or(synced).unwrap_or_else(|| mods_root_from(&wa_directory())),
+    };
     log_line(&format!("loading mods from {}", mods_dir.display()));
     let discovered = match discover_mods(&mods_dir) {
         Ok(d) => d,

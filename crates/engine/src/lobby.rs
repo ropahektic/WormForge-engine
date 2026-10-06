@@ -39,6 +39,7 @@ static RUN: OnceLock<String> = OnceLock::new();
 const RECORD_STRIDE: usize = 0x78;
 const RECORD_ACTIVE: usize = 0x80;
 const RECORD_READY: usize = 0x82;
+const RECORD_NAME: usize = 0xC;
 const LOCAL_SLOT: usize = 0x8;
 /// `IsOkToStartNetGame` walks 13 records.
 const RECORDS: i32 = 13;
@@ -79,6 +80,35 @@ unsafe fn local_bulb() -> Option<(bool, bool)> {
         return None;
     }
     Some((slot == 0, *record.add(RECORD_READY) != 0))
+}
+
+/// A machine's name in the lobby (`CPlayers` record +0xC, 16 bytes at most:
+/// `CPlayers::AddMachine`), `None` when the slot is empty or out of range.
+/// Slot 0 is the host.
+pub(crate) fn machine_name(slot: i32) -> Option<String> {
+    let players = PLAYERS.load(Ordering::Relaxed) as *const u8;
+    if players.is_null() || !(0..RECORDS).contains(&slot) {
+        return None;
+    }
+    unsafe {
+        let record = players.add(slot as usize * RECORD_STRIDE);
+        if *record.add(RECORD_ACTIVE) == 0 {
+            return None;
+        }
+        let raw = std::slice::from_raw_parts(record.add(RECORD_NAME), 0x10);
+        let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+        let name: String = raw[..end].iter().map(|&b| b as char).filter(|c| !c.is_control()).collect();
+        (!name.is_empty()).then_some(name)
+    }
+}
+
+/// This machine's name in the lobby.
+pub(crate) fn local_name() -> Option<String> {
+    let players = PLAYERS.load(Ordering::Relaxed) as *mut u8;
+    if players.is_null() {
+        return None;
+    }
+    machine_name(unsafe { read_i32(players, LOCAL_SLOT) })
 }
 
 /// The generation being offered, or 0 when the host's bulb is out.
@@ -206,7 +236,8 @@ fn freeze_generation(n: u32) {
     prune(n);
     match netsync::store::Served::load(n, &session) {
         Ok(served) if GENERATION.load(Ordering::SeqCst) == n => {
-            crate::transfer::serve(served, session.dir.clone())
+            let packs: Vec<String> = m.packs.iter().map(|p| format!("{} {}", p.id, p.version)).collect();
+            crate::transfer::serve(served, session.dir.clone(), packs)
         }
         Ok(_) => {}
         Err(e) => log_error(&format!("sync generation {n}: cannot serve: {e}")),

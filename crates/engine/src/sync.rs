@@ -75,6 +75,15 @@ struct LiveInput {
 
 static LIVE_INPUT: Mutex<Option<LiveInput>> = Mutex::new(None);
 
+/// A network round some machine cannot run packs in (`transfer::Round::Plain`):
+/// nothing of ours goes on the wire. A machine without WormForge does not know
+/// message kind 0x80, so even input records would be a stranger's to it.
+static PLAIN_ROUND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) fn set_plain_round(plain: bool) {
+    PLAIN_ROUND.store(plain, Ordering::SeqCst);
+}
+
 /// The enabled packs of this match as `modset_fingerprint`, plus how much of
 /// it has been announced to peers so far.
 struct ModsetTx {
@@ -247,6 +256,7 @@ fn receive_modset(tag: u32, sender: u32, word: u32) {
                     }
                 ));
                 crate::modloader::peer_report(&format!("PEER MISMATCH - {diff}"));
+                crate::hud::notice(&format!("WormForge: another player's packs differ ({diff})"), 20);
             }
         }
     }
@@ -412,6 +422,9 @@ unsafe extern "C" fn queue_live_checkpoint(runtime: *mut u8) {
         }
         let world = *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8);
         if world.is_null() || read_i32(world, GAME_WORLD_NET_SESSION) == 0 {
+            return;
+        }
+        if PLAIN_ROUND.load(Ordering::SeqCst) {
             return;
         }
         let frame = read_i32(world, GAME_WORLD_FRAME_COUNTER);

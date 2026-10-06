@@ -226,11 +226,20 @@ const CHAT_MARK: &[u8] = b"\x1bWF";
 fn wrap(message: &Message) -> Vec<u8> {
     let mut out = vec![0u8, 0u8];
     if let Message::Hello { .. } = message {
-        out.extend_from_slice(format!("WormForge {BUILD_ID}: lobby asset sync").as_bytes());
+        out.extend_from_slice(format!("WormForge {BUILD_ID} runs on the host").as_bytes());
     }
     out.push(0);
     out.extend_from_slice(CHAT_MARK);
     out.extend_from_slice(&proto::encode(message));
+    out
+}
+
+/// A plain chat line, as WA's chat packets carry one: shown to every player,
+/// WormForge or not. It has no marker, so our hooks pass it on to WA.
+fn chat_line(text: &str) -> Vec<u8> {
+    let mut out = vec![0u8, 0u8];
+    out.extend(text.bytes().filter(|b| b.is_ascii() && !b.is_ascii_control()).take(200));
+    out.push(0);
     out
 }
 
@@ -284,6 +293,40 @@ fn host_send(slot: usize, message: &Message) -> bool {
         send_on(connection, &bytes);
         trace_send(&format!("slot {slot} [{fields}]"), message, bytes.len(), true);
     }
+    true
+}
+
+/// A chat line to one client, which it shows whether it runs WormForge or not.
+fn host_say(slot: usize, text: &str) -> bool {
+    if slot >= HOST_SLOTS || !IN_LOBBY.load(Ordering::SeqCst) || quiet() || !slot_connected(slot) {
+        return false;
+    }
+    let host = HOST_SESSION.load(Ordering::Relaxed) as *mut u8;
+    unsafe { send_on(host.add(slot * SLOT_STRIDE + SLOT_CONNECTION), &chat_line(text)) };
+    log_line(&format!("chat to slot {slot}: {text}"));
+    true
+}
+
+/// A chat line to every client we have greeted, and to our own log.
+fn host_say_all(text: &str) {
+    let peers = PEERS.lock().map(|p| *p).unwrap_or_default();
+    for slot in 0..HOST_SLOTS {
+        if peers[slot].greeted.is_some() {
+            host_say(slot, text);
+        }
+    }
+    note(text.to_string());
+}
+
+/// A chat line to the host, which shows it (and passes it on) whether it runs
+/// WormForge or not.
+fn client_say(text: &str) -> bool {
+    if !IN_LOBBY.load(Ordering::SeqCst) || quiet() || !client_link_up() {
+        return false;
+    }
+    let link = CLIENT_LINK.load(Ordering::Relaxed) as *mut u8;
+    unsafe { send_on(link, &chat_line(text)) };
+    log_line(&format!("chat to the host: {text}"));
     true
 }
 
@@ -410,45 +453,60 @@ pub fn entered_lobby() {
         }
     }
 }
+/// How a round takes its packs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Round {
+    /// Not a network round: the installed `Mods/` (or a replay's own).
+    Offline,
+    /// A network round with every machine on WormForge: the host's packs.
+    Synced(PathBuf),
+    /// A network round some machine cannot run packs in: plain WA, no packs
+    /// and nothing of WormForge's on the wire, for the reason given.
+    Plain(String),
+}
 
-/// The pack folder a network round loads from, chosen as the round starts:
-/// the host's lit generation, or the copy a client took of the host's latest
-/// offer. `None` for an offline round, or when no synced copy fits, and then
-/// the round loads installed `Mods/` as before.
-pub fn round_packs() -> Option<PathBuf> {
+/// Which packs this network round loads, decided before the lobby state is
+/// dropped: the host's lit generation, or the copy a client took of the
+/// host's latest offer. A network round never loads this machine's own
+/// `Mods/`: packs only one machine runs would desync it, or give that player
+/// what the others cannot see.
+pub fn round_packs() -> Round {
     let host = HOST_SESSION.load(Ordering::Relaxed) as *mut u8;
     let hosting = !host.is_null() && unsafe { read_i32(host, HOSTING) } != 0;
     if hosting {
+        let peers = PEERS.lock().map(|p| *p).unwrap_or_default();
+        if let Some(slot) = (0..HOST_SLOTS).find(|&s| slot_connected(s) && !peers[s].wormforge) {
+            return Round::Plain(format!("{} has no WormForge", slot_name(slot)));
+        }
         let generation = crate::lobby::current_generation();
         let served = SERVED.lock().ok().and_then(|s| s.as_ref().map(|s| s.generation));
         let dir = SERVED_DIR.lock().ok().and_then(|d| d.clone());
         return match (generation, served == Some(generation), dir) {
-            (0, _, _) => None,
-            (g, true, Some(dir)) => {
+            (g, true, Some(dir)) if g != 0 => {
                 log_line(&format!("sync: round loads generation {g} from {}", dir.display()));
-                Some(dir.join(netsync::PACKS_DIR))
+                Round::Synced(dir.join(netsync::PACKS_DIR))
             }
-            (g, _, _) => {
-                log_error(&format!("sync: generation {g} is not frozen yet; round loads installed packs"));
-                None
-            }
+            (0, _, _) => Round::Plain("no packs were frozen for this round".into()),
+            (g, _, _) => Round::Plain(format!("generation {g} was not frozen yet")),
         };
     }
     if !client_link_up() {
-        return None;
+        return Round::Offline;
+    }
+    let host_name = crate::lobby::machine_name(0);
+    let greeted_by = HOST_WORMFORGE.lock().ok().and_then(|h| h.clone());
+    if greeted_by.is_none() || greeted_by != host_name {
+        return Round::Plain("the host has no WormForge".into());
     }
     let offered = LAST_OFFER.lock().ok().and_then(|o| *o);
     let ready = READY.lock().ok().and_then(|r| r.clone());
     match (offered, ready) {
         (Some((g, digest)), Some((have, dir))) if have == digest => {
             log_line(&format!("sync: round loads the host's generation {g} from {}", dir.display()));
-            Some(dir.join(netsync::PACKS_DIR))
+            Round::Synced(dir.join(netsync::PACKS_DIR))
         }
-        (Some((g, _)), _) => {
-            log_error(&format!("sync: host's generation {g} is not here; round loads installed packs"));
-            None
-        }
-        (None, _) => None,
+        (Some((g, _)), _) => Round::Plain(format!("the host's generation {g} did not arrive")),
+        (None, _) => Round::Plain("the host offered no packs".into()),
     }
 }
 
@@ -491,6 +549,32 @@ extern "system" fn tick(_: *mut c_void, _: u32, _: usize, _: u32) {
 fn pump() {
     host_pump();
     client_pump();
+    client_presence();
+}
+
+/// A client in a lobby whose host never said hello tells the lobby that its
+/// WormForge stays off: the round will be plain WA. (With a WormForge host,
+/// the host announces who runs it.) A lost connection forgets the host.
+fn client_presence() {
+    let host = HOST_SESSION.load(Ordering::Relaxed) as *mut u8;
+    if !host.is_null() && unsafe { read_i32(host, HOSTING) } != 0 {
+        return;
+    }
+    if !client_link_up() {
+        if CLIENT_SEEN.lock().map(|s| s.is_some()).unwrap_or(false) {
+            log_line("sync: left the host's lobby");
+        }
+        forget_host();
+        return;
+    }
+    let settled = CLIENT_SEEN.lock().ok().and_then(|s| *s).is_some_and(|t| t.elapsed() >= HOST_HELLO);
+    let greeted = HOST_WORMFORGE.lock().map(|h| h.is_some()).unwrap_or(false);
+    if !settled || greeted || CLIENT_SAID.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let name = crate::lobby::local_name().unwrap_or_else(|| "a player".into());
+    client_say(&format!("WormForge {BUILD_ID} is installed for {name}, but the host has none: it stays off"));
+    note("the host has no WormForge: rounds here are plain WA, without packs".into());
 }
 
 fn progress_due(last: &mut Instant, now: Instant) -> bool {
@@ -507,6 +591,10 @@ fn progress_due(last: &mut Instant, now: Instant) -> bool {
 static SERVED: Mutex<Option<Arc<Served>>> = Mutex::new(None);
 static SERVED_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 static OFFER_PENDING: AtomicBool = AtomicBool::new(false);
+/// The chat line naming the served generation's packs, and whether it is
+/// still to be said: every player sees it, WormForge or not.
+static PACKS_LINE: Mutex<Option<String>> = Mutex::new(None);
+static PACKS_PENDING: AtomicBool = AtomicBool::new(false);
 /// What the host knows of each client slot.
 #[derive(Clone, Copy, Default)]
 struct Peer {
@@ -541,7 +629,7 @@ static SLOT_STATUS: Mutex<[Option<SlotStatus>; HOST_SLOTS]> = Mutex::new([None; 
 static HOST_PROGRESS: Mutex<Option<(u32, Instant)>> = Mutex::new(None);
 
 /// Called by the freeze worker once a generation is published.
-pub fn serve(served: Served, dir: PathBuf) {
+pub fn serve(served: Served, dir: PathBuf, packs: Vec<String>) {
     let generation = served.generation;
     if crate::lobby::current_generation() != generation {
         return; // withdrawn while it loaded
@@ -552,7 +640,15 @@ pub fn serve(served: Served, dir: PathBuf) {
     if let Ok(mut d) = SERVED_DIR.lock() {
         *d = Some(dir);
     }
+    if let Ok(mut line) = PACKS_LINE.lock() {
+        *line = Some(if packs.is_empty() {
+            "WormForge: this round has no packs".into()
+        } else {
+            format!("WormForge: this round's packs: {}", packs.join(", "))
+        });
+    }
     OFFER_PENDING.store(true, Ordering::SeqCst);
+    PACKS_PENDING.store(true, Ordering::SeqCst);
     log_line(&format!("sync generation {generation}: ready to offer"));
 }
 
@@ -560,6 +656,10 @@ pub fn serve(served: Served, dir: PathBuf) {
 pub fn withdraw(generation: u32) {
     let current = SERVED.lock().ok().and_then(|mut s| s.take());
     OFFER_PENDING.store(false, Ordering::SeqCst);
+    PACKS_PENDING.store(false, Ordering::SeqCst);
+    if let Ok(mut line) = PACKS_LINE.lock() {
+        *line = None;
+    }
     clear_progress_note();
     if let Ok(mut clock) = HOST_PROGRESS.lock() {
         *clock = None;
@@ -573,6 +673,11 @@ pub fn withdraw(generation: u32) {
 fn host_pump() {
     greet();
     host_progress();
+    if PACKS_PENDING.swap(false, Ordering::SeqCst) {
+        if let Some(line) = PACKS_LINE.lock().ok().and_then(|l| l.clone()) {
+            host_say_all(&line);
+        }
+    }
     if !OFFER_PENDING.swap(false, Ordering::SeqCst) {
         return;
     }
@@ -723,9 +828,13 @@ fn greet() {
             }
         }
     }
+    let packs = SERVED.lock().ok().and_then(|s| s.clone()).and_then(|_| PACKS_LINE.lock().ok().and_then(|l| l.clone()));
     for slot in hello {
         if host_send(slot, &Message::Hello { build: BUILD_ID.into() }) {
             log_line(&format!("sync: greeted slot {slot}"));
+        }
+        if let Some(line) = &packs {
+            host_say(slot, line);
         }
     }
 }
@@ -753,6 +862,7 @@ fn host_receive(slot: usize, message: Message) -> bool {
     match message {
         Message::Hello { build } => {
             log_line(&format!("sync: slot {slot} runs WormForge {build}"));
+            host_say_all(&format!("WormForge: {} runs WormForge {build}", slot_name(slot)));
             if let Some(served) = SERVED.lock().ok().and_then(|s| s.clone()) {
                 if host_send(slot, &served.offer()) {
                     log_line(&format!("sync generation {}: offered to slot {slot}", served.generation));
@@ -821,6 +931,30 @@ static READY: Mutex<Option<([u8; 32], PathBuf)>> = Mutex::new(None);
 static CLIENT_SESSIONS: AtomicU32 = AtomicU32::new(0);
 /// The host's latest offer: generation and manifest digest.
 static LAST_OFFER: Mutex<Option<(u32, [u8; 32])>> = Mutex::new(None);
+/// The host's lobby name when its hello came: it runs WormForge. Kept by
+/// name, so a mark from one lobby never vouches for the next host.
+static HOST_WORMFORGE: Mutex<Option<String>> = Mutex::new(None);
+/// When this client's connection first carried a packet from the host.
+static CLIENT_SEEN: Mutex<Option<Instant>> = Mutex::new(None);
+/// This connection's own chat line is said.
+static CLIENT_SAID: AtomicBool = AtomicBool::new(false);
+/// How long a client waits for the host's hello before telling the lobby
+/// that its WormForge stays off: the host greets 3 s after a player settles.
+const HOST_HELLO: Duration = Duration::from_secs(8);
+
+/// The connection to the host is gone: forget what this lobby told us.
+fn forget_host() {
+    if let Ok(mut h) = HOST_WORMFORGE.lock() {
+        *h = None;
+    }
+    if let Ok(mut o) = LAST_OFFER.lock() {
+        *o = None;
+    }
+    if let Ok(mut s) = CLIENT_SEEN.lock() {
+        *s = None;
+    }
+    CLIENT_SAID.store(false, Ordering::SeqCst);
+}
 
 enum ClientJob {
     Downloading {
@@ -861,6 +995,14 @@ fn client_receive(message: Message) {
     match message {
         Message::Hello { build } => {
             log_line(&format!("sync: host runs WormForge {build}"));
+            let first = HOST_WORMFORGE.lock().map(|mut h| {
+                let first = h.is_none();
+                *h = crate::lobby::machine_name(0);
+                first
+            }).unwrap_or(false);
+            if first {
+                note(format!("the host runs WormForge {build}: rounds here use its packs"));
+            }
             if client_send(&Message::Hello { build: BUILD_ID.into() }) {
                 log_line("sync: answered the host's hello");
             }
@@ -1366,6 +1508,9 @@ unsafe fn host_packet(this: *mut u8, slot: i32, packet: *const u8, size: usize) 
 /// Our part of a client-side packet handler, lobby or end screen.
 unsafe fn client_packet(this: *mut u8, packet: *const u8, size: usize) -> bool {
     let _ = std::panic::catch_unwind(|| trace_packet(HOST_SLOTS, "host", packet, size));
+    if let Ok(mut seen) = CLIENT_SEEN.lock() {
+        seen.get_or_insert_with(Instant::now);
+    }
     if let Some(parsed) = take(packet, size) {
         let _ = std::panic::catch_unwind(|| {
             entered_lobby();
@@ -1432,4 +1577,21 @@ unsafe extern "thiscall" fn client_end_packet_hook(this: *mut u8, packet: *const
     }
     let f: ClientHandlerFn = std::mem::transmute(orig);
     f(this, packet, size)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_chat_line_is_plain_chat_our_hooks_pass_on() {
+        let line = chat_line("WormForge: this round's packs: highlander 0.8.0");
+        assert_eq!(&line[..2], &[0, 0], "WA's chat packet type");
+        assert_eq!(line.last(), Some(&0), "ended as WA's chat text is");
+        assert_eq!(unwrap_chat(&line), None, "no marker: WA shows it");
+        assert!(unwrap_chat(&wrap(&Message::Hello { build: "x".into() })).is_some(), "ours keep the marker");
+        let long = chat_line(&"x".repeat(500));
+        assert_eq!(long.len(), 2 + 200 + 1, "cut to 200 characters");
+        assert_eq!(chat_line("a\u{7}b\u{e9}c"), vec![0, 0, b'a', b'b', b'c', 0], "ASCII, no control characters");
+    }
 }
