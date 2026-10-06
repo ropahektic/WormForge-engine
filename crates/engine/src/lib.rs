@@ -13,6 +13,7 @@ mod hook;
 mod http;
 mod hud;
 mod hurt;
+mod arrow_source;
 mod overlay;
 mod particles;
 mod perf;

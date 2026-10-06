@@ -561,6 +561,28 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn freeze_is_a_simulation_verb_without_debug_opt_in() {
+        let _guard = lock_host();
+        thread_local! {
+            static FROZEN: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            freeze_worm: |handle| {
+                FROZEN.with(|v| v.set(handle));
+                true
+            },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let call = "return wa.worms.all()[1]:freeze()";
+        assert!(lua.load(call).eval::<bool>().is_err());
+        assert!(sim_context::with_sim(|| lua.load(call).eval::<bool>().unwrap()));
+        FROZEN.with(|v| assert_eq!(v.get(), 0x1234));
+    }
+
+    #[test]
     fn launch_reaches_native_only_during_simulation() {
         let _guard = lock_host();
         thread_local! {
@@ -739,6 +761,9 @@ wa.weapons.replace({
         let skip_go = claim(StockWeapon::SkipGo);
         assert_eq!(skip_go.params.name.as_deref(), Some("Skip Go/Surrender"));
         assert_eq!(skip_go.params.stock_fire_choice, Some(StockWeapon::Surrender));
+        let ice_arrow = claim(StockWeapon::Armageddon);
+        assert_eq!(ice_arrow.params.name.as_deref(), Some("Ice Arrow"));
+        assert!(ice_arrow.params.wep.is_some());
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());
@@ -2236,6 +2261,7 @@ end)
             by: Some(0),
             attacker: 0,
             slot: None,
+            source_weapon: None,
             kind: "blast",
             amount: 50,
             lost: 0,
@@ -2251,6 +2277,7 @@ end)
             by: Some(0),
             attacker: 0,
             slot: None,
+            source_weapon: None,
             kind: "blast",
             amount: 50,
             lost: 12,
@@ -2309,6 +2336,7 @@ wa.on.hurt(function(event)
     and event.attacker_team == 2
     and event.by == 2
     and event.weapon == "bazooka"
+    and event.source_weapon == "armageddon"
 end)
 "#,
         );
@@ -2325,6 +2353,7 @@ end)
             by: Some(2),
             attacker: 2,
             slot: Some(1),
+            source_weapon: Some(56),
             kind: "blast",
             amount: 20,
             lost: 20,

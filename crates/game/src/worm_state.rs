@@ -48,6 +48,7 @@ pub fn label(state: u32) -> Option<&'static str> {
         0x81 => "blasted",
         0x82 => "dying?",
         0x85 => "drowning?",
+        0x86 => "frozen",
         0x87 => "dead?",
         _ => return None,
     })

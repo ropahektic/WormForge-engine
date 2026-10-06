@@ -3,6 +3,14 @@
 # Revalidate patterns and ABI before adding support for another WA build.
 
 [[locator]]
+name = "ARROW_CTOR"
+reference_va = 0x004fe130
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 10 04 00 00 8B 84 24 24 04 00 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
 name = "APPLY_EXPLOSION_KNOCK"
 reference_va = 0x004ff390
 section = ".text"

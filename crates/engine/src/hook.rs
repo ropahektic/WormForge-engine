@@ -33,6 +33,7 @@ fn install_inner() -> Result<(), String> {
     }
 
     physics::install()?;
+    crate::arrow_source::install()?;
     actor::install()?;
     crate::worm_sprite::install()?;
     crate::mine::install()?;
@@ -164,4 +165,3 @@ unsafe extern "system" fn init_weapon_table_hook(runtime: *mut u8) {
         log_error(&format!("panic in InitWeaponTable wrap: {}", panic_text(p)));
     }
 }
-

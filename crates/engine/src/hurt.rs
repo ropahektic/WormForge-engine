@@ -127,6 +127,7 @@ fn snapshot(
         by,
         attacker,
         slot,
+        source_weapon: crate::arrow_source::weapon_of(sender),
         kind,
         amount,
         lost,

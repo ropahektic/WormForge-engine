@@ -57,6 +57,10 @@ A weapon is usually a **LuaActor**: `wa.weapons.replace` then `on_click` / `on_f
 `register` does not add a panel row; it still occupies `based_on`.
 
 `wa.on.hurt` runs on blast / hit / percent / nonlethal / poison (both peers). `percent` is axe-style: `amount` is 50 meaning half current HP. `pre` may write `amount` or return `"eat"`. `post` has `lost` (HP that actually left). `worm:hurt(10)` posts stock hit (0x4B) with no knockback; pending HP still waits until momentum ends. `worm:ammo("mine")` reads team ammo; `worm:ammo("mine", 1)` adds, and leaves infinite (`-1`) alone; `worm:ammo("mine", { set = 1 })` sets it outright, overwriting infinite too (`set = -1` makes it infinite). `worm.alliance` is WA's visible coalition colour (0 red .. 5 cyan); `worm.ammo_group` is its separate physical ammo row. Granting keeps the weapon in its own panel row.
+For a stock arrow hit, `wa.on.hurt` supplies `hit.source_weapon`: the stock slot
+that created the arrow, such as `"armageddon"`. Other sources leave it nil.
+`worm:freeze()` enters WA's frozen state from a simulation callback and returns
+true when a living worm changes state; WA handles its frozen pose and thaw.
 
 Per-worm loadouts are virtual because WA has no per-worm ammo row. `wa.inventory.create({ id = "classes", slots = {...} })` creates a store scoped to the registering pack. It supports `get`, `set`, `add`, `remove`, `clear`, `list`, deterministic `deal`, `transfer`, and `apply`. `apply(worm, { clear = true, each = 1 })` clears the store's slots on every live ammo row and materializes only that worm's inventory. `transfer(from, to, { weapons = "all", amount = n, mode = "move"|"copy" })` takes explicit worm targets; put conditions in normal Lua callbacks.
 
