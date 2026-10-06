@@ -2139,6 +2139,11 @@ end)
         lua.globals()
             .set("HIGHLANDER_BASELINE", include_str!("../../../mods/examples/highlander/baseline.txt"))
             .unwrap();
+        // rules.lua requires the pack's modules, which the suite loads from
+        // the pack's folder.
+        lua.globals()
+            .set("HIGHLANDER_ROOT", concat!(env!("CARGO_MANIFEST_DIR"), "/../../mods/examples/highlander/"))
+            .unwrap();
         let os: mlua::Table = lua.globals().get("os").unwrap();
         os.set(
             "exit",

@@ -350,20 +350,18 @@ def emit_highlander_table(
 
 
 def splice_into_rules(table: str) -> None:
-    rules = ROOT / "mods/examples/highlander/rules.lua"
+    # Highlander's weapon data module (tools/split_highlander.py split it
+    # out of rules.lua); the block sits between its markers.
+    rules = ROOT / "mods/examples/highlander/weapons/wep_data.lua"
     text = rules.read_text(encoding="utf-8")
     begin = "-- WEP_PATCH begin"
     end = "-- WEP_PATCH end"
     block = f"{begin}\n{table.rstrip()}\n{end}"
-    if begin in text and end in text:
-        pre, rest = text.split(begin, 1)
-        _, post = rest.split(end, 1)
-        text = pre + block + post
-    else:
-        needle = "for _, list in ipairs({ PORTED, PX_ART }) do"
-        if needle not in text:
-            raise SystemExit("rules.lua: cannot find replace loop")
-        text = text.replace(needle, block + "\n\n" + needle, 1)
+    if begin not in text or end not in text:
+        raise SystemExit(f"{rules}: cannot find the WEP_PATCH markers")
+    pre, rest = text.split(begin, 1)
+    _, post = rest.split(end, 1)
+    text = pre + block + post
     rules.write_text(text, encoding="utf-8", newline="\n")
     print(f"spliced WEP_NAME/WEP_PATCH into {rules}")
 
