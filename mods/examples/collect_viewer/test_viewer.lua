@@ -51,8 +51,8 @@ end
 local again=v.draw(10,true)
 for n,q in ipairs(again) do local x,y=center(q);local a,b=center(start[n]);near(x,a);near(y,b) end
 -- Origin stays at the recorded point; one complete sine cycle, deterministic phases.
-local opacity = {[25]=255, [49]=255, [50]=255, [51]=250, [75]=128, [99]=5}
-for _,age in ipairs({25,49,50,51,75,99}) do
+local opacity = {[24]=255, [25]=255, [26]=252, [50]=170, [75]=85, [99]=3}
+for _,age in ipairs({24,25,26,50,75,99}) do
   local drawn=v.draw(10+age,true)
   for n,q in ipairs(drawn) do
     local x,y=center(q);local sx,sy=center(start[n]);local phase=(n%4)*math.pi/2
@@ -67,7 +67,7 @@ assert(#v.draw(110,true)==0 and #v.draw(111,true)==0)
 -- Configuration actually controls proportional size, motion, spacing, lifetime.
 local tuned=input:gsub('size = 24','size = 20'):gsub('rise = 48','rise = 80')
   :gsub('amplitude = 6','amplitude = 3'):gsub('spacing = 28','spacing = 40')
-  :gsub('lifetime = 2','lifetime = 1')
+  :gsub('lifetime = 2','lifetime = 1'):gsub('fade = 1.5','fade = 0.5')
 local t=setup(tuned);t.grant(1)
 local a=t.draw(10,true); local ax,ay=center(a[1]);near(ax,80);near(ay,200)
 near((a[1].points[2][1]-a[1].points[1][1])/P,20)
@@ -76,4 +76,8 @@ assert(b[1].color==0xffffffff) -- half of the tuned one-second lifetime
 assert(t.draw(36,true)[1].color==0xf5ffffff)
 assert(t.draw(59,true)[1].color==0x0affffff)
 assert(#t.draw(60,true)==0)
+-- Zero fade is an opaque effect until expiration.
+local unfaded=setup(input:gsub('fade = 1.5','fade = 0'));unfaded.grant(1)
+assert(unfaded.draw(109,true)[1].color==0xffffffff)
+assert(#unfaded.draw(110,true)==0)
 print('collect_viewer: copies, origins, grid, phases, sizing, pause, visibility, fade and expiry passed')

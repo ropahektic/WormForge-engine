@@ -7,6 +7,7 @@ local CONFIG = {
   spacing = 28,          -- centres in a simultaneous grant's grid
   columns = 4,
   lifetime = 2,          -- simulation seconds, paused with the game
+  fade = 1.5,            -- final seconds fade linearly; lifetime - fade is opaque
 }
 local P, FPS, TAU = 0x10000, 50, 2 * math.pi
 local popups = {}
@@ -16,7 +17,7 @@ local draw_started = false
 local function trace(message)
   if CONFIG.debug then wa.log("collect_viewer: " .. message) end
 end
-trace("loaded; size=" .. CONFIG.size .. " lifetime=" .. CONFIG.lifetime)
+trace("loaded; size=" .. CONFIG.size .. " lifetime=" .. CONFIG.lifetime .. " fade=" .. CONFIG.fade)
 local function art(weapon)
   if visuals[weapon] then return visuals[weapon] end
   local v = wa.weapons.visual(weapon)
@@ -78,8 +79,10 @@ wa.on.draw(function()
         local u = age / (CONFIG.lifetime * FPS)
         local x = p.x + CONFIG.amplitude * (math.sin(TAU * u + p.phase) - math.sin(p.phase))
         local y = p.y - CONFIG.rise * u
-        -- Fully opaque for half the lifetime, then fade linearly to zero.
-        local alpha = math.floor(255 * math.min(1, 2 * (1 - u)) + 0.5)
+        -- Opaque until the final fade seconds, then linearly to zero.
+        local remaining = CONFIG.lifetime - age / FPS
+        local alpha = CONFIG.fade > 0
+          and math.floor(255 * math.min(1, remaining / CONFIG.fade) + 0.5) or 255
         local left, right = (x - p.w / 2) * P, (x + p.w / 2) * P
         local top, bottom = (y - p.h / 2) * P, (y + p.h / 2) * P
         wa.draw.quad({

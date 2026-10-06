@@ -2,18 +2,22 @@
 
 Enable alongside stock weapons or Highlander. Every acquired copy floats from
 its crate's pickup position or the killed worm's position for Highlander rewards,
-independently of later worm movement. Every weapon uses its panel symbol. Black pixels in those
-popup symbols are transparent. It creates no physics bodies.
+independently of later worm movement. Every weapon uses its panel symbol. Black
+and near-black pixels (all RGB channels at most 24/255) in those popup symbols
+are transparent; the original panel artwork is untouched. It creates no
+physics bodies.
 
 Diagnostics are enabled by `CONFIG.debug`: the log records grants, preview
 selection, visibility decisions and expiration without logging every draw.
 
 Edit `CONFIG` in `viewer.lua` to tune the default 24px bounding size, 48px rise,
-6px sine amplitude, copy spacing or two-second lifetime. Each copy follows one
-sine cycle, with fixed phase offsets and no randomness. Size preserves aspect
-ratio; art is a static frame. Time is 100 simulation frames (50 FPS), so pause
-pauses the effect. Icons stay opaque for half their lifetime, then fade linearly
-to transparent over the remaining half. Simultaneous copies have separate grid positions.
+6px sine amplitude, copy spacing, two-second lifetime or 1.5-second fade.
+Each copy follows one sine cycle, with fixed phase offsets and no randomness.
+Size preserves aspect ratio; art is a static frame. Time is 100 simulation
+frames (50 FPS), so pause pauses the effect. Icons stay opaque for 500ms,
+then fade linearly to transparent over 1500ms. `lifetime - fade` controls
+the opaque hold; `fade = 0` disables fading. Simultaneous copies have separate
+grid positions.
 
 Only the coalition active when the grant happened sees it: online, its local
 player and allies, never opposing players or spectators. Offline hotseat hides
@@ -44,8 +48,9 @@ stock simulation frame has finished; no live worm handle is retained.
 
 `wa.weapons.visual("grenade")` returns `{sprite, frame, width, height, kind}`,
 where `kind` is `icon`, or nil when its art is unavailable. Stock symbols and
-pack panel icons are copied into the shared GPU atlas with black pixels made
-transparent. No extra WA sprite slots or icon ownership is involved.
+pack panel icons are copied into the shared GPU atlas with black and near-black
+pixels made transparent (RGB threshold 24/255). No extra WA sprite slots or
+icon ownership is involved.
 `wa.world.frame()` returns the simulation frame or nil outside a match.
 `wa.world.is_local_alliance(colour)` is only legal in draw/HUD callbacks and
 returns whether this display belongs to that coalition (including hotseat).

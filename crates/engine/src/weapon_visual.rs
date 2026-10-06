@@ -4,6 +4,8 @@ use gfx::{RgbaFrame, SpriteStrip};
 use lua_host::WeaponVisual;
 use std::sync::Mutex;
 use weapons::{OverlayClaim, PanelIcon};
+// True-colour PX panel art contains near-black background pixels.
+const ICON_BLACK_THRESHOLD: u8 = 24;
 static VISUALS: Mutex<Vec<(u32, WeaponVisual)>> = Mutex::new(Vec::new());
 pub fn clear() {
     VISUALS.lock().unwrap().clear();
@@ -57,11 +59,12 @@ fn crop(frame: RgbaFrame) -> Option<RgbaFrame> {
         rgba,
     })
 }
-/// Panel artwork uses opaque black as its background as well as index 0.
-/// Key black to alpha only in the popup copy, before trimming that border.
+/// Panel artwork uses opaque black and near-black as its background.
+/// Key RGB channels at or below 24 to alpha only in the popup copy, before
+/// trimming that border; brighter colours and their existing alpha survive.
 fn transparent_icon(mut frame: RgbaFrame) -> RgbaFrame {
     for pixel in frame.rgba.chunks_exact_mut(4) {
-        if pixel[..3] == [0, 0, 0] {
+        if pixel[..3].iter().all(|&c| c <= ICON_BLACK_THRESHOLD) {
             pixel[3] = 0;
         }
     }
@@ -133,7 +136,7 @@ pub unsafe fn prepare(
     }
     let visuals = VISUALS.lock().unwrap();
     crate::log_line(&format!(
-        "collect_viewer preview: prepared={} icons missing={} world={world:p} display={display:p}",
+        "collect_viewer preview: prepared={} icons missing={} black_threshold={ICON_BLACK_THRESHOLD} world={world:p} display={display:p}",
         visuals.len(),
         STOCK_WEAPON_COUNT - 1 - visuals.len(),
     ));
@@ -186,7 +189,7 @@ mod tests {
         };
         let mut icon_rgba = [0, 255, 0, 255].repeat(64);
         icon_rgba[..4].copy_from_slice(&[0, 0, 0, 255]);
-        icon_rgba[4..8].copy_from_slice(&[0, 1, 0, 255]); // near-black art stays opaque
+        icon_rgba[4..8].copy_from_slice(&[0, 1, 0, 255]); // near-black PX background
         let claims = vec![
             OverlayClaim {
                 mod_id: "projectile-pack".into(),
@@ -239,7 +242,30 @@ mod tests {
         assert_eq!((get(62).width, get(62).height), (8, 5));
         assert_eq!(get(62).rgba, [10, 20, 30, 255].repeat(40));
         icon_rgba[3] = 0;
+        icon_rgba[7] = 0;
         assert_eq!(get(6).rgba, icon_rgba);
+    }
+
+    #[test]
+    fn near_black_key_removes_px_background_and_preserves_colour_and_alpha() {
+        let original = RgbaFrame {
+            width: 6,
+            height: 1,
+            rgba: vec![
+                0, 0, 0, 255,       // exact black
+                8, 16, 24, 255,     // uneven near-black, at the threshold
+                24, 24, 24, 64,     // existing translucency is also keyed
+                25, 25, 25, 128,    // just above threshold, alpha preserved
+                0, 0, 25, 255,      // dark blue is not black
+                255, 0, 0, 0,       // existing transparency preserved
+            ],
+        };
+        let keyed = transparent_icon(original.clone());
+        assert_eq!(keyed.rgba, vec![
+            0, 0, 0, 0, 8, 16, 24, 0, 24, 24, 24, 0,
+            25, 25, 25, 128, 0, 0, 25, 255, 255, 0, 0, 0,
+        ]);
+        assert_eq!(original.rgba[3], 255); // panel source is not modified
     }
 
     #[test]
