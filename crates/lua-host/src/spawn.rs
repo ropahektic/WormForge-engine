@@ -577,6 +577,44 @@ mod terrain_tests {
 ///
 /// Errors rather than returns nil when the draw is unavailable. A pack that
 /// silently got `nil` here would fail somewhere later and further away.
+fn finite(name: &str, v: f64) -> mlua::Result<f64> {
+    if v.is_finite() {
+        Ok(v)
+    } else {
+        Err(mlua::Error::external(format!("wa.math.{name}: needs a finite number, got {v}")))
+    }
+}
+
+/// `wa.math.sin(x)` / `cos(x)` / `atan(y [, x])`: as Lua's, in radians, but
+/// the same bits on every machine (`game::trig`: WA's own sine table, and an
+/// atan from + - * / alone), for code whose result reaches the simulation.
+/// Lua's `math.sin` goes to each machine's C runtime, which may differ in the
+/// last bit. They read and change nothing, so they work anywhere.
+fn math_table(lua: &Lua) -> Result<Table, String> {
+    let t = lua.create_table().map_err(|e| e.to_string())?;
+    let sin = lua
+        .create_function(|_, x: f64| {
+            let a = game::trig::angle_from_radians(finite("sin", x)?);
+            Ok(game::trig::sin(a) as f64 / 65536.0)
+        })
+        .map_err(|e| e.to_string())?;
+    let cos = lua
+        .create_function(|_, x: f64| {
+            let a = game::trig::angle_from_radians(finite("cos", x)?);
+            Ok(game::trig::cos(a) as f64 / 65536.0)
+        })
+        .map_err(|e| e.to_string())?;
+    let atan = lua
+        .create_function(|_, (y, x): (f64, Option<f64>)| {
+            Ok(game::trig::atan2(finite("atan", y)?, finite("atan", x.unwrap_or(1.0))?))
+        })
+        .map_err(|e| e.to_string())?;
+    t.set("sin", sin).map_err(|e| e.to_string())?;
+    t.set("cos", cos).map_err(|e| e.to_string())?;
+    t.set("atan", atan).map_err(|e| e.to_string())?;
+    Ok(t)
+}
+
 fn random_fn(lua: &Lua) -> Result<Function, String> {
     lua.create_function(|_, (a, b): (Option<i64>, Option<i64>)| {
         if crate::dispatch::rendering() {
@@ -832,6 +870,7 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     world.set("networked", networked).map_err(|e| e.to_string())?;
     wa.set("random", random_fn(lua)?).map_err(|e| e.to_string())?;
+    wa.set("math", math_table(lua)?).map_err(|e| e.to_string())?;
     wa.set("world", world).map_err(|e| e.to_string())?;
     Ok(())
 }
