@@ -1,10 +1,10 @@
 -- Highlander: Project X's sentry turrets (weapon_sentry_gun's PxSentryGun,
 -- weapon_sentry_laser's PxSentryLaser), the part they share: a body dropped
 -- in front of the worm that falls and plants itself, a head that sweeps,
--- picks the nearest moving enemy it can see, turns to it and fires, holds
--- fire on its owner's colour's turns, reloads each turn, and is disabled for
--- the turn by a blast and explodes at 0 health. What it fires is the
--- weapon's: `fire(t, a, s)`.
+-- picks the nearest moving enemy it can see, turns to it and fires, reloads
+-- each turn, and is disabled for the turn by a blast and explodes at 0
+-- health. What it aims at and what it fires are the weapon's: `targets` (by
+-- default the worms) and `fire(t, a, s, target)`.
 --
 -- From the standalone sentry_gun port (mods/examples/sentry_gun_old), with
 -- its numbers as the defaults. Angles: 0 down, 90 right, 180 up, 270 left.
@@ -23,6 +23,7 @@ local DEFAULTS = {
   sweep = 10,           -- PX idle sweep amplitude, degrees
   aim_tolerance = 1.5,  -- PX fires only after rotation reaches the target
   require_motion = true, -- PX only acquires walking/jumping/moving worms
+  hold_own_turn = true, -- the Sentry Gun holds fire on its colour's turns
   sink_px = 8,          -- pixels the planted turret settles into the ground
   muzzle_up = 25,       -- pixels from the anchor up to the turret pivot
   front_px = 5,         -- the body lands this far in front of the worm
@@ -50,16 +51,28 @@ local function turn_toward(cur, want, speed)
   return (cur + d) % 360
 end
 
+-- A turret without one of the sounds (the laser has no firing loop) skips it.
+local function play(a, sound)
+  if sound then a:sound(sound) end
+end
+
 local function angle_gap(a, b)
   local d = (a - b + 540) % 360 - 180
   return d < 0 and -d or d
 end
 
--- `cfg`: the weapon's numbers (over DEFAULTS), `art` { base, gun, flare },
--- `sounds` { place, beep, fire_loop, fire_end, servo_start, servo_loop,
--- servo_end }, `tints` (team colours, red to cyan, 0xRRGGBB), `kind` and
--- `fire(t, a, s)`, which shoots once (a, the body; s, its state). Returns
--- `t`, whose `place(fire_ev)` drops a turret for the firing worm.
+-- `cfg`: the weapon's numbers (over DEFAULTS), `art` { base, gun, flare,
+-- barrel }, `sounds` { place, beep, fire_loop, fire_end, servo_start,
+-- servo_loop, servo_end }, `tints` (team colours, red to cyan, 0xRRGGBB),
+-- `kind`, `fire(t, a, s, target)`, which shoots once (a, the body; s, its
+-- state), and optionally `targets(t, a, s)`, what it can aim at: a list of
+-- { key, x, y, alliance, moving }, in an order the same on every machine.
+-- Returns `t`, whose `place(fire_ev)` drops a turret for the firing worm.
+--
+-- The head: `gun`, team-tinted, its frames the firing poses; with a
+-- `barrel`, the barrel is its own untinted layer behind it, its frames the
+-- poses, and the gun's two frames are its art and its mirror image, for a
+-- turret that has turned to face left (PX draws it flipped).
 function turret.new(cfg)
   local t = {}
   for k, v in pairs(DEFAULTS) do t[k] = v end
@@ -80,39 +93,51 @@ function turret.new(cfg)
     end
   end
 
-  -- PX needs movement to notice a worm, but keeps an acquired one on line of
-  -- sight alone. Seen from the head, not the feet on the ground.
-  local function sees(a, s, w, need_motion)
-    if w.alliance == s.alliance or w.visible == false then return false end
-    if need_motion and t.require_motion then
+  -- The Sentry Gun's targets: the worms, keyed by worm id; moving by
+  -- note_motion.
+  local function worm_targets(_, _, s)
+    local out = {}
+    for _, w in ipairs(wa.worms.all()) do
+      if w.visible ~= false then
       local p = s.seen[w.id]
-      if not (p and p.moving) then return false end
+        out[#out + 1] = { key = w.id, x = w.x, y = w.y, alliance = w.alliance, moving = p and p.moving, obj = w }
     end
+    end
+    return out
+  end
+  local targets = cfg.targets or worm_targets
+
+  -- PX needs movement to notice a target, but keeps an acquired one on line
+  -- of sight alone. Seen from the head, not the feet on the ground.
+  local function sees(a, s, c, need_motion)
+    if c.alliance == s.alliance then return false end
+    if need_motion and t.require_motion and not c.moving then return false end
     local ex, ey = a.x, a.y - t.muzzle_up * P
-    local dx, dy = (w.x - ex) // P, (w.y - ey) // P
+    local dx, dy = (c.x - ex) // P, (c.y - ey) // P
     if dx * dx + dy * dy > t.sensor_px * t.sensor_px then return false end
-    return not wa.land.trace(ex, ey, w.x, w.y)
+    return not wa.land.trace(ex, ey, c.x, c.y)
   end
 
-  -- The nearest moving enemy in sight; ties on worm id, the same everywhere.
-  local function acquire(a, s)
+  -- The nearest moving enemy in sight; ties to the first listed, the same
+  -- everywhere.
+  local function acquire(a, s, list)
     local ex, ey = a.x, a.y - t.muzzle_up * P
     local best, best_d
-    for _, w in ipairs(wa.worms.all()) do
-      if sees(a, s, w, true) then
-        local dx, dy = (w.x - ex) // P, (w.y - ey) // P
+    for _, c in ipairs(list) do
+      if sees(a, s, c, true) then
+        local dx, dy = (c.x - ex) // P, (c.y - ey) // P
         local d = dx * dx + dy * dy
-        if not best_d or d < best_d or (d == best_d and w.id < best.id) then best, best_d = w, d end
+        if not best_d or d < best_d then best, best_d = c, d end
       end
     end
     return best
   end
 
   -- PX keeps its target until it loses sight of it.
-  local function held(a, s)
-    if not s.tid then return nil end
-    for _, w in ipairs(wa.worms.all()) do
-      if w.id == s.tid then return sees(a, s, w, false) and w or nil end
+  local function held(a, s, list)
+    if s.tid == nil then return nil end
+    for _, c in ipairs(list) do
+      if c.key == s.tid then return sees(a, s, c, false) and c or nil end
     end
     return nil
   end
@@ -123,27 +148,27 @@ function turret.new(cfg)
     -- PX zeroes ShootTimer as firing (re)starts: the first round goes now.
     s.cooldown = 0
     s.fire_sound = 35
-    a:sound(t.sounds.fire_loop)
+    play(a, t.sounds.fire_loop)
   end
 
   function t.stop_firing(a, s)
     if not s.firing then return end
     s.firing, s.anim = false, 0
-    a:sound(t.sounds.fire_end)
+    play(a, t.sounds.fire_end)
   end
 
   local function update_servo(a, s, rotating)
     if rotating then
       if not s.rotating then
         s.rotating, s.servo_sound = true, 17
-        a:sound(t.sounds.servo_start)
+        play(a, t.sounds.servo_start)
       elseif s.servo_sound <= 0 then
         s.servo_sound = 47
-        a:sound(t.sounds.servo_loop)
+        play(a, t.sounds.servo_loop)
       end
     elseif s.rotating then
       s.rotating, s.servo_sound = false, 0
-      a:sound(t.sounds.servo_end)
+      play(a, t.sounds.servo_end)
     end
   end
 
@@ -151,14 +176,17 @@ function turret.new(cfg)
     -- A planted turret is immovable: blasts would otherwise add up.
     if s.px then a.x, a.y = s.px, s.py end
     a.vx, a.vy = 0, 0
+    if not cfg.targets then
     for _, w in ipairs(wa.worms.all()) do note_motion(s, w) end
+    end
 
     local target
     if s.active then
-      target = held(a, s)
+      local list = targets(t, a, s)
+      target = held(a, s, list)
       if not target and not s.lost then
-        target = acquire(a, s)
-        if target then s.tid = target.id end
+        target = acquire(a, s, list)
+        if target then s.tid = target.key end
       end
     end
     local want
@@ -167,7 +195,7 @@ function turret.new(cfg)
       if not s.had_target then
         s.activate = t.activate
         if s.beep <= 0 then
-          a:sound(t.sounds.beep)
+          play(a, t.sounds.beep)
           s.beep = t.beep_frames
         end
       end
@@ -217,15 +245,15 @@ function turret.new(cfg)
 
     -- PX latches firing once on target, until it loses it, runs dry or is
     -- disabled.
-    local hold_fire = (active_alliance == s.alliance)
+    local hold_fire = t.hold_own_turn and active_alliance == s.alliance
     if target and not hold_fire and s.activate <= 0 and (s.firing or aligned) then
       t.start_firing(a, s)
       if s.fire_sound <= 0 then
         s.fire_sound = 35
-        a:sound(t.sounds.fire_loop)
+        play(a, t.sounds.fire_loop)
       end
       if s.cooldown <= 0 then
-        t.fire(t, a, s)
+        t.fire(t, a, s, target)
         s.cooldown = t.shot_frames
       end
     elseif not target or hold_fire then
@@ -238,11 +266,20 @@ function turret.new(cfg)
     local gun = s.gun
     if not gun or gun.dead then return end
     gun.x, gun.y, gun.vx, gun.vy = a.x, a.y - t.muzzle_up * P, 0, 0
-    local pose = s.firing and (1 + ((s.anim // 3) % 2)) or 0
-    if pose ~= s.pose then
-      gun:frame(pose)
-      s.pose = pose
+    local pose = (s.firing or s.recoil > 0) and (1 + ((s.anim // 3) % 2)) or 0
+    local barrel = s.barrel
+    -- With a barrel layer, the gun's frames are its art and its mirror.
+    local look = barrel and (s.side < 0 and 1 or 0) or pose
+    if look ~= s.look then
+      gun:frame(look)
+      s.look = look
     end
+    if barrel and not barrel.dead then
+      barrel.x, barrel.y, barrel.vx, barrel.vy = gun.x, gun.y, 0, 0
+      if pose ~= s.pose then barrel:frame(pose) end
+      barrel:gfx({ angle = (90 - s.angle) % 360, tint = 0xFFFFFF, depth = t.head_depth + 1 })
+    end
+    s.pose = pose
     local flare = s.flare
     if flare and not flare.dead then
       flare.x, flare.y, flare.vx, flare.vy = gun.x, gun.y, 0, 0
@@ -260,6 +297,7 @@ function turret.new(cfg)
   local function remove(s)
     if s.gun and not s.gun.dead then s.gun:despawn() end
     if s.flare and not s.flare.dead then s.flare:despawn() end
+    if s.barrel and not s.barrel.dead then s.barrel:despawn() end
   end
 
   local function brain(a, ev)
@@ -280,7 +318,10 @@ function turret.new(cfg)
         return
       end
     end
-    if s.firing then s.anim = s.anim + 1 end
+    -- `recoil`: frames the firing pose lingers after a shot the weapon ended
+    -- at once (the laser's).
+    if s.recoil > 0 then s.recoil = s.recoil - 1 end
+    if s.firing or s.recoil > 0 then s.anim = s.anim + 1 end
 
     if not s.planted then
       a:gravity()
@@ -289,7 +330,7 @@ function turret.new(cfg)
         a.vx, a.vy = 0, 0
         s.planted = true
         s.px, s.py = a.x, a.y + t.sink_px * P
-        a:sound(t.sounds.place)
+        play(a, t.sounds.place)
         sync(a, s)
         return
       end
@@ -351,11 +392,12 @@ function turret.new(cfg)
       health = t.health, angle = idle, idle = idle, side = facing < 0 and -1 or 1,
       sweep_dir = 1, shots = 0, firing = false, anim = 0, rotating = false,
       servo_sound = 0, fire_sound = 0, beep = 0, activate = 0, cooldown = 0,
-      had_target = false, lost = false, seen = {},
+      had_target = false, lost = false, seen = {}, recoil = 0,
     }
     state[body.id] = s
     s.gun = rider(t.art.gun, x, worm.y - t.muzzle_up * P, worm, t.kind .. "_head")
     if t.art.flare then s.flare = rider(t.art.flare, x, worm.y - t.muzzle_up * P, worm, t.kind .. "_flare") end
+    if t.art.barrel then s.barrel = rider(t.art.barrel, x, worm.y - t.muzzle_up * P, worm, t.kind .. "_barrel") end
     sync(body, s)
     return body, s
   end

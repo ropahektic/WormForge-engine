@@ -770,7 +770,7 @@ do
     if by_slot[spec.weapon] then dupes = true end
     by_slot[spec.weapon] = spec
   end
-  check("63 slots replaced, each once", #replaced == 63 and not dupes, tostring(#replaced))
+  check("64 slots replaced, each once", #replaced == 64 and not dupes, tostring(#replaced))
   -- The loader skips a replace the manifest does not declare, silently.
   -- (Checked where the suite can read the pack's files: run from the repo,
   -- not inside the engine's loader test.)
@@ -794,8 +794,8 @@ do
       or slot == "prod" or slot == "armageddon" or slot == "petrol_bomb" or slot == "nuclear_test"
       or slot == "sheep_strike" or slot == "salvation_army" or slot == "baseball_bat" or slot == "donkey" then
       if spec.wep ~= "weps/" .. slot .. ".wep" or spec.copy_from then own_file = false end
-    elseif slot == "kamikaze" then
-      -- The Sentry Gun is placed as WA places a mine.
+    elseif slot == "kamikaze" or slot == "dragon_ball" then
+      -- The Sentry Gun and the Sentry Laser are placed as WA places a mine.
       if spec.copy_from ~= "mine" or spec.wep then own_file = false end
     elseif spec.copy_from ~= slot or spec.wep then own_file = false end
   end
@@ -1064,6 +1064,91 @@ do
   check("at 0 of its 50 health it explodes, damage 50, blast 100, and its head goes",
     #M.actor_booms == 1 and M.actor_booms[1].opts.damage == 50 and M.actor_booms[1].opts.id == 100 and head.dead)
   M.solid, M.gravity = nil, nil
+end
+
+print("Sentry Laser: shoots enemy projectiles out of the air, not worms")
+do
+  new_match()
+  local p = 0x10000
+  local spec
+  for _, s in ipairs(replaced) do if s.weapon == "dragon_ball" then spec = s end end
+  check("it claims Dragon Ball, placed as a mine, its body tinted per team",
+    spec and spec.copy_from == "mine" and spec.name == "Sentry Laser" and type(spec.on_fire) == "function"
+      and spec.worm_sprites.weaponlnk == "sprites/sentry_laser/equip"
+      and spec.worm_sprites_team_tint.worm_sprites.weaponlnk == "sprites/sentry_laser/equip_housing")
+  local owner, enemy = worm(16), worm(32)
+  for _, w in ipairs(worms) do w.x, w.y = 5000 * p, 5000 * p end
+  owner.x, owner.y, owner.facing = 100 * p, 100 * p, 1
+  M.solid = function(_, y) return y >= 110 * p end
+  M.gravity, M.spawned, M.actor_sounds, M.actor_booms, M.digs = p // 4, {}, {}, {}, {}
+  spec.on_fire({ worm = owner })
+  local body, head, barrel = M.spawned[#M.spawned - 2], M.spawned[#M.spawned - 1], M.spawned[#M.spawned]
+  check("a base, a body and a barrel", body.sprite == "sprites/sentry_laser/turret_base"
+    and head.sprite == "sprites/sentry_laser/turret_body" and barrel.sprite == "sprites/sentry_laser/turret_barrel")
+  for _ = 1, 40 do body.on(body) end
+  check("it plants with PX's sound", M.actor_sounds[#M.actor_sounds] == "sounds/sentry_laser/sentrylaserplace.wav")
+  local function disintegrations()
+    local n = 0
+    for _, snd in ipairs(M.actor_sounds) do if snd == "sounds/sentry_laser/sentrylaserdisin.wav" then n = n + 1 end end
+    return n
+  end
+  local function missile(id, alliance, x)
+    local m = { id = id, kind = "missile", x = x * p, y = 80 * p, vx = p, vy = 0, alliance = alliance }
+    function m:remove()
+      self.removed = true
+      for i, o in ipairs(M.missiles) do if o == self then table.remove(M.missiles, i) break end end
+      return true
+    end
+    return m
+  end
+  local function run(n)
+    for _ = 1, n do
+      enemy.x = enemy.x + p
+      for _, m in ipairs(M.missiles) do m.x = m.x + m.vx end
+      body.on(body)
+    end
+  end
+  enemy.x, enemy.y = 200 * p, 90 * p
+  local own = missile(901, owner.alliance, 150)
+  M.missiles = { own }
+  run(60)
+  check("it ignores a moving enemy worm and its own colour's missiles",
+    disintegrations() == 0 and not own.removed and enemy.hp == 100)
+  local foe = missile(902, enemy.alliance, 200)
+  M.missiles = { own, foe }
+  run(10)
+  check("an enemy missile: not before its 20 frames", not foe.removed)
+  run(20)
+  check("then a beam in its owner's colour disintegrates it", foe.removed and disintegrations() == 1
+    and #M.digs >= 1 and M.digs[#M.digs].radius == 4)
+  M.ribbons = {}
+  M.draw()
+  check("the beam is drawn red", #M.ribbons == 1 and M.ribbons[1].points[1].color == 0xFFFF0000)
+  local still = missile(903, enemy.alliance, 200)
+  still.vx = 0
+  M.missiles = { own, still }
+  run(60)
+  check("a missile at rest is no target", not still.removed)
+  -- An enemy worm in the beam's way burns.
+  local foes = {}
+  for i = 1, 4 do
+    foes[i] = missile(910 + i, enemy.alliance, 220)
+    foes[i].y = 70 * p
+  end
+  -- Halfway from the turret's head to them.
+  enemy.x, enemy.y = (body.x + 220 * p) // 2, (body.y - 25 * p + 70 * p) // 2
+  M.missiles = foes
+  local hp = enemy.hp
+  for _ = 1, 200 do body.on(body) end
+  check("4 shots a turn: four missiles, then it is spent", disintegrations() == 4 and #M.missiles == 1)
+  check("a worm in the beam's way takes 10 a shot", enemy.hp < hp and (hp - enemy.hp) % 10 == 0, hp - enemy.hp)
+  M.message(owner, wa.msg.START_TURN)
+  for _ = 1, 60 do body.on(body) end
+  check("each turn reloads it, its owner's turn too", disintegrations() == 5 and #M.missiles == 0)
+  body.on(body, { damage = 35 })
+  check("at 0 of its 35 health it explodes, damage 50, blast 100, body and barrel gone",
+    #M.actor_booms == 1 and M.actor_booms[1].opts.damage == 50 and head.dead and barrel.dead)
+  M.solid, M.gravity, M.missiles = nil, nil, {}
 end
 
 print("pools: every stock slot is in exactly one place")

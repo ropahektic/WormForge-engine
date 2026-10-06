@@ -121,6 +121,45 @@ local PX_ART = {
     },
     on_fire = function(fire) fires.sentry_gun(fire) end,
   },
+  { -- Sentry Laser: PX's projectile-defence turret (weapons/sentry_laser.lua,
+    -- lib/turret.lua) on the Dragon Ball slot, placed as the Sentry Gun.
+    weapon = "dragon_ball", copy_from = "mine", name = "Sentry Laser",
+    panel_icon = "sprites/sentry_laser/icon.png",
+    is_weapon = true,
+    worm_sprites = {
+      weaponlnk = "sprites/sentry_laser/equip", weaponlnku = "sprites/sentry_laser/equipu",
+      weaponlnkd = "sprites/sentry_laser/equipd",
+      wthrow = "sprites/sentry_laser/unequip", wthrowu = "sprites/sentry_laser/unequipu",
+      wthrowd = "sprites/sentry_laser/unequipd",
+    },
+    -- The body coloured per team, as on the planted turret; its barrel stays grey.
+    worm_sprites_team_tint = {
+      worm_sprites = {
+        weaponlnk = "sprites/sentry_laser/equip_housing", weaponlnku = "sprites/sentry_laser/equipu_housing",
+        weaponlnkd = "sprites/sentry_laser/equipd_housing",
+        wthrow = "sprites/sentry_laser/unequip_housing", wthrowu = "sprites/sentry_laser/unequipu_housing",
+        wthrowd = "sprites/sentry_laser/unequipd_housing",
+      },
+      colours = { 0xFF6447, 0x4764FF, 0x47FF64, 0xE6E647, 0xE647E6, 0x47E6E6 },
+    },
+    sprites = {
+      "sprites/sentry_laser/turret_base", "sprites/sentry_laser/turret_body",
+      "sprites/sentry_laser/turret_barrel",
+    },
+    sounds = {
+      "sounds/sentry_laser/sentrylaserplace.wav", "sounds/sentry_laser/sentrylaserbeep.wav",
+      "sounds/sentry_laser/sentrylaserstart.wav", "sounds/sentry_laser/sentrylaserloop.wav",
+      "sounds/sentry_laser/sentrylaserend.wav", "sounds/sentry_laser/sentrylaserdisin.wav",
+    },
+    params = {
+      sprite_columns = 1,
+      worm_sprites_animate = true,
+      depth = 0x190000,
+      depth_prefix = "sprites/sentry_laser/turret_",
+      gpu_prefix = "sprites/sentry_laser/turret_",
+    },
+    on_fire = function(fire) fires.sentry_laser(fire) end,
+  },
   { -- Super Tele: the PX record is a type-3 cursor weapon on teleport's slot.
     weapon = "teleport",
     wep = "weps/teleport.wep",
