@@ -7,6 +7,7 @@ pub mod offsets;
 pub mod overwrite;
 pub mod sync_input;
 pub mod team;
+pub mod trig;
 pub mod weapon;
 pub mod worm_state;
 
