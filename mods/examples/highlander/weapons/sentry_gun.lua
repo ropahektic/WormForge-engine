@@ -46,7 +46,7 @@ local function casing(t, a, s, rad)
   wa.actors.spawn({
     sprite = CASING, x = a.x, y = a.y - t.muzzle_up * P,
     vx = math.floor(wa.math.sin(eject) * speed * P), vy = math.floor(wa.math.cos(eject) * speed * P),
-    gravity = false, collide = false, owner = s.owner, kind = "casing",
+    gravity = false, collide = false, owner = t.owner(a, s), kind = "casing",
     on = function(c)
       life = life - 1
       if life <= 0 then c:despawn(); return end
@@ -93,7 +93,7 @@ local function fire(t, a, s)
   if hit_px < SELF_BLAST_PX * SELF_BLAST_PX then return end
   wa.actors.spawn({
     sprite = IMPACT, x = hx, y = hy, vx = 0, vy = 0, gravity = false, collide = false,
-    origin = "center", owner = s.owner, on = impact,
+    origin = "center", owner = t.owner(a, s), on = impact,
   })
   s.ammo = s.ammo - 1
   if s.ammo <= 0 then

@@ -671,6 +671,14 @@ do
   enemy.x = 300 * p -- back in range: it has walked on meanwhile
   run(100)
   check("and fires again on the enemy's", impacts() > before, impacts() - before)
+  check("its rounds are its owner's while the owner lives", M.spawned[#M.spawned].owner == owner)
+  -- WA frees a worm that dies: the turret owns its rounds then.
+  for i, w in ipairs(worms) do if w == owner then table.remove(worms, i) break end end
+  before = impacts()
+  run(20)
+  check("its owner dead, it fires on, its rounds its own", impacts() > before
+    and M.spawned[#M.spawned].owner == body)
+  worms[#worms + 1] = owner
   body.on(body, { damage = 10 })
   before = impacts()
   run(120)
