@@ -844,7 +844,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 57);
+        assert_eq!(applied.len(), 58);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         let skip_go = claim(StockWeapon::SkipGo);
         assert_eq!(skip_go.params.name.as_deref(), Some("Skip Go/Surrender"));
@@ -857,6 +857,9 @@ wa.weapons.replace({
         assert!(valyrian.params.wep.is_some());
         assert!(valyrian.params.on_fire_id != 0, "thrown through on_fire");
         assert_eq!(valyrian.params.hold.as_ref().unwrap().sheet, "sprites/px_hold/valyrian_fire.png");
+        let reinforcement = claim(StockWeapon::NuclearTest);
+        assert_eq!(reinforcement.params.name.as_deref(), Some("Reinforcement"));
+        assert!(reinforcement.params.on_click_id != 0, "a click claim");
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());
