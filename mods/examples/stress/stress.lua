@@ -2,7 +2,10 @@
 -- measure WA's own projectiles against WormForge's, and to record into a
 -- replay that can be played back again and again for sync and performance.
 --
--- First, when the first turn starts: MAGNETS of Highlander's Electromagnet
+-- Nothing happens for START_DELAY frames after the first turn starts (a
+-- second), so the match can fade in from black first.
+--
+-- First, START_DELAY frames into the first turn: MAGNETS of Highlander's Electromagnet
 -- (its claim on the Baseball Bat slot), spread evenly across the map's
 -- width, each dropped just above the ground under its point, each at random
 -- repelling or attracting. Their fields push and pull everything the
@@ -10,7 +13,7 @@
 -- turns). Fired through `wa.weapons.fire`, as a worm firing it would;
 -- without Highlander no pack claims the slot, which is logged, not fatal.
 --
--- Batch 1, when the first turn starts: STOCK. Real WA missiles
+-- Batch 1, with the magnets: STOCK. Real WA missiles
 -- (wa.weapons.launch) that WA flies, draws and explodes itself: mortar shells
 -- that burst into clustlets on impact (drawn by WormForge as particles), and
 -- cluster bombs on a 3 s fuse.
@@ -60,6 +63,7 @@
 -- (`gpu_prefix`); the weapon itself stays WA's. (Highlander has Nuclear Test:
 -- its Reinforcement.)
 
+local START_DELAY = 50  -- frames from the first turn's start to the magnets and batch 1: 1 s
 local COUNT = 40        -- projectiles per batch
 local BATCH_GAP = 400   -- frames from batch 1 to batch 2: 8 s at WA's 50 a second
 local DAMAGE = 15       -- each explosion's damage
@@ -296,12 +300,9 @@ wa.on.turn_start(function(ev)
   started = true
   local owner = ev.worm
   local shots = plan()
-  if MAGNETS > 0 then magnet_batch(owner) end
-  wa.log(string.format("stress: batch 1, %d stock projectiles (mortar, cluster bomb)", COUNT))
-  stock_batch(owner, shots)
-  -- The clock: an invisible actor whose brain counts frames, fires batch 2
-  -- and lets the flashes go. It runs every frame whatever the worms do, and
-  -- in lockstep.
+  -- The clock: an invisible actor whose brain counts frames, fires every
+  -- batch and lets the flashes go. It runs every frame whatever the worms
+  -- do, and in lockstep.
   wa.actors.spawn({
     sprite = false, x = shots[1].x, y = shots[1].y,
     gravity = false, collide = false, owner = owner,
@@ -312,7 +313,17 @@ wa.on.turn_start(function(ev)
           table.remove(flashes, i)
         end
       end
-      if now == BATCH_GAP then
+      if now == START_DELAY then
+        local w = live_owner(owner)
+        if w then
+          if MAGNETS > 0 then magnet_batch(w) end
+          wa.log(string.format("stress: batch 1, %d stock projectiles (mortar, cluster bomb)", COUNT))
+          stock_batch(w, shots)
+        else
+          wa.log("stress: batch 1 skipped, no worm alive to fire it for")
+        end
+      end
+      if now == START_DELAY + BATCH_GAP then
         local w = live_owner(owner)
         if w then
           wa.log(string.format("stress: batch 2, %d custom projectiles (Lua actors, GPU orbs)", COUNT))
@@ -321,7 +332,7 @@ wa.on.turn_start(function(ev)
           wa.log("stress: batch 2 skipped, no worm alive to fire it for")
         end
       end
-      if now == 2 * BATCH_GAP and BOWLING_STRIKES > 0 then
+      if now == START_DELAY + 2 * BATCH_GAP and BOWLING_STRIKES > 0 then
         local w = live_owner(owner)
         if w then
           bowling_batch(w)
@@ -329,7 +340,7 @@ wa.on.turn_start(function(ev)
           wa.log("stress: batch 3 skipped, no worm alive to fire it for")
         end
       end
-      if now == 3 * BATCH_GAP and ELECTRIC_GRENADES > 0 then
+      if now == START_DELAY + 3 * BATCH_GAP and ELECTRIC_GRENADES > 0 then
         local w = live_owner(owner)
         if w then
           electric_batch(w)
@@ -337,7 +348,8 @@ wa.on.turn_start(function(ev)
           wa.log("stress: batch 4 skipped, no worm alive to fire it for")
         end
       end
-      local last = ELECTRIC_GRENADES > 0 and 3 * BATCH_GAP or BOWLING_STRIKES > 0 and 2 * BATCH_GAP or BATCH_GAP
+      local last = START_DELAY
+        + (ELECTRIC_GRENADES > 0 and 3 * BATCH_GAP or BOWLING_STRIKES > 0 and 2 * BATCH_GAP or BATCH_GAP)
       if now > last and next(orbs) == nil and #flashes == 0 then
         a:despawn()
       end
