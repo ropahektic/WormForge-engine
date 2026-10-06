@@ -207,6 +207,7 @@ pub fn install() -> Result<(), String> {
         hurt: crate::physics::hit_worm,
         set_worm_state: crate::physics::set_worm_state,
         retreat_ms: crate::world::retreat_ms,
+        turn_clock_ms: crate::world::turn_clock_ms,
         launch: crate::missile_boom::launch,
         retarget_weapon_sprites: |slot, body, cluster| {
             crate::apply::retarget_sprites(
@@ -280,6 +281,7 @@ unsafe extern "thiscall" fn team_msg_hook(this: *mut u8, a: u32, msg: u32, b: u3
                         let worm = turn_worm();
                         if !worm.is_null() {
                             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                // Eaten before WA fires: no shot, no speed.
                                 if let Err(e) = lua_host::weapon_click(
                                     claim.click_id,
                                     worm as u32,
@@ -287,6 +289,7 @@ unsafe extern "thiscall" fn team_msg_hook(this: *mut u8, a: u32, msg: u32, b: u3
                                     x,
                                     y,
                                     DROP_SKY_Y,
+                                    (0, 0),
                                 ) {
                                     log_error(&format!("on_click: {e}"));
                                 }
@@ -659,8 +662,16 @@ unsafe fn try_spawn_drop(worm: *mut u8, ctx: *mut u8) -> bool {
     };
     let (cursor_x, cursor_y) = cursor_xy(worm, ctx);
     if claim.click_id != 0 {
+        // The shot's speed in WA's fire context: a strike's direction is its
+        // x's sign, as Project X's PxAirstrike takes it.
+        let speed = if ctx.is_null() {
+            (0, 0)
+        } else {
+            (read_i32(ctx, CTX_VEL_X), read_i32(ctx, CTX_VEL_Y))
+        };
         crate::log::log_line(&format!(
-            "on_click dispatch slot={slot} at {cursor_x:#x},{cursor_y:#x}"
+            "on_click dispatch slot={slot} at {cursor_x:#x},{cursor_y:#x} speed {:#x},{:#x}",
+            speed.0, speed.1
         ));
         if let Err(e) = lua_host::weapon_click(
             claim.click_id,
@@ -669,6 +680,7 @@ unsafe fn try_spawn_drop(worm: *mut u8, ctx: *mut u8) -> bool {
             cursor_x,
             cursor_y,
             DROP_SKY_Y,
+            speed,
         ) {
             log_error(&format!("on_click: {e}"));
             return false;
@@ -819,6 +831,14 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
     let owner = body.owner;
     if owner.is_null() {
         return Err("spawn needs an owner worm or actor".into());
+    }
+    // A handle a pack kept can outlive what it names: WA frees a worm that
+    // died, a missile that burst. Its world is gone then (read 0 in a crash:
+    // WorldEntity's constructor takes the world from the parent), so such an
+    // owner is refused, not followed.
+    let world = crate::world::session_world_ptr();
+    if world.is_null() || read_i32(owner, ENT_WORLD) as *mut u8 != world {
+        return Err("spawn: its owner is gone (WA freed it: a worm that died, a missile that burst)".into());
     }
     log_line(&format!(
         "LuaActor spawn sprite {} x={:#x} y={:#x} vx={:#x} vy={:#x} origin={:?} explode={:?}",
@@ -1209,9 +1229,13 @@ unsafe fn tick(this: *mut u8) {
     }
     let y = read_i32(this, ENT_POS_Y);
     // Invisible tick actors (sprite sentinel) may sit on the land cursor
-    // anywhere on the map — do not cull them by Y.
+    // anywhere on the map — do not cull them by Y. Visible ones fell off the
+    // world once well below the map's own bottom (some maps are deeper than
+    // 6144 pixels: a glider's art there was freed in mid-flight).
     let invisible = read_i32(this, ACTOR_SPRITE) == CUSTOM_SPRITE_SENTINEL;
-    if !invisible && (y > 0x1800_0000 || y < -0x2000_0000) {
+    let (_, map_h) = crate::world::map_size_px();
+    let bottom = if map_h > 0 { (map_h as i64 + 1024) << 16 } else { 0x1800_0000 };
+    if !invisible && ((y as i64) > bottom || y < -0x2000_0000) {
         die(this);
         return;
     }
@@ -1754,17 +1778,20 @@ unsafe fn apply_explosion_knock(this: *mut u8, data: *mut u8) {
         read_i32(data, 8) as u32,
         crate::wa::address("APPLY_EXPLOSION_KNOCK"),
     ];
+    // The arguments are read through EAX, not a register the compiler picks:
+    // EDI carries `this` into the call, so an `args` the compiler put in EDI
+    // would be overwritten by it, and the call go through the entity's own
+    // memory (it did, crashing WA, once a second caller had it inlined).
     core::arch::asm!(
         "push edi",
-        "mov edi, dword ptr [{args}]",
-        "push dword ptr [{args} + 16]",
-        "push dword ptr [{args} + 12]",
-        "push dword ptr [{args} + 8]",
-        "push dword ptr [{args} + 4]",
-        "call dword ptr [{args} + 20]",
+        "mov edi, dword ptr [eax]",
+        "push dword ptr [eax + 16]",
+        "push dword ptr [eax + 12]",
+        "push dword ptr [eax + 8]",
+        "push dword ptr [eax + 4]",
+        "call dword ptr [eax + 20]",
         "pop edi",
-        args = in(reg) args.as_ptr(),
-        out("eax") _,
+        inout("eax") args.as_ptr() => _,
         out("ecx") _,
         out("edx") _,
     );

@@ -171,9 +171,42 @@ fn forget_missile(key: usize) {
     }
 }
 
+/// The missiles whose messages WA is handling, innermost last, each with
+/// whether WA freed it meanwhile. A missile that explodes in its frame is
+/// freed inside its own handler. Its memory is then the heap's, and what
+/// sits there differs between machines, so nothing after the handler may
+/// read it: the frame's post report once gave the dead missile a fresh id.
+static HANDLING: Mutex<Vec<(usize, bool)>> = Mutex::new(Vec::new());
+
+fn begin_handling(missile: usize) {
+    if let Ok(mut g) = HANDLING.lock() {
+        g.push((missile, false));
+    }
+}
+
+fn mark_freed(missile: usize) {
+    if let Ok(mut g) = HANDLING.lock() {
+        for entry in g.iter_mut().filter(|(m, _)| *m == missile) {
+            entry.1 = true;
+        }
+    }
+}
+
+/// Whether WA freed the missile while handling its message.
+fn end_handling(missile: usize) -> bool {
+    let Ok(mut g) = HANDLING.lock() else {
+        return false;
+    };
+    match g.iter().rposition(|(m, _)| *m == missile) {
+        Some(i) => g.remove(i).1,
+        None => false,
+    }
+}
+
 /// `MissileEntity__Free`: forget the missile before WA releases its memory,
 /// so the next missile allocated there starts clean.
 unsafe extern "thiscall" fn missile_free_hook(this: *mut u8, flags: u32) -> *mut u8 {
+    mark_freed(this as usize);
     forget_missile(this as usize);
     let orig = ORIG_MISSILE_FREE.load(Ordering::SeqCst);
     if orig.is_null() {
@@ -777,9 +810,13 @@ unsafe extern "thiscall" fn missile_hook(
         unsafe { missile_frame_hook(this, msg, "pre") };
     }
     let orig = ORIG_MISSILE.load(Ordering::SeqCst);
+    begin_handling(this as usize);
     if !orig.is_null() {
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
+    }
+    if end_handling(this as usize) {
+        return;
     }
     // Stock may refresh burn banks when lock engages — push custom again.
     if remap {
@@ -964,11 +1001,9 @@ fn tick_particles() {
 }
 
 unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c: *mut u8) {
-    let _perf = match msg {
-        MSG_FRAME_FINISH => crate::perf::probe(crate::perf::Section::Sim),
-        MSG_RENDER_SCENE => crate::perf::probe(crate::perf::Section::Scene),
-        _ => None,
-    };
+    // Every message the root handles, by number: WA sends it several each
+    // frame besides these two, and each walks the whole entity tree.
+    let _perf = crate::perf::root_probe(msg);
     // BEFORE stock entity blits fill the GPU pending list. Clearing after
     // would wipe quads between enqueue and dispatch (ghost trails).
     if msg == MSG_RENDER_SCENE {
@@ -986,6 +1021,16 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         let f: HandleMessageFn = unsafe { std::mem::transmute(orig) };
         unsafe { f(this, a, msg, b, c) };
     }
+    // No instant replays under WormForge. A replay rebuilds every entity
+    // from WA's saved state, which knows nothing of Lua actors or pack state:
+    // the rebuilt world root came back with zeroed camera-shake fields and
+    // divided by zero (0x5519A0). WA raises the wish only inside root
+    // messages, so dropping it here, before 0x532C48 reads it, stops every
+    // replay; online play, which has them off, never sets it. Not covered:
+    // the replay viewer's rewind key (0x52CDA5 -> 0x534540) restores saved
+    // state the same way. Saving and restoring pack state alongside WA's
+    // would let both work again; worth a look some day.
+    unsafe { crate::world::cancel_action_replay(this) };
     if msg == MSG_FRAME_FINISH {
         crate::actor::flush_deferred();
         crate::contact::flush();
@@ -1608,5 +1653,35 @@ mod homing_body_tests {
         assert_eq!(homing_body(Some(807), true, &[807, 808, 175], None, 0, 808, 807), Some(807));
         assert_eq!(homing_body(Some(807), true, &[0, 58, 59], Some(808), 1, 58, 59), Some(808));
         assert_eq!(homing_body(Some(807), true, &[0, 58, 59], None, 0, 808, 58), Some(808));
+    }
+}
+
+#[cfg(test)]
+mod freed_in_handler_tests {
+    use super::{begin_handling, end_handling, mark_freed};
+
+    #[test]
+    fn a_missile_freed_in_its_handler_is_reported_freed() {
+        begin_handling(0x7100);
+        mark_freed(0x7100);
+        assert!(end_handling(0x7100));
+    }
+
+    #[test]
+    fn only_the_freed_one_of_nested_handlers() {
+        // A blast in one missile's frame frees another, whose own message
+        // WA handles inside the first's.
+        begin_handling(0x7200);
+        begin_handling(0x7300);
+        mark_freed(0x7300);
+        assert!(end_handling(0x7300));
+        assert!(!end_handling(0x7200));
+    }
+
+    #[test]
+    fn a_free_outside_any_handler_marks_nothing() {
+        mark_freed(0x7400);
+        begin_handling(0x7400);
+        assert!(!end_handling(0x7400), "a new missile at a freed address is live");
     }
 }

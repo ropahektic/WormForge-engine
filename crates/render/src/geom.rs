@@ -49,9 +49,10 @@ pub struct Sprite {
 impl Sprite {
     /// Half-extent of the unrotated quad, in screen pixels.
     fn half(&self) -> (f32, f32) {
+        // The whole cell's, as WA would draw it; the stored box is within.
         (
-            self.rect.w as f32 * 0.5 * self.scale,
-            self.rect.h as f32 * 0.5 * self.scale,
+            self.rect.cw as f32 * 0.5 * self.scale,
+            self.rect.ch as f32 * 0.5 * self.scale,
         )
     }
 
@@ -88,12 +89,22 @@ impl Sprite {
 
     /// Append this sprite's six vertices.
     pub fn emit(&self, width: u32, height: u32, out: &mut Vec<Vertex>) {
-        let (hx, hy) = self.half();
         let r = self.angle.to_radians();
         let (sin, cos) = (r.sin(), r.cos());
 
-        // Corner offsets, clockwise from top-left.
-        let corners = [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)];
+        // Corner offsets, clockwise from top-left: the stored box where it
+        // sits in the cell, the cell centred on (x, y). Mirrored, the box
+        // sits on the other side of the centre.
+        let (cw, ch) = (self.rect.cw as f32, self.rect.ch as f32);
+        let mut left = self.rect.ox as f32 - cw * 0.5;
+        let mut right = left + self.rect.w as f32;
+        if self.mirror_x {
+            (left, right) = (-right, -left);
+        }
+        let top = self.rect.oy as f32 - ch * 0.5;
+        let bottom = top + self.rect.h as f32;
+        let k = self.scale;
+        let corners = [(left * k, top * k), (right * k, top * k), (right * k, bottom * k), (left * k, bottom * k)];
         let (u0, v0, u1, v1) = self.rect.uv();
         // Mirroring swaps the source columns rather than the geometry, so a
         // mirrored sprite keeps its rotation instead of reflecting it.
@@ -157,19 +168,55 @@ impl Quad {
         x1 < 0 || y1 < 0 || x0 >= width as i32 || y0 >= height as i32
     }
 
+    /// The part of the quad over its frame's stored box: corners, colours
+    /// and cell coordinates, or None when no part is. The quad's `uvs` span
+    /// an axis-aligned rectangle of the cell (as `wa.draw.quad` and ribbons
+    /// give them): it is clipped to the box, and corners and colours follow
+    /// by bilinear interpolation. A quad over a whole cell is unchanged.
+    fn on_box(&self) -> Option<([(f32, f32); 4], [u32; 4], [(f32, f32); 4])> {
+        let (b0, c0, b1, c1) = self.rect.box_in_cell();
+        let (ua, va) = self.uvs[0];
+        let (ub, vb) = self.uvs[2];
+        // [a, b] clipped to [lo, hi], whichever way it runs: the clipped ends
+        // and their fractions along the quad's edge.
+        let clip = |a: f32, b: f32, lo: f32, hi: f32| -> Option<(f32, f32, f32, f32)> {
+            let (cmin, cmax) = (a.min(b).max(lo), a.max(b).min(hi));
+            if cmin >= cmax {
+                return None;
+            }
+            let at = |t: f32| if b == a { 0.0 } else { (t - a) / (b - a) };
+            let (from, to) = if b >= a { (cmin, cmax) } else { (cmax, cmin) };
+            Some((from, to, at(from), at(to)))
+        };
+        let (u_from, u_to, s0, s1) = clip(ua, ub, b0, b1)?;
+        let (v_from, v_to, t0, t1) = clip(va, vb, c0, c1)?;
+        let [p0, p1, p2, p3] = self.corners;
+        let lerp = |a: (f32, f32), b: (f32, f32), t: f32| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+        let at = |s: f32, t: f32| lerp(lerp(p0, p1, s), lerp(p3, p2, s), t);
+        let [k0, k1, k2, k3] = self.colours;
+        let colour_at = |s: f32, t: f32| mix(mix(k0, k1, s), mix(k3, k2, s), t);
+        Some((
+            [at(s0, t0), at(s1, t0), at(s1, t1), at(s0, t1)],
+            [colour_at(s0, t0), colour_at(s1, t0), colour_at(s1, t1), colour_at(s0, t1)],
+            [(u_from, v_from), (u_to, v_from), (u_to, v_to), (u_from, v_to)],
+        ))
+    }
+
     /// Append this quad's six vertices, as `Sprite::emit` does.
     pub fn emit(&self, width: u32, height: u32, out: &mut Vec<Vertex>) {
-        let (u0, v0, u1, v1) = self.rect.uv();
-        let uvs = self.uvs.map(|(u, v)| (u0 + (u1 - u0) * u, v0 + (v1 - v0) * v));
+        let Some((corners, colours, cell)) = self.on_box() else {
+            return;
+        };
+        let uvs = cell.map(|(u, v)| self.rect.cell_uv(u, v));
         let vertex = |i: usize| {
-            let (cx, cy) = self.corners[i];
+            let (cx, cy) = corners[i];
             let (x, y) = (cx - 0.5, cy - 0.5);
             Vertex {
                 x,
                 y,
                 z: 0.0,
                 rhw: 1.0,
-                colour: self.colours[i],
+                colour: colours[i],
                 u: uvs[i].0,
                 v: uvs[i].1,
                 su: (x + 0.5) / width as f32,
@@ -179,6 +226,22 @@ impl Quad {
         let (a, b, c, d) = (vertex(0), vertex(1), vertex(2), vertex(3));
         out.extend_from_slice(&[a, b, c, a, c, d]);
     }
+}
+
+/// Two vertex colours (four 8-bit channels) mixed: `t` of the way to `b`.
+fn mix(a: u32, b: u32, t: f32) -> u32 {
+    if a == b || t <= 0.0 {
+        return a;
+    }
+    if t >= 1.0 {
+        return b;
+    }
+    let mut out = 0u32;
+    for shift in [0u32, 8, 16, 24] {
+        let (x, y) = (((a >> shift) & 0xFF) as f32, ((b >> shift) & 0xFF) as f32);
+        out |= ((x + (y - x) * t).round() as u32 & 0xFF) << shift;
+    }
+    out
 }
 
 /// Build the frame's vertex buffer, skipping anything off-screen.
@@ -198,7 +261,48 @@ mod tests {
     use crate::atlas::SheetRect;
 
     fn rect() -> SheetRect {
-        SheetRect { x: 0, y: 0, w: 32, h: 32, atlas_w: 64, atlas_h: 64 }
+        SheetRect::whole(0, 0, 32, 32, 64, 64)
+    }
+
+    #[test]
+    fn a_trimmed_sprite_draws_its_box_where_it_sits_in_the_cell() {
+        // A 32x32 cell whose visible 10x8 box starts at (20, 4).
+        let mut s = sprite(0.0, 1.0);
+        s.rect = SheetRect { w: 10, h: 8, ox: 20, oy: 4, cw: 32, ch: 32, ..rect() };
+        let mut v = Vec::new();
+        s.emit(256, 128, &mut v);
+        // Cell centred on (100, 50): its left edge 84, box 20 in = 104.
+        assert!((v[0].x - (104.0 - 0.5)).abs() < 0.01 && (v[0].y - (38.0 - 0.5)).abs() < 0.01);
+        assert!((v[2].x - (114.0 - 0.5)).abs() < 0.01 && (v[2].y - (46.0 - 0.5)).abs() < 0.01);
+        // Mirrored: the box sits 20 in from the cell's right edge (116): 86..96.
+        s.mirror_x = true;
+        let mut m = Vec::new();
+        s.emit(256, 128, &mut m);
+        assert!((m[0].x - (86.0 - 0.5)).abs() < 0.01 && (m[2].x - (96.0 - 0.5)).abs() < 0.01);
+        assert_eq!(s.bounds(), (84, 34, 116, 66), "bounds stay the cell's");
+    }
+
+    #[test]
+    fn a_quad_is_clipped_to_its_frames_box() {
+        // Box: the right half of the cell. A quad over the whole cell keeps
+        // only its right half, its colours fading along.
+        let q = Quad {
+            corners: [(0.0, 0.0), (100.0, 0.0), (100.0, 10.0), (0.0, 10.0)],
+            colours: [0xFF00_0000, 0xFFFF_FFFF, 0xFFFF_FFFF, 0xFF00_0000],
+            uvs: [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            rect: SheetRect { w: 16, ox: 16, ..rect() },
+        };
+        let mut v = Vec::new();
+        q.emit(256, 128, &mut v);
+        assert!((v[0].x - 49.5).abs() < 0.01 && (v[1].x - 99.5).abs() < 0.01);
+        assert_eq!(v[0].colour, 0xFF80_8080, "half way along the fade");
+        let (u0, _, u1, _) = q.rect.uv();
+        assert!((v[0].u - u0).abs() < 1e-6 && (v[1].u - u1).abs() < 1e-6);
+        // A ribbon segment wholly over the clear left half draws nothing.
+        let left = Quad { uvs: [(0.1, 0.0), (0.4, 0.0), (0.4, 1.0), (0.1, 1.0)], ..q };
+        let mut none = Vec::new();
+        left.emit(256, 128, &mut none);
+        assert!(none.is_empty());
     }
 
     fn sprite(angle: f32, scale: f32) -> Sprite {

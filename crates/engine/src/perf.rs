@@ -1,4 +1,4 @@
-//! Frame timing, turned on by a pack's `wa.perf.enable{ counter, profile }`.
+//! Frame timing, turned on by a pack's `wa.perf.enable{ counter, profile, packs }`.
 //!
 //! - `counter`: a one-line FPS counter at the top right of the screen: the
 //!   live frame rate (the last quarter second), the average over the last
@@ -13,33 +13,45 @@
 //! ```text
 //!   sim      the world root's FRAME_FINISH: WA's physics step, with our hooks
 //!   scene    the world root's RENDER_SCENE: entities queue their draws
+//!   root     every other message the world root handles (each walks the
+//!            entity tree), broken down by message number on the report
 //!   draw     RQ_RenderDrawingQueue: WA draws the queue (GPU capture inside)
-//!   present  our GPU sprites, after D3D9ShaderPresent
+//!   present  our GPU sprites, after D3D9ShaderPresent (0 with none to draw)
 //!   hud      wa.on.hud and its text, this counter included
+//!   flip     WA's present (0x59C8A0, around IDirect3DDevice9::Present):
+//!            waiting for vsync and the GPU, and WA's own pacing there
 //!   lua      every engine call into Lua, wherever it happens (a part of the
-//!            sections above, not added to them)
-//!   other    the rest of the frame: WA's own work and waiting for vsync
+//!            sections above, not added to them), broken down by hook and by
+//!            pack on a second report line
+//!   other    the rest of the frame: WA's own work outside these
 //! ```
+//!
+//! Root messages nest (a handler sending the root another message); only the
+//! outermost is timed, so nothing counts twice.
 //!
 //! Presentation only. Nothing here is read by the simulation, and Lua cannot
 //! read a timing back. Off, a probe is one relaxed load.
 
 use crate::log_line;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
+use std::ffi::c_void;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::time::Instant;
 
 #[derive(Clone, Copy)]
 pub enum Section {
     Sim,
     Scene,
+    Root,
     Draw,
     Present,
     Hud,
+    Flip,
 }
 
-const SECTIONS: usize = 5;
-const NAMES: [&str; SECTIONS] = ["sim", "scene", "draw", "present", "hud"];
+const SECTIONS: usize = 7;
+const NAMES: [&str; SECTIONS] = ["sim", "scene", "root", "draw", "present", "hud", "flip"];
 
 /// The counter's spike covers this much time, and it keeps frames this long.
 const WINDOW_NS: u64 = 5_000_000_000;
@@ -83,6 +95,53 @@ impl Drop for Probe {
     }
 }
 
+thread_local! {
+    static ROOT_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// A message the world root handles: FRAME_FINISH is `sim`, RENDER_SCENE
+/// `scene`, any other `root`, by number. Nested ones are part of the outer.
+pub fn root_probe(msg: u32) -> Option<RootProbe> {
+    if !profiling() {
+        return None;
+    }
+    let depth = ROOT_DEPTH.with(|d| {
+        let v = d.get();
+        d.set(v + 1);
+        v
+    });
+    Some(RootProbe { msg, start: (depth == 0).then(Instant::now) })
+}
+
+pub struct RootProbe {
+    msg: u32,
+    start: Option<Instant>,
+}
+
+impl Drop for RootProbe {
+    fn drop(&mut self) {
+        ROOT_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+        let Some(start) = self.start else { return };
+        let ns = start.elapsed().as_nanos() as u64;
+        let section = match self.msg {
+            game::offsets::MSG_FRAME_FINISH => Section::Sim,
+            game::offsets::MSG_RENDER_SCENE => Section::Scene,
+            _ => Section::Root,
+        };
+        STATE.with(|s| {
+            let mut s = s.borrow_mut();
+            let i = section as usize;
+            s.frame[i] += ns;
+            s.calls[i] += 1;
+            if let Section::Root = section {
+                let e = s.report.root_msgs.entry(self.msg).or_insert((0, 0));
+                e.0 += ns;
+                e.1 += 1;
+            }
+        });
+    }
+}
+
 #[derive(Default)]
 struct Stat {
     sum: u64,
@@ -103,7 +162,11 @@ struct Report {
     start: Option<Instant>,
     frames: u64,
     frame: Stat,
+    /// Every frame's time in the window, for its percentiles.
+    frame_ns: Vec<u64>,
     sections: [Stat; SECTIONS],
+    /// Root messages other than sim and scene: number -> (ns, calls).
+    root_msgs: std::collections::BTreeMap<u32, (u64, u64)>,
     lua: Stat,
 }
 
@@ -124,6 +187,66 @@ thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::default());
 }
 
+// ------------------------------------------------------------------ flip
+
+static ORIG_FLIP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+thread_local! {
+    static FLIP_START: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+extern "C" fn flip_before() {
+    if profiling() {
+        FLIP_START.with(|t| t.set(Some(Instant::now())));
+    }
+}
+
+extern "C" fn flip_after() {
+    let Some(start) = FLIP_START.with(|t| t.take()) else { return };
+    let ns = start.elapsed().as_nanos() as u64;
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.frame[Section::Flip as usize] += ns;
+        s.calls[Section::Flip as usize] += 1;
+    });
+}
+
+/// WA's present (0x59C8A0) is usercall: ECX the display, EDX where its result
+/// goes, a plain `ret`. Time it without touching those, nor what it returns.
+#[unsafe(naked)]
+unsafe extern "C" fn flip_hook() {
+    core::arch::naked_asm!(
+        "push ecx",
+        "push edx",
+        "call {before}",
+        "pop edx",
+        "pop ecx",
+        "call dword ptr [{orig}]",
+        "push eax",
+        "push ecx",
+        "push edx",
+        "call {after}",
+        "pop edx",
+        "pop ecx",
+        "pop eax",
+        "ret",
+        before = sym flip_before,
+        after = sym flip_after,
+        orig = sym ORIG_FLIP,
+    );
+}
+
+/// Time WA's present, when this WA has it (else `flip` stays 0 and its time
+/// is in `other`).
+pub fn install() -> Result<(), String> {
+    let Some(target) = crate::wa::try_address("DISPLAY_PRESENT_FRAME") else {
+        return Err("DISPLAY_PRESENT_FRAME not located".into());
+    };
+    let trampoline = unsafe { crate::wa::create_hook(target as *mut c_void, flip_hook as *mut c_void) }?;
+    ORIG_FLIP.store(trampoline, Ordering::SeqCst);
+    Ok(())
+}
+
 /// Close a rendered frame. Called once per GameRender, at the HUD hook.
 pub fn frame() {
     let flags = lua_host::perf_flags();
@@ -132,6 +255,12 @@ pub fn frame() {
     }
     let now = Instant::now();
     let (lua_ns, lua_calls) = lua_host::take_lua_time();
+    if flags.profile {
+        let frame = crate::world::sim_frame();
+        for spike in lua_host::take_lua_spikes() {
+            log_line(&spike_line(frame, &spike));
+        }
+    }
     STATE.with(|s| {
         let mut s = s.borrow_mut();
         let s = &mut *s;
@@ -168,6 +297,7 @@ pub fn frame() {
             let start = *r.start.get_or_insert(last);
             r.frames += 1;
             r.frame.add(dt, 1);
+            r.frame_ns.push(dt);
             for i in 0..SECTIONS {
                 r.sections[i].add(s.frame[i], s.calls[i]);
             }
@@ -175,6 +305,7 @@ pub fn frame() {
             let span = now.duration_since(start).as_nanos() as u64;
             if span >= REPORT_NS {
                 log_line(&report_line(span, r));
+                log_line(&lua_line(r.frames, &lua_host::take_lua_breakdown()));
                 s.report = Report::default();
             }
         }
@@ -215,15 +346,29 @@ fn ms(ns: u64) -> f64 {
     ns as f64 / 1e6
 }
 
+/// The `p`th percentile (0..=100) of `values`, nearest rank.
+fn percentile(sorted: &[u64], p: u64) -> u64 {
+    if sorted.is_empty() {
+        return 0;
+    }
+    let rank = (p * sorted.len() as u64).div_ceil(100).max(1) as usize;
+    sorted[rank.min(sorted.len()) - 1]
+}
+
 fn report_line(span: u64, r: &Report) -> String {
     let frames = r.frames.max(1);
     let total = r.frame.sum.max(1);
+    let mut sorted = r.frame_ns.clone();
+    sorted.sort_unstable();
     let mut line = format!(
-        "perf: {:.1} s, {} frames ({:.1} fps), frame avg {:.2} max {:.2} ms",
+        "perf: {:.1} s, {} frames ({:.1} fps), frame avg {:.2} p50 {:.2} p95 {:.2} p99 {:.2} max {:.2} ms",
         span as f64 / 1e9,
         r.frames,
         r.frames as f64 * 1e9 / span.max(1) as f64,
         ms(r.frame.sum / frames),
+        ms(percentile(&sorted, 50)),
+        ms(percentile(&sorted, 95)),
+        ms(percentile(&sorted, 99)),
         ms(r.frame.max),
     );
     let mut part = |name: &str, s: &Stat| {
@@ -246,7 +391,71 @@ fn report_line(span: u64, r: &Report) -> String {
         ms(other / frames),
         other as f64 * 100.0 / total as f64
     ));
+    if !r.root_msgs.is_empty() {
+        let mut msgs: Vec<_> = r.root_msgs.iter().collect();
+        msgs.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(b.0)));
+        let parts: Vec<String> = msgs
+            .iter()
+            .map(|(m, (ns, n))| format!("{m:#x} {:.2} ms ({:.1}/frame)", ms(ns / frames), *n as f64 / frames as f64))
+            .collect();
+        line.push_str(&format!(" | root by message: {}", parts.join(", ")));
+    }
     line
+}
+
+/// The Lua breakdown for the same window: by what the engine called Lua
+/// for, and by the pack whose hook ran, each by time per frame.
+/// One long Lua call, logged as it happens: what it was for, Lua's memory
+/// around it (a drop means a GC cycle ran in it), and the lines it spent its
+/// time on.
+fn spike_line(frame: Option<i64>, s: &lua_host::Spike) -> String {
+    let mb = |b: usize| b as f64 / (1024.0 * 1024.0);
+    let mut line = format!(
+        "perf spike: {} {:.2} ms",
+        if s.label.is_empty() { "?" } else { s.label },
+        ms(s.ns)
+    );
+    if let Some(f) = frame {
+        line += &format!(" at f={f}");
+    }
+    line += &format!(" | lua memory {:.1} -> {:.1} MB", mb(s.mem_before), mb(s.mem_after));
+    if s.mem_after < s.mem_before {
+        line += " (gc ran)";
+    }
+    // The lines are only sampled with `wa.perf.enable{ spikes = true }`.
+    if !s.places.is_empty() {
+        line += " | on ";
+        for (place, ns) in &s.places {
+            line += &format!("{place} {:.2} ms, ", ms(*ns));
+        }
+        line += &format!("rest {:.2} ms", ms(s.rest_ns));
+    }
+    line
+}
+
+fn lua_line(frames: u64, b: &lua_host::LuaBreakdown) -> String {
+    let frames = frames.max(1);
+    let part = |list: &[(String, u64, u32)]| -> String {
+        let mut list: Vec<_> = list.iter().collect();
+        list.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        list.iter()
+            .map(|(name, ns, n)| {
+                format!(
+                    "{} {:.2} ms ({:.1}/frame, {:.0} us/call)",
+                    if name.is_empty() { "?" } else { name },
+                    ms(ns / frames),
+                    *n as f64 / frames as f64,
+                    *ns as f64 / 1e3 / (*n).max(1) as f64,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    if b.by_pack.is_empty() {
+        // Per-pack times are only kept with `wa.perf.enable{ packs = true }`.
+        return format!("perf lua: by call {}", part(&b.by_label));
+    }
+    format!("perf lua: by call {} | by pack (hook handlers) {}", part(&b.by_label), part(&b.by_pack))
 }
 
 #[cfg(test)]
@@ -290,14 +499,76 @@ mod tests {
         let mut r = Report { frames: 2, ..Default::default() };
         r.frame.add(20 * MS, 1);
         r.frame.add(30 * MS, 1);
+        r.frame_ns = vec![20 * MS, 30 * MS];
         r.sections[Section::Sim as usize].add(10 * MS, 2);
         r.sections[Section::Draw as usize].add(5 * MS, 1);
         r.lua.add(4 * MS, 6);
         let line = report_line(1_000 * MS, &r);
-        assert!(line.starts_with("perf: 1.0 s, 2 frames (2.0 fps), frame avg 25.00 max 30.00 ms"), "{line}");
+        assert!(line.starts_with(
+            "perf: 1.0 s, 2 frames (2.0 fps), frame avg 25.00 p50 20.00 p95 30.00 p99 30.00 max 30.00 ms"), "{line}");
         assert!(line.contains("| sim avg 5.00 max 10.00 ms (20%, 1.0/frame)"), "{line}");
         assert!(line.contains("| draw avg 2.50 max 5.00 ms (10%, 0.5/frame)"), "{line}");
         assert!(line.contains("| lua avg 2.00 max 4.00 ms (8%, 3.0/frame)"), "{line}");
         assert!(line.ends_with("| other avg 17.50 ms (70%)"), "{line}");
+    }
+
+    #[test]
+    fn percentiles_are_nearest_rank() {
+        let v: Vec<u64> = (1..=100).collect();
+        assert_eq!((percentile(&v, 50), percentile(&v, 95), percentile(&v, 99)), (50, 95, 99));
+        assert_eq!(percentile(&[7], 99), 7);
+        assert_eq!(percentile(&[], 50), 0);
+    }
+
+    #[test]
+    fn root_messages_count_in_root_and_by_number_slowest_first() {
+        let mut r = Report { frames: 2, ..Default::default() };
+        r.frame.add(40 * MS, 2);
+        r.sections[Section::Root as usize].add(6 * MS, 4);
+        r.root_msgs.insert(0x1, (2 * MS, 2));
+        r.root_msgs.insert(0x5, (4 * MS, 2));
+        let line = report_line(1_000 * MS, &r);
+        assert!(line.contains("| root avg 3.00 max 6.00 ms (15%, 2.0/frame)"), "{line}");
+        assert!(line.ends_with("| root by message: 0x5 2.00 ms (1.0/frame), 0x1 1.00 ms (1.0/frame)"), "{line}");
+    }
+
+    #[test]
+    fn lua_line_breaks_time_down_by_call_and_by_pack() {
+        let b = lua_host::LuaBreakdown {
+            by_label: vec![("actor".into(), 2 * MS, 40), ("worm_message".into(), 6 * MS, 200)],
+            by_pack: vec![("".into(), MS, 10), ("example.highlander".into(), 5 * MS, 190)],
+        };
+        let line = lua_line(2, &b);
+        assert_eq!(line, "perf lua: by call worm_message 3.00 ms (100.0/frame, 30 us/call), \
+            actor 1.00 ms (20.0/frame, 50 us/call) | by pack (hook handlers) \
+            example.highlander 2.50 ms (95.0/frame, 26 us/call), ? 0.50 ms (5.0/frame, 100 us/call)");
+    }
+
+    #[test]
+    fn spike_line_names_the_call_its_lines_and_a_gc() {
+        let s = lua_host::Spike {
+            label: "worm_message",
+            ns: 43 * MS,
+            mem_before: 30 * 1024 * 1024,
+            mem_after: 22 * 1024 * 1024 + 512 * 1024,
+            places: vec![("weapons/electrical.lua:120".into(), 40 * MS), ("lib/sound.lua:9".into(), 2 * MS)],
+            rest_ns: MS,
+        };
+        assert_eq!(
+            spike_line(Some(855), &s),
+            "perf spike: worm_message 43.00 ms at f=855 | lua memory 30.0 -> 22.5 MB (gc ran) \
+             | on weapons/electrical.lua:120 40.00 ms, lib/sound.lua:9 2.00 ms, rest 1.00 ms"
+        );
+        let unsampled = lua_host::Spike { places: vec![], rest_ns: 43 * MS, mem_before: 0, ..s };
+        assert_eq!(spike_line(None, &unsampled), "perf spike: worm_message 43.00 ms | lua memory 0.0 -> 22.5 MB");
+    }
+
+    #[test]
+    fn lua_line_leaves_out_packs_when_they_are_not_timed() {
+        let b = lua_host::LuaBreakdown {
+            by_label: vec![("actor".into(), 2 * MS, 40)],
+            by_pack: vec![],
+        };
+        assert_eq!(lua_line(2, &b), "perf lua: by call actor 1.00 ms (20.0/frame, 50 us/call)");
     }
 }

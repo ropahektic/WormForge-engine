@@ -31,17 +31,17 @@ pub const GAME_WORLD_WEAPON_TABLE: usize = 0x510;
 pub const GAME_WORLD_TEAM_ARENA: usize = 0x4628;
 pub const TEAM_GET_AMMO: u32 = 0x0052_25E0;
 pub const TEAM_ADD_AMMO: u32 = 0x0052_2640;
-/// TeamArena ammo dword table. Index `alliance * 142 + weapon`.
+/// TeamArena ammo dword table. Index `ammo_group * 142 + weapon`.
 pub const TEAM_ARENA_AMMO: usize = 0x1EB4;
 /// TeamArena delay dword table. Same index as ammo.
 pub const TEAM_ARENA_DELAY: usize = 0x1FD0;
-/// Per-team alliance (team colour) -- the ammo/delay ROW. Read at
-/// `arena + TEAM_ARENA_ALLIANCE + team * WORLD_TEAM_STRIDE`, team 1-based.
+/// Per-team ammo/delay row. Read at
+/// `arena + TEAM_ARENA_AMMO_GROUP + team * WORLD_TEAM_STRIDE`, team 1-based.
 /// This is what WA's own `TeamArena__GetAmmo` (0x5225E0) and
-/// `TeamArena__AddAmmo` (0x522640) read; `WORLD_TEAM_ALLIANCE` is the same
-/// field measured from GameWorld. Not OpenWA's logical-record `+0x508`:
-/// writing through that put every team's ammo into one row.
-pub const TEAM_ARENA_ALLIANCE: usize = 0x4;
+/// `TeamArena__AddAmmo` (0x522640) read; `WORLD_TEAM_AMMO_GROUP` is the same
+/// field measured from GameWorld. WA initializes it from the team's owner
+/// player slot, which need not equal its visible colour or coalition.
+pub const TEAM_ARENA_AMMO_GROUP: usize = 0x4;
 pub const TEAM_AMMO_STRIDE: usize = 142;
 /// WormEntity__SelectWeapon — usercall EDI=this, stdcall (weapon, ammo) RET 8.
 pub const WORM_SELECT_WEAPON: u32 = 0x0051_AE50;
@@ -331,6 +331,11 @@ pub const WORLD_ROOT_TURN_ENDED: usize = 0x150;
 pub const WORLD_ROOT_RETREAT_TIMER: usize = 0x178;
 /// GameWorld copy of WorldRoot `worm_active`.
 pub const GAME_WORLD_WORM_ACTIVE: usize = 0x7234;
+/// Set by the world root (0x55F708) when a turn earns an instant replay (the
+/// "action replay": enough kills or damage, or a forced one). At the end of
+/// the frame 0x532C48 turns it into a replay request, cleared again either
+/// way; the replay then rebuilds the whole game from WA's saved state.
+pub const GAME_WORLD_ACTION_REPLAY_WANTED: usize = 0x98A8;
 pub const SHARED_KEY_TEAM: u32 = 0x15;
 /// `TeamEntity__reset_cursor` — thiscall, clears planted strike X.
 pub const TEAM_RESET_CURSOR: u32 = 0x0055_6D00;
@@ -351,6 +356,10 @@ pub const TEAM_OWNER_MACHINE: usize = 0x40;
 /// GameWorld's GameInfo, and in it this machine's index (`local_team_index`,
 /// set per machine by `InitTeamsFromLobby`: 0 the host, 1.. the clients).
 pub const GAME_WORLD_GAME_INFO: usize = 0x24;
+/// GameInfo's 1-based team records: visible colour is byte +1 of each record.
+pub const GAME_INFO_TEAM_RECORDS: usize = 0x450;
+pub const GAME_INFO_TEAM_RECORD_STRIDE: usize = 0xBB8;
+pub const GAME_INFO_TEAM_COLOUR: usize = 0x1;
 pub const GAME_INFO_LOCAL_MACHINE: usize = 0xD9DC;
 /// GameInfo: the match's gravity, 16.16, from the scheme. Every frame
 /// `TurnManager__ProcessFrame` (0x55FDA0, at 0x5603CF) sets the collision
@@ -488,8 +497,25 @@ pub const WORM_INDEX: usize = 0x100;
 /// Per-tick poison amount. ApplyPoison (msg 0x3E) subtracts this, floor 1 HP.
 pub const WORM_POISON: usize = 0x148;
 pub const ARENA_WORM_HP: usize = 0x40EC;
-/// Team alliance id. Index `world + 0x462C + team * 0x51C`.
-pub const WORLD_TEAM_ALLIANCE: usize = 0x462C;
+/// The health a worm's label shows, 16.16, and the value it counts towards
+/// (0x5147C0, each frame): it moves a tenth of the way a frame and, while
+/// the two differ, writes its whole part into the label text (+0x312). The
+/// target rises at once when the worm's health (ARENA_WORM_HP) is above the
+/// shown value, and falls only when the turn commits health (0x510865). The
+/// constructor (0x50C55E) starts both at the scheme's starting health.
+pub const WORM_HEALTH_SHOWN: usize = 0x178;
+/// WorldEntity +0x48, Project X's IsStatic (its CGObject fields sit 8 above
+/// WA's: Layer +0x30, ColGroup +0x34, MaskIndex +0x38, IsMaterial +0x3C,
+/// CouldSkipTurn +0x40, ObjState +0x44, IsStatic +0x48). A static object is
+/// not moved: no fall, no knock. The worm constructor sets it, with
+/// WORM_AWAITING_PLACEMENT, on a worm it leaves waiting to be placed (state
+/// 0x64, 0x50C752); WA's SetState clears both once the worm is placed
+/// (teleporting, 0x50EC63).
+pub const ENT_IS_STATIC: usize = 0x48;
+pub const WORM_AWAITING_PLACEMENT: usize = 0x208;
+pub const WORM_HEALTH_TARGET: usize = 0x17C;
+/// Team ammo row. Index `world + 0x462C + team * 0x51C`.
+pub const WORLD_TEAM_AMMO_GROUP: usize = 0x462C;
 /// ExplosionMessage / SpecialImpactMessage.damage
 pub const BLAST_AMOUNT: usize = 0x10;
 pub const BLAST_TEAM: usize = 0x18;
@@ -778,6 +804,7 @@ mod tests {
         assert_eq!(WORLD_ROOT_WORM_ACTIVE, 0x108);
         assert_eq!(WORLD_ROOT_TURN_TIMER, 0x18C);
         assert_eq!(GAME_WORLD_WORM_ACTIVE, 0x7234);
+        assert_eq!(GAME_WORLD_ACTION_REPLAY_WANTED, 0x98A8);
         assert_eq!(TEAM_CURSOR_MARK, 0x3E0);
         assert_eq!(TEAM_DRAW_CURSOR, 0x0055_6AD0);
         assert_eq!(TEAM_RESET_CURSOR, 0x0055_6D00);
@@ -851,7 +878,10 @@ mod tests {
         assert_eq!(TEAM_ARENA_AMMO, 0x1EB4);
         assert_eq!(TEAM_ARENA_DELAY, 0x1FD0);
         // Two names for one field; they must never drift apart.
-        assert_eq!(GAME_WORLD_TEAM_ARENA + TEAM_ARENA_ALLIANCE, WORLD_TEAM_ALLIANCE);
+        assert_eq!(
+            GAME_WORLD_TEAM_ARENA + TEAM_ARENA_AMMO_GROUP,
+            WORLD_TEAM_AMMO_GROUP
+        );
         // Delays sit right after the 71 ammo counts of each row.
         assert_eq!(TEAM_ARENA_DELAY, TEAM_ARENA_AMMO + 71 * 4);
         assert_eq!(PLAY_SOUND_LOCAL, 0x004FDFE0);

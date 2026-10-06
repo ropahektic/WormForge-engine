@@ -15,10 +15,11 @@ mod sim_context;
 mod spawn;
 
 pub use bundles::ComponentPlan;
-pub use perf::{perf_flags, take_lua_time, PerfFlags};
+pub use perf::{perf_flags, take_lua_breakdown, take_lua_spikes, take_lua_time, LuaBreakdown, PerfFlags, Spike};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
     weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, LaunchArgs, SpawnArgs,
+    StampBuried,
 };
 pub use dispatch::{
     contact, Contact,
@@ -43,6 +44,8 @@ thread_local! {
 }
 
 pub fn park_lua(lua: Lua) {
+    dispatch::worm_message_rebuild(&lua);
+    dispatch::fast_rebuild(&lua);
     PARKED_LUA.with(|slot| {
         *slot.borrow_mut() = Some(lua);
     });
@@ -288,7 +291,7 @@ mod tests {
         test.call::<()>(pack).unwrap();
     }
 
-    fn lock_host() -> std::sync::MutexGuard<'static, ()> {
+    pub(crate) fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -630,10 +633,15 @@ wa.weapons.replace({
             static STAMP: std::cell::Cell<Option<(i32, u32, i32, i32)>> = const { std::cell::Cell::new(None) };
             static CUT: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
             static DIG: std::cell::Cell<Option<(i32, i32, i32)>> = const { std::cell::Cell::new(None) };
+            static BURIED: std::cell::Cell<Option<actor::StampBuried>> = const { std::cell::Cell::new(None) };
         }
         actor::bind_actor_native(actor::ActorNative {
             resolve_sprite: |_| Some((10001, 0, 60, 60)),
-            land_stamp: |id, frame, x, y| { STAMP.with(|c| c.set(Some((id, frame, x, y)))); Ok(()) },
+            land_stamp: |id, frame, x, y, buried| {
+                STAMP.with(|c| c.set(Some((id, frame, x, y))));
+                BURIED.with(|c| c.set(buried));
+                Ok(())
+            },
             land_cut: |shape, x, y| { CUT.with(|c| c.set(Some((shape, x, y)))); Ok(()) },
             land_dig: |x, y, radius| { DIG.with(|c| c.set(Some((x, y, radius)))); Ok(()) },
             ..Default::default()
@@ -651,6 +659,17 @@ wa.weapons.replace({
             lua.load("wa.land.dig{ x = 0x10000, y = 0x20000, radius = 12 }").exec().unwrap();
         });
         STAMP.with(|c| assert_eq!(c.get(), Some((10001, 31, -65536, 131072))));
+        BURIED.with(|c| assert_eq!(c.get(), None, "no buried table: drawn over the land as before"));
+        let buried = |table: &str| stamp.replace(" }", &format!(", buried = {table} }}"));
+        sim_context::with_sim(|| {
+            lua.load(buried("{}")).exec().unwrap();
+            BURIED.with(|c| assert_eq!(c.get(), Some(actor::StampBuried { soften: 2, mix: false })));
+            lua.load(buried("{ soften = 5, blend = 'mix' }")).exec().unwrap();
+            BURIED.with(|c| assert_eq!(c.get(), Some(actor::StampBuried { soften: 5, mix: true })));
+            assert!(lua.load(buried("{ soften = 0 }")).exec().is_err());
+            assert!(lua.load(buried("{ soften = 33 }")).exec().is_err());
+            assert!(lua.load(buried("{ blend = 'smear' }")).exec().is_err());
+        });
         CUT.with(|c| assert_eq!(c.get(), Some((10, 0x12340000, 0x56780000))));
         DIG.with(|c| assert_eq!(c.get(), Some((0x10000, 0x20000, 12))));
     }
@@ -1006,6 +1025,27 @@ wa.weapons.replace({
         assert!(params.extra_sheets.iter().any(|(p, _)| p == "bit.png"));
         assert_eq!(params.cluster_homing_sprite_path.as_deref(), Some("homing.png"));
         assert!(params.extra_sheets.iter().any(|(p, _)| p == "homing.png"));
+    }
+
+    #[test]
+    fn wa_sprites_get_a_true_colour_copy_unless_a_pack_says_not() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-truecolor");
+        let _ = std::fs::remove_dir_all(&root);
+        let claim = |dir: &str, id: &str, params: &str| {
+            pack(
+                &root.join(dir),
+                id,
+                &format!("id = \"{id}\"\napi_version = 1\nentry = \"weapons.lua\"\n[weapons]\nreplace = [\"cluster_bomb\"]\n"),
+                &format!("wa.weapons.replace({{ weapon = \"cluster_bomb\", {params} }})"),
+            )
+        };
+        let default = claim("a", "t.default", "");
+        let off = claim("b", "t.off", "params = { truecolor = false }");
+        let on = run_mods(&[default]).unwrap();
+        assert!(on.resolved.applied[0].params.truecolor);
+        let off = run_mods(&[off]).unwrap();
+        assert!(!off.resolved.applied[0].params.truecolor);
     }
 
     #[test]
@@ -1841,6 +1881,194 @@ end)
         assert!(!worm_message(1, 0, 0x34).unwrap());
     }
 
+    fn filter_pack(root: &std::path::Path, script: &str) -> LoadedMod {
+        let _ = std::fs::remove_dir_all(root);
+        pack(
+            &root.join("w"),
+            "w.filter",
+            r#"
+id = "w.filter"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = []
+"#,
+            script,
+        )
+    }
+
+    fn parked_seen() -> Vec<String> {
+        PARKED_LUA.with(|slot| {
+            let guard = slot.borrow();
+            let lua = guard.as_ref().unwrap();
+            let seen: mlua::Table = lua.globals().get("seen").unwrap();
+            let out = seen.sequence_values::<String>().map(|v| v.unwrap()).collect();
+            lua.load("seen = {}").exec().unwrap();
+            out
+        })
+    }
+
+    #[test]
+    fn worm_message_filters_keep_registration_order() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-worm-filter");
+        let pack = filter_pack(&root, r#"
+seen = {}
+local function note(tag) return function(_, m) seen[#seen + 1] = tag .. m end end
+wa.on.worm_message(note("a"))
+wa.on.worm_message(note("b"), { msgs = { 2 } })
+wa.on.worm_message(note("c"))
+wa.on.worm_message(note("d"), { msgs = { 2, 36 } })
+"#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        worm_message(1, 0, 2).unwrap();
+        assert_eq!(parked_seen(), ["a2", "b2", "c2", "d2"]);
+        worm_message(1, 0, 5).unwrap();
+        assert_eq!(parked_seen(), ["a5", "c5"]);
+        worm_message(1, 0, 36).unwrap();
+        assert_eq!(parked_seen(), ["a36", "c36", "d36"]);
+    }
+
+    #[test]
+    fn a_message_no_handler_wants_never_enters_lua() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-worm-filter-skip");
+        let pack = filter_pack(&root, r#"
+seen = {}
+wa.on.worm_message(function(_, m) seen[#seen + 1] = "f" .. m end, { msgs = { 2 } })
+"#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        perf::enable(PerfFlags { counter: false, profile: true, packs: false, spikes: false });
+        take_lua_time();
+        assert!(!worm_message(1, 0, 5).unwrap());
+        assert_eq!(take_lua_time().1, 0, "no call into Lua for an unwanted message");
+        worm_message(1, 0, 2).unwrap();
+        assert_eq!(take_lua_time().1, 1);
+        perf::reset();
+        assert_eq!(parked_seen(), ["f2"]);
+    }
+
+    #[test]
+    fn another_state_built_mid_match_keeps_the_parked_filters() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-worm-filter-second");
+        let pack = filter_pack(&root, r#"
+seen = {}
+wa.on.worm_message(function(_, m) seen[#seen + 1] = "f" .. m end, { msgs = { 2 } })
+"#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        // A second pack state, built and not parked (a pack check, say).
+        let other = filter_pack(&root.join("other"), "-- no handlers");
+        let _second = run_mods(&[other]).unwrap();
+        worm_message(1, 0, 2).unwrap();
+        assert_eq!(parked_seen(), ["f2"], "the parked state's handler still runs");
+    }
+
+    /// Dispatch cost per call, Highlander-shaped: 13 worm_message handlers
+    /// (most of them filtered to FRAME_FINISH) and 5 missile_frame handlers
+    /// that, like most real ones, look at the missile and return. Run it in
+    /// release, as the DLL is built:
+    /// `cargo test --release -p lua-host bench_dispatch -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn bench_dispatch() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-bench");
+        let mut script = String::from("local W = {}\n");
+        for i in 1..=13 {
+            let msgs = if i % 4 == 0 { "{ 2, 0x26 }" } else { "{ 2 }" };
+            script.push_str(&format!(
+                "wa.on.worm_message(function(w, m) if m ~= 2 then return end W[{i}] = m end, {{ msgs = {msgs} }})\n"
+            ));
+        }
+        for _ in 1..=5 {
+            script.push_str("wa.on.missile_frame(function(m) if m.phase ~= 'post' then return end if m.weapon == 'prod' then m.vx = m.vx end end)\n");
+        }
+        let pack = filter_pack(&root, &script);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        let motion = game::entity::Motion {
+            id: 0xF000_0001, class_type: 0, damp: 0x10000, wind_scale: 0x10000, gravity_scale: 0x10000,
+            moved: 1, x: 100 << 16, y: 200 << 16, vx: 0x8000, vy: -0x8000, cm_gravity: 0x1000, cm_wind: 0,
+        };
+        let n = 20_000u32;
+        let run = |label: &str| {
+            let t = std::time::Instant::now();
+            for _ in 0..n {
+                worm_message(1, 0, 2).unwrap();
+            }
+            let wm = t.elapsed().as_nanos() as f64 / n as f64 / 1e3;
+            let (mut sprite, mut mask) = (48, 0x7C);
+            let t = std::time::Instant::now();
+            for i in 0..n {
+                let phase = if i % 2 == 0 { "pre" } else { "post" };
+                missile_frame(motion, 2, phase, Some(6), &mut sprite, &mut mask).unwrap();
+            }
+            let mf = t.elapsed().as_nanos() as f64 / n as f64 / 1e3;
+            println!("bench_dispatch {label}: worm_message {wm:.2} us/call, missile_frame {mf:.2} us/call");
+        };
+        run("profiler off");
+        perf::enable(PerfFlags { counter: false, profile: true, packs: false, spikes: false });
+        run("profiler on ");
+        PARKED_LUA.with(|slot| perf::install_sampler(slot.borrow().as_ref().unwrap()));
+        run("sampler on ");
+        perf::enable(PerfFlags { counter: false, profile: true, packs: true, spikes: false });
+        run("packs on    ");
+        perf::reset();
+    }
+
+    #[test]
+    fn missile_frame_fast_and_slow_paths_agree() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-missile-paths");
+        let pack = filter_pack(&root, r#"
+seen = {}
+wa.on.missile_frame(function(m)
+  seen[#seen + 1] = m.phase .. ":" .. tostring(m.weapon) .. ":" .. m.msg
+  if m.phase ~= "post" then return end
+  m.x, m.vx, m.sprite, m.collision_mask = m.x + 7, -m.vx, 0, 0x400000
+  m.damp = "not a number"
+end)
+"#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        let motion = game::entity::Motion {
+            id: 0xF000_0002, class_type: 0, damp: 0x10000, wind_scale: 3, gravity_scale: 4,
+            moved: 1, x: 100, y: 200, vx: 5, vy: -6, cm_gravity: 0, cm_wind: 0,
+        };
+        let run = || {
+            let (mut sprite, mut mask) = (48, 0x7C);
+            let pre = missile_frame(motion, 2, "pre", Some(6), &mut sprite, &mut mask).unwrap();
+            let post = missile_frame(motion, 2, "post", Some(6), &mut sprite, &mut mask).unwrap();
+            (pre, post, sprite, mask, parked_seen())
+        };
+        let fast = run();
+        perf::enable(PerfFlags { counter: false, profile: true, packs: true, spikes: false });
+        let slow = run();
+        perf::reset();
+        assert_eq!(fast, slow);
+        let (pre, post, sprite, mask, seen) = fast;
+        assert_eq!(pre, motion, "an untouched frame comes back as it went");
+        assert_eq!((post.x, post.vx, post.damp, post.y), (107, -5, 0x10000, 200));
+        assert_eq!((sprite, mask), (0, 0x400000));
+        assert_eq!(seen, ["pre:grenade:2", "post:grenade:2"]);
+    }
+
+    #[test]
+    fn worm_message_options_are_checked() {
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let f = "local f = function() end ";
+        for bad in [
+            "wa.on.worm_message(f, {})",
+            "wa.on.worm_message(f, { msgs = {} })",
+            "wa.on.worm_message(f, { msgs = { 'jump' } })",
+            "wa.on.worm_message(f, { msgs = { 2 }, also = 1 })",
+            "wa.on.hud(f, { msgs = { 2 } })",
+        ] {
+            assert!(lua.load(format!("{f}{bad}")).exec().is_err(), "{bad}");
+        }
+        lua.load(format!("{f}wa.on.worm_message(f, {{ msgs = {{ 2, 2, 36 }} }})")).exec().unwrap();
+    }
+
     #[test]
     fn missile_frame_names_the_missiles_weapon() {
         let _host = lock_host();
@@ -2492,6 +2720,8 @@ wa.weapons.replace({
             write_i32(body.as_mut_ptr(), ACTOR_BOOM_ID, 100);
             write_i32(body.as_mut_ptr(), ENT_POS_X, 0x10_0000);
         }
+        // As the engine does for every actor it spawns.
+        crate::actor_spawned(handle, spawn.brain_id);
         crate::actor_frame(
             handle,
             spawn.brain_id,
@@ -2510,6 +2740,34 @@ wa.weapons.replace({
         assert_eq!(boom.2, 100);
         assert!(boom.3);
         assert!(!DEAD.with(|c| c.get()));
+    }
+
+    #[test]
+    fn a_freed_actors_handle_reads_and_writes_nothing() {
+        use game::entity::{read_i32, write_i32};
+        use game::offsets::{ACTOR_MAGIC, ENT_POS_X, ENT_POS_Y, LUA_ACTOR_MAGIC, LUA_ACTOR_SIZE};
+        let _host = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let mut body = vec![0u8; LUA_ACTOR_SIZE];
+        let handle = body.as_mut_ptr() as u32;
+        unsafe {
+            write_i32(body.as_mut_ptr(), ACTOR_MAGIC, LUA_ACTOR_MAGIC as i32);
+            write_i32(body.as_mut_ptr(), ENT_POS_X, 0x50000);
+        }
+        crate::actor_spawned(handle, 0);
+        lua.globals().set("A", lua.create_userdata(actor::ActorHandle(handle)).unwrap()).unwrap();
+        sim_context::with_sim(|| {
+            let x: i64 = lua.load("return A.x").eval().unwrap();
+            assert_eq!(x, 0x50000, "alive, it reads through");
+            crate::actor_freed(handle);
+            // WA reuses the memory: the handle must leave it alone.
+            unsafe { write_i32(body.as_mut_ptr(), ENT_POS_X, 0x1234) };
+            lua.load("A.x = 0x70000; A.y = 0x80000; A.vx = 1").exec().unwrap();
+            assert_eq!(lua.load("return A.x").eval::<i64>().unwrap(), 0, "freed, it reads nothing");
+        });
+        assert_eq!(unsafe { read_i32(body.as_mut_ptr(), ENT_POS_X) }, 0x1234, "and writes nothing");
+        assert_eq!(unsafe { read_i32(body.as_mut_ptr(), ENT_POS_Y) }, 0);
     }
 
     #[test]
@@ -2641,7 +2899,7 @@ wa.weapons.replace({
             },
             ..Default::default()
         });
-        crate::weapon_click(p.on_click_id, 0x11, 5, 1, 2, -0x00D0_0000).unwrap();
+        crate::weapon_click(p.on_click_id, 0x11, 5, 1, 2, -0x00D0_0000, (-0x5_0000, 0)).unwrap();
         assert_eq!(OWNER.with(|c| c.get()), 0x11);
     }
 
@@ -2696,6 +2954,44 @@ wa.weapons.replace({
         assert_eq!(OWNER.with(|c| c.get()), 0x22);
     }
 
+    /// A missile can burst while another pack launches it (started inside
+    /// the land): its on_explode runs as its own pack inside that call, and
+    /// the launching pack must be the running one again after it.
+    #[test]
+    fn a_weapon_step_leaves_the_callers_pack_running() {
+        let _host = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-nested-step");
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = pack(
+            &root.join("n"),
+            "n.burst",
+            r#"
+id = "n.burst"
+api_version = 1
+entry = "weapons.lua"
+[weapons]
+replace = ["grenade"]
+"#,
+            r#"
+wa.weapons.replace({ weapon = "grenade", on_explode = function() burst_ran_as = wa._mod end })
+"#,
+        );
+        let scripts = run_mods(&[pack]).unwrap();
+        let id = scripts.resolved.applied[0].params.on_explode_id;
+        assert!(id != 0);
+        scripts.lua.load(r#"wa._mod = "n.launcher""#).exec().unwrap();
+        park_lua(scripts.lua);
+        crate::weapon_emit("_explodes", id, "on_explode", 0, 5, 0, 0, 0).unwrap();
+        let (ran_as, after): (String, String) = PARKED_LUA.with(|slot| {
+            let guard = slot.borrow();
+            let lua = guard.as_ref().unwrap();
+            let wa: mlua::Table = lua.globals().get("wa").unwrap();
+            (lua.globals().get("burst_ran_as").unwrap(), wa.get("_mod").unwrap())
+        });
+        assert_eq!(ran_as, "n.burst");
+        assert_eq!(after, "n.launcher");
+    }
+
     #[test]
     fn a_pack_turns_on_the_perf_counter_and_profiler() {
         let _host = lock_host();
@@ -2711,10 +3007,10 @@ wa.weapons.replace({
             "wa.perf.enable({ counter = true })",
         );
         run_mods(&[counter]).unwrap();
-        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: false });
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: false, packs: false, spikes: false });
         let both = pack(&root.join("b"), "p.both", &manifest("p.both"), "wa.perf.enable()");
         run_mods(&[both]).unwrap();
-        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: true });
+        assert_eq!(perf_flags(), PerfFlags { counter: true, profile: true, packs: false, spikes: false });
         let none = pack(&root.join("n"), "p.none", &manifest("p.none"), "");
         run_mods(&[none]).unwrap();
         assert_eq!(perf_flags(), PerfFlags::default(), "a new match's packs decide afresh");
@@ -2782,10 +3078,11 @@ end)
     }
 
     #[test]
-    fn world_reads_gravity_and_wind() {
+    fn world_reads_gravity_wind_and_the_turn_clock() {
         let _host = lock_host();
         crate::bind_actor_native(crate::ActorNative {
             forces: || (0x3AE, -0x120),
+            turn_clock_ms: || 24200,
             ..Default::default()
         });
         let root = std::env::temp_dir().join("wklua-lua-host-world-forces");
@@ -2798,14 +3095,15 @@ id = "f.forces"
 api_version = 1
 entry = "weapons.lua"
 "#,
-            "GRAVITY, WIND = wa.world.gravity(), wa.world.wind()",
+            "GRAVITY, WIND, CLOCK = wa.world.gravity(), wa.world.wind(), wa.world.turn_clock()",
         );
         let scripts = run_mods(&[pack]).unwrap();
         let g: i32 = scripts.lua.globals().get("GRAVITY").unwrap();
         let w: i32 = scripts.lua.globals().get("WIND").unwrap();
+        let c: i32 = scripts.lua.globals().get("CLOCK").unwrap();
         park_lua(scripts.lua);
         crate::bind_actor_native(crate::ActorNative::default());
-        assert_eq!((g, w), (0x3AE, -0x120));
+        assert_eq!((g, w, c), (0x3AE, -0x120, 24200));
     }
 
     #[test]

@@ -602,6 +602,23 @@ pub fn freeze_turn() {
     }
 }
 
+/// Drop WA's wish for an instant replay of this turn (see
+/// `GAME_WORLD_ACTION_REPLAY_WANTED`), logging each one.
+pub unsafe fn cancel_action_replay(root: *mut u8) {
+    if root.is_null() {
+        return;
+    }
+    let world = read_i32(root, ENT_WORLD) as *mut u8;
+    if world.is_null() || read_i32(world, GAME_WORLD_ACTION_REPLAY_WANTED) == 0 {
+        return;
+    }
+    write_i32(world, GAME_WORLD_ACTION_REPLAY_WANTED, 0);
+    crate::log_line(&format!(
+        "instant replay cancelled at f={} (WormForge plays none)",
+        read_i32(world, GAME_WORLD_FRAME_COUNTER)
+    ));
+}
+
 pub fn thaw_turn() {
     let root = unsafe { session_root_ptr() };
     let saved = FROZEN_TURN.lock().ok().and_then(|mut g| g.take());
@@ -680,7 +697,7 @@ static POINTER_SYNC_REQUESTED: AtomicU32 = AtomicU32::new(0);
 static POINTER_SYNC_UNTIL: AtomicU32 = AtomicU32::new(0);
 
 /// WA's sim frame, or `None` outside a game (frontend, map editor).
-fn sim_frame() -> Option<i64> {
+pub(crate) fn sim_frame() -> Option<i64> {
     let world = session_world();
     if world.is_null() {
         return None;
@@ -1276,6 +1293,19 @@ pub fn revive_grave(grave_handle: u32, worm_id: u32, health: i32) -> u32 {
         let hp = ARENA_WORM_HP + team as usize * WORLD_TEAM_STRIDE
             + index as usize * ARENA_WORM_STRIDE;
         write_i32(world, hp, health);
+        show_health(worm, health);
+        // With worm placement in the scheme, WA's constructor leaves a worm
+        // waiting to be placed (state 0x64, static, flagged awaiting
+        // placement), which WA neither draws nor moves: at the start of a
+        // match every worm waits so until it is placed. Leave it as the
+        // constructor leaves a worm without placement: standing (0x65), not
+        // static, placed. Standing, WA checks the ground under it itself;
+        // not static, hits and blasts move it.
+        let set_state: unsafe extern "thiscall" fn(*mut u8, u32) =
+            std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
+        crate::state_trace::with_cause("revive", || set_state(worm, WORM_STATE_STANDING));
+        write_i32(worm, ENT_IS_STATIC, 0);
+        write_i32(worm, WORM_AWAITING_PLACEMENT, 0);
         // TeamArena::logical_teams[team-1].eliminated_flag. A revived last
         // worm must put its team back into selection and score calculations.
         write_i32(world, GAME_WORLD_TEAM_ARENA + 8
@@ -1343,22 +1373,22 @@ unsafe fn mark_panel_dirty(world: *mut u8) {
     }
 }
 
-/// The ammo/delay row a team uses: its alliance, read exactly where WA's own
+/// The ammo/delay row a team uses, read exactly where WA's own
 /// `TeamArena__GetAmmo` / `AddAmmo` read it. Teams are 1-based (the first team
-/// is 1, as in the worm's `ENT_WORM_TEAM` and wkFOW's team records), and allied
-/// teams share a row.
+/// is 1, as in the worm's `ENT_WORM_TEAM` and wkFOW's team records). This row
+/// is independent of the visible coalition colour.
 unsafe fn ammo_row(arena: *mut u8, team: u32) -> Option<usize> {
     if arena.is_null() || team == 0 || team > MAX_TEAMS {
         return None;
     }
-    let alliance = read_i32(
+    let ammo_group = read_i32(
         arena,
-        TEAM_ARENA_ALLIANCE + team as usize * WORLD_TEAM_STRIDE,
+        TEAM_ARENA_AMMO_GROUP + team as usize * WORLD_TEAM_STRIDE,
     );
-    if alliance < 0 || alliance >= MAX_TEAMS as i32 {
+    if ammo_group < 0 || ammo_group >= MAX_TEAMS as i32 {
         return None;
     }
-    Some(alliance as usize * TEAM_AMMO_STRIDE)
+    Some(ammo_group as usize * TEAM_AMMO_STRIDE)
 }
 
 unsafe fn ammo_index(arena: *mut u8, team: u32, slot: u32) -> Option<usize> {
@@ -1702,7 +1732,10 @@ unsafe fn read_grid() -> Option<GridView> {
         w = read_i32(world, GAME_WORLD_MAP_W);
         h = read_i32(world, GAME_WORLD_MAP_H);
     }
-    if bits.is_null() || stride == 0 || w <= 0 || h <= 0 || w > 4096 || h > 4096 {
+    // A sanity bound only: WA's maps can be well over 4096 pixels tall, and
+    // with a 4096 bound such a map read as no map at all (wa.world.size,
+    // trace, land.solid and the actor cull all saw nothing).
+    if bits.is_null() || stride == 0 || w <= 0 || h <= 0 || w > 0x8000 || h > 0x8000 {
         return None;
     }
     // +0x914 is the walk mask (FUN_0057cc90). +0x910/+0x91C are paint. +0x0D0 is plot scratch.
@@ -1823,6 +1856,20 @@ unsafe fn climb_root(from: *mut u8) -> *mut u8 {
 }
 
 /// The retreat countdown in ms, 0 before retreat starts (or with no match).
+/// The turn clock in ms left (root +0x18C, the timer the engine already
+/// reads to let go of held worms). Traced in replays: it stands still while
+/// WA's turn-ended flag (root +0x150) is up after a shot, about 120 frames
+/// each time, and resumes when everything has settled.
+pub fn turn_clock_ms() -> i32 {
+    unsafe {
+        let root = session_root_ptr();
+        if root.is_null() {
+            return 0;
+        }
+        read_i32(root, game::offsets::WORLD_ROOT_TURN_TIMER)
+    }
+}
+
 pub fn retreat_ms() -> i32 {
     unsafe {
         let root = session_root_ptr();
@@ -1849,7 +1896,7 @@ unsafe fn session_root_ptr() -> *mut u8 {
     *(runtime.add(GAME_RUNTIME_WORLD_ROOT) as *const *mut u8)
 }
 
-unsafe fn session_world_ptr() -> *mut u8 {
+pub(crate) unsafe fn session_world_ptr() -> *mut u8 {
     let root = session_root_ptr();
     if root.is_null() {
         return std::ptr::null_mut();
@@ -1977,9 +2024,38 @@ unsafe fn play_sound_local(entity: *mut u8, id: i32, flags: i32, volume: i32, pi
     }
 }
 
+/// Make `worm`'s label show `health` from its next frame, through WA's own
+/// counter: the target is the health and the shown value half a point off
+/// it, so WA's count (0x5147C0) snaps to the target and writes the label
+/// text with its own formatter. A revived worm needs it: the constructor
+/// starts the shown value at the scheme's starting health but writes the
+/// label from the health it had then (0, before revive sets it), and WA only
+/// raises a label at once, never lowers it before the turn commits.
+unsafe fn show_health(worm: *mut u8, health: i32) {
+    let target = health.clamp(0, 9999) << 16;
+    write_i32(worm, WORM_HEALTH_TARGET, target);
+    write_i32(worm, WORM_HEALTH_SHOWN, target + 0x8000);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_revived_worms_label_counts_to_its_health_next_frame() {
+        let mut worm = vec![0u8; 0x41C];
+        let p = worm.as_mut_ptr();
+        unsafe {
+            write_i32(p, WORM_HEALTH_SHOWN, 100 << 16);
+            write_i32(p, WORM_HEALTH_TARGET, 100 << 16);
+            show_health(p, 10);
+            assert_eq!(read_i32(p, WORM_HEALTH_TARGET), 10 << 16);
+            let shown = read_i32(p, WORM_HEALTH_SHOWN);
+            assert_ne!(shown, 10 << 16, "they differ, so WA rewrites the label");
+            assert_eq!(shown >> 16, 10, "but its whole part is already the health");
+            assert!((shown - (10 << 16)).abs() < 0x10000, "close enough that WA snaps, not counts");
+        }
+    }
 
     fn pixel_solid_slice(
         packed: &[u8],

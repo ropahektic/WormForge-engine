@@ -2,7 +2,7 @@ use crate::dispatch::{self, HudLine};
 use crate::spawn::{self, get_bool, get_i32, get_string};
 use actors::kind_id;
 use gfx::{is_sheet_path, load_sprite_path, sprite_key, stock_sprite_id, SpriteStrip};
-use mlua::{Function, Lua, MultiValue, Table, Value};
+use mlua::{Function, Lua, Table, Value};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -44,8 +44,18 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     let logs = Rc::clone(&ctx.logs);
     let mod_id_log = ctx.mod_id.clone();
     let log_fn = lua
-        .create_function(move |_, msg: String| {
-            let line = format!("[{mod_id_log}] {msg}");
+        .create_function(move |lua, msg: String| {
+            // The pack running now. `wa` is one table for every pack, so this
+            // function is whichever pack loaded last; its own id named that
+            // pack for every log line written from a hook. Hooks and weapon
+            // steps set `wa._mod` to their own pack while they run.
+            let running = lua
+                .globals()
+                .get::<Table>("wa")
+                .ok()
+                .and_then(|wa| wa.get::<Option<String>>("_mod").ok().flatten())
+                .filter(|m| !m.is_empty());
+            let line = format!("[{}] {msg}", running.as_deref().unwrap_or(&mod_id_log));
             // Straight to wkLua.log, so a pack logging from a hook or a brain
             // is visible. The Vec below is only the load-time transcript, and
             // it is snapshotted once after loading -- anything pushed to it
@@ -159,6 +169,69 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
     Ok(())
 }
 
+/// The Lua side of hook dispatch, kept in the registry: wrapping a handler
+/// so it runs as its pack, the loops over a hook list, and a missile frame
+/// built, dispatched and read back in one call. Run in Lua, a hook list costs
+/// one call from the engine instead of two per handler.
+const DISPATCH_LUA: &str = r#"
+local wa, NAMES = ...
+-- A handler runs as its pack, and leaves the caller's pack running after:
+-- a hook can run inside another pack's call (a missile bursting while a
+-- pack launches it).
+local function back(outer, ...)
+  wa._mod = outer
+  return ...
+end
+local function wrap(owner, cb)
+  return function(...)
+    local outer = wa._mod
+    wa._mod = owner
+    return back(outer, cb(...))
+  end
+end
+local function each(list, ...)
+  for i = 1, #list do list[i](...) end
+end
+local function eat_each(list, ...)
+  local eat = false
+  for i = 1, #list do
+    if list[i](...) == "eat" then eat = true end
+  end
+  return eat
+end
+local function missile(list, id, class_type, damp, wind_scale, gravity_scale, moved, x, y, vx, vy,
+    cm_gravity, cm_wind, msg, post, slot, sprite, mask)
+  local m = {
+    id = id, class_type = class_type, damp = damp, wind_scale = wind_scale,
+    gravity_scale = gravity_scale, moved = moved, x = x, y = y, vx = vx, vy = vy,
+    cm_gravity = cm_gravity, cm_wind = cm_wind, msg = msg,
+    phase = post and "post" or "pre", weapon = slot and NAMES[slot], sprite = sprite,
+    collision_mask = mask,
+  }
+  for i = 1, #list do list[i](m) end
+  return m.damp, m.wind_scale, m.gravity_scale, m.moved, m.x, m.y, m.vx, m.vy, m.sprite, m.collision_mask
+end
+return wrap, each, eat_each, missile
+"#;
+
+fn install_dispatch(lua: &Lua, wa: &Table) -> Result<(), String> {
+    let names = lua.create_table().map_err(|e| e.to_string())?;
+    for i in 0..128u32 {
+        if let Some(w) = StockWeapon::from_index(i) {
+            names.set(i, w.name()).map_err(|e| e.to_string())?;
+        }
+    }
+    let (wrap, each, eat_each, missile): (Function, Function, Function, Function) = lua
+        .load(DISPATCH_LUA)
+        .set_name("wormforge/dispatch")
+        .call((wa.clone(), names))
+        .map_err(|e| e.to_string())?;
+    for (key, f) in [("wf_wrap", wrap), ("wf_each", each), ("wf_eat_each", eat_each), ("wf_missile", missile)] {
+        lua.set_named_registry_value(key, f).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Build the `wa` table if this Lua state has none yet.
 fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     let globals = lua.globals();
@@ -166,6 +239,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         return Ok(wa);
     }
     let wa = lua.create_table().map_err(|e| e.to_string())?;
+    install_dispatch(lua, &wa)?;
     wa.set("weapons", lua.create_table().map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
     wa.set("sprites", lua.create_table().map_err(|e| e.to_string())?)
@@ -187,13 +261,16 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     msg.set("IMPACT", 0x76).map_err(|e| e.to_string())?;
     wa.set("msg", msg).map_err(|e| e.to_string())?;
 
-    // `wa.perf.enable{ counter = true, profile = true }`: this machine's FPS
-    // counter and profiler. With no table, both. Nothing is readable back.
+    // `wa.perf.enable{ counter = true, profile = true, packs = true,
+    // spikes = true }`: this machine's FPS counter and profiler; `packs` also
+    // times each hook handler for its pack, and `spikes` samples the Lua lines
+    // long calls spend their time on. Both slow Lua down while on. With no
+    // table, counter and profile. Nothing is readable back.
     let perf = lua.create_table().map_err(|e| e.to_string())?;
     let enable = lua
-        .create_function(|_, opts: Option<Table>| {
+        .create_function(|lua, opts: Option<Table>| {
             let flags = match opts {
-                None => crate::PerfFlags { counter: true, profile: true },
+                None => crate::PerfFlags { counter: true, profile: true, ..Default::default() },
                 Some(t) => {
                     let mut flags = crate::PerfFlags::default();
                     for pair in t.pairs::<Value, Value>() {
@@ -202,16 +279,18 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
                             Value::Boolean(b) => b,
                             _ => {
                                 return Err(mlua::Error::external(
-                                    "wa.perf.enable: counter and profile take true or false",
+                                    "wa.perf.enable: counter, profile, packs and spikes take true or false",
                                 ))
                             }
                         };
                         match k.as_str().as_deref() {
                             Some("counter") => flags.counter = on,
                             Some("profile") => flags.profile = on,
+                            Some("packs") => flags.packs = on,
+                            Some("spikes") => flags.spikes = on,
                             _ => {
                                 return Err(mlua::Error::external(
-                                    "wa.perf.enable: unknown option (counter, profile)",
+                                    "wa.perf.enable: unknown option (counter, profile, packs, spikes)",
                                 ))
                             }
                         }
@@ -219,6 +298,9 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
                     flags
                 }
             };
+            if flags.profile && flags.spikes {
+                crate::perf::install_sampler(lua);
+            }
             crate::perf::enable(flags);
             Ok(())
         })
@@ -232,6 +314,8 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "gravity_after",
         "missile_frame",
         "worm_message",
+        "worm_message_any",
+        "worm_message_by_msg",
         "hurt",
         "turn_start",
         "turn_retreat",
@@ -333,8 +417,8 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
 
 /// Pack-scoped virtual worm inventories.
 ///
-/// WA's real ammo remains alliance-scoped. These stores are deliberately
-/// keyed by stable worm id and only touch the live TeamArena row when
+/// WA's real ammo remains scoped to its physical ammo rows. These stores are
+/// deliberately keyed by stable worm id and only touch the live TeamArena row when
 /// `apply()` is called. Keeping the state in this match's Lua interpreter
 /// also gives it the same lifetime as pack state and avoids process-global
 /// state leaking into the next round.
@@ -526,8 +610,8 @@ function inventory_api.create(spec)
     if opts.clear then
       local seen = {}
       for _, live in ipairs(wa.worms.all()) do
-        if not seen[live.alliance] then
-          seen[live.alliance] = true
+        if not seen[live.ammo_group] then
+          seen[live.ammo_group] = true
           for _, name in ipairs(slots) do live:ammo(name, { set = 0 }) end
         end
       end
@@ -572,7 +656,16 @@ end
 /// covers hooks added later for free.
 fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
     let f = lua
-        .create_function(move |lua, cb: Function| {
+        .create_function(move |lua, (cb, opts): (Function, Option<Table>)| {
+            let msgs = match (name, opts) {
+                (_, None) => None,
+                ("worm_message", Some(opts)) => Some(worm_message_msgs(&opts)?),
+                (_, Some(_)) => {
+                    return Err(mlua::Error::external(format!(
+                        "wa.on.{name} takes only a function; options are for wa.on.worm_message"
+                    )))
+                }
+            };
             let wa: Table = lua.globals().get("wa")?;
             let hooks: Table = wa.get("_hooks")?;
             let list: Table = hooks.get(name)?;
@@ -580,20 +673,48 @@ fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
             // nobody had set `_mod` yet; such a hook keeps the old
             // stale-field behaviour rather than guessing a pack.
             let owner: String = wa.get("_mod").unwrap_or_default();
-            // MultiValue so every hook shape passes through untouched --
-            // arguments in, and return values (worm_message's "eat", hurt's
-            // rewritten amount) back out.
-            let wrapped = lua.create_function(move |lua, args: MultiValue| {
-                let wa: Table = lua.globals().get("wa")?;
-                wa.set("_mod", owner.clone())?;
-                cb.call::<MultiValue>(args)
-            })?;
+            // A Lua closure (wf_wrap) that sets `_mod` and calls the handler:
+            // every hook shape passes through untouched -- arguments in, and
+            // return values (worm_message's "eat", hurt's rewritten amount)
+            // back out -- without a trip through the engine per handler.
+            let wrap: Function = lua.named_registry_value("wf_wrap")?;
+            let wrapped: Function = wrap.call((owner, cb))?;
+            if name == "worm_message" {
+                return crate::dispatch::register_worm_message(lua, &hooks, wrapped, msgs);
+            }
             let n = list.len()?;
             list.set(n + 1, wrapped)?;
             Ok(())
         })
         .map_err(|e| e.to_string())?;
     on.set(name, f).map_err(|e| e.to_string())
+}
+
+/// `{ msgs = { wa.msg.FRAME_FINISH, ... } }`: the messages a worm_message
+/// handler wants.
+fn worm_message_msgs(opts: &Table) -> mlua::Result<Vec<u32>> {
+    let bad = |why: &str| mlua::Error::external(format!("wa.on.worm_message: {why}"));
+    for pair in opts.pairs::<Value, Value>() {
+        let (k, _) = pair?;
+        if k.as_str().as_deref() != Some("msgs") {
+            return Err(bad("the only option is msgs = { message numbers }"));
+        }
+    }
+    let list: Table = opts.get::<Option<Table>>("msgs")?.ok_or_else(|| bad("msgs = { message numbers }"))?;
+    let mut msgs = Vec::new();
+    for v in list.sequence_values::<Value>() {
+        let n = match v? {
+            Value::Integer(n) if (0..=0xFFFF).contains(&n) => n as u32,
+            other => return Err(bad(&format!("msgs lists message numbers, got {other:?}"))),
+        };
+        if !msgs.contains(&n) {
+            msgs.push(n);
+        }
+    }
+    if msgs.is_empty() {
+        return Err(bad("msgs must name at least one message"));
+    }
+    Ok(msgs)
 }
 
 /// Total order over Lua keys so `wa.sorted` is deterministic.
@@ -671,7 +792,7 @@ fn spec_slot(spec: &Table) -> mlua::Result<StockWeapon> {
     parse_stock_weapon(&name).map_err(mlua::Error::external)
 }
 
-/// WA's team colours: alliance 0 (red) to 5 (cyan).
+/// WA's coalition colours: alliance 0 (red) to 5 (cyan).
 const WORM_SPRITE_TEAMS: usize = 6;
 
 /// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse,
@@ -1143,6 +1264,7 @@ fn table_to_claim(
     let mut truecolor_prefix = None;
     let mut reserve_prefix = None;
     let mut gpu_worm_sprites = true;
+    let mut truecolor = true;
     let mut worm_sprites_animate = false;
     if let Some(p) = spec.get::<Option<Table>>("params")? {
         layer = get_i32(&p, "layer")?.map(|v| v as u32);
@@ -1152,6 +1274,7 @@ fn table_to_claim(
         truecolor_prefix = get_string(&p, "truecolor_prefix")?;
         reserve_prefix = get_string(&p, "reserve_prefix")?;
         gpu_worm_sprites = get_bool(&p, "gpu_worm_sprites")?.unwrap_or(true);
+        truecolor = get_bool(&p, "truecolor")?.unwrap_or(true);
         worm_sprites_animate = get_bool(&p, "worm_sprites_animate")?.unwrap_or(false);
     }
 
@@ -1325,6 +1448,7 @@ fn table_to_claim(
             gpu_prefix,
             truecolor_prefix,
             gpu_worm_sprites,
+            truecolor,
             worm_sprites_animate,
             extra_sounds,
             cluster_sprite_id,
@@ -1759,6 +1883,47 @@ mod tests {
         assert_eq!(hits.len().unwrap(), 2);
     }
 
+    /// `wa.log` is the last-loaded pack's function (one `wa` for every pack),
+    /// so it used to tag a line logged from pack a's hook with pack b's id.
+    #[test]
+    fn a_hooks_log_line_names_its_own_pack() {
+        let lua = Lua::new();
+        install(&lua, &ctx("packa")).unwrap();
+        lua.load(r#"wa.on.hud(function() wa.log("from a's hook") end)"#).exec().unwrap();
+        let b = ctx("packb");
+        install(&lua, &b).unwrap();
+        lua.load(r#"wa.log("b loading")"#).exec().unwrap();
+        let wa: Table = lua.globals().get("wa").unwrap();
+        let hud: mlua::Function = wa.get::<Table>("_hooks").unwrap().get::<Table>("hud").unwrap().get(1).unwrap();
+        hud.call::<()>(()).unwrap();
+        let logs = b.logs.borrow();
+        assert_eq!(logs.first().map(String::as_str), Some("[packb] b loading"));
+        assert_eq!(logs.last().map(String::as_str), Some("[packa] from a's hook"));
+    }
+
+    /// A hook can run inside another pack's call: the caller's pack is the
+    /// running one again after it.
+    #[test]
+    fn a_nested_hook_leaves_the_callers_pack_running() {
+        let lua = Lua::new();
+        install(&lua, &ctx("packa")).unwrap();
+        lua.load(r#"wa.on.hud(function() end)"#).exec().unwrap();
+        let b = ctx("packb");
+        install(&lua, &b).unwrap();
+        lua.load(
+            r#"wa.on.hud(function()
+                 wa._hooks.hud[1]() -- pack a's, run from inside pack b's
+                 wa.log("after a's hook")
+               end)"#,
+        )
+        .exec()
+        .unwrap();
+        let wa: Table = lua.globals().get("wa").unwrap();
+        let hud: mlua::Function = wa.get::<Table>("_hooks").unwrap().get::<Table>("hud").unwrap().get(2).unwrap();
+        hud.call::<()>(()).unwrap();
+        assert_eq!(b.logs.borrow().last().map(String::as_str), Some("[packb] after a's hook"));
+    }
+
     /// The wrapper must stay transparent: worm_message dispatch reads the
     /// callback's return to spot "eat", hurt's pre phase does the same for a
     /// rewritten amount. Wrap-and-call must hand return values through.
@@ -1872,15 +2037,17 @@ mod tests {
               return lo + ((draw - 1) % (hi - lo + 1))
             end
             local live = {}
-            local function worm(id, alliance)
-              local w = { id = id, alliance = alliance, live = {} }
+            local function worm(id, alliance, ammo_group)
+              local w = { id = id, alliance = alliance, ammo_group = ammo_group, live = {} }
               function w:ammo(name, change)
                 if change ~= nil then self.live[name] = change.set end
                 return self.live[name] or 0
               end
               return w
             end
-            a, b, c = worm(16, 0), worm(32, 1), worm(33, 1)
+            a, b, c = worm(16, 1, 0), worm(32, 1, 1), worm(33, 0, 1)
+            assert(a.alliance == b.alliance and a.ammo_group ~= b.ammo_group)
+            assert(b.alliance ~= c.alliance and b.ammo_group == c.ammo_group)
             wa.worms.all = function() return { a, b, c } end
 
             inv_a = wa.inventory.create({
@@ -1898,7 +2065,7 @@ mod tests {
             inv_a:apply(b, { clear = true, each = 1 })
             assert(a.live.bazooka == 0 and a.live.grenade == 0)
             assert(b.live.bazooka == 1 and b.live.grenade == 1)
-            -- b/c share an alliance: clear visits that physical row once.
+            -- b/c share an ammo row despite having different coalition colours.
             assert(c.live.bazooka == nil)
         "#,
         )

@@ -8,7 +8,8 @@ use game::offsets::{
     ACTOR_MAGIC, ACTOR_OWNER, ACTOR_SEQ, ACTOR_SPR_H, ACTOR_SPR_W, ACTOR_SPRITE, CLASS_CRATE,
     CLASS_MINE, WORM_INDEX,
     CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
-    ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, WORLD_TEAM_ALLIANCE, WORLD_TEAM_STRIDE,
+    ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, MAX_TEAMS, WORLD_TEAM_AMMO_GROUP,
+    WORLD_TEAM_STRIDE,
     ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_DRILLING, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_TUMBLING, ENT_COLLISION_MASK,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
@@ -172,7 +173,7 @@ pub struct ActorNative {
     /// WA landscape cut, with 16.16 coordinates and pixel-sized radius.
     pub land_dig: fn(x: i32, y: i32, radius: i32) -> Result<(), String>,
     /// WA landscape mask cut; shape is a validated stock mask index.
-    pub land_stamp: fn(sprite: i32, frame: u32, x: i32, y: i32) -> Result<(), String>,
+    pub land_stamp: fn(sprite: i32, frame: u32, x: i32, y: i32, buried: Option<StampBuried>) -> Result<(), String>,
     pub land_cut: fn(shape: i32, x: i32, y: i32) -> Result<(), String>,
     pub land_trace: fn(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<(i32, i32)>,
     pub map_size: fn() -> (i32, i32),
@@ -252,6 +253,9 @@ pub struct ActorNative {
     pub set_worm_state: fn(handle: u32, state: u32),
     /// The retreat countdown in ms, 0 when retreat has not started.
     pub retreat_ms: fn() -> i32,
+    /// The turn clock in ms left, as WA counts it (it stands still while WA
+    /// waits for everything to settle after a shot).
+    pub turn_clock_ms: fn() -> i32,
 }
 
 /// A write to team ammo.
@@ -276,6 +280,7 @@ impl Default for ActorNative {
             networked: || false,
             set_worm_state: |_, _| {},
             retreat_ms: || 0,
+            turn_clock_ms: || 0,
             random: || None,
             log: |_| {},
             in_water: |_| false,
@@ -291,7 +296,7 @@ impl Default for ActorNative {
             resolve_sprite: |_| None,
             land_solid: |_, _| false,
             land_dig: |_, _, _| Err("land dig not bound".into()),
-            land_stamp: |_, _, _, _| Err("land stamp not bound".into()),
+            land_stamp: |_, _, _, _, _| Err("land stamp not bound".into()),
             land_cut: |_, _, _| Err("land cut not bound".into()),
             land_trace: |_, _, _, _| None,
             map_size: || (0, 0),
@@ -364,6 +369,9 @@ fn with_spawn_owner<T>(owner: u32, f: impl FnOnce() -> T) -> T {
 
 pub fn reset() {
     NEXT_BRAIN.store(1, Ordering::SeqCst);
+    if let Ok(mut g) = LIVE_ACTORS.lock() {
+        g.clear();
+    }
 }
 
 pub fn bind_actor_native(native: ActorNative) {
@@ -444,7 +452,7 @@ pub fn weapon_fire(
     if fire_id == 0 {
         return Ok(());
     }
-    with_lua(|lua| {
+    with_lua("weapon_fire", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let fires: Table = wa.get("_fires").map_err(|e| e.to_string())?;
         let spec = match fires.get::<Value>(fire_id).map_err(|e| e.to_string())? {
@@ -455,6 +463,7 @@ pub fn weapon_fire(
             Value::Function(f) => f,
             _ => return Err(format!("on_fire {fire_id} has no function")),
         };
+        let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
         if let Ok(m) = spec.get::<String>("mod") {
             let _ = wa.set("_mod", m);
         }
@@ -466,11 +475,15 @@ pub fn weapon_fire(
         fire.set("slot", slot).map_err(|e| e.to_string())?;
         fire.set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;
-        with_spawn_owner(worm, || cb.call::<()>(fire).map_err(|e| e.to_string()))?;
-        Ok(())
+        let result = with_spawn_owner(worm, || cb.call::<()>(fire).map_err(|e| e.to_string()));
+        let _ = wa.set("_mod", caller);
+        result
     })
 }
 
+/// An `on_click`: the click at (x, y), and `speed`, the shot's speed in WA's
+/// fire context (16.16; for a strike, the sign of its x is the direction WA's
+/// arrow keys set: Project X's PxAirstrike reads it so), (0, 0) without one.
 pub fn weapon_click(
     click_id: u32,
     worm: u32,
@@ -478,11 +491,12 @@ pub fn weapon_click(
     x: i32,
     y: i32,
     sky: i32,
+    speed: (i32, i32),
 ) -> Result<(), String> {
     if click_id == 0 {
         return Ok(());
     }
-    with_lua(|lua| {
+    with_lua("weapon_click", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let clicks: Table = wa.get("_clicks").map_err(|e| e.to_string())?;
         let spec = match clicks.get::<Value>(click_id).map_err(|e| e.to_string())? {
@@ -501,6 +515,8 @@ pub fn weapon_click(
         click.set("y", y).map_err(|e| e.to_string())?;
         click.set("sky", sky).map_err(|e| e.to_string())?;
         click.set("slot", slot).map_err(|e| e.to_string())?;
+        click.set("vx", speed.0).map_err(|e| e.to_string())?;
+        click.set("vy", speed.1).map_err(|e| e.to_string())?;
         click
             .set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;
@@ -514,7 +530,7 @@ pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String>
         return Ok(());
     }
     let (x, y, _) = native_pointer().map(|f| f()).unwrap_or((0, 0, false));
-    with_lua(|lua| {
+    with_lua("weapon_select", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let selects: Table = wa.get("_selects").map_err(|e| e.to_string())?;
         let spec = match selects.get::<Value>(select_id).map_err(|e| e.to_string())? {
@@ -525,6 +541,7 @@ pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String>
             Value::Function(f) => f,
             _ => return Err(format!("on_select {select_id} has no function")),
         };
+        let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
         if let Ok(m) = spec.get::<String>("mod") {
             let _ = wa.set("_mod", m);
         }
@@ -534,8 +551,9 @@ pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String>
         sel.set("slot", slot).map_err(|e| e.to_string())?;
         sel.set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;
-        with_spawn_owner(worm, || cb.call::<()>(sel).map_err(|e| e.to_string()))?;
-        Ok(())
+        let result = with_spawn_owner(worm, || cb.call::<()>(sel).map_err(|e| e.to_string()));
+        let _ = wa.set("_mod", caller);
+        result
     })
 }
 
@@ -555,7 +573,7 @@ pub fn weapon_emit(
     if emit_id == 0 {
         return Ok(());
     }
-    with_lua(|lua| {
+    with_lua("weapon_emit", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let fns: Table = wa.get(table).map_err(|e| e.to_string())?;
         let spec = match fns.get::<Value>(emit_id).map_err(|e| e.to_string())? {
@@ -566,6 +584,9 @@ pub fn weapon_emit(
             Value::Function(f) => f,
             _ => return Err(format!("{label} {emit_id} has no function")),
         };
+        // The step runs as its pack and leaves the caller's running: a
+        // missile can burst inside another pack's wa.weapons.launch.
+        let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
         if let Ok(m) = spec.get::<String>("mod") {
             let _ = wa.set("_mod", m);
         }
@@ -578,20 +599,47 @@ pub fn weapon_emit(
         }
         ev.set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;
-        with_spawn_owner(worm, || cb.call::<()>(ev).map_err(|e| e.to_string()))?;
-        Ok(())
+        let result = with_spawn_owner(worm, || cb.call::<()>(ev).map_err(|e| e.to_string()));
+        let _ = wa.set("_mod", caller);
+        result
     })
 }
 
-pub fn actor_spawned(_handle: u32, _brain_id: u32) {}
+/// The actors alive now, by address: the engine reports each spawn and free.
+/// A pack may keep an actor's handle after the engine freed it (drowned, or
+/// despawned); WA then reuses the memory, so nothing may be read or written
+/// through such a handle. Every ActorHandle access goes through `live`.
+static LIVE_ACTORS: Mutex<std::collections::BTreeSet<u32>> = Mutex::new(std::collections::BTreeSet::new());
 
-pub fn actor_freed(_handle: u32) {}
+pub fn actor_spawned(handle: u32, _brain_id: u32) {
+    if handle != 0 {
+        if let Ok(mut g) = LIVE_ACTORS.lock() {
+            g.insert(handle);
+        }
+    }
+}
+
+fn actor_live(handle: u32) -> bool {
+    handle != 0 && LIVE_ACTORS.lock().map(|g| g.contains(&handle)).unwrap_or(false)
+}
+
+/// The handle while its actor is alive, else 0, which every read and write
+/// through it treats as no actor.
+fn live(handle: u32) -> u32 {
+    if actor_live(handle) { handle } else { 0 }
+}
+
+pub fn actor_freed(handle: u32) {
+    if let Ok(mut g) = LIVE_ACTORS.lock() {
+        g.remove(&handle);
+    }
+}
 
 pub fn actor_frame(handle: u32, brain_id: u32, ev: ActorEvent) -> Result<(), String> {
     if handle == 0 || brain_id == 0 {
         return Ok(());
     }
-    with_lua(|lua| {
+    with_lua("actor", |lua| {
         let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
         let brains: Table = wa.get("_brains").map_err(|e| e.to_string())?;
         let spec = match brains.get::<Value>(brain_id).map_err(|e| e.to_string())? {
@@ -639,13 +687,13 @@ fn event_table(lua: &Lua, ev: &ActorEvent) -> Result<Table, String> {
     Ok(t)
 }
 
-fn with_lua<T>(f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
+fn with_lua<T>(label: &'static str, f: impl FnOnce(&Lua) -> Result<T, String>) -> Result<T, String> {
     PARKED_LUA.with(|slot| {
         let guard = slot.borrow();
         let Some(lua) = guard.as_ref() else {
             return Err("no lua state".into());
         };
-        crate::perf::time(|| crate::sim_context::with_sim(|| f(lua)))
+        crate::perf::time(label, lua, || crate::sim_context::with_sim(|| f(lua)))
     })
 }
 
@@ -661,15 +709,15 @@ impl UserData for ActorHandle {
         // identity: it differs between peers and between runs, so comparing
         // ids or iterating a table keyed by them gave a different answer on
         // every machine.
-        fields.add_field_method_get("id", |_, this| Ok(read_handle(this.0, ACTOR_SEQ)));
+        fields.add_field_method_get("id", |_, this| Ok(read_handle(live(this.0), ACTOR_SEQ)));
         fields.add_field_method_get("kind", |_, _| Ok("actor"));
-        bind_pos_fields(fields, |h| h.0);
+        bind_pos_fields(fields, |h| live(h.0));
         fields.add_field_method_get("owner", |lua, this| {
-            let owner = read_handle(this.0, ACTOR_OWNER);
+            let owner = read_handle(live(this.0), ACTOR_OWNER);
             lua.create_userdata(WormHandle(owner as u32))
         });
         fields.add_field_method_get("facing", |_, this| {
-            let flags = read_handle(this.0, ACTOR_FLAGS);
+            let flags = read_handle(live(this.0), ACTOR_FLAGS);
             Ok(if flags & ACTOR_FLAG_MIRROR_X != 0 {
                 -1i32
             } else {
@@ -678,36 +726,36 @@ impl UserData for ActorHandle {
         });
         fields.add_field_method_set("facing", |_, this, v: i32| {
             crate::sim_context::require("worm.facing (write)")?;
-            let mut flags = read_handle(this.0, ACTOR_FLAGS);
+            let mut flags = read_handle(live(this.0), ACTOR_FLAGS);
             if v < 0 {
                 flags |= ACTOR_FLAG_MIRROR_X;
             } else {
                 flags &= !ACTOR_FLAG_MIRROR_X;
             }
-            write_handle(this.0, ACTOR_FLAGS, flags);
+            write_handle(live(this.0), ACTOR_FLAGS, flags);
             Ok(())
         });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("dig", |_, this, spec: Table| {
-            if this.0 == 0 || actor_dead(this.0) {
+            if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return Ok(());
             }
             let radius: i32 = spec.get("radius")?;
             crate::spawn::dig_at(
-                read_handle(this.0, ENT_POS_X),
-                read_handle(this.0, ENT_POS_Y),
+                read_handle(live(this.0), ENT_POS_X),
+                read_handle(live(this.0), ENT_POS_Y),
                 radius,
             )
         });
         methods.add_method("explode", |_, this, opts: Option<Table>| {
             crate::sim_context::require("actor:explode")?;
-            if this.0 == 0 || actor_dead(this.0) {
+            if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return Ok(());
             }
-            let mut damage = read_handle(this.0, ACTOR_DAMAGE);
-            let mut id = read_handle(this.0, ACTOR_BOOM_ID);
+            let mut damage = read_handle(live(this.0), ACTOR_DAMAGE);
+            let mut id = read_handle(live(this.0), ACTOR_BOOM_ID);
             let mut below = true;
             if let Some(t) = opts {
                 if let Ok(Some(v)) = opt_i32(&t, "damage") {
@@ -726,44 +774,44 @@ impl UserData for ActorHandle {
             let explode = native_explode().ok_or_else(|| {
                 mlua::Error::external("explode: CreateExplosion not bound")
             })?;
-            explode(this.0, damage, id, below);
+            explode(live(this.0), damage, id, below);
             Ok(())
         });
         methods.add_method("despawn", |_, this, ()| {
             crate::sim_context::require("actor:despawn")?;
-            if this.0 == 0 || actor_dead(this.0) {
+            if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return Ok(());
             }
             let despawn = native_despawn_fn().ok_or_else(|| {
                 mlua::Error::external("despawn: native free not bound")
             })?;
-            despawn(this.0);
+            despawn(live(this.0));
             Ok(())
         });
         methods.add_method("in_water", |_, this, ()| {
-            if this.0 == 0 {
+            if live(this.0) == 0 {
                 return Ok(false);
             }
-            Ok(native_in_water_fn().map(|f| f(this.0)).unwrap_or(false))
+            Ok(native_in_water_fn().map(|f| f(live(this.0))).unwrap_or(false))
         });
         methods.add_method("on_feet", |_, this, ()| {
-            if this.0 == 0 {
+            if live(this.0) == 0 {
                 return Ok(false);
             }
-            Ok(native_on_feet_fn().map(|f| f(this.0)).unwrap_or(false))
+            Ok(native_on_feet_fn().map(|f| f(live(this.0))).unwrap_or(false))
         });
         methods.add_method("gravity", |_, this, ()| {
-            if this.0 == 0 || actor_dead(this.0) {
+            if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return Ok(());
             }
             let gravity = native_gravity().ok_or_else(|| {
                 mlua::Error::external("gravity: stock leaf not bound")
             })?;
-            gravity(this.0);
+            gravity(live(this.0));
             Ok(())
         });
         methods.add_method("move", |lua, this, opts: Option<Table>| {
-            if this.0 == 0 || actor_dead(this.0) {
+            if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return empty_hit(lua);
             }
             let mut terrain = true;
@@ -785,16 +833,16 @@ impl UserData for ActorHandle {
             let move_body = native_move().ok_or_else(|| {
                 mlua::Error::external("move: native step not bound")
             })?;
-            hit_table(lua, move_body(this.0, terrain, worms))
+            hit_table(lua, move_body(live(this.0), terrain, worms))
         });
         methods.add_method("advance", |_, this, ()| {
-            if this.0 == 0 || actor_dead(this.0) {
+            if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return Ok(());
             }
             let advance = native_advance().ok_or_else(|| {
                 mlua::Error::external("advance: sprite loop not bound")
             })?;
-            advance(this.0);
+            advance(live(this.0));
             Ok(())
         });
         // Set several presentation fields at once. Only the keys actually
@@ -802,46 +850,46 @@ impl UserData for ActorHandle {
         // depth exactly as they were.
         methods.add_method("gfx", |_, this, spec: Table| {
             let (mask, angle, scale, tint, depth) = gfx_args(&spec)?;
-            apply_gfx(this.0, mask, angle, scale, tint, depth)
+            apply_gfx(live(this.0), mask, angle, scale, tint, depth)
         });
         // Single-field setters. They forward to the same native call with a
         // one-bit mask, so each is genuinely independent of the others.
         methods.add_method("angle", |_, this, degrees: f32| {
-            apply_gfx(this.0, gfx_field::ANGLE, degrees, 1.0, 0, 0)
+            apply_gfx(live(this.0), gfx_field::ANGLE, degrees, 1.0, 0, 0)
         });
         methods.add_method("scale", |_, this, factor: f32| {
-            apply_gfx(this.0, gfx_field::SCALE, 0.0, factor, 0, 0)
+            apply_gfx(live(this.0), gfx_field::SCALE, 0.0, factor, 0, 0)
         });
         methods.add_method("tint", |_, this, rgb: u32| {
-            apply_gfx(this.0, gfx_field::TINT, 0.0, 1.0, rgb & 0x00FF_FFFF, 0)
+            apply_gfx(live(this.0), gfx_field::TINT, 0.0, 1.0, rgb & 0x00FF_FFFF, 0)
         });
         methods.add_method("blend", |_, this, mode: String| {
-            apply_gfx(this.0, gfx_field::BLEND, 0.0, 1.0, blend_alpha(&mode)?, 0)
+            apply_gfx(live(this.0), gfx_field::BLEND, 0.0, 1.0, blend_alpha(&mode)?, 0)
         });
         methods.add_method("frame", |_, this, frame: i32| {
-            if this.0 == 0 || actor_dead(this.0) {
+            if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return Ok(());
             }
             if let Some(set) = native_set_frame() {
-                set(this.0, frame);
+                set(live(this.0), frame);
             }
             Ok(())
         });
         methods.add_method("look", |lua, this, name: String| {
-            if this.0 == 0 || actor_dead(this.0) {
+            if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return Ok(());
             }
             let (id, delta, w, h) = crate::spawn::resolve_sprite_name(lua, &name)?;
             if let Some(look) = native_look() {
-                look(this.0, id, delta, w, h);
+                look(live(this.0), id, delta, w, h);
             }
             Ok(())
         });
         methods.add_method("spawn", |lua, this, spec: Table| {
-            crate::spawn::runtime_spawn(lua, spec, Some(this.0))
+            crate::spawn::runtime_spawn(lua, spec, Some(live(this.0)))
         });
         methods.add_method("sound", |_, this, (slot, flags): (Value, Option<i32>)| {
-            if this.0 == 0 || actor_dead(this.0) {
+            if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return Ok(());
             }
             let id = sound_slot(slot)?;
@@ -851,7 +899,7 @@ impl UserData for ActorHandle {
             let play = native_play_sound().ok_or_else(|| {
                 mlua::Error::external("sound: PlaySoundLocal not bound")
             })?;
-            play(this.0, id, flags.unwrap_or(8));
+            play(live(this.0), id, flags.unwrap_or(8));
             Ok(())
         });
     }
@@ -1069,6 +1117,12 @@ impl UserData for WormHandle {
             Ok(native_hp().map(|f| f(this.0)).unwrap_or(0))
         });
         fields.add_field_method_get("alliance", |_, this| {
+            Ok(unsafe { game::team::worm_team_colour(this.0 as *mut u8) }
+                .unwrap_or(0) as i32)
+        });
+        // WA indexes physical ammo by this separate owner/player row. It can
+        // differ from the visible coalition colour exposed as `alliance`.
+        fields.add_field_method_get("ammo_group", |_, this| {
             if this.0 == 0 {
                 return Ok(0i32);
             }
@@ -1079,12 +1133,12 @@ impl UserData for WormHandle {
                     return Ok(0);
                 }
                 let team = read_i32(worm, ENT_WORM_TEAM);
-                if team < 0 {
+                if !(1..=MAX_TEAMS as i32).contains(&team) {
                     return Ok(0);
                 }
                 Ok(read_i32(
                     world,
-                    WORLD_TEAM_ALLIANCE + (team as usize) * WORLD_TEAM_STRIDE,
+                    WORLD_TEAM_AMMO_GROUP + (team as usize) * WORLD_TEAM_STRIDE,
                 ))
             }
         });
@@ -1512,6 +1566,10 @@ pub fn native_retreat_ms() -> Option<fn() -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.retreat_ms)
 }
 
+pub fn native_turn_clock_ms() -> Option<fn() -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.turn_clock_ms)
+}
+
 const WORM_KEYS: [(&str, usize); 4] = [
     ("up", WORM_KEY_UP),
     ("down", WORM_KEY_DOWN),
@@ -1802,7 +1860,7 @@ fn stable_worm_id(handle: u32) -> i32 {
 }
 
 fn actor_dead(handle: u32) -> bool {
-    if handle == 0 {
+    if !actor_live(handle) {
         return true;
     }
     unsafe {
@@ -2000,6 +2058,20 @@ mod tests {
     }
 }
 
-pub fn native_land_stamp() -> Option<fn(i32, u32, i32, i32) -> Result<(), String>> {
+/// `wa.land.stamp{ buried = { soften, blend } }`: how the stamp's pixels
+/// that land on existing terrain are drawn. Each keeps `min(d, soften) /
+/// soften` of its strength, `d` being its distance in pixels to the frame's
+/// outline, so the sprite's thick middle stays whole and its edges fade into
+/// the land.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StampBuried {
+    /// Pixels over which the strength grows from the outline, 1..=32.
+    pub soften: u8,
+    /// Blend each buried pixel's colour with the land's (`"mix"`) rather than
+    /// keep or drop it against an ordered dither pattern (`"dither"`).
+    pub mix: bool,
+}
+
+pub fn native_land_stamp() -> Option<fn(i32, u32, i32, i32, Option<StampBuried>) -> Result<(), String>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_stamp)
 }

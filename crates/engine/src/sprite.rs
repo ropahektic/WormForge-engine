@@ -63,6 +63,9 @@ pub struct RgbaSheet {
     pub frames: Vec<Vec<u8>>,
     // Source alpha is gameplay data for land.stamp, independent of the GPU atlas.
     pub terrain_frames: Vec<gfx::RgbaFrame>,
+    /// Per terrain frame, each pixel's distance to the frame's outline, for
+    /// a buried stamp's soft edges. Computed once here, at install.
+    pub terrain_depths: Vec<Vec<u8>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -514,6 +517,7 @@ fn remember_rgba(id: i32, strip: &SpriteStrip) {
             h,
             looping: strip.looping,
             terrain_frames: terrain_frames(strip),
+            terrain_depths: terrain_depths(strip),
             frames,
         });
     }
@@ -910,12 +914,13 @@ pub fn is_virtual(id: i32) -> bool {
     id >= VIRTUAL_SPRITE_BASE
 }
 
-/// Stock sprite id -> the GPU sheet drawn in its place (`sprite_overrides`).
+/// WA sprite id -> the GPU sheet drawn in its place: a stock sprite a pack
+/// overrides (`sprite_overrides`), or a pack's own sprite's true-colour copy.
 /// WA keeps its own sprite at that id, so every size, frame-count and phase
 /// lookup still answers as before; only the draw is ours, in true colour.
 static GPU_ALIASES: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
 
-/// Draw `sheet`, a GPU sheet, wherever WA draws stock sprite `target`.
+/// Draw `sheet`, a GPU sheet, wherever WA draws sprite `target`.
 /// The first claim wins; false when `target` is already drawn as another.
 pub fn alias_gpu(target: i32, sheet: i32) -> bool {
     let Ok(mut g) = GPU_ALIASES.lock() else {
@@ -925,7 +930,7 @@ pub fn alias_gpu(target: i32, sheet: i32) -> bool {
         return false;
     }
     g.push((target as u32, sheet as u32));
-    log_line(&format!("stock sprite {target} drawn as GPU sheet {sheet:#x}"));
+    log_line(&format!("sprite {target} drawn as GPU sheet {sheet:#x}"));
     true
 }
 
@@ -1009,6 +1014,7 @@ pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) 
             // a frame COUNT must use frame_count(), which checks GPU_SHEETS
             // first for exactly this reason.
             terrain_frames: terrain_frames(strip),
+            terrain_depths: terrain_depths(strip),
             frames: Vec::new(),
         });
     }
@@ -1078,9 +1084,16 @@ fn terrain_frames(strip: &SpriteStrip) -> Vec<gfx::RgbaFrame> {
     } else { Vec::new() }
 }
 
-pub fn terrain_frame(id: i32, frame: u32) -> Result<gfx::RgbaFrame, String> {
+fn terrain_depths(strip: &SpriteStrip) -> Vec<Vec<u8>> {
+    terrain_frames(strip).iter().map(crate::terrain::edge_depths).collect()
+}
+
+/// A stamp frame and its pixels' distances to its outline.
+pub fn terrain_frame(id: i32, frame: u32) -> Result<(gfx::RgbaFrame, Vec<u8>), String> {
     let sheets = RGBA_SHEETS.lock().map_err(|_| "land.stamp: sprite store unavailable")?;
     let sheet = sheets.iter().find(|s| s.id == id).ok_or("land.stamp: unknown sheet")?;
-    sheet.terrain_frames.get(frame as usize).cloned()
-        .ok_or_else(|| "land.stamp: frame out of range or sheet exceeds 256x256".into())
+    let image = sheet.terrain_frames.get(frame as usize).cloned()
+        .ok_or("land.stamp: frame out of range or sheet exceeds 256x256")?;
+    let depth = sheet.terrain_depths.get(frame as usize).cloned().unwrap_or_default();
+    Ok((image, depth))
 }

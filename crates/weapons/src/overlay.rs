@@ -388,6 +388,15 @@ pub struct OverlayParams {
     /// sprites, so the palette wash buys nothing. `params.gpu_worm_sprites =
     /// false` keeps the 8-bit path.
     pub gpu_worm_sprites: bool,
+    /// The claim's sheets that WA must hold as real sprites (the weapon
+    /// body, cluster bits, a strike's plane) are also put in the GPU atlas
+    /// and drawn from there, in true colour: on a map whose palette is full,
+    /// WA's palette copy has only the map's colours to pick from. WA keeps
+    /// that copy for every size, frame and phase lookup. Without the GPU
+    /// renderer, or if the copies do not fit the atlas, the palette copy
+    /// draws as before. `params.truecolor = false` keeps the palette draw,
+    /// for a sheet drawn in WA's team-colour entries on purpose.
+    pub truecolor: bool,
     /// `weaponlnk*` sheets are one-shot animations (equip / unfold) driven
     /// frame by frame, not aim-angle sheets. Default false = aim-wizard
     /// semantics (phase is the aim angle; draw poses hold or play).
@@ -472,6 +481,7 @@ impl Default for OverlayParams {
             gpu_prefix: None,
             truecolor_prefix: None,
             gpu_worm_sprites: true,
+            truecolor: true,
             worm_sprites_animate: false,
             extra_sounds: Vec::new(),
             cluster_sprite_id: None,
@@ -562,6 +572,14 @@ impl OverlayParams {
 
     pub fn uses_lua_projectile(&self) -> bool {
         self.on_fire_id != 0 || self.fire_spawn.is_some()
+    }
+
+    /// Whether the slot's WA missiles carry its explode step. Only a Lua
+    /// actor projectile (`on_fire = { spawn = ... }`) replaces them: an
+    /// `on_fire` function may relaunch WA's own missile of the slot
+    /// (`wa.weapons.launch`), which is that slot's missile to every hook.
+    pub fn explodes_as_missile(&self) -> bool {
+        self.fire_spawn.is_none() && (self.explode_spawn.is_some() || self.on_explode_id != 0)
     }
 }
 
@@ -705,6 +723,18 @@ mod tests {
             slot,
             params: OverlayParams::default(),
         }
+    }
+
+    #[test]
+    fn a_relaunching_on_fire_keeps_the_missiles_explode_step() {
+        let mut p = OverlayParams::default();
+        assert!(!p.explodes_as_missile(), "no explode step at all");
+        p.on_explode_id = 3;
+        assert!(p.explodes_as_missile());
+        p.on_fire_id = 4;
+        assert!(p.explodes_as_missile(), "an on_fire function may relaunch WA's missile");
+        p.fire_spawn = Some(ActorSpawn::default());
+        assert!(!p.explodes_as_missile(), "a Lua actor projectile has no WA missile");
     }
 
     #[test]

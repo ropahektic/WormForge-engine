@@ -147,6 +147,9 @@ pub fn on_gfx_ready(display: *mut u8) {
     // `sprite_overrides`, resolved once the GPU atlas has given their sheets
     // an id: (mod id, stock sprite, pack path).
     let mut overrides: Vec<(String, i32, String)> = Vec::new();
+    // `params.truecolor` (default on): a GPU copy of each sheet WA holds as a
+    // real sprite, drawn in its place: (WA sprite id, atlas key, sheet).
+    let mut truecolor: Vec<(i32, String, gfx::SpriteStrip)> = Vec::new();
     for claim in &scripts.resolved.applied {
         sprite::set_force_layer(claim.params.layer);
         let mut install = |path: Option<String>, sheet: &gfx::SpriteStrip, as_weapon: bool| {
@@ -191,6 +194,9 @@ pub fn on_gfx_ready(display: *mut u8) {
             })) {
                 Ok(Ok(id)) => {
                     log_line(&format!("{} sprite slot {id}", claim.mod_id));
+                    if claim.params.truecolor && !truecolor.iter().any(|(t, ..)| *t == id) {
+                        truecolor.push((id, format!("truecolor:{id}"), sheet.clone()));
+                    }
                     if as_weapon {
                         sprite_ids.insert(claim.slot.index(), id);
                     }
@@ -258,7 +264,14 @@ pub fn on_gfx_ready(display: *mut u8) {
         }
     }
 
-    install_gpu_atlas(gpu_sheets);
+    // Most wanted first: what does not fit the atlas is left out from the end.
+    let copies = truecolor.iter().map(|(_, key, sheet)| (key.clone(), sheet.clone())).collect();
+    install_gpu_atlas(gpu_sheets, copies);
+    for (id, key, _) in &truecolor {
+        if let Some(copy) = sprite::lookup_key(key).filter(|s| sprite::is_virtual(s.id)) {
+            sprite::alias_gpu(*id, copy.id);
+        }
+    }
     for (mod_id, target, path) in &overrides {
         let claimed = match sprite::lookup_key(&gfx::sprite_key(mod_id, path)) {
             Some(source) if sprite::is_virtual(source.id) => Ok(sprite::alias_gpu(*target, source.id)),
@@ -574,9 +587,7 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
                 claim.mod_id,
                 claim.params.damage.unwrap_or(100)
             ));
-        } else if !claim.params.uses_lua_projectile()
-            && (claim.params.explode_spawn.is_some() || claim.params.on_explode_id != 0)
-        {
+        } else if claim.params.explodes_as_missile() {
             // Same attach pattern as mines: stock MissileEntity (HM/bazooka/…)
             // keeps its fire path; Lua bits spawn on detonate.
             let sprite = pass
@@ -744,28 +755,82 @@ pub fn restore_panel_icons() {
 }
 
 
-fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>) {
-    crate::gpu::set_active(false);
-    if sheets.is_empty() {
-        return;
-    }
-    let framesets: Vec<Vec<Vec<u8>>> = sheets
-        .iter()
-        .map(|(_, strip)| strip.frames.iter().map(|f| f.rgba.clone()).collect())
-        .collect();
+fn pack_atlas(sheets: &[(String, gfx::SpriteStrip)]) -> Option<render::Atlas> {
+    // The frames' pixels are borrowed, not copied: a pack that does not fit
+    // is tried again with fewer sheets.
     let sources: Vec<render::atlas::Source> = sheets
         .iter()
-        .zip(&framesets)
         .enumerate()
-        .map(|(i, ((_, strip), frames))| render::atlas::Source {
+        .map(|(i, (_, strip))| render::atlas::Source {
             id: i as u32,
             width: strip.frames.first().map(|f| f.width).unwrap_or(0),
             height: strip.frames.first().map(|f| f.height).unwrap_or(0),
-            frames,
+            frames: strip.frames.iter().map(|f| f.rgba.as_slice()).collect(),
         })
         .collect();
+    render::Atlas::pack(&sources, 4096)
+}
 
-    let Some(atlas) = render::Atlas::pack(&sources, 4096) else {
+/// The most of `n` optional sheets that fit, in order: the largest `k` with
+/// `fits(k)`, `fits` being monotonic (fewer always fit if more do). None when
+/// not even 0 fit.
+fn longest_fit(n: usize, mut fits: impl FnMut(usize) -> bool) -> Option<usize> {
+    if fits(n) {
+        return Some(n);
+    }
+    if !fits(0) {
+        return None;
+    }
+    // fits(lo), !fits(hi).
+    let (mut lo, mut hi) = (0, n);
+    while hi - lo > 1 {
+        let mid = (lo + hi) / 2;
+        if fits(mid) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    Some(lo)
+}
+
+/// `optional` sheets go in too, as many as fit beside `sheets`, in the order
+/// given (most wanted first); the rest are left out, and said so.
+fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>, optional: Vec<(String, gfx::SpriteStrip)>) {
+    crate::gpu::set_active(false);
+    let required = sheets.len();
+    let wanted = optional.len();
+    let mut sheets = sheets;
+    sheets.extend(optional);
+    if sheets.is_empty() {
+        return;
+    }
+    let mut atlas = None;
+    let kept = longest_fit(wanted, |k| {
+        let fitted = pack_atlas(&sheets[..required + k]);
+        let ok = fitted.is_some();
+        if ok {
+            atlas = fitted;
+        }
+        ok
+    });
+    if let Some(k) = kept {
+        if k < wanted {
+            log_error(&format!(
+                "gpu atlas: {} of {wanted} true-colour copies of WA sprites do not fit; they keep their palette draw",
+                wanted - k
+            ));
+        }
+        sheets.truncate(required + k);
+        if sheets.is_empty() {
+            return;
+        }
+        // The last pack tried may have been a larger one that failed.
+        if atlas.as_ref().is_none_or(|a| a.sheets.len() != sheets.len()) {
+            atlas = pack_atlas(&sheets);
+        }
+    }
+    let Some(atlas) = atlas else {
         log_error("gpu atlas: sheets do not fit 4096x4096; stock rendering retained");
         return;
     };
@@ -789,10 +854,31 @@ fn install_gpu_atlas(sheets: Vec<(String, gfx::SpriteStrip)>) {
         }
     }
     log_line(&format!(
-        "gpu atlas: {installed} sheets in {}x{}, 0 WA sprite slots used",
-        atlas.width, atlas.height
+        "gpu atlas: {installed} sheets in {}x{} ({}% covered, {} frames sharing a picture), 0 WA sprite slots used",
+        atlas.width,
+        atlas.height,
+        atlas.used * 100 / (atlas.width as u64 * atlas.height as u64).max(1),
+        atlas.shared
     ));
     crate::gpu::set_atlas(atlas);
     crate::gpu::set_active(true);
     log_line("gpu renderer active: sprites drawn as GPU quads");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::longest_fit;
+
+    #[test]
+    fn the_atlas_keeps_the_most_optional_sheets_that_fit() {
+        assert_eq!(longest_fit(41, |k| k <= 41), Some(41), "all of them");
+        assert_eq!(longest_fit(41, |k| k <= 31), Some(31), "the first 31");
+        assert_eq!(longest_fit(41, |_| true), Some(41));
+        assert_eq!(longest_fit(41, |k| k == 0), Some(0), "none of them");
+        assert_eq!(longest_fit(41, |_| false), None, "not even the required sheets");
+        assert_eq!(longest_fit(0, |_| true), Some(0));
+        for limit in 0..=10 {
+            assert_eq!(longest_fit(10, |k| k <= limit), Some(limit));
+        }
+    }
 }

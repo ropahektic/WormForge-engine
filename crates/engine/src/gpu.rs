@@ -664,7 +664,14 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mu
     // flags alongside the id (the mirror bit, and others); `sheet_id` drops
     // them. A stock sprite a pack overrides on the GPU draws as that sheet.
     let mirror = sprite & game::offsets::SPRITE_MIRROR_X;
-    let id = crate::sprite::gpu_alias(crate::sprite::sheet_id(sprite));
+    let wa_id = crate::sprite::sheet_id(sprite);
+    let id = crate::sprite::gpu_alias(wa_id);
+    // A real WA sprite drawn as a GPU sheet (`sprite_overrides`, a true-colour
+    // copy) still has WA's own copy: without the shader renderer, which would
+    // leave our quad undrawn, let WA draw that instead.
+    if id != wa_id && !crate::shader::is_ready() {
+        return false;
+    }
     let sprite = id | mirror;
     if !crate::sprite::is_gpu_sheet(id) {
         // A virtual id that reached here without a sheet must NOT be passed
@@ -716,9 +723,29 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mu
 /// owners -- a worm's GPU sheet after the actors in front of it -- so without
 /// this, depth only ever decided terrain occlusion, never which of two GPU
 /// sprites is on top. The sort is stable: equal depths keep collection order.
-fn back_to_front(pending: &[Pending]) -> Vec<&Pending> {
-    let mut order: Vec<&Pending> = pending.iter().collect();
-    order.sort_by(|a, b| b.depth.cmp(&a.depth));
+/// A GPU sprite or a pack's `wa.draw.quad` (ribbons are quads too), drawn in
+/// one order: a quad's depth places it among the sprites as a sprite's does
+/// (Project X's `AddSpriteQ` takes a Z plane among its sprites).
+enum Draw<'a> {
+    Sprite(&'a Pending),
+    Quad(&'a lua_host::DrawQuad),
+}
+
+impl Draw<'_> {
+    fn depth(&self) -> u32 {
+        match self {
+            Draw::Sprite(p) => p.depth,
+            Draw::Quad(q) => q.depth,
+        }
+    }
+}
+
+/// Back to front: the highest depth first. The sort is stable and sprites
+/// come before quads, so at equal depths sprites keep their collection
+/// order, quads their submission order, and a quad draws over a sprite.
+fn back_to_front<'a>(pending: &'a [Pending], quads: &'a [lua_host::DrawQuad]) -> Vec<Draw<'a>> {
+    let mut order: Vec<Draw<'a>> = pending.iter().map(Draw::Sprite).chain(quads.iter().map(Draw::Quad)).collect();
+    order.sort_by(|a, b| b.depth().cmp(&a.depth()));
     order
 }
 
@@ -740,92 +767,93 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
     let cam_x = *((display + 0x3560) as *const i32);
     let cam_y = *((display + 0x3564) as *const i32);
 
-    for p in back_to_front(&pending) {
-        let id = crate::sprite::sheet_id(p.sprite);
-        let Some((rect, frames, looping)) = crate::sprite::gpu_frame(id) else {
-            continue;
-        };
-        let Some(index) = gfx::composite::frame_index(p.anim, frames, looping) else {
-            continue;
-        };
-        let Some(rect) = rect(index) else { continue };
-
-        let x = ((p.x >> 16).saturating_sub(clip_x)).saturating_add(cam_x);
-        let y = ((p.y >> 16).saturating_sub(clip_y)).saturating_add(cam_y);
-
-        let sprite = render::Sprite {
-            x: x as f32,
-            y: y as f32,
-            rect,
-            angle: p.angle,
-            scale: p.scale,
-            tint: render::Tint(p.tint),
-            mirror_x: p.sprite & 0x40000 != 0,
-        };
-        // At or behind terrain's own depth, terrain occludes; in front of it
-        // only the HUD does.
-        const TERRAIN_DEPTH: u32 = 0x0018_0000;
-        let behind_terrain = p.depth >= TERRAIN_DEPTH;
-        if !sprite.offscreen(w, h) {
-            // Once per distinct sprite id, so every sheet reports itself
-            // rather than only whichever happens to resolve first. A sheet
-            // that never appears here is not reaching the renderer at all,
-            // which is a different bug from one that draws wrongly.
-            let first_time = RESOLVED_IDS
-                .lock()
-                .map(|mut seen| {
-                    if seen.contains(&id) {
-                        false
-                    } else {
-                        seen.push(id);
-                        true
-                    }
-                })
-                .unwrap_or(false);
-            if first_time {
-                let (bx0, by0, bx1, by1) = sprite.bounds();
-                crate::log_line(&format!(
-                    "gpu resolve: id={id} frame={index}/{frames} \
-                     rect=({},{} {}x{} in {}x{}) angle={:.1} scale={:.3} \
-                     tint={:#010x} raw=({},{}) clip=({clip_x},{clip_y}) \
-                     cam=({cam_x},{cam_y}) -> screen=({x},{y}) \
-                     bounds=({bx0},{by0})..({bx1},{by1}) surface={w}x{h}",
-                    rect.x,
-                    rect.y,
-                    rect.w,
-                    rect.h,
-                    rect.atlas_w,
-                    rect.atlas_h,
-                    sprite.angle,
-                    sprite.scale,
-                    sprite.tint.0,
-                    p.x >> 16,
-                    p.y >> 16,
-                ));
-            }
-            if behind_terrain {
-                sprite.emit(w, h, &mut frame.vertices);
-            } else {
-                sprite.emit(w, h, &mut frame.vertices_front);
-            }
-        }
-    }
-    drop(pending);
-
-    // The packs' quads, through the same world-to-screen transform.
     let Ok(quads) = QUADS.lock() else {
         return;
     };
-    for q in quads.iter() {
+    // At or behind terrain's own depth, terrain occludes; in front of it
+    // only the HUD does.
+    const TERRAIN_DEPTH: u32 = 0x0018_0000;
+    // The packs' quads go through the same world-to-screen transform.
+    let screen = |(x, y): (f32, f32)| (x - clip_x as f32 + cam_x as f32, y - clip_y as f32 + cam_y as f32);
+
+    for draw in back_to_front(&pending, &quads) {
+        let q = match draw {
+            Draw::Quad(q) => q,
+            Draw::Sprite(p) => {
+                let id = crate::sprite::sheet_id(p.sprite);
+                let Some((rect, frames, looping)) = crate::sprite::gpu_frame(id) else {
+                    continue;
+                };
+                let Some(index) = gfx::composite::frame_index(p.anim, frames, looping) else {
+                    continue;
+                };
+                let Some(rect) = rect(index) else { continue };
+
+                let x = ((p.x >> 16).saturating_sub(clip_x)).saturating_add(cam_x);
+                let y = ((p.y >> 16).saturating_sub(clip_y)).saturating_add(cam_y);
+
+                let sprite = render::Sprite {
+                    x: x as f32,
+                    y: y as f32,
+                    rect,
+                    angle: p.angle,
+                    scale: p.scale,
+                    tint: render::Tint(p.tint),
+                    mirror_x: p.sprite & 0x40000 != 0,
+                };
+                let behind_terrain = p.depth >= TERRAIN_DEPTH;
+                if !sprite.offscreen(w, h) {
+                    // Once per distinct sprite id, so every sheet reports itself
+                    // rather than only whichever happens to resolve first. A sheet
+                    // that never appears here is not reaching the renderer at all,
+                    // which is a different bug from one that draws wrongly.
+                    let first_time = RESOLVED_IDS
+                        .lock()
+                        .map(|mut seen| {
+                            if seen.contains(&id) {
+                                false
+                            } else {
+                                seen.push(id);
+                                true
+                            }
+                        })
+                        .unwrap_or(false);
+                    if first_time {
+                        let (bx0, by0, bx1, by1) = sprite.bounds();
+                        crate::log_line(&format!(
+                            "gpu resolve: id={id} frame={index}/{frames} \
+                             rect=({},{} {}x{} in {}x{}) angle={:.1} scale={:.3} \
+                             tint={:#010x} raw=({},{}) clip=({clip_x},{clip_y}) \
+                             cam=({cam_x},{cam_y}) -> screen=({x},{y}) \
+                             bounds=({bx0},{by0})..({bx1},{by1}) surface={w}x{h}",
+                            rect.x,
+                            rect.y,
+                            rect.w,
+                            rect.h,
+                            rect.atlas_w,
+                            rect.atlas_h,
+                            sprite.angle,
+                            sprite.scale,
+                            sprite.tint.0,
+                            p.x >> 16,
+                            p.y >> 16,
+                        ));
+                    }
+                    if behind_terrain {
+                        sprite.emit(w, h, &mut frame.vertices);
+                    } else {
+                        sprite.emit(w, h, &mut frame.vertices_front);
+                    }
+                }
+                continue;
+            }
+        };
         let Some((rect, frames, _)) = crate::sprite::gpu_frame(q.sprite as u32) else {
             warn("wa.draw.quad: its sprite is not a GPU sheet");
             continue;
         };
         let Some(rect) = rect((q.frame as usize).min(frames.saturating_sub(1))) else {
             continue;
-        };
-        let screen = |(x, y): (f32, f32)| {
-            (x - clip_x as f32 + cam_x as f32, y - clip_y as f32 + cam_y as f32)
         };
         let quad = render::Quad {
             corners: q.corners.map(screen),
@@ -836,7 +864,6 @@ unsafe fn resolve(frame: &mut Frame, display: usize, clip: usize) {
         if quad.offscreen(w, h) {
             continue;
         }
-        const TERRAIN_DEPTH: u32 = 0x0018_0000;
         if q.depth >= TERRAIN_DEPTH {
             quad.emit(w, h, &mut frame.vertices);
         } else {
@@ -954,10 +981,28 @@ pub fn install_rq_draw() -> Result<(), String> {
 
 #[cfg(test)]
 mod depth_order_tests {
-    use super::{back_to_front, Pending};
+    use super::{back_to_front, Draw, Pending};
 
     fn at(depth: u32, sprite: u32) -> Pending {
         Pending { x: 0, y: 0, sprite, anim: 0, angle: 0.0, scale: 1.0, tint: 0, depth }
+    }
+
+    fn quad(depth: u32, sprite: i32) -> lua_host::DrawQuad {
+        lua_host::DrawQuad {
+            corners: [(0.0, 0.0); 4], colours: [0; 4], uvs: [(0.0, 0.0); 4],
+            sprite, frame: 0, additive: false, depth,
+        }
+    }
+
+    /// Sprites by their sprite id, quads by 100 + theirs.
+    fn order(pending: &[Pending], quads: &[lua_host::DrawQuad]) -> Vec<i64> {
+        back_to_front(pending, quads)
+            .iter()
+            .map(|d| match d {
+                Draw::Sprite(p) => p.sprite as i64,
+                Draw::Quad(q) => 100 + q.sprite as i64,
+            })
+            .collect()
     }
 
     #[test]
@@ -966,8 +1011,16 @@ mod depth_order_tests {
         // worm (0x10000) before the worm's own sheet (0xD0000), a default
         // actor behind terrain (0x190000) last.
         let pending = [at(0x10000, 1), at(0xD0000, 2), at(0x190000, 3), at(0xD0000, 4)];
-        let order: Vec<u32> = back_to_front(&pending).iter().map(|p| p.sprite).collect();
-        assert_eq!(order, vec![3, 2, 4, 1], "equal depths keep collection order");
+        assert_eq!(order(&pending, &[]), vec![3, 2, 4, 1], "equal depths keep collection order");
+    }
+
+    #[test]
+    fn pack_quads_take_their_place_among_the_sprites_by_depth() {
+        // A ball at 0xE0000: its halo just behind it, its spark just in front,
+        // and a quad at the ball's own depth, which draws over it.
+        let pending = [at(0xE0000, 1), at(0xD0000, 2)];
+        let quads = [quad(0xE0001, 1), quad(0xDFFFF, 2), quad(0xE0000, 3), quad(0x10000, 4)];
+        assert_eq!(order(&pending, &quads), vec![101, 1, 103, 102, 2, 104]);
     }
 }
 

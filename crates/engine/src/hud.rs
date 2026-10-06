@@ -103,12 +103,14 @@ unsafe extern "C" fn hooked_render_waiting() {
     unsafe {
         core::arch::asm!("mov {}, edi", out(reg) runtime);
         let orig = ORIG.load(Ordering::SeqCst);
+        // WA's routine takes the runtime in EAX and may change EAX, ECX and
+        // EDX, as a call does: all three are declared, so none is assumed to
+        // survive it.
         core::arch::asm!(
-            "mov eax, {runtime}",
             "call ecx",
-            runtime = in(reg) runtime,
-            in("ecx") orig,
-            options(nostack),
+            inout("eax") runtime => _,
+            inout("ecx") orig => _,
+            out("edx") _,
         );
     }
     // Once per rendered frame: where the profiler's frames end.
