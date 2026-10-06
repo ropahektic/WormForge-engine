@@ -1195,6 +1195,26 @@ pub fn mine_fuse(handle: u32) -> i32 {
     }
 }
 
+/// `object:impulse(dx, dy)`: add 16.16 speed to a stock mine or missile, as
+/// Project X's magnet does (CMagnet::ApplyForce): SpX/SpY += force, then
+/// Stopped = 1 and InMidAir = 0. PX's CGObject fields sit 8 above WA's
+/// (its SpX at 152 is WA's +0x90), so Stopped is +0xAC (ENT_SETTLE) and
+/// InMidAir +0xB8 (ENT_MOVED). Marked resting each time it is pushed, the
+/// object still moves with its speed, but WA does not wait on it as on a
+/// flying one, so objects held in a field do not stall the turn.
+pub fn impulse_object(handle: u32, dx: i32, dy: i32) -> bool {
+    if handle == 0 || (dx == 0 && dy == 0) { return false; }
+    unsafe {
+        let obj = handle as *mut u8;
+        if !matches!(read_i32(obj, ENT_CLASS_TYPE), CLASS_MINE | CLASS_MISSILE) { return false; }
+        write_i32(obj, ENT_SPEED_X, read_i32(obj, ENT_SPEED_X).saturating_add(dx));
+        write_i32(obj, ENT_SPEED_Y, read_i32(obj, ENT_SPEED_Y).saturating_add(dy));
+        write_i32(obj, ENT_SETTLE, 1);
+        write_i32(obj, ENT_MOVED, 0);
+    }
+    true
+}
+
 /// A missile explosion can give Lua a missile or a former worm as its owner.
 /// Never pass that pointer or its arbitrary team field to WA's hit handler:
 /// WA indexes its team table directly with HIT_TEAM.

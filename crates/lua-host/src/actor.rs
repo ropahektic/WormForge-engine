@@ -298,6 +298,8 @@ pub struct ActorNative {
     pub heal: fn(handle: u32, amount: i32) -> i32,
     pub arm_mine: fn(handle: u32, fuse_ms: i32) -> bool,
     pub mine_fuse: fn(handle: u32) -> i32,
+    /// Add 16.16 velocity to a live stock mine or missile and wake it.
+    pub impulse_object: fn(handle: u32, dx: i32, dy: i32) -> bool,
     pub hit_object: fn(handle: u32, from: u32, damage: i32, vx: i32, vy: i32, projectile: bool) -> bool,
     /// Rebuild the dead worm associated by the pack with a live grave.
     pub revive_grave: fn(grave: u32, worm_id: u32, health: i32) -> u32,
@@ -418,6 +420,7 @@ impl Default for ActorNative {
             heal: |_, _| 0,
             arm_mine: |_, _| false,
             mine_fuse: |_| 0,
+            impulse_object: |_, _, _| false,
             hit_object: |_, _, _, _, _, _| false,
             revive_grave: |_, _, _| 0,
             grave_identity: |_| 0,
@@ -1603,6 +1606,10 @@ impl UserData for WorldHandle {
             }
             Ok(native_arm_mine().map(|f| f(this.0, fuse_ms)).unwrap_or(false))
         });
+        methods.add_method("impulse", |_, this, (dx, dy): (i32, i32)| {
+            crate::sim_context::require("object:impulse")?;
+            Ok(native_impulse_object().map(|f| f(this.0, dx, dy)).unwrap_or(false))
+        });
         methods.add_method("hit", |_, this, (damage, vx, vy, kind): (i32, i32, i32, Option<String>)| {
             if !crate::sim_context::active() {
                 return Err(mlua::Error::external("object:hit: only from a simulation callback"));
@@ -1942,6 +1949,10 @@ fn native_arm_mine() -> Option<fn(u32, i32) -> bool> {
 
 fn native_mine_fuse() -> Option<fn(u32) -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.mine_fuse)
+}
+
+fn native_impulse_object() -> Option<fn(u32, i32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.impulse_object)
 }
 
 fn native_hit_object() -> Option<fn(u32, u32, i32, i32, i32, bool) -> bool> {
