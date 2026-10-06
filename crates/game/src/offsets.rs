@@ -504,6 +504,15 @@ pub const ARENA_WORM_HP: usize = 0x40EC;
 /// shown value, and falls only when the turn commits health (0x510865). The
 /// constructor (0x50C55E) starts both at the scheme's starting health.
 pub const WORM_HEALTH_SHOWN: usize = 0x178;
+/// WorldEntity +0x48, Project X's IsStatic (its CGObject fields sit 8 above
+/// WA's: Layer +0x30, ColGroup +0x34, MaskIndex +0x38, IsMaterial +0x3C,
+/// CouldSkipTurn +0x40, ObjState +0x44, IsStatic +0x48). A static object is
+/// not moved: no fall, no knock. The worm constructor sets it, with
+/// WORM_AWAITING_PLACEMENT, on a worm it leaves waiting to be placed (state
+/// 0x64, 0x50C752); WA's SetState clears both once the worm is placed
+/// (teleporting, 0x50EC63).
+pub const ENT_IS_STATIC: usize = 0x48;
+pub const WORM_AWAITING_PLACEMENT: usize = 0x208;
 pub const WORM_HEALTH_TARGET: usize = 0x17C;
 /// Team ammo row. Index `world + 0x462C + team * 0x51C`.
 pub const WORLD_TEAM_AMMO_GROUP: usize = 0x462C;

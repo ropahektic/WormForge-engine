@@ -1294,14 +1294,18 @@ pub fn revive_grave(grave_handle: u32, worm_id: u32, health: i32) -> u32 {
             + index as usize * ARENA_WORM_STRIDE;
         write_i32(world, hp, health);
         show_health(worm, health);
-        // WA's constructor leaves a worm waiting to be placed (state 0x64),
-        // which WA does not draw: at the start of a match every worm waits
-        // so until it is placed, and WA then stands it up (0x65). Do the same:
-        // standing, WA checks the ground under it itself and drops it onto
-        // the grave's spot (0x7E, and up again), or into the water.
+        // With worm placement in the scheme, WA's constructor leaves a worm
+        // waiting to be placed (state 0x64, static, flagged awaiting
+        // placement), which WA neither draws nor moves: at the start of a
+        // match every worm waits so until it is placed. Leave it as the
+        // constructor leaves a worm without placement: standing (0x65), not
+        // static, placed. Standing, WA checks the ground under it itself;
+        // not static, hits and blasts move it.
         let set_state: unsafe extern "thiscall" fn(*mut u8, u32) =
             std::mem::transmute(crate::wa::address("WORM_SET_STATE") as usize);
         crate::state_trace::with_cause("revive", || set_state(worm, WORM_STATE_STANDING));
+        write_i32(worm, ENT_IS_STATIC, 0);
+        write_i32(worm, WORM_AWAITING_PLACEMENT, 0);
         // TeamArena::logical_teams[team-1].eliminated_flag. A revived last
         // worm must put its team back into selection and score calculations.
         write_i32(world, GAME_WORLD_TEAM_ARENA + 8
