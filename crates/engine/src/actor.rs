@@ -217,6 +217,7 @@ pub fn install() -> Result<(), String> {
         turn_clock_ms: crate::world::turn_clock_ms,
         launch: crate::missile_boom::launch,
         spawn_fire: crate::fire::spawn,
+        spawn_worm: crate::world::spawn_worm,
         retarget_weapon_sprites: |slot, body, cluster| {
             crate::apply::retarget_sprites(
                 slot as usize,

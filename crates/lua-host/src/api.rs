@@ -188,6 +188,28 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     actors_tbl.set("kind", kind_fn).map_err(|e| e.to_string())?;
     spawn::bind_world(lua, &actors_tbl, &wa)?;
+    // `wa.worms.spawn{ team, x, y, name = "Worm", health = 100 }`: a new worm
+    // for a team, in its next unused place (8 at most), standing at (x, y).
+    let worms: Table = wa.get("worms").map_err(|e| e.to_string())?;
+    let spawn_worm = lua
+        .create_function(|_, spec: Table| {
+            let bad = |why: String| mlua::Error::external(format!("worms.spawn: {why}"));
+            let team = spec.get::<Option<u32>>("team")?.ok_or_else(|| bad("needs team = worm.team".into()))?;
+            let need = |key: &str| get_i32(&spec, key)?.ok_or_else(|| bad(format!("needs {key} (16.16)")));
+            let (x, y) = (need("x")?, need("y")?);
+            let name = spec.get::<Option<String>>("name")?.unwrap_or_else(|| "Worm".into());
+            let health = get_i32(&spec, "health")?.unwrap_or(100);
+            if !(1..=1000).contains(&health) {
+                return Err(bad(format!("health is 1 to 1000, got {health}")));
+            }
+            if !crate::sim_context::active() {
+                return Err(bad("only valid in simulation callbacks".into()));
+            }
+            let spawn = crate::actor::native_spawn_worm().ok_or_else(|| bad("native not bound".into()))?;
+            spawn(team, x, y, &name, health).map(crate::actor::WormHandle).map_err(bad)
+        })
+        .map_err(|e| e.to_string())?;
+    worms.set("spawn", spawn_worm).map_err(|e| e.to_string())?;
     Ok(())
 }
 
