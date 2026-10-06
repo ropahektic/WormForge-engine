@@ -406,6 +406,11 @@ pub struct OverlayParams {
     /// frame by frame, not aim-angle sheets. Default false = aim-wizard
     /// semantics (phase is the aim angle; draw poses hold or play).
     pub worm_sprites_animate: bool,
+    /// `worm_sprites_toggle = { key = "plus_key", worm_sprites = { ... } }`:
+    /// sheets drawn in place of `worm_sprites` while the worm's toggle is on,
+    /// which the synchronized + key flips while the turn's worm has the slot
+    /// selected (stock id, team, path, as `worm_sprites`).
+    pub worm_sprites_toggle: Vec<(i32, Option<u8>, String)>,
     /// Pack-relative WAV paths (`sounds = { ... }`) loaded into DSSound slot 451+.
     pub extra_sounds: Vec<(String, std::path::PathBuf)>,
     pub cluster_sprite_id: Option<i32>,
@@ -488,6 +493,7 @@ impl Default for OverlayParams {
             gpu_worm_sprites: true,
             truecolor: true,
             worm_sprites_animate: false,
+            worm_sprites_toggle: Vec::new(),
             extra_sounds: Vec::new(),
             cluster_sprite_id: None,
             cluster_sprite_path: None,

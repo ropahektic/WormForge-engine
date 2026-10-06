@@ -22,7 +22,7 @@
 use crate::{log_line, sprite};
 use game::{
     entity::read_i32,
-    offsets::{WORM_SELECTED_WEAPON, WORM_SLOPE_DIR, WORM_STATE},
+    offsets::{WORM_SELECTED_WEAPON, WORM_SLOPE_DIR, WORM_STATE, WORM_TURN_ACTIVE},
 };
 use std::{
     ffi::c_void,
@@ -35,6 +35,30 @@ use std::{
 static ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_SPRITE_INFO: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_HOLD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+#[cfg(test)]
+mod toggle_tests {
+    use super::*;
+
+    #[test]
+    fn a_toggled_worm_draws_the_toggle_sheet_of_its_slot() {
+        if let (Ok(mut c), Ok(mut t)) = (TOGGLE_CLAIMS.lock(), TOGGLES.lock()) {
+            *c = vec![(35, 334, 900), (35, 335, 901)];
+            *t = vec![(0x1000, true, false), (0x2000, false, false)];
+        }
+        assert_eq!(toggled_sheet(0x1000, 35, 334), Some(900));
+        assert_eq!(toggled_sheet(0x1000, 35, 335), Some(901));
+        assert_eq!(toggled_sheet(0x1000, 35, 336), None, "a pose the toggle does not name");
+        assert_eq!(toggled_sheet(0x1000, 34, 334), None, "another slot");
+        assert_eq!(toggled_sheet(0x2000, 35, 334), None, "toggled off");
+        assert_eq!(toggled_sheet(0x3000, 35, 334), None, "never toggled");
+        // Only this test's state: clear() would reset claims other tests use.
+        if let (Ok(mut c), Ok(mut t)) = (TOGGLE_CLAIMS.lock(), TOGGLES.lock()) {
+            c.clear();
+            t.clear();
+        }
+    }
+}
+
 
 /// Placed weapons (fire type 2, method 2): WA picks what the worm holds from
 /// the flight sprite (+0x60), stock sprite -> held sheet (`Weapon__hold_sheet`,
@@ -120,6 +144,15 @@ fn forget_slot(worm: usize) {
 /// holds each pose's default, so pose and phase logic never looks at team;
 /// only the final sheet id is swapped for the drawing worm's colour.
 static TEAM_CLAIMS: Mutex<Vec<(usize, u8, i32, i32)>> = Mutex::new(Vec::new());
+/// `worm_sprites_toggle`: the sheets a claim's slot draws instead while the
+/// worm's toggle is on: (slot, pose, sheet). Project X's Electromagnet: the
+/// red magnet while attracting, the blue one while repelling.
+static TOGGLE_CLAIMS: Mutex<Vec<(usize, i32, i32)>> = Mutex::new(Vec::new());
+/// Per worm: (worm, toggle on, the + key held last frame). The engine reads
+/// the synchronized key itself; a pack keeping
+/// its own mode by the same rule (a press while the turn's worm has the slot
+/// selected) stays in step with it.
+static TOGGLES: Mutex<Vec<(usize, bool, bool)>> = Mutex::new(Vec::new());
 /// Slots whose `weaponlnk*` sheets are one-shot animations (equip, unfold),
 /// not aim-angle sheets: `params.worm_sprites_animate = true`.
 static ANIMATE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
@@ -349,6 +382,12 @@ unsafe extern "C" fn hold_sheet_hook() {
 }
 
 pub fn clear() {
+    if let Ok(mut g) = TOGGLE_CLAIMS.lock() {
+        g.clear();
+    }
+    if let Ok(mut g) = TOGGLES.lock() {
+        g.clear();
+    }
     if let Ok(mut held) = HELD.lock() {
         held.clear();
     }
@@ -415,6 +454,56 @@ fn expand_aim_claims(poses: &[(i32, i32)]) -> Vec<(i32, i32)> {
     out.push((FIRE_U, fire_u.or(any_fire).unwrap_or(u)));
     out.push((FIRE_D, fire_d.or(any_fire).unwrap_or(d)));
     out
+}
+
+/// A claim's `worm_sprites_toggle` sheets, drawn in place of its
+/// `worm_sprites` while the worm's toggle is on.
+pub fn claim_toggle(slot: usize, mod_id: &str, poses: &[(i32, Option<u8>, String)]) {
+    let mut list: Vec<(i32, i32)> = Vec::new();
+    for (stock, _, path) in poses {
+        if let Some(sheet) = sprite::lookup_key(&gfx::sprite_key(mod_id, path)) {
+            log_line(&format!("worm sprite toggle slot={slot} stock={stock} custom={} path={path}", sheet.id));
+            list.push((*stock, sheet.id));
+        }
+    }
+    if let Ok(mut claims) = TOGGLE_CLAIMS.lock() {
+        claims.retain(|(s, _, _)| *s != slot);
+        for (stock, id) in expand_aim_claims(&list) {
+            claims.push((slot, stock, id));
+        }
+    }
+}
+
+/// The worm's FrameFinish: a press of the synchronized + key while the
+/// turn's worm has a toggle claim's slot selected flips its toggle.
+pub unsafe fn toggle_frame(worm: *mut u8) {
+    let slot = read_i32(worm, WORM_SELECTED_WEAPON) as usize;
+    let claimed = TOGGLE_CLAIMS.lock().map(|g| g.iter().any(|(s, _, _)| *s == slot)).unwrap_or(false);
+    let pressed = claimed
+        && read_i32(worm, WORM_TURN_ACTIVE) != 0
+        && crate::world::keys() & game::sync_input::PLUS_KEY != 0;
+    let Ok(mut toggles) = TOGGLES.lock() else {
+        return;
+    };
+    match toggles.iter_mut().find(|(w, _, _)| *w == worm as usize) {
+        Some(entry) => {
+            if pressed && !entry.2 {
+                entry.1 = !entry.1;
+            }
+            entry.2 = pressed;
+        }
+        None if pressed => toggles.push((worm as usize, true, true)),
+        None => {}
+    }
+}
+
+/// The toggle claim's sheet for `pose` on `slot`, while the worm's toggle is on.
+fn toggled_sheet(worm: usize, slot: usize, pose: i32) -> Option<i32> {
+    let on = TOGGLES.lock().ok()?.iter().any(|(w, on, _)| *w == worm && *on);
+    if !on {
+        return None;
+    }
+    TOGGLE_CLAIMS.lock().ok()?.iter().find(|(s, p, _)| *s == slot && *p == pose).map(|(_, _, id)| *id)
 }
 
 pub fn claim(slot: usize, mod_id: &str, poses: &[(i32, Option<u8>, String)], animate: bool) {
@@ -576,6 +665,10 @@ unsafe fn after_calc_inner(worm: *mut u8, sprite_out: *mut u32, phase_out: *mut 
         // Pose and aim logic compare the default sheet; only the drawn one
         // follows the worm's team colour.
         let sheet = team_sheet(worm, slot, stock, *id);
+        // A toggled worm draws the toggle claim's sheet: a new sheet, so a
+        // one-shot pose plays again from its start (drive_phase), as PX
+        // replays the Electromagnet's deploy in its new colour.
+        let sheet = toggled_sheet(worm as usize, slot, stock).unwrap_or(sheet);
         *sprite_out = (original & !0xffff) | sheet as u32;
         // Two kinds of pack use these poses:
         //

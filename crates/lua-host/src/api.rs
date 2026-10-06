@@ -868,6 +868,44 @@ fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
     })
 }
 
+/// A `worm_sprites` table: `weaponlnk = "sprites/equip"`, or one sheet per
+/// team colour (`weaponlnk = { red, blue, ... }`, by alliance + 1), as
+/// (stock pose, team, path). `label` names the table in errors.
+fn parse_worm_sprites(poses: &Table, label: &str) -> mlua::Result<Vec<(i32, Option<u8>, String)>> {
+    let mut out = Vec::new();
+    for pair in poses.pairs::<String, Value>() {
+        let (name, value) = pair?;
+        let id = gfx::stock_worm_sprite_id(&name).ok_or_else(|| {
+            mlua::Error::external(format!("unknown stock worm sprite '{name}'"))
+        })?;
+        match value {
+            Value::String(path) => {
+                out.push((id, None, path.to_str()?.replace('\\', "/")));
+            }
+            Value::Table(teams) => {
+                let n = teams.raw_len();
+                if n == 0 || n > WORM_SPRITE_TEAMS {
+                    return Err(mlua::Error::external(format!(
+                        "{label}.{name}: a team list holds 1 to {WORM_SPRITE_TEAMS} \
+                         paths, one per team colour; got {n}"
+                    )));
+                }
+                for i in 1..=n {
+                    let path: String = teams.get(i)?;
+                    out.push((id, Some((i - 1) as u8), path.replace('\\', "/")));
+                }
+            }
+            other => {
+                return Err(mlua::Error::external(format!(
+                    "{label}.{name} must be a path or a list of paths, got {other:?}"
+                )))
+            }
+        }
+    }
+    out.sort_by_key(|(id, team, _)| (*id, *team));
+    Ok(out)
+}
+
 fn table_to_claim(
     lua: &Lua,
     mod_id: &str,
@@ -1150,37 +1188,31 @@ fn table_to_claim(
     // alliance + 1 like the rest of the Lua surface.
     let mut worm_sprites = Vec::new();
     if let Some(poses) = spec.get::<Option<Table>>("worm_sprites")? {
-        for pair in poses.pairs::<String, Value>() {
-            let (name, value) = pair?;
-            let id = gfx::stock_worm_sprite_id(&name).ok_or_else(|| {
-                mlua::Error::external(format!("unknown stock worm sprite '{name}'"))
-            })?;
-            match value {
-                Value::String(path) => {
-                    worm_sprites.push((id, None, path.to_str()?.replace('\\', "/")));
-                }
-                Value::Table(teams) => {
-                    let n = teams.raw_len();
-                    if n == 0 || n > WORM_SPRITE_TEAMS {
-                        return Err(mlua::Error::external(format!(
-                            "worm_sprites.{name}: a team list holds 1 to {WORM_SPRITE_TEAMS} \
-                             paths, one per team colour; got {n}"
-                        )));
-                    }
-                    for i in 1..=n {
-                        let path: String = teams.get(i)?;
-                        worm_sprites.push((id, Some((i - 1) as u8), path.replace('\\', "/")));
-                    }
-                }
-                other => {
-                    return Err(mlua::Error::external(format!(
-                        "worm_sprites.{name} must be a path or a list of paths, got {other:?}"
-                    )))
-                }
-            }
-        }
-        worm_sprites.sort_by_key(|(id, team, _)| (*id, *team));
+        worm_sprites = parse_worm_sprites(&poses, "worm_sprites")?;
         for (_, _, path) in &worm_sprites {
+            if extra_sheets.iter().any(|(existing, _)| existing == path) {
+                continue;
+            }
+            let (path, mut sheet) = load_pack_sheet(root, path, 1)?;
+            sheet.looping = false;
+            extra_sheets.push((path, sheet));
+        }
+    }
+    // `worm_sprites_toggle = { key = "plus_key", worm_sprites = { ... } }`:
+    // sheets drawn instead of `worm_sprites` while the worm's toggle is on,
+    // which the synchronized + key flips while the turn's worm has the slot
+    // selected (Project X's Electromagnet: red attracting, blue repelling).
+    let mut worm_sprites_toggle = Vec::new();
+    if let Some(toggle) = spec.get::<Option<Table>>("worm_sprites_toggle")? {
+        let key: String = toggle.get("key")?;
+        if key != "plus_key" {
+            return Err(mlua::Error::external("worm_sprites_toggle.key must be \"plus_key\""));
+        }
+        let poses: Table = toggle.get("worm_sprites").map_err(|_| {
+            mlua::Error::external("worm_sprites_toggle needs worm_sprites = { pose = path, ... }")
+        })?;
+        worm_sprites_toggle = parse_worm_sprites(&poses, "worm_sprites_toggle.worm_sprites")?;
+        for (_, _, path) in &worm_sprites_toggle {
             if extra_sheets.iter().any(|(existing, _)| existing == path) {
                 continue;
             }
@@ -1450,6 +1482,7 @@ fn table_to_claim(
             gpu_worm_sprites,
             truecolor,
             worm_sprites_animate,
+            worm_sprites_toggle,
             extra_sounds,
             cluster_sprite_id,
             cluster_sprite_path,
@@ -1834,6 +1867,26 @@ mod tests {
             logs: Rc::new(RefCell::new(Vec::new())),
             debug_worm_state: false,
         }
+    }
+
+    #[test]
+    fn worm_sprites_toggle_takes_the_plus_key_and_known_poses() {
+        let lua = Lua::new();
+        let claim = |src: &str| {
+            let spec: Table = lua.load(src).eval().unwrap();
+            table_to_claim(&lua, "test", std::path::Path::new("."), StockWeapon::BaseballBat, spec)
+        };
+        let err = |src: &str| claim(src).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(err(r#"{ weapon = "baseball_bat", worm_sprites_toggle = { key = "ctrl", worm_sprites = {} } }"#)
+            .contains("plus_key"));
+        assert!(err(r#"{ weapon = "baseball_bat", worm_sprites_toggle = { key = "plus_key" } }"#)
+            .contains("needs worm_sprites"));
+        assert!(err(r#"{ weapon = "baseball_bat", worm_sprites_toggle = { key = "plus_key",
+            worm_sprites = { wnotapose = "x.png" } } }"#)
+            .contains("unknown stock worm sprite"));
+        let none = claim(r#"{ weapon = "baseball_bat", worm_sprites_toggle = { key = "plus_key", worm_sprites = {} } }"#)
+            .unwrap();
+        assert!(none.params.worm_sprites_toggle.is_empty());
     }
 
     /// Gap 7: hooks that no weapon dispatcher drives (`hud` here, and the same
