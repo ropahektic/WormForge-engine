@@ -315,6 +315,10 @@ pub struct ActorNative {
     pub mine_fuse: fn(handle: u32) -> i32,
     /// Add 16.16 velocity to a live stock mine or missile and wake it.
     pub impulse_object: fn(handle: u32, dx: i32, dy: i32) -> bool,
+    /// The team (1-6) that fired a stock missile or laid a stock mine; 0 if none.
+    pub object_team: fn(handle: u32) -> i32,
+    /// Free a live stock missile or mine without it bursting.
+    pub remove_object: fn(handle: u32) -> bool,
     pub hit_object: fn(handle: u32, from: u32, damage: i32, vx: i32, vy: i32, projectile: bool) -> bool,
     /// Rebuild the dead worm associated by the pack with a live grave.
     pub revive_grave: fn(grave: u32, worm_id: u32, health: i32) -> u32,
@@ -438,6 +442,8 @@ impl Default for ActorNative {
             arm_mine: |_, _| false,
             mine_fuse: |_| 0,
             impulse_object: |_, _, _| false,
+            object_team: |_| 0,
+            remove_object: |_| false,
             hit_object: |_, _, _, _, _, _| false,
             revive_grave: |_, _, _| 0,
             grave_identity: |_| 0,
@@ -1614,6 +1620,18 @@ impl UserData for WorldHandle {
         fields.add_field_method_get("fuse", |_, this| {
             Ok(native_mine_fuse().map(|f| f(this.0)).unwrap_or(0))
         });
+        // A stock missile's or mine's team (1-6, 0 none) and its colour, as
+        // `worm.alliance` (nil without a team).
+        fields.add_field_method_get("team", |_, this| {
+            Ok(native_object_team().map(|f| f(this.0)).unwrap_or(0))
+        });
+        fields.add_field_method_get("alliance", |_, this| {
+            let team = native_object_team().map(|f| f(this.0)).unwrap_or(0);
+            if team == 0 {
+                return Ok(None);
+            }
+            Ok(unsafe { game::team::entity_team_colour(this.0 as *mut u8, team) }.map(|c| c as i32))
+        });
         bind_pos_fields(fields, |h| h.0);
     }
 
@@ -1627,6 +1645,10 @@ impl UserData for WorldHandle {
         methods.add_method("impulse", |_, this, (dx, dy): (i32, i32)| {
             crate::sim_context::require("object:impulse")?;
             Ok(native_impulse_object().map(|f| f(this.0, dx, dy)).unwrap_or(false))
+        });
+        methods.add_method("remove", |_, this, ()| {
+            crate::sim_context::require("object:remove")?;
+            Ok(native_remove_object().map(|f| f(this.0)).unwrap_or(false))
         });
         methods.add_method("hit", |_, this, (damage, vx, vy, kind): (i32, i32, i32, Option<String>)| {
             if !crate::sim_context::active() {
@@ -1971,6 +1993,14 @@ fn native_mine_fuse() -> Option<fn(u32) -> i32> {
 
 fn native_impulse_object() -> Option<fn(u32, i32, i32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.impulse_object)
+}
+
+fn native_object_team() -> Option<fn(u32) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.object_team)
+}
+
+fn native_remove_object() -> Option<fn(u32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.remove_object)
 }
 
 fn native_hit_object() -> Option<fn(u32, u32, i32, i32, i32, bool) -> bool> {

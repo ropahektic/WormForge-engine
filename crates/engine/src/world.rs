@@ -1215,6 +1215,45 @@ pub fn impulse_object(handle: u32, dx: i32, dy: i32) -> bool {
     true
 }
 
+/// `object.team`: the team (1-6) that fired a stock missile or laid a stock
+/// mine. Both copy the shoot description they were built with (team first):
+/// a missile at +0x130, a mine at +0x144, the team its explosion credits
+/// (0x507110). 0 for any other object, or a mine no team laid (the map's).
+pub fn object_team(handle: u32) -> i32 {
+    if handle == 0 { return 0; }
+    unsafe {
+        let obj = handle as *mut u8;
+        let team = match read_i32(obj, ENT_CLASS_TYPE) {
+            CLASS_MISSILE => read_i32(obj, MISSILE_SHOOT_DESC + SHOOT_TEAM),
+            CLASS_MINE => read_i32(obj, MINE_SHOOT_DESC + SHOOT_TEAM),
+            _ => return 0,
+        };
+        if (1..=MAX_TEAMS as i32).contains(&team) { team } else { 0 }
+    }
+}
+
+/// `object:remove()`: free a live stock missile or mine through its own
+/// vtable (slot 1, Free with the heap flag), as Project X's `Free(true)`:
+/// gone without bursting. WA's destructor unregisters it, and our free hooks
+/// (the missile's records, the mine's tune) see it go. A handle WA has
+/// already freed is not in the world's lists and is left alone.
+pub fn remove_object(handle: u32) -> bool {
+    if handle == 0 { return false; }
+    unsafe {
+        let obj = handle as *mut u8;
+        let class = read_i32(obj, ENT_CLASS_TYPE);
+        if !matches!(class, CLASS_MINE | CLASS_MISSILE) || !list_kind(class, 0).contains(&handle) {
+            return false;
+        }
+        let vtable = *(obj as *const *const u32);
+        if vtable.is_null() { return false; }
+        let free: unsafe extern "thiscall" fn(*mut u8, u32) -> *mut u8 =
+            std::mem::transmute(*vtable.add(1) as usize);
+        free(obj, 1);
+    }
+    true
+}
+
 /// A missile explosion can give Lua a missile or a former worm as its owner.
 /// Never pass that pointer or its arbitrary team field to WA's hit handler:
 /// WA indexes its team table directly with HIT_TEAM.
@@ -2176,6 +2215,29 @@ mod tests {
             assert_eq!(shown >> 16, 10, "but its whole part is already the health");
             assert!((shown - (10 << 16)).abs() < 0x10000, "close enough that WA snaps, not counts");
         }
+    }
+
+    #[test]
+    fn a_missiles_and_a_mines_team_is_read_from_their_shoot_description() {
+        let mut missile = vec![0u8; MISSILE_ENTITY_SIZE];
+        let mut mine = vec![0u8; 0x1BC];
+        let mut crate_ = vec![0u8; 0x200];
+        unsafe {
+            write_i32(missile.as_mut_ptr(), ENT_CLASS_TYPE, CLASS_MISSILE);
+            write_i32(missile.as_mut_ptr(), MISSILE_SHOOT_DESC + SHOOT_TEAM, 3);
+            write_i32(mine.as_mut_ptr(), ENT_CLASS_TYPE, CLASS_MINE);
+            write_i32(mine.as_mut_ptr(), MINE_SHOOT_DESC + SHOOT_TEAM, 2);
+            write_i32(crate_.as_mut_ptr(), ENT_CLASS_TYPE, CLASS_CRATE);
+            write_i32(crate_.as_mut_ptr(), MINE_SHOOT_DESC, 2);
+        }
+        assert_eq!(object_team(missile.as_mut_ptr() as u32), 3);
+        assert_eq!(object_team(mine.as_mut_ptr() as u32), 2);
+        assert_eq!(object_team(crate_.as_mut_ptr() as u32), 0, "only missiles and mines have one");
+        unsafe { write_i32(mine.as_mut_ptr(), MINE_SHOOT_DESC + SHOOT_TEAM, 0) };
+        assert_eq!(object_team(mine.as_mut_ptr() as u32), 0, "a mine no team laid");
+        unsafe { write_i32(mine.as_mut_ptr(), MINE_SHOOT_DESC + SHOOT_TEAM, 7) };
+        assert_eq!(object_team(mine.as_mut_ptr() as u32), 0, "no team 7");
+        assert_eq!(object_team(0), 0);
     }
 
     fn pixel_solid_slice(

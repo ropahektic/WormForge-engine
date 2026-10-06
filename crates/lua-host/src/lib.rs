@@ -814,6 +814,33 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn a_missiles_team_and_its_removal_reach_native() {
+        let _guard = lock_host();
+        thread_local! {
+            static REMOVED: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_kind: |class, _| if class == game::offsets::CLASS_MISSILE { vec![0xA1, 0xA2] } else { Vec::new() },
+            object_team: |h| if h == 0xA1 { 4 } else { 0 },
+            remove_object: |h| { REMOVED.with(|l| l.borrow_mut().push(h)); true },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let teams: (i32, i32, Option<i32>) = lua
+            .load("local m = wa.missiles.all(); return m[1].team, m[2].team, m[2].alliance")
+            .eval()
+            .unwrap();
+        assert_eq!(teams, (4, 0, None), "a team, none, and no colour without one");
+        let remove = "return wa.missiles.all()[2]:remove()";
+        assert!(lua.load(remove).exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            assert!(lua.load(remove).eval::<bool>().unwrap());
+        });
+        REMOVED.with(|l| assert_eq!(l.borrow().as_slice(), &[0xA2]));
+    }
+
+    #[test]
     fn launch_reaches_native_only_during_simulation() {
         let _guard = lock_host();
         thread_local! {
