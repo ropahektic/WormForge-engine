@@ -194,6 +194,8 @@ pub fn install() -> Result<(), String> {
         heal: crate::world::heal_worm,
         arm_mine: crate::world::arm_mine,
         mine_fuse: crate::world::mine_fuse,
+        object_team: crate::world::object_team,
+        remove_object: crate::world::remove_object,
         hit_object: crate::world::hit_object,
         revive_grave: crate::world::revive_grave,
         grave_identity: crate::world::grave_identity,

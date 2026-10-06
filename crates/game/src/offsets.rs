@@ -258,6 +258,9 @@ pub const MISSILE_TYPE: usize = 0x1C4;
 /// bit.
 pub const MISSILE_SHOOT_DESC: usize = 0x130;
 pub const MISSILE_SHOOT_PELLET: usize = MISSILE_SHOOT_DESC + 0x20;
+/// MineEntity's copy of its shoot description, just before the fire params
+/// it copies to +0x170; its explosion credits the team in it (0x507110).
+pub const MINE_SHOOT_DESC: usize = 0x144;
 /// `MissileEntity__CreateClusters` (0x5096A0): usercall, the missile in ESI,
 /// (x, y) on the stack, `ret 8`. Makes the record's cluster pellets.
 pub const MISSILE_CREATE_CLUSTERS: u32 = 0x0050_96A0;
