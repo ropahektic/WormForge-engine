@@ -7,6 +7,7 @@ use crate::log::{log_error, log_line, panic_text};
 use crate::sprite;
 use game::entity::{read_i32, write_i32};
 use game::offsets::*;
+use game::weapon::WeaponEntry;
 use lua_host::SpawnArgs;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, Ordering};
@@ -60,6 +61,9 @@ struct SelectClaim {
 static DROPS: Mutex<Vec<DropClaim>> = Mutex::new(Vec::new());
 static FIRES: Mutex<Vec<FireClaim>> = Mutex::new(Vec::new());
 static SELECTS: Mutex<Vec<SelectClaim>> = Mutex::new(Vec::new());
+/// Owned copies of alternate stock fire records. Boxes keep their addresses
+/// stable while FireWeapon uses them; they are rebuilt for each match.
+static STOCK_FIRE_CHOICES: Mutex<Vec<(usize, Box<WeaponEntry>)>> = Mutex::new(Vec::new());
 static LAST_SLOT: Mutex<Vec<(u32, i32)>> = Mutex::new(Vec::new());
 static LIVE: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static CHILD_EMITS: Mutex<Vec<(u32, AttachedSpawn)>> = Mutex::new(Vec::new());
@@ -344,6 +348,13 @@ pub fn claim_fire_repeat(slot: usize, times: u32) {
     }
 }
 
+pub fn claim_stock_fire_choice(slot: usize, alternate: WeaponEntry) {
+    if let Ok(mut choices) = STOCK_FIRE_CHOICES.lock() {
+        choices.retain(|(claimed, _)| *claimed != slot);
+        choices.push((slot, Box::new(alternate)));
+    }
+}
+
 pub fn claim_select(slot: usize, select_id: u32, eat_fire: bool) {
     if select_id == 0 && !eat_fire {
         return;
@@ -398,6 +409,9 @@ pub fn on_weapon_slot(worm: *mut u8) {
 }
 
 pub fn clear_claims() {
+    if let Ok(mut g) = STOCK_FIRE_CHOICES.lock() {
+        g.clear();
+    }
     if let Ok(mut g) = FIRE_REPEATS.lock() {
         g.clear();
     }
@@ -507,6 +521,14 @@ unsafe extern "C" fn fire_weapon_dispatch_hook() {
         "pop eax",
         "pop ecx",
         "jnz 2f",
+        // Replace the fire record only for a claim that opted in and while
+        // the synchronized Ctrl sample for this frame is held.
+        "push ecx",
+        "push dword ptr [esp + 8]",
+        "push eax",
+        "call {choose}",
+        "add esp, 8",
+        "pop ecx",
         // fire_repeat: the extra shots first, then the stock one as always.
         "push ecx",
         "push eax",
@@ -522,9 +544,46 @@ unsafe extern "C" fn fire_weapon_dispatch_hook() {
         "xor eax, eax",
         "ret 4",
         check = sym fire_weapon_click_only_eat,
+        choose = sym choose_stock_fire_entry,
         extra = sym fire_weapon_extra_shots,
         orig = sym ORIG_FIRE_DISPATCH,
     );
+}
+
+fn stock_fire_entry(slot: usize, ctrl: bool, original: *mut u8) -> *mut u8 {
+    if !ctrl {
+        return original;
+    }
+    STOCK_FIRE_CHOICES
+        .lock()
+        .ok()
+        .and_then(|choices| {
+            choices
+                .iter()
+                .find(|(claimed, _)| *claimed == slot)
+                .map(|(_, record)| record.as_ref() as *const WeaponEntry as *mut u8)
+        })
+        .unwrap_or(original)
+}
+
+unsafe extern "C" fn choose_stock_fire_entry(entry: *mut u8, worm: *mut u8) -> *mut u8 {
+    if entry.is_null() || worm.is_null() {
+        return entry;
+    }
+    let slot = unsafe { read_i32(worm, WORM_SELECTED_WEAPON) };
+    if slot < 0 {
+        return entry;
+    }
+    // An ordinary stock shot must not sample synchronized input just because
+    // this dispatch hook is installed. Only an opted-in slot needs Ctrl.
+    let opted_in = STOCK_FIRE_CHOICES
+        .lock()
+        .ok()
+        .is_some_and(|choices| choices.iter().any(|(claimed, _)| *claimed == slot as usize));
+    if !opted_in {
+        return entry;
+    }
+    stock_fire_entry(slot as usize, crate::world::keys() & game::sync_input::CTRL != 0, entry)
 }
 
 /// Stock FireWeapon once, as the dispatch hook's caller would: cdecl
@@ -2760,4 +2819,25 @@ unsafe fn create_explosion(
         out("ecx") _,
         out("edx") _,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stock_fire_choice_changes_only_its_slot_while_ctrl_is_held() {
+        clear_claims();
+        let ordinary = WeaponEntry::default();
+        let mut surrender = ordinary;
+        surrender.set_special_subtype(13);
+        claim_stock_fire_choice(57, surrender);
+        let fallback = &ordinary as *const WeaponEntry as *mut u8;
+        assert_eq!(stock_fire_entry(57, false, fallback), fallback);
+        assert_eq!(stock_fire_entry(58, true, fallback), fallback);
+        let chosen = stock_fire_entry(57, true, fallback);
+        assert_ne!(chosen, fallback);
+        assert_eq!(unsafe { (*(chosen as *const WeaponEntry)).special_subtype() }, 13);
+        clear_claims();
+    }
 }
