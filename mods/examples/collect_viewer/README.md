@@ -1,8 +1,8 @@
 # Collect Viewer
 
 Enable alongside stock weapons or Highlander. Every acquired copy floats from
-its crate's pickup position or its receiving worm's position, independently of
-later worm movement. Every weapon uses its panel symbol. Black pixels in those
+its crate's pickup position or the killed worm's position for Highlander rewards,
+independently of later worm movement. Every weapon uses its panel symbol. Black pixels in those
 popup symbols are transparent. It creates no physics bodies.
 
 Diagnostics are enabled by `CONFIG.debug`: the log records grants, preview
@@ -12,7 +12,8 @@ Edit `CONFIG` in `viewer.lua` to tune the default 24px bounding size, 48px rise,
 6px sine amplitude, copy spacing or two-second lifetime. Each copy follows one
 sine cycle, with fixed phase offsets and no randomness. Size preserves aspect
 ratio; art is a static frame. Time is 100 simulation frames (50 FPS), so pause
-pauses the effect. Simultaneous copies have separate grid positions.
+pauses the effect. Icons stay opaque for half their lifetime, then fade linearly
+to transparent over the remaining half. Simultaneous copies have separate grid positions.
 
 Only the coalition active when the grant happened sees it: online, its local
 player and allies, never opposing players or spectators. Offline hotseat hides
@@ -22,6 +23,9 @@ renderer, as the other `wa.draw` packs do.
 
 Crates and virtual inventory acquisitions/transfers report grants automatically.
 Initial deals, inventory apply, turn refills, refunds and removals are silent.
+`inventory:transfer(from, to, {x = ..., y = ...})` can supply a captured acquisition
+position in 16.16 coordinates; otherwise it defaults to the receiving worm.
+Highlander supplies the victim's position without changing the recipient or coalition.
 A script granting directly through `worm:ammo` can report it afterwards:
 
 ```lua

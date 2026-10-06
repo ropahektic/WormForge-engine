@@ -553,8 +553,8 @@ function inventory_api.create(spec)
 
   local values = {}
   local quiet = 0
-  local function granted(worm, items)
-    if quiet == 0 and #items > 0 then wa._inventory_grant({ worm = worm, items = items }) end
+  local function granted(worm, items, x, y)
+    if quiet == 0 and #items > 0 then wa._inventory_grant({ worm = worm, items = items, x = x, y = y }) end
   end
   local inv = { id = id, owner = owner }
 
@@ -647,6 +647,15 @@ function inventory_api.create(spec)
     end
     local limit = opts.amount
     if limit ~= nil then limit = whole_nonnegative(limit, "transfer amount") end
+    -- Optional acquisition position, captured before changing either inventory.
+    local x, y = opts.x, opts.y
+    local function coordinate(n, axis)
+      if n ~= nil and (type(n) ~= "number" or n % 1 ~= 0 or n < -0x80000000 or n > 0x7fffffff) then
+        error("transfer " .. axis .. " must be a signed 16.16 integer", 3)
+      end
+    end
+    coordinate(x, "x")
+    coordinate(y, "y")
     local moved, items = {}, {}
     for _, name in ipairs(requested_weapons(opts.weapons, slots, allowed)) do
       local have = self:get(from, name)
@@ -660,7 +669,7 @@ function inventory_api.create(spec)
         moved[name] = n
       end
     end
-    granted(to, items)
+    granted(to, items, x, y)
     return moved
   end
 

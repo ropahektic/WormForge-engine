@@ -308,6 +308,12 @@ mod tests {
             inv:set(a,'bazooka',4) -- only the positive delta
             inv:set(a,'bazooka',4)
             inv:remove(a,'bazooka',1)
+            for _, bad in ipairs({0.5, 'bad', 0x80000000, -0x80000001}) do
+              assert(not pcall(inv.transfer,inv,a,b,{x=bad}))
+              assert(not pcall(inv.transfer,inv,a,b,{y=bad}))
+              assert(inv:get(a,'grenade')==3 and inv:get(b,'grenade')==0)
+            end
+            inv:transfer(a,b,{mode='copy',amount=1,x=321*0x10000,y=-12*0x10000})
             inv:transfer(a,b,{mode='move'}) -- one batch, three of each, not one usable shot
             inv:apply(b,{each=1})
             wa.weapons.notify_grant{worm=b,items={{weapon='grenade',amount=2}},x=123,y=456}
@@ -334,14 +340,18 @@ mod tests {
                 .unwrap()
                 .load(
                     r#"
-            assert(#events==4)
+            assert(#events==5)
             assert(events[1].items[1].amount==2 and events[2].items[1].amount==2)
-            local e=events[3]
+            local pickup=events[3]
+            assert(pickup.source=='inventory' and pickup.worm_id==33 and pickup.alliance==4)
+            assert(pickup.x==321*0x10000 and pickup.y==-12*0x10000)
+            assert(#pickup.items==2 and pickup.items[1].amount==1 and pickup.items[2].amount==1)
+            local e=events[4]
             assert(e.source=='inventory' and e.worm_id==33 and e.frame==42 and e.alliance==4)
             assert(e.x==100*0x10000 and e.y==200*0x10000)
             assert(#e.items==2 and e.items[1].weapon=='grenade' and e.items[1].amount==3)
             assert(e.items[2].weapon=='bazooka' and e.items[2].amount==3)
-            assert(events[4].source=='script' and events[4].x==123 and events[4].y==456)
+            assert(events[5].source=='script' and events[5].x==123 and events[5].y==456)
         "#,
                 )
                 .exec()

@@ -51,12 +51,14 @@ end
 local again=v.draw(10,true)
 for n,q in ipairs(again) do local x,y=center(q);local a,b=center(start[n]);near(x,a);near(y,b) end
 -- Origin stays at the recorded point; one complete sine cycle, deterministic phases.
-for _,age in ipairs({25,50,75,99}) do
+local opacity = {[25]=255, [49]=255, [50]=255, [51]=250, [75]=128, [99]=5}
+for _,age in ipairs({25,49,50,51,75,99}) do
   local drawn=v.draw(10+age,true)
   for n,q in ipairs(drawn) do
     local x,y=center(q);local sx,sy=center(start[n]);local phase=(n%4)*math.pi/2
     near(x,sx+6*(math.sin(2*math.pi*age/100+phase)-math.sin(phase)))
     near(y,sy-48*age/100)
+    assert(q.color == opacity[age] * 0x1000000 + 0xffffff)
   end
 end
 assert(#v.draw(60,false)==0) -- local opponent/spectator or hotseat switched
@@ -70,5 +72,8 @@ local t=setup(tuned);t.grant(1)
 local a=t.draw(10,true); local ax,ay=center(a[1]);near(ax,80);near(ay,200)
 near((a[1].points[2][1]-a[1].points[1][1])/P,20)
 local b=t.draw(35,true);local bx,by=center(b[1]);near(bx,ax-6);near(by,ay-40)
+assert(b[1].color==0xffffffff) -- half of the tuned one-second lifetime
+assert(t.draw(36,true)[1].color==0xf5ffffff)
+assert(t.draw(59,true)[1].color==0x0affffff)
 assert(#t.draw(60,true)==0)
-print('collect_viewer: copies, origins, grid, phases, sizing, pause, visibility and expiry passed')
+print('collect_viewer: copies, origins, grid, phases, sizing, pause, visibility, fade and expiry passed')

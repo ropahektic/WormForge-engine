@@ -78,12 +78,14 @@ wa.on.draw(function()
         local u = age / (CONFIG.lifetime * FPS)
         local x = p.x + CONFIG.amplitude * (math.sin(TAU * u + p.phase) - math.sin(p.phase))
         local y = p.y - CONFIG.rise * u
+        -- Fully opaque for half the lifetime, then fade linearly to zero.
+        local alpha = math.floor(255 * math.min(1, 2 * (1 - u)) + 0.5)
         local left, right = (x - p.w / 2) * P, (x + p.w / 2) * P
         local top, bottom = (y - p.h / 2) * P, (y + p.h / 2) * P
         wa.draw.quad({
           points = {{left, top}, {right, top}, {right, bottom}, {left, bottom}},
           sprite = p.art.sprite, frame = p.art.frame,
-          color = 0xffffffff, blend = "alpha", depth = 0x10000,
+          color = alpha * 0x1000000 + 0xffffff, blend = "alpha", depth = 0x10000,
         })
       end
     else
