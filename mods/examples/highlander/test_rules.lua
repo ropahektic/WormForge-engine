@@ -281,6 +281,13 @@ local function new_match(opts)
       rng = (rng * 1103515245 + 12345) % 2147483648
       return lo + rng % (hi - lo + 1)
     end,
+    -- As the engine's: 16.16 steps of a sine (WA's table differs from this
+    -- by at most one step), and atan.
+    math = {
+      sin = function(x) return math.floor(math.sin(x) * 65536 + 0.5) / 65536 end,
+      cos = function(x) return math.floor(math.cos(x) * 65536 + 0.5) / 65536 end,
+      atan = math.atan,
+    },
     worms = {
       -- As the engine's: a new worm for the team, or an error when it is full.
       spawn = function(spec)

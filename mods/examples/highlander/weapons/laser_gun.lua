@@ -59,7 +59,7 @@ do
   local function laser_aim(r, w)
     local ang = (1 - w.aim) * math.pi
     if w.facing < 0 then ang = 2 * math.pi - ang end
-    r.dx, r.dy = math.sin(ang), -math.cos(ang)
+    r.dx, r.dy = wa.math.sin(ang), -wa.math.cos(ang)
     r.x = w.x + math.floor((2 * w.facing * r.dy - r.dx) * LASER_FX)
     r.y = w.y + math.floor((-2 - r.dy) * LASER_FX)
     r.gx = r.x + math.floor(24 * r.dx * LASER_FX)
