@@ -15,6 +15,10 @@
 //!   closed by the jump key 0x7D -> 0x7E; in water 0x7F -> 0x76 -> 0x85 ->
 //!   0x87; dying on land 0x65 -> 0x82 -> 0x87.
 //!
+//! - Disassembly: SetState 0x6D's setup (0x518A50) and its frame (0x518C10)
+//!   are the Kamikaze's: the flight countdown at +0x278, digging, the blast
+//!   (100, the record's +0x3C), and 0x85 when the worm reaches the water.
+//!
 //! A label ending in `?` rests on one observation or one source only; check
 //! it before building on it.
 
@@ -29,6 +33,7 @@ pub fn label(state: u32) -> Option<&'static str> {
         0x6A => "firing",
         0x6B => "fired",
         0x6C => "punching",
+        0x6D => "kamikaze",
         0x6E => "drilling",
         0x6F => "teleporting",
         0x70 => "rope_firing?",

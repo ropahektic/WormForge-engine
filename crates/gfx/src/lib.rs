@@ -76,6 +76,12 @@ pub fn stock_worm_sprite_id(name: &str) -> Option<i32> {
         "wthrow" => Some(591),
         "wthrowu" => Some(592),
         "wthrowd" => Some(593),
+        // The Kamikaze's take-out (its last frame the hold) and its launch:
+        // the slot's own, for a weapon built on WA's Kamikaze.
+        "wkamlnk" => Some(371),
+        "wkamlnku" => Some(372),
+        "wkamlnkd" => Some(373),
+        "wkamjmp" => Some(374),
         _ => None,
     }
 }
@@ -774,6 +780,9 @@ mod tests {
         assert_eq!(stock_worm_sprite_id("weaponlnk"), Some(-1));
         assert_eq!(stock_worm_sprite_id("weaponlnku"), Some(-2));
         assert_eq!(stock_worm_sprite_id("weaponlnkd"), Some(-3));
+        for name in ["wkamlnk", "wkamlnku", "wkamlnkd", "wkamjmp"] {
+            assert_eq!(stock_worm_sprite_id(name), stock_sprite_id(name), "{name}");
+        }
         assert_eq!(stock_worm_sprite_id("wthrow"), Some(591));
         assert_eq!(stock_worm_sprite_id("wthrowu"), Some(592));
         assert_eq!(stock_worm_sprite_id("wthrowd"), Some(593));
