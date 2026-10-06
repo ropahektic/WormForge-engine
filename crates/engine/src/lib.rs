@@ -14,6 +14,8 @@ mod http;
 mod hud;
 mod hurt;
 mod arrow_source;
+mod grants;
+mod weapon_visual;
 mod overlay;
 mod particles;
 mod perf;

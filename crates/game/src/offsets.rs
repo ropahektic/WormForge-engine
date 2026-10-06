@@ -363,6 +363,8 @@ pub const GAME_WORLD_GAME_INFO: usize = 0x24;
 pub const GAME_INFO_TEAM_RECORDS: usize = 0x450;
 pub const GAME_INFO_TEAM_RECORD_STRIDE: usize = 0xBB8;
 pub const GAME_INFO_TEAM_COLOUR: usize = 0x1;
+/// Team setup worm count, retained when worms die; zero for an empty record.
+pub const GAME_INFO_TEAM_WORM_COUNT: usize = 0xBB4;
 pub const GAME_INFO_LOCAL_MACHINE: usize = 0xD9DC;
 /// GameInfo: the match's gravity, 16.16, from the scheme. Every frame
 /// `TurnManager__ProcessFrame` (0x55FDA0, at 0x5603CF) sets the collision

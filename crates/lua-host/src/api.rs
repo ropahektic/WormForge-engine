@@ -210,6 +210,7 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     worms.set("spawn", spawn_worm).map_err(|e| e.to_string())?;
+    crate::grants::install(lua, &wa)?;
     Ok(())
 }
 
@@ -369,6 +370,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "hud",
         "draw",
         "contact",
+        "weapon_grant",
     ] {
         hooks
             .set(name, lua.create_table().map_err(|e| e.to_string())?)
@@ -404,6 +406,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     bind_on(lua, &on, "hud")?;
     bind_on(lua, &on, "draw")?;
     bind_on(lua, &on, "contact")?;
+    bind_on(lua, &on, "weapon_grant")?;
     wa.set("on", on).map_err(|e| e.to_string())?;
 
     let draw = lua.create_table().map_err(|e| e.to_string())?;
@@ -455,6 +458,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     spawn::bind_world(lua, &wa.get("actors").map_err(|e| e.to_string())?, &wa)?;
 
     globals.set("wa", wa.clone()).map_err(|e| e.to_string())?;
+    crate::grants::install(lua, &wa)?;
     install_inventory(lua, &wa)?;
     Ok(wa)
 }
@@ -548,6 +552,10 @@ function inventory_api.create(spec)
   end
 
   local values = {}
+  local quiet = 0
+  local function granted(worm, items)
+    if quiet == 0 and #items > 0 then wa._inventory_grant({ worm = worm, items = items }) end
+  end
   local inv = { id = id, owner = owner }
 
   local function row(worm, create)
@@ -576,7 +584,9 @@ function inventory_api.create(spec)
     require_weapon(name)
     amount = whole_nonnegative(amount, "inventory amount")
     local r = row(worm, true)
+    local old = r[name] or 0
     if amount == 0 then r[name] = nil else r[name] = amount end
+    if amount > old then granted(worm, {{ weapon = name, amount = amount - old }}) end
     return amount
   end
 
@@ -620,7 +630,9 @@ function inventory_api.create(spec)
     local dealt = {}
     for _ = 1, count do
       local name = pool[wa.random(1, #pool)]
+      quiet = quiet + 1
       self:add(worm, name, 1)
+      quiet = quiet - 1
       dealt[#dealt + 1] = name
     end
     return dealt
@@ -635,16 +647,20 @@ function inventory_api.create(spec)
     end
     local limit = opts.amount
     if limit ~= nil then limit = whole_nonnegative(limit, "transfer amount") end
-    local moved = {}
+    local moved, items = {}, {}
     for _, name in ipairs(requested_weapons(opts.weapons, slots, allowed)) do
       local have = self:get(from, name)
       local n = limit == nil and have or math.min(have, limit)
       if n > 0 then
+        quiet = quiet + 1
         self:add(to, name, n)
+        quiet = quiet - 1
+        items[#items + 1] = { weapon = name, amount = n }
         if mode == "move" then self:remove(from, name, n) end
         moved[name] = n
       end
     end
+    granted(to, items)
     return moved
   end
 

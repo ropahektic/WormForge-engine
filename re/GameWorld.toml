@@ -62,3 +62,39 @@ plate_comment = "Partial. weapon_table confirmed: InitWeaponTable memset *(world
   name = "collision_manager"
   type = "CollisionManager *"
   comment = "Entity registry + collision layers. Size 0x264, vtable 0x664194."
+
+[[function]]
+name = "WorldEntity__CollectCrate"
+va = 0x00501340
+calling_convention = "__stdcall"
+plate_comment = "WA 3.8.1: (collector, team, worm_index, utility_flag). Searches nearby crates, asks vmethod 19 to resolve random contents, then vmethod 3 for message 0x7D8's 0x394-byte description. Single weapon branch calls TeamArena__AddAmmo at 0x5014B8; bundle branch at 0x501576. Collection notification snapshots crate position from the description call and the actual positive AddAmmo requests within this operation. It does not infer awards from net ammo differences. Health-only and destroyed crates have no awards."
+
+[[function]]
+name = "CrateEntity__GetDescription"
+va = 0x00503F70
+calling_convention = "__thiscall"
+plate_comment = "WA 3.8.1 vmethod 3, (message, size, output), RET 0xC. Accepts 0x7D8 and copies 0x394 bytes from crate+0x110. The caller already ran vmethod 19, which selects random contents. Description does not own the pickup; notification dispatch waits until the enclosing collection routine returns and the root simulation frame finishes."
+
+
+[[struct]]
+name = "GameInfoTeamRecord"
+size = 0xBB8
+plate_comment = "WA 3.8.1: six setup records at GameInfo+0x450. Kept after deaths, so coalition membership is independent of surviving worms and physical ammo rows."
+
+  [[struct.field]]
+  offset = 0
+  name = "owner_machine"
+  type = "sbyte"
+  comment = "Controller machine; negative for AI. InitTeamsFromLobby copies this to TeamEntity+0x40."
+
+  [[struct.field]]
+  offset = 1
+  name = "coalition_colour"
+  type = "byte"
+  comment = "Visible coalition 0..5, read by game::team::worm_team_colour."
+
+  [[struct.field]]
+  offset = 0xBB4
+  name = "worm_count"
+  type = "byte"
+  comment = "Number of setup worms. Zero for an unused team; persists after death. WA reads it at 0x55C06F, and the existing spawn/revive paths use it."

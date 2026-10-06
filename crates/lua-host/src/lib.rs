@@ -5,6 +5,7 @@
 //! override stock C++ methods. See docs/architecture.md.
 
 mod actor;
+mod grants;
 mod api;
 mod bundles;
 mod dispatch;
@@ -15,6 +16,7 @@ mod sim_context;
 mod spawn;
 
 pub use bundles::ComponentPlan;
+pub use grants::{bind_grant_native, queue_weapon_grant, flush_weapon_grants, GrantNative, GrantOrigin, GrantItem, WeaponGrant, WeaponVisual};
 pub use perf::{perf_flags, take_lua_breakdown, take_lua_spikes, take_lua_time, LuaBreakdown, PerfFlags, Spike};
 pub use actor::{
     gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
@@ -64,6 +66,7 @@ pub fn run_mods(mods: &[LoadedMod]) -> Result<MatchScripts, String> {
 /// [`run_mods`], then the selected components of `plan`, if any.
 pub fn run_match(mods: &[LoadedMod], plan: Option<&ComponentPlan>) -> Result<MatchScripts, String> {
     actor::reset();
+    grants::reset();
     perf::reset();
     let lua = sandbox::new_lua()?;
     let logs = Rc::new(RefCell::new(Vec::new()));
@@ -293,6 +296,23 @@ mod tests {
 
     pub(crate) fn lock_host() -> std::sync::MutexGuard<'static, ()> {
         HOST.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    #[test]
+    fn collect_viewer_loads_as_a_utility_without_weapon_claims() {
+        let _guard = lock_host();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/collect_viewer");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap()).unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        assert!(scripts.resolved.applied.is_empty());
+        park_lua(scripts.lua);
+        PARKED_LUA.with(|slot| slot.borrow().as_ref().unwrap().load(
+            "assert(#wa._hooks.weapon_grant==1 and #wa._hooks.draw==1)"
+        ).exec().unwrap());
+        run_draw().unwrap();
     }
 
     #[test]
