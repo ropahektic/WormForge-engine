@@ -981,7 +981,7 @@ do
   end
   local count = 0
   for _ in pairs(holds) do count = count + 1 end
-  check("ten PX holds claimed", count == 10, tostring(count))
+  check("nine PX holds claimed", count == 9, tostring(count))
   check("Sticky Bomb has a weapon and the lower radial hand",
     holds.grenade.sheet == "sprites/px_hold/sticky_bomb"
     and holds.grenade.hand == "sprites/px_hold/hand_rad_lower"

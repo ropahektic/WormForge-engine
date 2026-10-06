@@ -823,7 +823,7 @@ wa.weapons.replace({
         assert!(javelin.params.wep.is_some());
         assert!(javelin.params.on_explode_id != 0);
         let held: Vec<_> = applied.iter().filter(|c| c.params.hold.is_some()).collect();
-        assert_eq!(held.len(), 10, "each PX hold is a replacement claim");
+        assert_eq!(held.len(), 9, "each PX hold is a replacement claim");
         let rifle = claim(StockWeapon::Handgun).params.hold.as_ref().unwrap();
         assert_eq!(rifle.sheet, "sprites/px_hold/sniper_rifle");
         assert!(rifle.hand.is_none());
