@@ -67,6 +67,10 @@ pub const WORM_ACTIVE_WEAPON: usize = 0x36C;
 pub const WORM_STATE: usize = 0x44;
 /// WA 3.8.1 SetState dispatch case that enters WormEntity__setup_Drilling.
 pub const WORM_STATE_DRILLING: u32 = 0x6E;
+/// WA's Kamikaze flight (setup 0x518A50, frame 0x518C10): the worm flies
+/// along its aim, digging, while worm+0x278 (the record's +0x38, less 20 a
+/// frame) lasts; after that, land or leaving the map sets it off.
+pub const WORM_STATE_KAMIKAZE: u32 = 0x6D;
 /// Worm states by the setup each `SetState` case calls (jump table 0x50F484,
 /// base 0x64): 0x65 setup_Standing, 0x69 setup_PreFiring, 0x6C
 /// setup_Punching, 0x6F setup_Teleporting, 0x78 setup_JetPacking. The full
