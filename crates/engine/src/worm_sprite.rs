@@ -35,6 +35,25 @@ use std::{
 static ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_SPRITE_INFO: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ORIGINAL_HOLD: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+#[cfg(test)]
+mod team_tint_tests {
+    use super::*;
+
+    #[test]
+    fn a_stand_in_names_its_overlay_and_team_colour() {
+        if let Ok(mut t) = TINT_OVERLAYS.lock() {
+            t.push((0x0100_0901, 0x0100_0800, 0xFF6447));
+            t.push((0x0100_0902, 0x0100_0800, 0x4764FF));
+        }
+        assert_eq!(tint_overlay(0x0100_0901), Some((0x0100_0800, 0xFF6447)));
+        assert_eq!(tint_overlay(0x0100_0902), Some((0x0100_0800, 0x4764FF)));
+        assert_eq!(tint_overlay(0x0100_0903), None, "a sheet with no overlay");
+        if let Ok(mut t) = TINT_OVERLAYS.lock() {
+            t.retain(|(s, _, _)| !(0x0100_0901..=0x0100_0902).contains(s));
+        }
+    }
+}
+
 
 /// Placed weapons (fire type 2, method 2): WA picks what the worm holds from
 /// the flight sprite (+0x60), stock sprite -> held sheet (`Weapon__hold_sheet`,
@@ -120,6 +139,10 @@ fn forget_slot(worm: usize) {
 /// holds each pose's default, so pose and phase logic never looks at team;
 /// only the final sheet id is swapped for the drawing worm's colour.
 static TEAM_CLAIMS: Mutex<Vec<(usize, u8, i32, i32)>> = Mutex::new(Vec::new());
+/// `worm_sprites_team_tint`: per team-coloured stand-in sheet, the overlay
+/// drawn on top of it and that team's colour (0xRRGGBB): (stand-in, overlay,
+/// colour). The stand-ins are the per-team sheets of TEAM_CLAIMS.
+static TINT_OVERLAYS: Mutex<Vec<(u32, u32, u32)>> = Mutex::new(Vec::new());
 /// Slots whose `weaponlnk*` sheets are one-shot animations (equip, unfold),
 /// not aim-angle sheets: `params.worm_sprites_animate = true`.
 static ANIMATE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
@@ -349,6 +372,9 @@ unsafe extern "C" fn hold_sheet_hook() {
 }
 
 pub fn clear() {
+    if let Ok(mut g) = TINT_OVERLAYS.lock() {
+        g.clear();
+    }
     if let Ok(mut held) = HELD.lock() {
         held.clear();
     }
@@ -415,6 +441,46 @@ fn expand_aim_claims(poses: &[(i32, i32)]) -> Vec<(i32, i32)> {
     out.push((FIRE_U, fire_u.or(any_fire).unwrap_or(u)));
     out.push((FIRE_D, fire_d.or(any_fire).unwrap_or(d)));
     out
+}
+
+/// A claim's `worm_sprites_team_tint`: each of its `worm_sprites` poses with
+/// an overlay pose (the tintable part only, Highlander's sentry housing) is
+/// drawn by every team colour through a stand-in of its sheet (no atlas
+/// space), which the GPU renderer draws with the overlay on top, multiplied
+/// by that team's colour (`colours`, red to cyan, 0xRRGGBB). The rest of the
+/// sheet stays as drawn. Call after `claim`, which resets the slot's team
+/// sheets.
+pub fn claim_team_tint(slot: usize, mod_id: &str, overlays: &[(i32, Option<u8>, String)], colours: &[u32]) {
+    let base: Vec<(i32, i32)> = CLAIMS
+        .lock()
+        .map(|g| g.iter().filter(|(s, _, _)| *s == slot).map(|(_, p, id)| (*p, *id)).collect())
+        .unwrap_or_default();
+    let mut list: Vec<(i32, i32)> = Vec::new();
+    for (stock, _, path) in overlays {
+        if let Some(sheet) = sprite::lookup_key(&gfx::sprite_key(mod_id, path)) {
+            list.push((*stock, sheet.id));
+        }
+    }
+    let overlay = expand_aim_claims(&list);
+    let (Ok(mut team_claims), Ok(mut tints)) = (TEAM_CLAIMS.lock(), TINT_OVERLAYS.lock()) else {
+        return;
+    };
+    for (pose, sheet) in base {
+        let Some(&(_, over)) = overlay.iter().find(|(p, _)| *p == pose) else { continue };
+        for (team, &rgb) in colours.iter().enumerate().take(6) {
+            let Some(standin) = sprite::install_standin(sheet) else { continue };
+            team_claims.retain(|(s, t, p, _)| !(*s == slot && *t == team as u8 && *p == pose));
+            team_claims.push((slot, team as u8, pose, standin));
+            tints.push((standin as u32, over as u32, rgb & 0x00FF_FFFF));
+        }
+        log_line(&format!("worm sprite team tint slot={slot} stock={pose} sheet={sheet:#x} overlay={over:#x}"));
+    }
+}
+
+/// The overlay and team colour drawn on top of `sheet`, when it is a
+/// team-tinted stand-in.
+pub fn tint_overlay(sheet: u32) -> Option<(u32, u32)> {
+    TINT_OVERLAYS.lock().ok()?.iter().find(|(s, _, _)| *s == sheet).map(|(_, o, c)| (*o, *c))
 }
 
 pub fn claim(slot: usize, mod_id: &str, poses: &[(i32, Option<u8>, String)], animate: bool) {

@@ -1,6 +1,14 @@
 use crate::stock::StockWeapon;
 
 /// What a weapon shows in the stock weapon panel.
+/// `worm_sprites_team_tint`: the overlay poses (stock id, team, path, as
+/// `worm_sprites`) and the six team colours, 0xRRGGBB, red to cyan.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WormTeamTint {
+    pub worm_sprites: Vec<(i32, Option<u8>, String)>,
+    pub colours: Vec<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PanelIcon {
     /// Borrow a stock weapon's icon (`panel_icon = "banana"`).
@@ -401,6 +409,10 @@ pub struct OverlayParams {
     /// frame by frame, not aim-angle sheets. Default false = aim-wizard
     /// semantics (phase is the aim angle; draw poses hold or play).
     pub worm_sprites_animate: bool,
+    /// `worm_sprites_team_tint = { worm_sprites = { ... }, colours = { ... } }`:
+    /// per pose, an overlay drawn over the claim's sheet, multiplied by the
+    /// drawing worm's team colour (six, red to cyan).
+    pub worm_sprites_team_tint: Option<WormTeamTint>,
     /// Pack-relative WAV paths (`sounds = { ... }`) loaded into DSSound slot 451+.
     pub extra_sounds: Vec<(String, std::path::PathBuf)>,
     pub cluster_sprite_id: Option<i32>,
@@ -483,6 +495,7 @@ impl Default for OverlayParams {
             gpu_worm_sprites: true,
             truecolor: true,
             worm_sprites_animate: false,
+            worm_sprites_team_tint: None,
             extra_sounds: Vec::new(),
             cluster_sprite_id: None,
             cluster_sprite_path: None,
