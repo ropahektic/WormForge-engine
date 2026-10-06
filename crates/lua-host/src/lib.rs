@@ -814,8 +814,12 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 55);
+        assert_eq!(applied.len(), 56);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
+        let magnet = claim(StockWeapon::BaseballBat);
+        assert_eq!(magnet.params.name.as_deref(), Some("Electromagnet"));
+        assert!(magnet.params.wep.is_some());
+        assert!(magnet.params.on_fire_id != 0);
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());
