@@ -38,6 +38,19 @@ local PORTED = {
 -- tools/px_split_strip.py. Where PX draws the worm's hold at run time with
 -- its sprite builder (p_sprite_builder), so does the engine from PX_HOLDS.
 local PX_ART = {
+  { -- Kamikaze Rocket: PX's steered Kamikaze (weapons/kamikaze_rocket.lua) on
+    -- the Suicide Bomber slot. Its record is WA's Kamikaze's, so WA flies,
+    -- digs and hits as its own Kamikaze; the pack steers it.
+    weapon = "suicide_bomber", wep = "weps/suicide_bomber.wep",
+    panel_icon = "sprites/kamikaze_rocket/icon.png",
+    -- The Kamikaze's take-out (its last frame the hold) and launch, PX's.
+    worm_sprites = {
+      wkamlnk = "sprites/kamikaze_rocket/take_out", wkamlnku = "sprites/kamikaze_rocket/take_out",
+      wkamlnkd = "sprites/kamikaze_rocket/take_out", wkamjmp = "sprites/kamikaze_rocket/launch",
+    },
+    sprites = { "sprites/kamikaze_rocket/fly" },
+    params = { gpu_prefix = "sprites/kamikaze_rocket/" },
+  },
   { -- Super Tele: the PX record is a type-3 cursor weapon on teleport's slot.
     weapon = "teleport",
     wep = "weps/teleport.wep",
