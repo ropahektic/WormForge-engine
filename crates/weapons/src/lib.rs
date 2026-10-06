@@ -15,8 +15,8 @@ pub mod wep;
 pub use overlay::{
     PanelIcon, HoldFlash, HoldSpec,
     ActorSpawn, AttachedSpawn, ClusterHoming, ClusterSpec, HomingMode, OverlayClaim, OverlayParams,
-    ResolveResult, ScreenBlit, SkippedClaim, SpawnExplode, SpawnFrom, SpriteOrigin, apply_params,
-    resolve_claims,
+    ResolveResult, ScreenBlit, SkippedClaim, SpawnExplode, SpawnFrom, SpriteOrigin, WormTeamTint,
+    apply_params, resolve_claims,
 };
 pub use stock::{parse_panel_icon, parse_stock_weapon, StockWeapon, STOCK_NAMES};
 pub use templates::{

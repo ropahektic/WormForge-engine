@@ -742,6 +742,23 @@ pub fn intercept(_layer: u32, x: i32, y: i32, sprite: u32, anim: u32, actor: *mu
         tint,
         depth,
     });
+    // A team-tinted worm pose (`worm_sprites_team_tint`): its overlay, the
+    // same frame, on top, multiplied by the team's colour. Pushed after it at
+    // the same depth, so the stable back-to-front sort keeps it on top.
+    if let Some((overlay, rgb)) = crate::worm_sprite::tint_overlay(id) {
+        if crate::sprite::is_gpu_sheet(overlay) {
+            pending.push(Pending {
+                x,
+                y,
+                sprite: overlay | mirror,
+                anim,
+                angle,
+                scale,
+                tint: 0xFF00_0000 | rgb,
+                depth,
+            });
+        }
+    }
     true
 }
 

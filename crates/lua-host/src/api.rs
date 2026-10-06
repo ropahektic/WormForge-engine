@@ -1366,6 +1366,39 @@ fn table_to_claim(
             extra_sheets.push((path, sheet));
         }
     }
+    // `worm_sprites_team_tint = { worm_sprites = { ... }, colours = { six } }`:
+    // per pose, an overlay (the tintable part only) drawn over the claim's
+    // sheet, multiplied by the drawing worm's team colour, red to cyan. One
+    // sheet and one overlay stand for six team-coloured copies.
+    let worm_sprites_team_tint = match spec.get::<Option<Table>>("worm_sprites_team_tint")? {
+        None => None,
+        Some(tint) => {
+            let poses: Table = tint.get("worm_sprites").map_err(|_| {
+                mlua::Error::external("worm_sprites_team_tint needs worm_sprites = { pose = path, ... }")
+            })?;
+            let overlays = parse_worm_sprites(&poses, "worm_sprites_team_tint.worm_sprites")?;
+            if overlays.iter().any(|(_, team, _)| team.is_some()) {
+                return Err(mlua::Error::external(
+                    "worm_sprites_team_tint.worm_sprites: one overlay per pose, not a team list",
+                ));
+            }
+            let colours: Vec<u32> = tint.get::<Option<Vec<u32>>>("colours")?.unwrap_or_default();
+            if colours.len() != WORM_SPRITE_TEAMS || colours.iter().any(|c| *c > 0xFF_FFFF) {
+                return Err(mlua::Error::external(format!(
+                    "worm_sprites_team_tint.colours: {WORM_SPRITE_TEAMS} colours 0xRRGGBB, red to cyan"
+                )));
+            }
+            for (_, _, path) in &overlays {
+                if extra_sheets.iter().any(|(existing, _)| existing == path) {
+                    continue;
+                }
+                let (path, mut sheet) = load_pack_sheet(root, path, 1)?;
+                sheet.looping = false;
+                extra_sheets.push((path, sheet));
+            }
+            Some(weapons::WormTeamTint { worm_sprites: overlays, colours })
+        }
+    };
 
     // Held sheets are presentation-only. Always pack them into the GPU atlas;
     // they never consume WA's finite sprite slots.
@@ -1629,6 +1662,7 @@ fn table_to_claim(
             truecolor,
             worm_sprites_animate,
             worm_sprites_toggle,
+            worm_sprites_team_tint,
             extra_sounds,
             cluster_sprite_id,
             cluster_sprite_path,
@@ -2063,6 +2097,28 @@ mod tests {
         let none = claim(r#"{ weapon = "baseball_bat", worm_sprites_toggle = { key = "plus_key", worm_sprites = {} } }"#)
             .unwrap();
         assert!(none.params.worm_sprites_toggle.is_empty());
+    }
+
+    #[test]
+    fn worm_sprites_team_tint_takes_six_colours_and_one_overlay_per_pose() {
+        let lua = Lua::new();
+        let claim = |src: &str| {
+            let spec: Table = lua.load(src).eval().unwrap();
+            table_to_claim(&lua, "test", std::path::Path::new("."), StockWeapon::Kamikaze, spec)
+        };
+        let err = |src: &str| claim(src).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(err(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { colours = {} } }"#).contains("needs worm_sprites"));
+        assert!(err(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { worm_sprites = {}, colours = { 1, 2, 3 } } }"#)
+            .contains("6 colours"));
+        assert!(err(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { worm_sprites = {},
+            colours = { 1, 2, 3, 4, 5, 0x1000000 } } }"#).contains("6 colours"));
+        assert!(err(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { worm_sprites = { weaponlnk = { "a", "b" } },
+            colours = { 1, 2, 3, 4, 5, 6 } } }"#).contains("not a team list"));
+        let ok = claim(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { worm_sprites = {},
+            colours = { 0xFF6447, 0x4764FF, 0x47FF64, 0xE6E647, 0xE647E6, 0x47E6E6 } } }"#).unwrap();
+        assert_eq!(ok.params.worm_sprites_team_tint.unwrap().colours[1], 0x4764FF);
+        let none = claim(r#"{ weapon = "kamikaze" }"#).unwrap();
+        assert!(none.params.worm_sprites_team_tint.is_none());
     }
 
     /// Gap 7: hooks that no weapon dispatcher drives (`hud` here, and the same
