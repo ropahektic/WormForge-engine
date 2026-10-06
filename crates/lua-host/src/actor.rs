@@ -229,6 +229,10 @@ pub struct ActorNative {
     pub fits: fn(handle: u32, x: i32, y: i32) -> bool,
     /// `worm:jetpack_steer(on)`.
     pub jetpack_steer: fn(handle: u32, on: bool),
+    /// `worm.windup = frames | nil`: frames left before the worm releases
+    /// its weapon, counted by the engine instead of WA's wind-up.
+    pub set_windup: fn(handle: u32, frames: Option<i32>),
+    pub windup: fn(handle: u32) -> Option<i32>,
     /// Switch this actor's installed sheet and reset the animation phase.
     pub look: fn(handle: u32, sprite: i32, delta: u32, w: i32, h: i32),
     /// Keyboard bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint, 64 Q, 128 Space, 4096 Ctrl.
@@ -350,6 +354,8 @@ impl Default for ActorNative {
             is_taken: |_| false,
             fits: |_, _, _| true,
             jetpack_steer: |_, _| {},
+            set_windup: |_, _| {},
+            windup: |_| None,
             look: |_, _, _, _, _| {},
             keys: || 0,
             hide_worm: |_, _| {},
@@ -1145,6 +1151,26 @@ impl UserData for WormHandle {
             }
             Ok(())
         });
+        // The frames left before the worm releases its weapon, as a pack set
+        // them; nil while WA runs its own wind-up (see `state`). Written,
+        // the engine counts them down instead of WA's wind-up and releases
+        // through WA's own path: 0 on the worm's next frame, nil gives the
+        // wind-up back to WA. Cleared at every turn start.
+        fields.add_field_method_get("windup", |_, this| {
+            Ok(native_windup().and_then(|(_, get)| get(this.0)))
+        });
+        fields.add_field_method_set("windup", |_, this, v: Option<i32>| {
+            crate::sim_context::require("worm.windup (write)")?;
+            if v.is_some_and(|f| f < 0) {
+                return Err(mlua::Error::external("worm.windup: frames are 0 or more, or nil"));
+            }
+            if this.0 != 0 {
+                if let Some((set, _)) = native_windup() {
+                    set(this.0, v);
+                }
+            }
+            Ok(())
+        });
         fields.add_field_method_get("turn", |_, this| {
             if this.0 == 0 {
                 return Ok(false);
@@ -1596,6 +1622,10 @@ fn native_is_taken() -> Option<fn(u32) -> bool> {
 
 fn native_release() -> Option<fn(u32, i32, i32, bool, bool)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.release)
+}
+
+fn native_windup() -> Option<(fn(u32, Option<i32>), fn(u32) -> Option<i32>)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| (n.set_windup, n.windup))
 }
 
 fn native_jetpack_steer() -> Option<fn(u32, bool)> {

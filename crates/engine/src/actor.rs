@@ -184,6 +184,8 @@ pub fn install() -> Result<(), String> {
         is_taken: crate::physics::taken,
         fits: crate::physics::fits,
         jetpack_steer: crate::physics::jetpack_steer,
+        set_windup: crate::windup::set,
+        windup: crate::windup::get,
         look: native_look,
         keys: crate::world::keys,
         networked: crate::world::is_networked,
@@ -1305,9 +1307,19 @@ unsafe fn tick(this: *mut u8) {
         && (SPRITE_CURSOR_R..SPRITE_CURSOR_R + 6).contains(&sprite_id)
     {
         ease_cursor_phase(this);
+    } else if (SPRITE_MARKER_R..SPRITE_MARKER_R + 6).contains(&sprite_id) {
+        play_marker_once(this);
     } else if (flags & ACTOR_FLAG_LOOP) != 0 {
         advance_anim(this);
     }
+}
+
+/// A planted X plays as WA's does: its phase grows by `MARKER_PHASE_STEP`
+/// a frame from the spawn and holds on the last frame. A stock sheet has no
+/// loop delta, so it used to stay on its first frame.
+unsafe fn play_marker_once(this: *mut u8) {
+    let phase = read_i32(this, ACTOR_PHASE);
+    write_i32(this, ACTOR_PHASE, (phase + MARKER_PHASE_STEP).min(0xFFFF));
 }
 
 /// Stock cursor sheet ease-in (TeamEntity msg 5 on `+0x3D4`): close 20 % of
@@ -2841,5 +2853,21 @@ mod tests {
         assert_ne!(chosen, fallback);
         assert_eq!(unsafe { (*(chosen as *const WeaponEntry)).special_subtype() }, 13);
         clear_claims();
+    }
+
+    /// WA's planted X: 0xCCC a frame from the plant, one play-through in 20
+    /// frames, then it holds on the last frame.
+    #[test]
+    fn a_planted_marker_plays_once_and_holds() {
+        let mut actor = vec![0u8; ACTOR_PHASE + 4];
+        let this = actor.as_mut_ptr();
+        let mut phases = Vec::new();
+        for _ in 0..25 {
+            unsafe { play_marker_once(this) };
+            phases.push(unsafe { read_i32(this, ACTOR_PHASE) });
+        }
+        assert_eq!(phases[0], 0xCCC);
+        assert_eq!(phases[19], 20 * 0xCCC, "the 20th frame is the sheet's last");
+        assert!(phases[20..].iter().all(|&p| p == 0xFFFF), "and it holds there");
     }
 }

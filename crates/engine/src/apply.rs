@@ -82,6 +82,7 @@ pub fn on_gfx_ready(display: *mut u8) {
     crate::truecolor::clear();
     crate::render_queue::clear_depths();
     crate::fire::clear();
+    crate::windup::clear();
 
     let mods_dir = crate::replay::playback_mods_root()
         .or(synced)
