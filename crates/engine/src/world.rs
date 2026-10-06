@@ -1244,6 +1244,93 @@ pub fn hit_object(handle: u32, from: u32, damage: i32, vx: i32, vy: i32, project
 /// uses the same allocator, setup slot and WormEntity constructor as
 /// TeamEntity::Constructor in WA 3.8.1 (verified against OpenWA's bridge),
 /// then removes the consumed grave through its own vtable.
+/// Build worm `index` of `team` with WA's own constructor from its setup
+/// entry, as the team's constructor does (0x555CC0): 0x41C bytes, the first
+/// 0x3FC zeroed.
+unsafe fn construct_worm(parent: *mut u8, team: u32, index: u32, setup: *mut u8) -> Option<*mut u8> {
+    let malloc: unsafe extern "C" fn(usize) -> *mut u8 =
+        std::mem::transmute(crate::wa::address("WA_MALLOC") as usize);
+    let worm = malloc(0x41C);
+    if worm.is_null() { return None; }
+    std::ptr::write_bytes(worm, 0, 0x3FC);
+    // The constructor may append the worm to TeamEntity's selection
+    // roster. The team's constructor lists every index (1-8) up front, and a
+    // dead worm stays listed, so restore the roster if the index was already
+    // present rather than leaving a duplicate turn.
+    let roster_count = read_i32(parent, 0x218).clamp(0, 100) as usize;
+    let already_listed = (0..roster_count).any(|i| read_i32(parent, 0x88 + i * 4) == index as i32);
+    let ctor: unsafe extern "stdcall" fn(*mut u8, *mut u8, u32, u32, *mut u8) -> *mut u8 =
+        std::mem::transmute(crate::wa::address("WORM_ENTITY_CTOR") as usize);
+    let built = ctor(worm, parent, team, index, setup);
+    if built.is_null() || read_i32(worm, ENT_CLASS_TYPE) != CLASS_WORM { return None; }
+    if already_listed {
+        write_i32(parent, 0x218, roster_count as i32);
+    }
+    Some(worm)
+}
+
+/// A GameInfoWormSetup (0x28 bytes, copied whole to the worm at +0x110 by
+/// its constructor) for a new worm: `template`'s (the team's first worm's),
+/// with the worm's starting health (+0x00, u16; the label's counter starts
+/// at it), its name (+0x03, 0x11 bytes) and a fixed place (+0x1E set, x and
+/// y in pixels at +0x20 / +0x24), which makes the constructor stand the worm
+/// there (0x50C040) instead of leaving it to be placed.
+fn fill_setup(setup: &mut [u8; 0x28], template: &[u8; 0x28], name: &str, health: i32, x_px: i32, y_px: i32) {
+    *setup = *template;
+    setup[0..2].copy_from_slice(&(health.clamp(1, 9999) as u16).to_le_bytes());
+    setup[3..3 + 0x11].fill(0);
+    let bytes: Vec<u8> = name.bytes().filter(|b| (0x20..0x7F).contains(b)).take(0x10).collect();
+    setup[3..3 + bytes.len()].copy_from_slice(&bytes);
+    setup[0x1E] = 1;
+    setup[0x20..0x24].copy_from_slice(&x_px.to_le_bytes());
+    setup[0x24..0x28].copy_from_slice(&y_px.to_le_bytes());
+}
+
+/// `wa.worms.spawn{ team, x, y, name, health }`: a new worm for `team` in its
+/// next unused place (Project X's RessurectWormEx at GetFreeWormIndex), built
+/// by WA's own constructor and standing at (x, y), 16.16. The team's setup
+/// record gains the worm (its count, GameInfo team record +0xBB4, which WA
+/// reads during the match, e.g. counting living worms at 0x55C06F) and the
+/// arena its health. An error when the team already has 8 worms.
+pub fn spawn_worm(team: u32, x: i32, y: i32, name: &str, health: i32) -> Result<u32, String> {
+    if !(1..=MAX_TEAMS).contains(&team) { return Err(format!("no team {team}")); }
+    if !(1..=1000).contains(&health) { return Err(format!("health is 1 to 1000, got {health}")); }
+    unsafe {
+        let world = session_world_ptr();
+        if world.is_null() { return Err("no match".into()); }
+        let parent = team_entity(team as i32);
+        if parent.is_null() { return Err(format!("no team {team} in this match")); }
+        let info = read_i32(world, GAME_WORLD_GAME_INFO) as *mut u8;
+        if info.is_null() { return Err("no match".into()); }
+        let record = info.add(0x450 + (team as usize - 1) * 0xBB8);
+        let count = *record.add(0xBB4) as u32;
+        if count >= MAX_WORMS_PER_TEAM {
+            return Err(format!("team {team} already has {MAX_WORMS_PER_TEAM} worms"));
+        }
+        if count == 0 { return Err(format!("team {team} has no worms")); }
+        let index = count + 1;
+        let setup = record.add(0xA74 + count as usize * 0x28);
+        let template = *(record.add(0xA74) as *const [u8; 0x28]);
+        let mut filled = [0u8; 0x28];
+        fill_setup(&mut filled, &template, name, health, x >> 16, y >> 16);
+        std::ptr::copy_nonoverlapping(filled.as_ptr(), setup, 0x28);
+        *record.add(0xBB4) = index as u8;
+        // Its health before the constructor, which writes the label from it.
+        let hp = ARENA_WORM_HP + team as usize * WORLD_TEAM_STRIDE + index as usize * ARENA_WORM_STRIDE;
+        write_i32(world, hp, health);
+        let Some(worm) = construct_worm(parent, team, index, setup) else {
+            *record.add(0xBB4) = count as u8;
+            write_i32(world, hp, 0);
+            return Err("WA's worm constructor refused".into());
+        };
+        write_i32(worm, ENT_POS_X, x);
+        write_i32(worm, ENT_POS_Y, y);
+        write_i32(worm, ENT_SPEED_X, 0);
+        write_i32(worm, ENT_SPEED_Y, 0);
+        Ok(worm as u32)
+    }
+}
+
 pub fn revive_grave(grave_handle: u32, worm_id: u32, health: i32) -> u32 {
     if grave_handle == 0 || !(1..=1000).contains(&health) { return 0; }
     if grave_identity(grave_handle) != worm_id { return 0; }
@@ -1267,25 +1354,7 @@ pub fn revive_grave(grave_handle: u32, worm_id: u32, health: i32) -> u32 {
         let record = info.add(0x450 + (team as usize - 1) * 0xBB8);
         if index > *record.add(0xBB4) as u32 { return 0; }
         let setup = record.add(0xA74 + (index as usize - 1) * 0x28);
-        let malloc: unsafe extern "C" fn(usize) -> *mut u8 =
-            std::mem::transmute(crate::wa::address("WA_MALLOC") as usize);
-        let worm = malloc(0x41C);
-        if worm.is_null() { return 0; }
-        std::ptr::write_bytes(worm, 0, 0x3FC);
-
-        // The constructor may append the worm to TeamEntity's selection
-        // roster. An existing dead worm remains in that roster, so restore it
-        // if it was already present rather than leaving a duplicate turn.
-        let roster_count = read_i32(parent, 0x218).clamp(0, 100) as usize;
-        let already_listed = (0..roster_count)
-            .any(|i| read_i32(parent, 0x88 + i * 4) == index as i32);
-        let ctor: unsafe extern "stdcall" fn(*mut u8, *mut u8, u32, u32, *mut u8) -> *mut u8 =
-            std::mem::transmute(crate::wa::address("WORM_ENTITY_CTOR") as usize);
-        let built = ctor(worm, parent, team, index, setup);
-        if built.is_null() || read_i32(worm, ENT_CLASS_TYPE) != CLASS_WORM { return 0; }
-        if already_listed {
-            write_i32(parent, 0x218, roster_count as i32);
-        }
+        let Some(worm) = construct_worm(parent, team, index, setup) else { return 0 };
 
         let x = read_i32(grave, ENT_POS_X);
         let y = read_i32(grave, ENT_POS_Y).saturating_sub(5 << 16);
@@ -2043,6 +2112,26 @@ unsafe fn show_health(worm: *mut u8, health: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_worms_setup_is_its_teams_with_its_name_health_and_place() {
+        let mut template = [0u8; 0x28];
+        template[0..2].copy_from_slice(&100u16.to_le_bytes());
+        template[3..3 + 6].copy_from_slice(b"Boggy\0");
+        template[0x18] = 0x5A; // a field after the name, which the template keeps
+        let mut setup = [0xFFu8; 0x28];
+        fill_setup(&mut setup, &template, "Reinforcement", 200, 640, -12);
+        assert_eq!(u16::from_le_bytes([setup[0], setup[1]]), 200);
+        assert_eq!(&setup[3..3 + 14], b"Reinforcement\0");
+        assert!(setup[3 + 13..3 + 0x11].iter().all(|&b| b == 0), "the rest of the name cleared");
+        assert_eq!(setup[0x18], 0x5A);
+        assert_eq!(setup[0x1E], 1, "a fixed place: no waiting to be placed");
+        assert_eq!(i32::from_le_bytes(setup[0x20..0x24].try_into().unwrap()), 640);
+        assert_eq!(i32::from_le_bytes(setup[0x24..0x28].try_into().unwrap()), -12);
+        fill_setup(&mut setup, &template, "A very long reinforcement name", 5, 0, 0);
+        assert_eq!(&setup[3..3 + 0x10], b"A very long rein", "16 characters at most");
+        assert_eq!(setup[3 + 0x10], 0, "and a terminating zero");
+    }
 
     #[test]
     fn a_revived_worms_label_counts_to_its_health_next_frame() {

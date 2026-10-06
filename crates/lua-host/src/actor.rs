@@ -287,6 +287,9 @@ pub struct ActorNative {
     pub launch: fn(&LaunchArgs) -> Result<u32, String>,
     /// `wa.fire.spawn{...}`: one of WA's fires. Returns its number.
     pub spawn_fire: fn(&FireArgs) -> Result<u32, String>,
+    /// `wa.worms.spawn{...}`: a new worm for a team (team, x, y, name,
+    /// health). Returns its handle.
+    pub spawn_worm: fn(u32, i32, i32, &str, i32) -> Result<u32, String>,
     /// WA's own WormEntity::SetState, so the state's setup runs.
     pub set_worm_state: fn(handle: u32, state: u32),
     /// Enter WA's frozen worm state when the worm is alive and eligible.
@@ -381,6 +384,7 @@ impl Default for ActorNative {
             retarget_weapon_sprites: |_, _, _| Err("retarget not bound".into()),
             launch: |_| Err("launch not bound".into()),
             spawn_fire: |_| Err("fire.spawn not bound".into()),
+            spawn_worm: |_, _, _, _, _| Err("worms.spawn not bound".into()),
         }
     }
 }
@@ -1867,6 +1871,10 @@ fn native_hurt() -> Option<fn(u32, u32, i32)> {
 
 pub(crate) fn native_spawn_fire() -> Option<fn(&FireArgs) -> Result<u32, String>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.spawn_fire)
+}
+
+pub(crate) fn native_spawn_worm() -> Option<fn(u32, i32, i32, &str, i32) -> Result<u32, String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.spawn_worm)
 }
 
 pub(crate) fn native_launch() -> Option<fn(&LaunchArgs) -> Result<u32, String>> {

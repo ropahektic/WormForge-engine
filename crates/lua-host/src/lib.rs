@@ -632,6 +632,45 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn worms_spawn_reaches_native_only_during_simulation() {
+        let _guard = lock_host();
+        thread_local! {
+            static MADE: std::cell::RefCell<Vec<(u32, i32, i32, String, i32)>> =
+                const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            spawn_worm: |team, x, y, name, health| {
+                MADE.with(|l| l.borrow_mut().push((team, x, y, name.to_string(), health)));
+                if team == 6 { Err("team 6 already has 8 worms".into()) } else { Ok(0x3030) }
+            },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let one = "return wa.worms.spawn{ team = 2, x = 0x100000, y = 0x200000, name = 'Reinforcement', health = 200 }";
+        assert!(lua.load(one).exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            let w: mlua::AnyUserData = lua.load(one).eval().unwrap();
+            assert!(w.is::<actor::WormHandle>(), "a worm as wa.worms.all() gives one");
+            lua.load("wa.worms.spawn{ team = 1, x = 1, y = 2 }").exec().unwrap();
+            let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
+            assert!(err("wa.worms.spawn{ x = 0, y = 0 }").contains("needs team"));
+            assert!(err("wa.worms.spawn{ team = 1, x = 0 }").contains("needs y"));
+            assert!(err("wa.worms.spawn{ team = 1, x = 0, y = 0, health = 0 }").contains("health"));
+            assert!(err("wa.worms.spawn{ team = 6, x = 0, y = 0 }").contains("already has 8"));
+        });
+        MADE.with(|l| assert_eq!(
+            l.borrow().as_slice(),
+            &[
+                (2, 0x100000, 0x200000, "Reinforcement".to_string(), 200),
+                (1, 1, 2, "Worm".to_string(), 100),
+                (6, 0, 0, "Worm".to_string(), 100),
+            ],
+            "name Worm and health 100 by default"
+        ));
+    }
+
+    #[test]
     fn launch_reaches_native_only_during_simulation() {
         let _guard = lock_host();
         thread_local! {
@@ -805,7 +844,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 57);
+        assert_eq!(applied.len(), 58);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         let skip_go = claim(StockWeapon::SkipGo);
         assert_eq!(skip_go.params.name.as_deref(), Some("Skip Go/Surrender"));
@@ -818,6 +857,9 @@ wa.weapons.replace({
         assert!(valyrian.params.wep.is_some());
         assert!(valyrian.params.on_fire_id != 0, "thrown through on_fire");
         assert_eq!(valyrian.params.hold.as_ref().unwrap().sheet, "sprites/px_hold/valyrian_fire.png");
+        let reinforcement = claim(StockWeapon::NuclearTest);
+        assert_eq!(reinforcement.params.name.as_deref(), Some("Reinforcement"));
+        assert!(reinforcement.params.on_click_id != 0, "a click claim");
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());
