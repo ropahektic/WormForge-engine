@@ -245,7 +245,9 @@ wa.on.missile_frame(function(missile)
 end)
 
 -- PX switches with WA's bounce keys; here the synchronized + key toggles
--- the turn's worm between repel and attract, kept per worm.
+-- the turn's worm between repel and attract, kept per worm. The engine
+-- flips the worm's red/blue magnet by the same rule (worm_sprites_toggle in
+-- the claim), so the two stay in step.
 wa.on.worm_message(function(worm)
   local id = worm.id
   local pressed = worm.turn and worm.weapon == "baseball_bat" and wa.world.keys().plus_key or false

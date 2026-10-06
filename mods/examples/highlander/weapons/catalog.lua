@@ -37,18 +37,24 @@ local PX_ART = {
     weapon = "baseball_bat", wep = "weps/baseball_bat.wep",
     panel_icon = "sprites/electromagnet/ico_magnet.png",
     -- WA takes it out and puts it away with the Dynamite's draw (334-336);
-    -- PX swaps in the magnet's (CSpriteAnim::SetAnimEx), blue for repel.
+    -- PX swaps in the magnet's (CSpriteAnim::SetAnimEx): blue repelling,
+    -- red once + switched the worm to attracting (the engine reads + as the
+    -- module does, and plays the take-out again in the new colour).
     worm_sprites = {
       wdynlnk = "sprites/electromagnet/wmag2lnk",
       wdynlnku = "sprites/electromagnet/wmag2lnku",
       wdynlnkd = "sprites/electromagnet/wmag2lnkd",
     },
+    worm_sprites_toggle = { key = "plus_key", worm_sprites = {
+      wdynlnk = "sprites/electromagnet/wmaglnk",
+      wdynlnku = "sprites/electromagnet/wmaglnku",
+      wdynlnkd = "sprites/electromagnet/wmaglnkd",
+    } },
     sprites = {
       "sprites/electromagnet/magnet.png", "sprites/electromagnet/magnet2.png",
       "sprites/electromagnet/magnet_damaged.png", "sprites/electromagnet/magnet2_damaged.png",
       "sprites/electromagnet/ring_in.png", "sprites/electromagnet/ring_out.png",
       "sprites/electromagnet/magnetsparks",
-      "sprites/electromagnet/wmaglnk", "sprites/electromagnet/wmaglnku", "sprites/electromagnet/wmaglnkd",
     },
     params = { gpu_prefix = "sprites/electromagnet/" },
     on_fire = function(fire) fires.electromagnet(fire) end,
