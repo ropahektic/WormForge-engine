@@ -231,6 +231,30 @@ mod tests {
         assert!(lua.load("return wa.random(5, 2)").eval::<i64>().is_err());
     }
 
+    /// `wa.math` is WA's own sine table and a portable atan, with
+    /// `math.sin`'s signature: radians in, the same bits on every machine out.
+    #[test]
+    fn wa_math_is_was_sine_table_and_a_portable_atan() {
+        let _guard = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        lua.load(r#"
+            local m = wa.math
+            assert(m.sin(0) == 0 and m.cos(0) == 1)
+            assert(m.sin(math.pi / 2) == 1 and m.sin(-math.pi / 2) == -1 and m.cos(math.pi) == -1)
+            assert(m.sin(math.pi / 4) == 46340 / 65536, "WA's table, not the C runtime's")
+            for i = -50, 50 do
+              local x = i * 0.137
+              assert(math.abs(m.sin(x) - math.sin(x)) < 1e-4, x)
+              assert(math.abs(m.cos(x) - math.cos(x)) < 1e-4, x)
+              assert(m.sin(x) * 65536 == math.floor(m.sin(x) * 65536), "a whole 16.16 value")
+              assert(math.abs(m.atan(x, 1.5) - math.atan(x, 1.5)) < 1e-14, x)
+            end
+            assert(m.atan(1) == m.atan(1, 1), "x defaults to 1, as math.atan")
+            assert(not pcall(m.sin, 0 / 0) and not pcall(m.cos, math.huge) and not pcall(m.atan, 1, -math.huge))
+        "#).exec().unwrap();
+    }
+
     /// With no RNG available the call must fail loudly. Returning nil would
     /// surface as an error somewhere later and further from the cause, and
     /// substituting a host RNG would desync every peer.
