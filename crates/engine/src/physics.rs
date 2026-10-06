@@ -1172,6 +1172,9 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
         crate::windup::clear();
     }
     eat = eat || worm_message_reporting_errors(this as u32, team, msg);
+    if msg == MSG_FRAME_FINISH && !this.is_null() {
+        unsafe { crate::worm_sprite::toggle_frame(this) };
+    }
     // After the pack's hooks (which read the keys), before WA's handler.
     eat = eat || owned_input(this, msg);
     if msg == MSG_FIRE_WEAPON { crate::worm_hold::on_fire(this as u32); }
