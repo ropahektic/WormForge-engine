@@ -789,6 +789,7 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
             t.set("q", m & 64 != 0)?;
             t.set("space", m & 128 != 0)?;
             t.set("ctrl", m & game::sync_input::CTRL != 0)?;
+            t.set("plus_key", m & game::sync_input::PLUS_KEY != 0)?;
             // The digit key held, 0..9 (top row or keypad), or nil.
             let digit = (m >> game::sync_input::DIGIT_SHIFT) & 0xf;
             if digit != 0 {

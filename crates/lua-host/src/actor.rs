@@ -274,7 +274,8 @@ pub struct ActorNative {
     pub windup: fn(handle: u32) -> Option<i32>,
     /// Switch this actor's installed sheet and reset the animation phase.
     pub look: fn(handle: u32, sprite: i32, delta: u32, w: i32, h: i32),
-    /// Keyboard bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint, 64 Q, 128 Space, 4096 Ctrl.
+    /// Keyboard bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint, 64 Q, 128 Space, 4096 Ctrl,
+    /// 8192 the + key.
     pub keys: fn() -> u32,
     /// True when peers exist. Packs reading local input need this to guard
     /// themselves: `keys()` and `pointer()` are local-only, so acting on them
