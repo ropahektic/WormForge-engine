@@ -37,7 +37,6 @@ pub fn pack(sample: InputSample) -> (u32, u32) {
         | ((sample.down as u32) << 8)
         | (digit << WIRE_DIGIT_SHIFT)
         | (if sample.keys & CTRL != 0 { WIRE_CTRL } else { 0 })
-        | (if sample.keys & CTRL != 0 { WIRE_CTRL } else { 0 })
         | (if sample.keys & PLUS_KEY != 0 { WIRE_PLUS_KEY } else { 0 })
         | (if sample.keys & MINUS_KEY != 0 { WIRE_MINUS_KEY } else { 0 })
         | (if sample.keys & ALT != 0 { WIRE_ALT } else { 0 })
@@ -55,7 +54,6 @@ pub fn unpack(controls: u32, packed_pointer: u32) -> Option<InputSample> {
     Some(InputSample {
         keys: (controls & 0xff)
             | (digit << DIGIT_SHIFT)
-            | (if controls & WIRE_CTRL != 0 { CTRL } else { 0 })
             | (if controls & WIRE_CTRL != 0 { CTRL } else { 0 })
             | (if controls & WIRE_PLUS_KEY != 0 { PLUS_KEY } else { 0 })
             | (if controls & WIRE_MINUS_KEY != 0 { MINUS_KEY } else { 0 })

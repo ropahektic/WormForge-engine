@@ -791,7 +791,6 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
             t.set("space", m & 128 != 0)?;
             t.set("ctrl", m & game::sync_input::CTRL != 0)?;
             t.set("plus_key", m & game::sync_input::PLUS_KEY != 0)?;
-            t.set("ctrl", m & game::sync_input::CTRL != 0)?;
             t.set("minus_key", m & game::sync_input::MINUS_KEY != 0)?;
             t.set("alt", m & game::sync_input::ALT != 0)?;
             t.set("pause_key", m & game::sync_input::PAUSE_KEY != 0)?;
