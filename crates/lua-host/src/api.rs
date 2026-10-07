@@ -551,9 +551,8 @@ function inventory_api.create(spec)
   end
 
   local values = {}
-  local quiet = 0
   local function granted(worm, items, x, y)
-    if quiet == 0 and #items > 0 then report_grant({ worm = worm, items = items, x = x, y = y }) end
+    if #items > 0 then report_grant({ worm = worm, items = items, x = x, y = y }) end
   end
   local inv = { id = id, owner = owner }
 
@@ -579,14 +578,19 @@ function inventory_api.create(spec)
     return r and (r[name] or 0) or 0
   end
 
-  function inv:set(worm, name, amount)
-    require_weapon(name)
-    amount = whole_nonnegative(amount, "inventory amount")
+  -- Silent writes (deal, and transfer's batched report) say so per call
+  -- rather than through shared state an error could leave set.
+  local function put(worm, name, amount, report)
     local r = row(worm, true)
     local old = r[name] or 0
     if amount == 0 then r[name] = nil else r[name] = amount end
-    if amount > old then granted(worm, {{ weapon = name, amount = amount - old }}) end
+    if report and amount > old then granted(worm, {{ weapon = name, amount = amount - old }}) end
     return amount
+  end
+
+  function inv:set(worm, name, amount)
+    require_weapon(name)
+    return put(worm, name, whole_nonnegative(amount, "inventory amount"), true)
   end
 
   function inv:add(worm, name, amount)
@@ -629,9 +633,7 @@ function inventory_api.create(spec)
     local dealt = {}
     for _ = 1, count do
       local name = pool[wa.random(1, #pool)]
-      quiet = quiet + 1
-      self:add(worm, name, 1)
-      quiet = quiet - 1
+      put(worm, name, self:get(worm, name) + 1, false)
       dealt[#dealt + 1] = name
     end
     return dealt
@@ -660,9 +662,7 @@ function inventory_api.create(spec)
       local have = self:get(from, name)
       local n = limit == nil and have or math.min(have, limit)
       if n > 0 then
-        quiet = quiet + 1
-        self:add(to, name, n)
-        quiet = quiet - 1
+        put(to, name, self:get(to, name) + n, false)
         items[#items + 1] = { weapon = name, amount = n }
         if mode == "move" then self:remove(from, name, n) end
         moved[name] = n

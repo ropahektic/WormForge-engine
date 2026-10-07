@@ -320,6 +320,10 @@ mod tests {
             inv:transfer(a,b,{mode='copy',amount=1,x=321*0x10000,y=-12*0x10000})
             inv:transfer(a,b,{mode='move'}) -- one batch, three of each, not one usable shot
             inv:apply(b,{each=1})
+            -- A failed silent write must not silence the inventory after it.
+            assert(not pcall(inv.deal,inv,{},{'grenade'},1))
+            assert(not pcall(inv.transfer,inv,b,{},{mode='copy'})) -- b has items, so it gets to the write
+            inv:add(b,'grenade',1)
             wa.weapons.notify_grant{worm=b,items={{weapon='grenade',amount=2}},x=123,y=456}
             assert(#events==0)
         "#,
@@ -344,7 +348,7 @@ mod tests {
                 .unwrap()
                 .load(
                     r#"
-            assert(#events==5)
+            assert(#events==6)
             assert(events[1].items[1].amount==2 and events[2].items[1].amount==2)
             local pickup=events[3]
             assert(pickup.source=='inventory' and pickup.worm_id==33 and pickup.alliance==4)
@@ -355,7 +359,10 @@ mod tests {
             assert(e.x==100*0x10000 and e.y==200*0x10000)
             assert(#e.items==2 and e.items[1].weapon=='grenade' and e.items[1].amount==3)
             assert(e.items[2].weapon=='bazooka' and e.items[2].amount==3)
-            assert(events[5].source=='script' and events[5].x==123 and events[5].y==456)
+            local after=events[5]
+            assert(after.source=='inventory' and after.worm_id==33 and #after.items==1)
+            assert(after.items[1].weapon=='grenade' and after.items[1].amount==1)
+            assert(events[6].source=='script' and events[6].x==123 and events[6].y==456)
         "#,
                 )
                 .exec()
