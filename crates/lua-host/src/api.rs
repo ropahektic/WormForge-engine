@@ -210,6 +210,7 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     worms.set("spawn", spawn_worm).map_err(|e| e.to_string())?;
+    crate::grants::install(lua, &wa)?;
     Ok(())
 }
 
@@ -369,6 +370,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "hud",
         "draw",
         "contact",
+        "weapon_grant",
     ] {
         hooks
             .set(name, lua.create_table().map_err(|e| e.to_string())?)
@@ -404,6 +406,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     bind_on(lua, &on, "hud")?;
     bind_on(lua, &on, "draw")?;
     bind_on(lua, &on, "contact")?;
+    bind_on(lua, &on, "weapon_grant")?;
     wa.set("on", on).map_err(|e| e.to_string())?;
 
     let draw = lua.create_table().map_err(|e| e.to_string())?;
@@ -469,16 +472,16 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
 fn install_inventory(lua: &Lua, wa: &Table) -> Result<(), String> {
     wa.set("inventory", lua.create_table().map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
-    wa.set(
-        "_inventory_stores",
-        lua.create_table().map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
+    // The stores and the grant report are the chunk's locals, not fields of
+    // `wa`: one pack cannot reach another's stores, nor report a grant the
+    // inventory did not make. (The sandbox has no `debug` to reach upvalues.)
+    let grant = crate::grants::inventory_grant(lua).map_err(|e| e.to_string())?;
 
     lua.load(
         r#"
+local report_grant = ...
 local inventory_api = wa.inventory
-local stores = wa._inventory_stores
+local stores = {}
 
 local function whole_nonnegative(n, what)
   if type(n) ~= "number" or n < 0 or n % 1 ~= 0 then
@@ -548,6 +551,9 @@ function inventory_api.create(spec)
   end
 
   local values = {}
+  local function granted(worm, items, x, y)
+    if #items > 0 then report_grant({ worm = worm, items = items, x = x, y = y }) end
+  end
   local inv = { id = id, owner = owner }
 
   local function row(worm, create)
@@ -572,12 +578,19 @@ function inventory_api.create(spec)
     return r and (r[name] or 0) or 0
   end
 
+  -- Silent writes (deal, and transfer's batched report) say so per call
+  -- rather than through shared state an error could leave set.
+  local function put(worm, name, amount, report)
+    local r = row(worm, true)
+    local old = r[name] or 0
+    if amount == 0 then r[name] = nil else r[name] = amount end
+    if report and amount > old then granted(worm, {{ weapon = name, amount = amount - old }}) end
+    return amount
+  end
+
   function inv:set(worm, name, amount)
     require_weapon(name)
-    amount = whole_nonnegative(amount, "inventory amount")
-    local r = row(worm, true)
-    if amount == 0 then r[name] = nil else r[name] = amount end
-    return amount
+    return put(worm, name, whole_nonnegative(amount, "inventory amount"), true)
   end
 
   function inv:add(worm, name, amount)
@@ -620,7 +633,7 @@ function inventory_api.create(spec)
     local dealt = {}
     for _ = 1, count do
       local name = pool[wa.random(1, #pool)]
-      self:add(worm, name, 1)
+      put(worm, name, self:get(worm, name) + 1, false)
       dealt[#dealt + 1] = name
     end
     return dealt
@@ -635,16 +648,27 @@ function inventory_api.create(spec)
     end
     local limit = opts.amount
     if limit ~= nil then limit = whole_nonnegative(limit, "transfer amount") end
-    local moved = {}
+    -- Optional acquisition position, captured before changing either inventory.
+    local x, y = opts.x, opts.y
+    local function coordinate(n, axis)
+      if n ~= nil and (type(n) ~= "number" or n % 1 ~= 0 or n < -0x80000000 or n > 0x7fffffff) then
+        error("transfer " .. axis .. " must be a signed 16.16 integer", 3)
+      end
+    end
+    coordinate(x, "x")
+    coordinate(y, "y")
+    local moved, items = {}, {}
     for _, name in ipairs(requested_weapons(opts.weapons, slots, allowed)) do
       local have = self:get(from, name)
       local n = limit == nil and have or math.min(have, limit)
       if n > 0 then
-        self:add(to, name, n)
+        put(to, name, self:get(to, name) + n, false)
+        items[#items + 1] = { weapon = name, amount = n }
         if mode == "move" then self:remove(from, name, n) end
         moved[name] = n
       end
     end
+    granted(to, items, x, y)
     return moved
   end
 
@@ -678,7 +702,7 @@ end
 "#,
     )
     .set_name("wa.inventory")
-    .exec()
+    .call::<()>(grant)
     .map_err(|e| e.to_string())
 }
 

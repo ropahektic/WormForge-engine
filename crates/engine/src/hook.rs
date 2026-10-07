@@ -35,6 +35,7 @@ fn install_inner() -> Result<(), String> {
     physics::install()?;
     crate::arrow_source::install()?;
     actor::install()?;
+    crate::grants::install()?;
     crate::worm_sprite::install()?;
     crate::mine::install()?;
     crate::missile_boom::install()?;

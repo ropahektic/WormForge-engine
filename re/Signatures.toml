@@ -879,3 +879,19 @@ section = ".text"
 pattern = "55 8B EC 83 E4 F8 51 53 56 8B F1 8B 46 20 8B 4E 1C 57 50 51 8B FE 8B DA E8 ?? ?? ?? ?? 8B 46 40 8B 10 6A 00 6A 00 6A 00 6A 00 50 8B 42 44 FF D0"
 derive = "match"
 target_section = ".text"
+
+[[locator]]
+name = "WORLD_COLLECT_CRATE"
+reference_va = 0x00501340
+section = ".text"
+pattern = "81 EC B4 07 00 00 8B 94 24 C0 07 00 00 53 8B 9C 24 BC 07 00 00 8B 83 84 00 00 00 8B 8B 88 00 00 00"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
+name = "CRATE_GET_DESCRIPTION"
+reference_va = 0x00503F70
+section = ".text"
+pattern = "81 7C 24 04 D8 07 00 00 74 05 33 C0 C2 0C 00 56 57 8B 7C 24 14 8D B1 10 01 00 00"
+derive = "match"
+target_section = ".text"

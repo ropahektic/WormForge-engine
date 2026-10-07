@@ -1048,6 +1048,7 @@ unsafe extern "thiscall" fn root_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     if msg == MSG_FRAME_FINISH {
         crate::actor::flush_deferred();
         crate::contact::flush();
+        if let Err(e) = lua_host::flush_weapon_grants() { crate::log_error(&format!("weapon_grant: {e}")); }
         crate::actor::tick_puffs();
         tick_particles();
         unsafe { crate::mask_collide::resolve_all(this) };
@@ -1150,7 +1151,7 @@ unsafe extern "thiscall" fn worm_hook(this: *mut u8, a: u32, msg: u32, b: u32, c
     eat = eat || owned_input(this, msg);
     if msg == MSG_FIRE_WEAPON { crate::worm_hold::on_fire(this as u32); }
     if msg == MSG_START_TURN {
-        if let Err(e) = lua_host::turn_start(this as u32) {
+        if let Err(e) = { crate::grants::remember_active(this as u32); lua_host::turn_start(this as u32) } {
             crate::log_error(&format!("turn_start: {e}"));
         }
     }

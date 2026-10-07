@@ -40,7 +40,7 @@ static GFX: Mutex<Option<GfxPass>> = Mutex::new(None);
 /// packs' sprites took every free palette entry before the terrain was
 /// loaded, and the terrain was drawn in one colour; on every other install
 /// the sprites went in here anyway.
-pub fn on_gfx_ready(display: *mut u8) {
+pub fn on_gfx_ready(world: *mut u8, display: *mut u8) {
     if display.is_null() {
         return;
     }
@@ -60,6 +60,8 @@ pub fn on_gfx_ready(display: *mut u8) {
     world::clear_sounds();
     crate::hurt::reset();
     crate::arrow_source::clear();
+    crate::grants::clear();
+    crate::weapon_visual::clear();
     crate::physics::clear_handoffs();
     actor::clear_claims();
     crate::mask_collide::clear();
@@ -303,6 +305,8 @@ pub fn on_gfx_ready(display: *mut u8) {
     // left out from the end.
     let mut copies: Vec<_> = truecolor.iter().map(|(_, key, sheet)| (key.clone(), sheet.clone())).collect();
     copies.extend(unsafe { crate::fire::copies(display) });
+    let previews = unsafe { crate::weapon_visual::prepare(world, display, &scripts.resolved.applied) };
+    gpu_sheets.extend(previews);
     install_gpu_atlas(gpu_sheets, copies);
     crate::fire::bind_copies();
     for (id, key, _) in &truecolor {
@@ -371,7 +375,7 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
     if display.is_null() {
         log_error("GameWorld.display is null; custom sprites skipped");
     } else {
-        on_gfx_ready(display);
+        on_gfx_ready(world, display);
     }
 
     let restored = sprite::reassert();

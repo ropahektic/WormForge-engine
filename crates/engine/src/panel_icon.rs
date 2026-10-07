@@ -323,3 +323,22 @@ unsafe fn runtime_world() -> *mut u8 {
     }
     *(runtime.add(GAME_RUNTIME_WORLD) as *const *mut u8)
 }
+
+/// Read the enabled panel tile into RGBA for a GPU-only inventory preview.
+/// Copies pixels; never borrows ownership of WA's icon grids.
+pub unsafe fn preview_frame(world: *mut u8, slot: usize) -> Option<gfx::RgbaFrame> {
+    if world.is_null() || slot >= WEAPON_IDS { return None; }
+    unsafe {
+        let display = read_i32(world, GAME_WORLD_DISPLAY) as *mut u8;
+        if display.is_null() { return None; }
+        let palette = read_i32(display, DISPLAY_LAYER_CONTEXTS + 4) as *const u8;
+        if palette.is_null() { return None; }
+        let g = grid(*table(world).add(slot * 2 + 1))?;
+        let mut rgba = Vec::new();
+        for index in window(&g) {
+            if index == 0 { rgba.extend_from_slice(&[0;4]); }
+            else { let p=palette.add(PAL_RGB+index as usize*4); rgba.extend_from_slice(&[*p,*p.add(1),*p.add(2),255]); }
+        }
+        Some(gfx::RgbaFrame { width: WINDOW_W, height: WINDOW_H, rgba })
+    }
+}

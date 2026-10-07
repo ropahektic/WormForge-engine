@@ -682,3 +682,13 @@ pub fn death(death: Death) -> Result<(), String> {
         call_each(lua, &list, event)
     })
 }
+
+/// Completed acquisitions, delivered outside stock pickup/collision code.
+pub(crate) fn weapon_grant(grant: crate::WeaponGrant) -> Result<(), String> {
+    with_lua("weapon_grant", |lua| {
+        let list = hook_list(lua, "weapon_grant")?;
+        if list.is_empty() { return Ok(()); }
+        let event = crate::grants::event(lua, grant)?;
+        call_each(lua, &list, event)
+    })
+}
