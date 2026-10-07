@@ -171,7 +171,7 @@ local function frame(m, a)
     m.spark = (m.spark + 0.02) % 1.4
   end
   -- PX's UpdateRotation: spun by its speed, at most half a radian a frame.
-  local speed = math.sqrt(((m.vx) * (m.vx)) + ((m.vy) * (m.vy)))
+  local speed = math.sqrt((m.vx * m.vx) + (m.vy * m.vy))
   m.angle = m.angle + (m.vx < 0 and -1 or 1) * math.min(0.5, 0.04 * speed)
   local s = sprite(m)
   if s ~= m.sprite then a:look(s); m.sprite = s end
@@ -202,8 +202,8 @@ shared.fires.electromagnet = function(fire)
   local pol = (fire.polarity == 1 or fire.polarity == -1) and fire.polarity or polarity[worm.id] or 1
   local m = { pol = pol, turns = TURNS, health = HEALTH, age = 0, angle = 0, spark = 0, alive = true,
     x = fire.x or worm.x, y = fire.y or worm.y,
-    vx = worm.vx + (worm.facing < 0 and -1 or 1) * (0.3),
-    vy = worm.vy - (0.15) }
+    vx = worm.vx + (worm.facing < 0 and -1 or 1) * 0.3,
+    vy = worm.vy - 0.15 }
   local a = wa.actors.spawn({
     sprite = BODY .. (pol < 0 and "magnet.png" or "magnet2.png"),
     x = m.x, y = m.y, gravity = false, collide = false, owner = worm,
@@ -283,7 +283,7 @@ if wa.on.draw and wa.draw.quad then
           if radius >= 5 and radius <= 120 then
             local alpha = math.max(0, math.min(255, math.floor((120 - radius) * 255 / 120)))
             wa.draw.quad({ sprite = BODY .. ring, blend = "add", color = (alpha << 24) | 0xFFFFFF,
-              depth = wa.depth.OBJECTS + 1, points = square(x, y, (radius), 0) })
+              depth = wa.depth.OBJECTS + 1, points = square(x, y, radius, 0) })
           end
         end
         if m.spark <= 1 then

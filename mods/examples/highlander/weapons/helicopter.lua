@@ -107,7 +107,7 @@ local function heli_frame(worm)
   end
   -- FireFinal: the jet pack it wound up has started.
   if h and h.armed and state == "jetpacking" and not h.flying then
-    worm.gravity = HELI_REALISTIC and (0.2) or 0
+    worm.gravity = HELI_REALISTIC and 0.2 or 0
     worm:jetpack_steer(true)
     h.flying, h.launch, h.ticks, h.armed = true, true, 0, false
   elseif h and h.armed and not worm.turn then
@@ -143,7 +143,7 @@ local function heli_frame(worm)
     if h.launch then
       worm.fuel = HELI_FUEL
       h.jump_phase, h.jumpin, h.launch = 0, false, false
-      if HELI_REALISTIC then worm.wind = (0.2) end
+      if HELI_REALISTIC then worm.wind = 0.2 end
     end
     local k = worm.keys
     local up, down, left, right = k.up, k.down, k.left, k.right
@@ -203,7 +203,7 @@ local function heli_frame(worm)
   elseif h.jumpin and state == "prefiring" then
     h.climb = h.climb or heli_actor(worm, "sprites/helicopter/jumpin")
     local a = h.climb
-    a.x = worm.x + ((f > 0 and -11.5 or 12.5))
+    a.x = worm.x + (f > 0 and -11.5 or 12.5)
     a.y, a.vx, a.vy, a.facing = worm.y + 1, 0, 0, f
     a:frame(math.min(math.floor(h.jump_phase * 23), 22))
     a:gfx({ depth = HELI_DEPTH })

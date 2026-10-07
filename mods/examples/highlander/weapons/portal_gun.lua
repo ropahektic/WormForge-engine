@@ -121,7 +121,7 @@ shared.fires.portal_gun = function(fire)
   local angle = (1 - aim) * math.pi
   local dx, dy = wa.math.sin(angle) * worm.facing, -wa.math.cos(angle)
   local power = fire.power or 1
-  local b = { x = worm.x + (dx), y = worm.y + (dy),
+  local b = { x = worm.x + dx, y = worm.y + dy,
     vx = (dx * SPEED * power), vy = (dy * SPEED * power),
     worm_id = worm.id, team = worm.team, team_colour = team_colours[worm.alliance + 1],
     colour = colour, age = 0 }
@@ -172,7 +172,7 @@ if wa.on.draw then
     local c, s = wa.math.cos(angle or 0), wa.math.sin(angle or 0)
     local points = {}
     for _, v in ipairs({ {-w/2,-h/2}, {w/2,-h/2}, {w/2,h/2}, {-w/2,h/2} }) do
-      points[#points + 1] = { x + ((v[1]*c-v[2]*s)), y + ((v[1]*s+v[2]*c)) }
+      points[#points + 1] = { x + (v[1]*c-v[2]*s), y + (v[1]*s+v[2]*c) }
     end
     wa.draw.quad({sprite = ART .. sprite, points = points, color = colour, blend = blend,
       depth = depth or wa.depth.OBJECTS, frame = frame or 0})

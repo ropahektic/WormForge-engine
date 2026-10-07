@@ -156,7 +156,7 @@ local function think(b)
   if vx2 == 0 and vy2 == 0 then vy2 = b.vy + 0.1 end
   local with = speed > FAST and SOLID_FAST or SOLID
   local x, y = b.x, b.y
-  local dx, dy = (vx2), (vy2)
+  local dx, dy = vx2, vy2
   if math.abs(x + dx) > EDGE or math.abs(y + dy) > EDGE then
     b.gone = true
     return 0
@@ -198,7 +198,7 @@ local function think(b)
     if not (lift and (lift.hit or lift.starts_solid)) then x, y = lx, ly end
   else
     b.vx, b.vy = vx2, vy2
-    x, y = x + (vx2), y + (vy2)
+    x, y = x + vx2, y + vy2
   end
   b.vx = b.vx + ix * (b.vx - b.lvx)
   b.vy = b.vy + iy * (b.vy - b.lvy)
@@ -291,9 +291,9 @@ local function hit_others(a, b, speed)
       fx, fy = fx * DAMAGE_FORCE, fy * DAMAGE_FORCE
     end
     if obj.kind == "worm" then
-      obj:hurt({ amount = damage, vx = (fx), vy = (fy) })
+      obj:hurt({ amount = damage, vx = fx, vy = fy })
     else
-      obj:hit(damage, (fx), (fy))
+      obj:hit(damage, fx, fy)
     end
     a:sound(crushed and SOUND_CRUSH or SOUND_HIT)
   end
@@ -479,7 +479,7 @@ local function spawn_ball(owner, x, y, vx, vy)
         if shared.portals and next(shared.portals.pairs) then
           local proxy = {
             id = a.id, kind = "actor", x = b.x, y = b.y,
-            vx = (b.vx), vy = (b.vy),
+            vx = b.vx, vy = b.vy,
             fits = function(_, x, y)
               return not wa.world.collides({ x = x, y = y, radius = RADIUS, with = {"terrain"} })
             end,
@@ -522,7 +522,7 @@ local function drift(y0, y1, vx)
   for _ = 1, 3000 do
     if y >= y1 then break end
     local vy2 = vy + g
-    x, y = x + (vx), y + (vy2)
+    x, y = x + vx, y + vy2
     vy = vy2 + INERTIA_Y * (vy2 - lvy)
     lvy = vy
   end
@@ -535,7 +535,7 @@ fires.bowling_strike = function(ev)
   local back = drift(y0, ev.y - RADIUS, STRIKE_SPEED * dir)
   for i = 1, STRIKE_BALLS do
     local offset = (i - (STRIKE_BALLS + 1) / 2) * STRIKE_SPACING
-    spawn_ball(ev.worm, ev.x - back + (offset), y0, STRIKE_SPEED * dir, 0)
+    spawn_ball(ev.worm, ev.x - back + offset, y0, STRIKE_SPEED * dir, 0)
   end
 end
 

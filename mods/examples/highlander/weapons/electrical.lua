@@ -49,12 +49,12 @@ end
 local function electrical_trace(x0, y0, dx, dy)
   local far = 10000
   if wa.world.electrical_trace then
-    return wa.world.electrical_trace((x0), (y0),
+    return wa.world.electrical_trace(x0, y0,
       (x0 + dx * far), (y0 + dy * far))
   end
-  local land = wa.land.trace((x0), (y0),
+  local land = wa.land.trace(x0, y0,
     (x0 + dx * far), (y0 + dy * far))
-  local best = land and math.sqrt((((land.x - x0)) * ((land.x - x0))) + (((land.y - y0)) * ((land.y - y0)))) or far
+  local best = land and math.sqrt(((land.x - x0) * (land.x - x0)) + ((land.y - y0) * (land.y - y0))) or far
   local hit = land and { x = land.x, y = land.y, obj = nil } or nil
   for _, obj in ipairs(electrical_targets(true)) do
     local ox, oy = (obj.x - x0), (obj.y - y0)
@@ -71,7 +71,7 @@ end
 local function strike_hit(s)
   if shared.zap_bowling_balls then shared.zap_bowling_balls(s.ex, s.ey) end
   if not s.hit then return end
-  local radius2 = ((6) * (6))
+  local radius2 = (6 * 6)
   local targets = wa.world.electrical_nearby
     and wa.world.electrical_nearby(s.ex, s.ey, 24, true) or electrical_targets(true)
   for _, obj in ipairs(targets) do
@@ -159,18 +159,18 @@ shared.lightning_click = function(ev)
   local dirx = 0.5 * ((ev.vx or 0) < 0 and -1 or 1)
   local diry = math.sqrt(3) / 2
   local sy = -270
-  local sx = (ev.x - ((ev.y - sy)) * dirx / diry)
+  local sx = (ev.x - (ev.y - sy) * dirx / diry)
   local hit = electrical_trace(sx, sy, dirx, diry)
   local ex, ey = hit and hit.x or sx + (300 * dirx),
     hit and hit.y or sy + (300 * diry)
   -- A bowling ball on the way stops the beam, as PX's does.
   local bx, by = nil, nil
   if shared.bowling_ball_on_beam then
-    local reach = math.sqrt((((ex - sx)) * ((ex - sx))) + (((ey - sy)) * ((ey - sy))))
+    local reach = math.sqrt(((ex - sx) * (ex - sx)) + ((ey - sy) * (ey - sy)))
     bx, by = shared.bowling_ball_on_beam(sx, sy, dirx, diry, reach)
   end
   if bx then ex, ey, hit = bx, by, { x = bx, y = by } end
-  local distance = math.sqrt((((ex - sx)) * ((ex - sx))) + (((ey - sy)) * ((ey - sy))))
+  local distance = math.sqrt(((ex - sx) * (ex - sx)) + ((ey - sy) * (ey - sy)))
   if hit and distance > 300 then
     sx, sy = ex - (300 * dirx), ey - (300 * diry)
   end
@@ -214,7 +214,7 @@ local function find_target(key)
 end
 
 local function closest_target(arc)
-  local best, distance = nil, ((200) * (200))
+  local best, distance = nil, (200 * 200)
   local targets = wa.world.electrical_nearby
     and wa.world.electrical_nearby(arc.x, arc.y, 200, false) or electrical_targets(false)
   local function consider(obj)
@@ -338,7 +338,7 @@ local function progress_arc(arc)
   local norm = math.sqrt(arc.dx * arc.dx + arc.dy * arc.dy)
   if norm < 0.01 then arc.dx, arc.dy = 0, -1 else arc.dx, arc.dy = arc.dx / norm, arc.dy / norm end
   local nx, ny = arc.x + arc.dx * 20, arc.y + arc.dy * 20
-  local land = wa.land.trace((arc.x), (arc.y), (nx), (ny))
+  local land = wa.land.trace(arc.x, arc.y, nx, ny)
   if land then
     if land.starts_solid then arc.life = 0; return end
     -- Follow the tangent that moves closer to the target, as PX's arc does.

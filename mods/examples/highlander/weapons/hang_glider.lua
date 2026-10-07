@@ -188,7 +188,7 @@ do
     g.landing = landing and GLIDER_PACK_WAIT or nil
     g.unstand = not (landing or hard_landing) and GLIDER_UNSTAND or nil
     if worm.taken then
-      local vx, vy = (g.sx), (g.sy)
+      local vx, vy = g.sx, g.sy
       if hard_landing then
         worm:release(vx, vy, { suppress_auto_parachute = true })
       else
@@ -227,12 +227,12 @@ do
       if glider_blocked(worm, g.x, g.y, g.sx, g.sy) then
         -- Onto land below it: WA handles the impact with the glider's full
         -- speed. Only a fall below its damage threshold gets the pack-away.
-        local below = g.sy > 0 and not worm:fits(g.x, g.y + ((1.1 * g.sy + 4)))
-        local hard_landing = below and (g.sy) >= GLIDER_SAFE_LANDING_SPEED
+        local below = g.sy > 0 and not worm:fits(g.x, g.y + (1.1 * g.sy + 4))
+        local hard_landing = below and g.sy >= GLIDER_SAFE_LANDING_SPEED
         glider_close(worm, g, below and not hard_landing, hard_landing)
         return
       end
-      local x, y = g.x + (g.sx), g.y + (g.sy)
+      local x, y = g.x + g.sx, g.y + g.sy
       if y >= wa.world.water() then
         glider_close(worm, g, false)
         return

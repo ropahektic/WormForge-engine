@@ -166,7 +166,7 @@ local function fire(t, a, s, target)
     if obj.kind == "worm" then
       if obj.hp > 0 then obj:hurt(WORM_DAMAGE) end
     elseif obj.kind == "crate" or obj.kind == "oil" then
-      obj:hit(OBJECT_DAMAGE, (dx), (dy))
+      obj:hit(OBJECT_DAMAGE, dx, dy)
     elseif obj.kind == "mine" and not s.armed[obj.id] then
       s.armed[obj.id] = true
       obj:arm(obj.fuse < 0 and wa.random(1000, 5000) or obj.fuse)

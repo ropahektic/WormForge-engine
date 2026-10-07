@@ -167,9 +167,9 @@ local function swim_frame(worm)
     -- The engine clears the keys after this hook. Move, stopping at land
     -- on each axis (unless it is already in land, so it can swim free).
     local stuck = swim_blocked(s.x, s.y)
-    local nx = s.x + (vx)
+    local nx = s.x + vx
     if not stuck and swim_blocked(nx, s.y) then vx = 0 else s.x = nx end
-    local ny = s.y + (vy)
+    local ny = s.y + vy
     if not stuck and swim_blocked(s.x, ny) then vy = 0 else s.y = ny end
     s.vx, s.vy = vx, vy
     -- Out of the water: on through the air, as from a jump.
@@ -178,7 +178,7 @@ local function swim_frame(worm)
       s.plopready, s.plopped = true, false
       -- Where the swim took it: its last pin is still under the surface.
       worm.x, worm.y = s.x, s.y
-      worm:release((vx), (vy))
+      worm:release(vx, vy)
     else
       worm:carry(s.x, s.y)
       -- Too deep: the suit gives out.
@@ -192,7 +192,7 @@ local function swim_frame(worm)
         deep = y > 768
       end
       if deep then
-        suit_off(worm, s, true, (vx), (vy))
+        suit_off(worm, s, true, vx, vy)
         return
       end
     end

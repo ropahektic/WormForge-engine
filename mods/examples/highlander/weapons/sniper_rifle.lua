@@ -46,10 +46,10 @@ STOPPERS = { { wa.worms, 6 }, { wa.mines, 4 }, { wa.crates, 10 }, { wa.oil, 9 } 
 
 local function laser_length(x, y, dx, dy, shooter)
   local len = LASER_LEN
-  local hit = wa.land.trace((x), (y),
+  local hit = wa.land.trace(x, y,
     (x + dx * LASER_LEN), (y + dy * LASER_LEN))
   if hit then
-    len = math.sqrt((((hit.x - x)) * ((hit.x - x))) + (((hit.y - y)) * ((hit.y - y))))
+    len = math.sqrt(((hit.x - x) * (hit.x - x)) + ((hit.y - y) * (hit.y - y)))
   end
   for _, s in ipairs(STOPPERS) do
     local list, r = s[1], s[2]

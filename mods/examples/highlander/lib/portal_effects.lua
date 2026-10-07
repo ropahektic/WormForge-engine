@@ -93,7 +93,7 @@ function Effects:draw(quad)
     for i=1,3 do rgb[i]=trunc(p.start[i]+t*(p.finish[i]-p.start[i])) end
     local size = p.pixels*(p.size+t*(p.end_size-p.size))
     local colour = (p.alpha << 24) | (rgb[1] << 16) | (rgb[2] << 8) | rgb[3]
-    quad(p.sprite, (p.x), (p.y), size, size, p.angle, colour, "add", wa.depth.EFFECTS - 1)
+    quad(p.sprite, p.x, p.y, size, size, p.angle, colour, "add", wa.depth.EFFECTS - 1)
   end
 end
 return Effects

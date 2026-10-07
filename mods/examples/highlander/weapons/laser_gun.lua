@@ -44,8 +44,8 @@ do
     local ang = (1 - w.aim) * math.pi
     if w.facing < 0 then ang = 2 * math.pi - ang end
     r.dx, r.dy = wa.math.sin(ang), -wa.math.cos(ang)
-    r.x = w.x + ((2 * w.facing * r.dy - r.dx))
-    r.y = w.y + ((-2 - r.dy))
+    r.x = w.x + (2 * w.facing * r.dy - r.dx)
+    r.y = w.y + (-2 - r.dy)
     r.gx = r.x + (24 * r.dx)
     r.gy = r.y + (24 * r.dy)
   end
@@ -84,7 +84,7 @@ do
     if land then
       if r.hit and r.dx == r.last_dx and r.dy == r.last_dy then
         -- The aim held: a clean cut from the last hit to this one.
-        local steps = math.max(1, math.floor(math.sqrt((((hx - r.hx)) * ((hx - r.hx))) + (((hy - r.hy)) * ((hy - r.hy)))) / 2))
+        local steps = math.max(1, math.floor(math.sqrt(((hx - r.hx) * (hx - r.hx)) + ((hy - r.hy) * (hy - r.hy))) / 2))
         for i = 0, steps do
           wa.land.dig({ x = r.hx + (hx - r.hx) * i / steps, y = r.hy + (hy - r.hy) * i / steps, radius = 4 })
         end
@@ -116,7 +116,7 @@ do
             r.taken[key] = taken + amount
           end
         elseif obj.kind == "oil" or obj.kind == "crate" then
-          obj:hit(obj.kind == "oil" and 4 or 1, (r.dx), (r.dy))
+          obj:hit(obj.kind == "oil" and 4 or 1, r.dx, r.dy)
         elseif obj.kind == "mine" and not r.armed[key] then
           r.armed[key] = true
           obj:arm(obj.fuse < 0 and wa.random(1000, 5000) or obj.fuse)

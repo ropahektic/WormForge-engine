@@ -77,7 +77,7 @@ function Network:place(group, colour, x, y, nx, ny, team_colour)
   p.exit_x, p.exit_y = p.x, p.y
   if dir == 2 or dir == 4 or dir == 6 or dir == 8 then
     p.exit_x = p.x + OFFSET[dir][1] * (p.w / 2 - 5)
-    p.exit_y = trunc((p.y + OFFSET[dir][2] * p.h / 6))
+    p.exit_y = trunc(p.y + OFFSET[dir][2] * p.h / 6)
   end
   pair[colour] = p
   self.pairs[group] = pair

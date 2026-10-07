@@ -76,10 +76,12 @@ Legacy sprite override IDs without known Gfx.dir stems also remain numeric.
 
 Whole-pixel floor operations retained for terrain/grid sampling, Reinforcement's
 chosen column, turret beam distances, laser seeds, log formatting and sweep
-step counts, and diagonal portal exit height. Fractional motion subdivisions and damping use ordinary division.
-POOZ movement constants retain their exact native values in pixels. Crate Strike uses the precise click and stock `click.sky`, as approved, instead
-of flooring the click and hardcoding -50. Chilli's and Nuke Rocket's velocity lotteries retain their
-original integer RNG ranges and draw count, then converts that random velocity
-to pixels; changing the lottery to seven integer pixel speeds would change play.
+step counts, and diagonal portal exit height. Fractional motion subdivisions
+and damping use ordinary division. POOZ movement constants retain their exact
+native values in pixels. Crate Strike uses the precise click and stock
+`click.sky`, as approved, instead of flooring the click and hardcoding -50.
+Chilli's and Nuke Rocket's velocity lotteries retain their original integer
+RNG ranges and draw count, then convert the random velocity to pixels; changing
+the lottery to integer pixel speeds would change play.
 Valyrian's precomputed ring now contains exact pixel values. The glider's hard
 landing cutoff retains its one-native-unit margin below eight pixels/frame.

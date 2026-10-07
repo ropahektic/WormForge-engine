@@ -76,7 +76,7 @@ do
   local function launch_point(x, y, w)
     local r = 0
     while r <= REACH do
-      local step = (r == 0) and 360 or math.max(15, math.floor(360 / ((r) / 2)))
+      local step = (r == 0) and 360 or math.max(15, math.floor(360 / (r / 2)))
       local deg = 0
       while deg < 360 do
         local a = deg * math.pi / 180

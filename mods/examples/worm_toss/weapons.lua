@@ -10,7 +10,7 @@
 --                   team-colour cursor (what Teleport shows), snapped to
 --                   wa.world.pointer() natively every frame before `on` runs.
 --                   Grab/drag/throw use the actor position.
-local GRAB_R2 = (48) * (48)
+local GRAB_R2 = 48 * 48
 
 local owner_id
 local live
