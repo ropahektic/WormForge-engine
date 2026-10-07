@@ -410,46 +410,75 @@ pub fn entered_lobby() {
         }
     }
 }
+/// How a round takes its packs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Round {
+    /// Not a network round: the installed `Mods/` (or a replay's own).
+    Offline,
+    /// A network round with every machine on WormForge: the host's packs.
+    Synced(PathBuf),
+    /// A network round some machine cannot run packs in: plain WA, no packs
+    /// and nothing of WormForge's on the wire, for the reason given.
+    Plain(String),
+}
 
-/// The pack folder a network round loads from, chosen as the round starts:
-/// the host's lit generation, or the copy a client took of the host's latest
-/// offer. `None` for an offline round, or when no synced copy fits, and then
-/// the round loads installed `Mods/` as before.
-pub fn round_packs() -> Option<PathBuf> {
+/// Which packs this network round loads, decided before the lobby state is
+/// dropped: the host's lit generation, or the copy a client took of the
+/// host's latest offer. A network round never loads this machine's own
+/// `Mods/`: packs only one machine runs would desync it, or give that player
+/// what the others cannot see.
+pub fn round_packs() -> Round {
     let host = HOST_SESSION.load(Ordering::Relaxed) as *mut u8;
     let hosting = !host.is_null() && unsafe { read_i32(host, HOSTING) } != 0;
     if hosting {
+        let peers = PEERS.lock().map(|p| *p).unwrap_or_default();
+        if let Some(slot) = (0..HOST_SLOTS).find(|&s| slot_connected(s) && !peers[s].wormforge) {
+            return Round::Plain(format!("{} has no WormForge", slot_name(slot)));
+        }
         let generation = crate::lobby::current_generation();
         let served = SERVED.lock().ok().and_then(|s| s.as_ref().map(|s| s.generation));
         let dir = SERVED_DIR.lock().ok().and_then(|d| d.clone());
         return match (generation, served == Some(generation), dir) {
-            (0, _, _) => None,
-            (g, true, Some(dir)) => {
-                log_line(&format!("sync: round loads generation {g} from {}", dir.display()));
-                Some(dir.join(netsync::PACKS_DIR))
-            }
-            (g, _, _) => {
-                log_error(&format!("sync: generation {g} is not frozen yet; round loads installed packs"));
-                None
-            }
+            (g, true, Some(dir)) if g != 0 => synced_round(g, dir.join(netsync::PACKS_DIR)),
+            (0, _, _) => Round::Plain("no packs were frozen for this round".into()),
+            (g, _, _) => Round::Plain(format!("generation {g} was not frozen yet")),
         };
     }
     if !client_link_up() {
-        return None;
+        return Round::Offline;
+    }
+    let host_name = crate::lobby::machine_name(0);
+    let greeted_by = HOST_WORMFORGE.lock().ok().and_then(|h| h.clone());
+    if greeted_by.is_none() || greeted_by != host_name {
+        return Round::Plain("the host has no WormForge".into());
     }
     let offered = LAST_OFFER.lock().ok().and_then(|o| *o);
     let ready = READY.lock().ok().and_then(|r| r.clone());
     match (offered, ready) {
-        (Some((g, digest)), Some((have, dir))) if have == digest => {
-            log_line(&format!("sync: round loads the host's generation {g} from {}", dir.display()));
-            Some(dir.join(netsync::PACKS_DIR))
-        }
-        (Some((g, _)), _) => {
-            log_error(&format!("sync: host's generation {g} is not here; round loads installed packs"));
-            None
-        }
-        (None, _) => None,
+        (Some((g, digest)), Some((have, dir))) if have == digest => synced_round(g, dir.join(netsync::PACKS_DIR)),
+        (Some((g, _)), _) => Round::Plain(format!("the host's generation {g} did not arrive")),
+        (None, _) => Round::Plain("the host offered no packs".into()),
     }
+}
+
+/// The round on generation `g`'s packs at `packs`, or plain WA when it has
+/// none. Every machine holds the same generation, so each decides the same:
+/// with nothing to run, nothing of WormForge's goes on the wire either, which
+/// a lobby with a player without WormForge needs (the Start gate lets a round
+/// with no packs start without waiting for every player's answer).
+fn synced_round(g: u32, packs: PathBuf) -> Round {
+    if !has_packs(&packs) {
+        return Round::Plain("this round has no packs".into());
+    }
+    log_line(&format!("sync: round loads generation {g} from {}", packs.display()));
+    Round::Synced(packs)
+}
+
+/// Whether a generation's pack folder holds any pack.
+fn has_packs(packs: &std::path::Path) -> bool {
+    std::fs::read_dir(packs)
+        .map(|entries| entries.flatten().any(|e| e.path().is_dir()))
+        .unwrap_or(false)
 }
 
 fn client_link_up() -> bool {
@@ -491,6 +520,29 @@ extern "system" fn tick(_: *mut c_void, _: u32, _: usize, _: u32) {
 fn pump() {
     host_pump();
     client_pump();
+    client_presence();
+}
+
+/// A client in a lobby whose host never said hello notes that its WormForge
+/// stays off: the round will be plain WA. A lost connection forgets the host.
+fn client_presence() {
+    let host = HOST_SESSION.load(Ordering::Relaxed) as *mut u8;
+    if !host.is_null() && unsafe { read_i32(host, HOSTING) } != 0 {
+        return;
+    }
+    if !client_link_up() {
+        if CLIENT_SEEN.lock().map(|s| s.is_some()).unwrap_or(false) {
+            log_line("sync: left the host's lobby");
+        }
+        forget_host();
+        return;
+    }
+    let settled = CLIENT_SEEN.lock().ok().and_then(|s| *s).is_some_and(|t| t.elapsed() >= HOST_HELLO);
+    let greeted = HOST_WORMFORGE.lock().map(|h| h.is_some()).unwrap_or(false);
+    if !settled || greeted || CLIENT_SAID.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    note("the host has no WormForge: rounds here are plain WA, without packs".into());
 }
 
 fn progress_due(last: &mut Instant, now: Instant) -> bool {
@@ -541,7 +593,7 @@ static SLOT_STATUS: Mutex<[Option<SlotStatus>; HOST_SLOTS]> = Mutex::new([None; 
 static HOST_PROGRESS: Mutex<Option<(u32, Instant)>> = Mutex::new(None);
 
 /// Called by the freeze worker once a generation is published.
-pub fn serve(served: Served, dir: PathBuf) {
+pub fn serve(served: Served, dir: PathBuf, packs: Vec<String>) {
     let generation = served.generation;
     if crate::lobby::current_generation() != generation {
         return; // withdrawn while it loaded
@@ -552,6 +604,11 @@ pub fn serve(served: Served, dir: PathBuf) {
     if let Ok(mut d) = SERVED_DIR.lock() {
         *d = Some(dir);
     }
+    note(if packs.is_empty() {
+        "this round has no packs".into()
+    } else {
+        format!("this round's packs: {}", packs.join(", "))
+    });
     OFFER_PENDING.store(true, Ordering::SeqCst);
     log_line(&format!("sync generation {generation}: ready to offer"));
 }
@@ -753,6 +810,7 @@ fn host_receive(slot: usize, message: Message) -> bool {
     match message {
         Message::Hello { build } => {
             log_line(&format!("sync: slot {slot} runs WormForge {build}"));
+            note(format!("{} runs WormForge {build}", slot_name(slot)));
             if let Some(served) = SERVED.lock().ok().and_then(|s| s.clone()) {
                 if host_send(slot, &served.offer()) {
                     log_line(&format!("sync generation {}: offered to slot {slot}", served.generation));
@@ -821,6 +879,30 @@ static READY: Mutex<Option<([u8; 32], PathBuf)>> = Mutex::new(None);
 static CLIENT_SESSIONS: AtomicU32 = AtomicU32::new(0);
 /// The host's latest offer: generation and manifest digest.
 static LAST_OFFER: Mutex<Option<(u32, [u8; 32])>> = Mutex::new(None);
+/// The host's lobby name when its hello came: it runs WormForge. Kept by
+/// name, so a mark from one lobby never vouches for the next host.
+static HOST_WORMFORGE: Mutex<Option<String>> = Mutex::new(None);
+/// When this client's connection first carried a packet from the host.
+static CLIENT_SEEN: Mutex<Option<Instant>> = Mutex::new(None);
+/// This connection's "the host has no WormForge" note is shown.
+static CLIENT_SAID: AtomicBool = AtomicBool::new(false);
+/// How long a client waits for the host's hello before noting that its
+/// WormForge stays off: the host greets 3 s after a player settles.
+const HOST_HELLO: Duration = Duration::from_secs(8);
+
+/// The connection to the host is gone: forget what this lobby told us.
+fn forget_host() {
+    if let Ok(mut h) = HOST_WORMFORGE.lock() {
+        *h = None;
+    }
+    if let Ok(mut o) = LAST_OFFER.lock() {
+        *o = None;
+    }
+    if let Ok(mut s) = CLIENT_SEEN.lock() {
+        *s = None;
+    }
+    CLIENT_SAID.store(false, Ordering::SeqCst);
+}
 
 enum ClientJob {
     Downloading {
@@ -861,6 +943,14 @@ fn client_receive(message: Message) {
     match message {
         Message::Hello { build } => {
             log_line(&format!("sync: host runs WormForge {build}"));
+            let first = HOST_WORMFORGE.lock().map(|mut h| {
+                let first = h.is_none();
+                *h = crate::lobby::machine_name(0);
+                first
+            }).unwrap_or(false);
+            if first {
+                note(format!("the host runs WormForge {build}: rounds here use its packs"));
+            }
             if client_send(&Message::Hello { build: BUILD_ID.into() }) {
                 log_line("sync: answered the host's hello");
             }
@@ -1366,6 +1456,9 @@ unsafe fn host_packet(this: *mut u8, slot: i32, packet: *const u8, size: usize) 
 /// Our part of a client-side packet handler, lobby or end screen.
 unsafe fn client_packet(this: *mut u8, packet: *const u8, size: usize) -> bool {
     let _ = std::panic::catch_unwind(|| trace_packet(HOST_SLOTS, "host", packet, size));
+    if let Ok(mut seen) = CLIENT_SEEN.lock() {
+        seen.get_or_insert_with(Instant::now);
+    }
     if let Some(parsed) = take(packet, size) {
         let _ = std::panic::catch_unwind(|| {
             entered_lobby();
@@ -1432,4 +1525,22 @@ unsafe extern "thiscall" fn client_end_packet_hook(this: *mut u8, packet: *const
     }
     let f: ClientHandlerFn = std::mem::transmute(orig);
     f(this, packet, size)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_generation_without_packs_is_a_plain_round() {
+        let base = std::env::temp_dir().join(format!("wf-round-test-{}", std::process::id()));
+        let packs = base.join(netsync::PACKS_DIR);
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&packs).unwrap();
+        assert_eq!(synced_round(3, packs.clone()), Round::Plain("this round has no packs".into()));
+        assert_eq!(synced_round(3, base.join("missing")), Round::Plain("this round has no packs".into()));
+        std::fs::create_dir_all(packs.join("example.highlander")).unwrap();
+        assert_eq!(synced_round(3, packs.clone()), Round::Synced(packs));
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }

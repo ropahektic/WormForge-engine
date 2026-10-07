@@ -16,6 +16,18 @@ use windows_sys::Win32::System::Threading::GetCurrentProcess;
 const PATCH_LEN: usize = 5;
 
 static ORIG: AtomicUsize = AtomicUsize::new(0);
+/// The engine's own lines for the player (`notice`), each until its time is up.
+static NOTICES: std::sync::Mutex<Vec<(String, std::time::Instant)>> = std::sync::Mutex::new(Vec::new());
+
+/// Show `text` on the HUD for `seconds`, under the packs' lines: what the
+/// engine itself has to tell the player during a match. Presentation only.
+pub(crate) fn notice(text: &str, seconds: u64) {
+    log_line(&format!("HUD notice: {text}"));
+    if let Ok(mut n) = NOTICES.lock() {
+        n.retain(|(t, _)| t != text);
+        n.push((text.to_string(), std::time::Instant::now() + std::time::Duration::from_secs(seconds)));
+    }
+}
 static WARNED: AtomicBool = AtomicBool::new(false);
 
 type SetTextboxTextFn = unsafe extern "system" fn(
@@ -135,6 +147,20 @@ fn flush_hud() {
         } else {
             break;
         }
+    }
+    let notices: Vec<String> = NOTICES
+        .lock()
+        .map(|mut n| {
+            let now = std::time::Instant::now();
+            n.retain(|(_, until)| *until > now);
+            n.iter().map(|(t, _)| t.clone()).collect()
+        })
+        .unwrap_or_default();
+    for text in notices {
+        if !blit_line(world, 14, y, &text, Line::default()) {
+            break;
+        }
+        y += 14;
     }
     // `wa.perf.enable{ counter = true }`, at the top right.
     if let Some(text) = crate::perf::counter() {
