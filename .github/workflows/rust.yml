@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check deterministic pack simulation maths
+        run: python3 tools/test_check_sim_math.py
       - name: Test crates that do not need Windows
         # .cargo/config.toml defaults the build target to i686-pc-windows-msvc
         # for local WA DLL work; override so Linux host tests stay native.
