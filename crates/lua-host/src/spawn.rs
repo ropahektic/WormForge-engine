@@ -1,5 +1,6 @@
 //! Parse spawn tables (GUI statuses + Lua `on`) and run `wa.actors.spawn`.
 
+use crate::units;
 use crate::actor::{
     native_land_cut, native_land_dig, native_land_solid, native_land_trace, native_list_actors,
     native_list_kind, native_list_worms, native_map_size, native_resolve_sprite, native_spawn,
@@ -238,11 +239,11 @@ pub fn parse_attached(lua: &Lua, s: &Table) -> mlua::Result<AttachedSpawn> {
     let mut attached = AttachedSpawn {
         sprite: 0,
         delta: 0,
-        vx: get_i32(s, "vx")?.unwrap_or(0),
-        vy: get_i32(s, "vy")?.unwrap_or(0),
+        vx: units::get(s, "vx")?.unwrap_or(0),
+        vy: units::get(s, "vy")?.unwrap_or(0),
         count: get_i32(s, "count")?.unwrap_or(1).clamp(1, 16),
         spread: get_i32(s, "spread")?.unwrap_or(0),
-        power: get_i32(s, "power")?.unwrap_or(0),
+        power: units::get(s, "power")?.unwrap_or(0),
         trail: 0,
         trail_path: None,
         path: None,
@@ -384,20 +385,26 @@ fn bind_kind_list(lua: &Lua, wa: &Table, name: &str, class: i32) -> Result<(), S
 fn bind_land(lua: &Lua, wa: &Table) -> Result<(), String> {
     let land = lua.create_table().map_err(|e| e.to_string())?;
     let solid = lua
-        .create_function(|_, (x, y): (i32, i32)| {
+        .create_function(|_, (x, y): (f64, f64)| {
+            let x = units::native(x, "x")?;
+            let y = units::native(y, "y")?;
             Ok(native_land_solid().map(|f| f(x, y)).unwrap_or(false))
         })
         .map_err(|e| e.to_string())?;
     land.set("solid", solid).map_err(|e| e.to_string())?;
     let trace = lua
-        .create_function(|lua, (x0, y0, x1, y1): (i32, i32, i32, i32)| {
+        .create_function(|lua, (x0, y0, x1, y1): (f64, f64, f64, f64)| {
+            let x0 = units::native(x0, "x0")?;
+            let y0 = units::native(y0, "y0")?;
+            let x1 = units::native(x1, "x1")?;
+            let y1 = units::native(y1, "y1")?;
             let solid = native_land_solid();
             let starts_solid = solid.map(|f| f(x0, y0)).unwrap_or(false);
             match native_land_trace().and_then(|f| f(x0, y0, x1, y1)) {
                 Some((x, y)) => {
                     let t = lua.create_table()?;
-                    t.set("x", x)?;
-                    t.set("y", y)?;
+                    t.set("x", units::pixels(x))?;
+                    t.set("y", units::pixels(y))?;
                     t.set("hit", true)?;
                     t.set("starts_solid", starts_solid)?;
                     // Estimate the terrain gradient at the hit pixel. The
@@ -424,8 +431,8 @@ fn bind_land(lua: &Lua, wa: &Table) -> Result<(), String> {
     land.set("trace", trace).map_err(|e| e.to_string())?;
     let dig = lua
         .create_function(|_, spec: Table| {
-            let x: i32 = spec.get("x")?;
-            let y: i32 = spec.get("y")?;
+            let x = units::require(&spec, "x")?;
+            let y = units::require(&spec, "y")?;
             let radius: i32 = spec.get("radius")?;
             dig_at(x, y, radius)
         })
@@ -433,14 +440,14 @@ fn bind_land(lua: &Lua, wa: &Table) -> Result<(), String> {
     land.set("dig", dig).map_err(|e| e.to_string())?;
     let cut = lua
         .create_function(|_, spec: Table| {
-            let x: i32 = spec.get("x")?;
-            let y: i32 = spec.get("y")?;
+            let x = units::require(&spec, "x")?;
+            let y = units::require(&spec, "y")?;
             let shape: String = spec.get("shape")?;
             let index = match shape.as_str() {
                 "drill" => 2,
                 "torch" => {
                     let facing: i32 = spec.get("facing")?;
-                    let angle: i32 = spec.get("angle")?;
+                    let angle = units::require(&spec, "angle")?;
                     torch_shape(facing, angle)?
                 }
                 _ => {
@@ -459,8 +466,8 @@ fn bind_land(lua: &Lua, wa: &Table) -> Result<(), String> {
         }
         let name: String = spec.get("sprite")?;
         let frame: u32 = spec.get::<Option<u32>>("frame")?.unwrap_or(0);
-        let x: i32 = spec.get("x")?;
-        let y: i32 = spec.get("y")?;
+        let x = units::require(&spec, "x")?;
+        let y = units::require(&spec, "y")?;
         let buried = match spec.get::<Option<Table>>("buried")? {
             None => None,
             Some(b) => {
@@ -502,7 +509,7 @@ fn torch_shape(facing: i32, angle: i32) -> mlua::Result<i32> {
     }
     if !(-0x10000..=0x10000).contains(&angle) {
         return Err(mlua::Error::external(
-            "land.cut: torch angle must be -65536..65536",
+            "land.cut: torch angle must be -1..1",
         ));
     }
     let group = if angle < -0x1999 {
@@ -596,13 +603,13 @@ fn math_table(lua: &Lua) -> Result<Table, String> {
     let sin = lua
         .create_function(|_, x: f64| {
             let a = game::trig::angle_from_radians(finite("sin", x)?);
-            Ok(game::trig::sin(a) as f64 / 65536.0)
+            Ok(units::pixels(game::trig::sin(a)))
         })
         .map_err(|e| e.to_string())?;
     let cos = lua
         .create_function(|_, x: f64| {
             let a = game::trig::angle_from_radians(finite("cos", x)?);
-            Ok(game::trig::cos(a) as f64 / 65536.0)
+            Ok(units::pixels(game::trig::cos(a)))
         })
         .map_err(|e| e.to_string())?;
     let atan = lua
@@ -658,7 +665,9 @@ fn random_fn(lua: &Lua) -> Result<Function, String> {
 
 fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
     let world = lua.create_table().map_err(|e| e.to_string())?;
-    let nearby = lua.create_function(|lua, (x, y, radius, graves): (i32, i32, i32, bool)| {
+    let nearby = lua.create_function(|lua, (x, y, radius, graves): (f64, f64, i32, bool)| {
+        let x = units::native(x, "x")?;
+        let y = units::native(y, "y")?;
         if !crate::sim_context::active() {
             return Err(mlua::Error::external("world.electrical_nearby: only from simulation callbacks"));
         }
@@ -671,15 +680,19 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         Ok(out)
     }).map_err(|e| e.to_string())?;
     world.set("electrical_nearby", nearby).map_err(|e| e.to_string())?;
-    let trace = lua.create_function(|lua, (x0, y0, x1, y1): (i32, i32, i32, i32)| {
+    let trace = lua.create_function(|lua, (x0, y0, x1, y1): (f64, f64, f64, f64)| {
+            let x0 = units::native(x0, "x0")?;
+            let y0 = units::native(y0, "y0")?;
+            let x1 = units::native(x1, "x1")?;
+            let y1 = units::native(y1, "y1")?;
         if !crate::sim_context::active() {
             return Err(mlua::Error::external("world.electrical_trace: only from simulation callbacks"));
         }
         let hit = crate::actor::native_electrical_trace().and_then(|f| f(x0, y0, x1, y1));
         let Some((x, y, object)) = hit else { return Ok(None::<Table>); };
         let out = lua.create_table()?;
-        out.set("x", x)?;
-        out.set("y", y)?;
+        out.set("x", units::pixels(x))?;
+        out.set("y", units::pixels(y))?;
         if object != 0 {
             out.set("obj", crate::actor::entity_value(lua, object).map_err(mlua::Error::external)?)?;
         }
@@ -699,12 +712,12 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         out.set("hit", hit.hit)?;
         out.set("starts_solid", hit.starts_solid)?;
         if let Some((x, y)) = hit.left {
-            out.set("left_x", x)?;
-            out.set("left_y", y)?;
+            out.set("left_x", units::pixels(x))?;
+            out.set("left_y", units::pixels(y))?;
         }
         if hit.hit {
-            out.set("x", hit.x)?;
-            out.set("y", hit.y)?;
+            out.set("x", units::pixels(hit.x))?;
+            out.set("y", units::pixels(hit.y))?;
             out.set("nx", hit.nx)?;
             out.set("ny", hit.ny)?;
             out.set("tx", -hit.ny)?;
@@ -730,10 +743,10 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
     }).map_err(|e| e.to_string())?;
     world.set("collides", shape_collides).map_err(|e| e.to_string())?;
     world
-        .set("sky", game::offsets::DROP_SKY_Y)
+        .set("sky", units::pixels(game::offsets::DROP_SKY_Y))
         .map_err(|e| e.to_string())?;
     let water = lua
-        .create_function(|_, ()| Ok(native_water_y().map(|f| f()).unwrap_or(0)))
+        .create_function(|_, ()| Ok(units::pixels(native_water_y().map(|f| f()).unwrap_or(0))))
         .map_err(|e| e.to_string())?;
     world.set("water", water).map_err(|e| e.to_string())?;
     // A function, not a value: the table is built when the pack loads, which
@@ -756,8 +769,8 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         .create_function(|lua, ()| {
             let (cx, cy, w, h) = native_view_cam().map(|f| f()).unwrap_or((0, 0, 0, 0));
             let t = lua.create_table()?;
-            t.set("cx", cx)?;
-            t.set("cy", cy)?;
+            t.set("cx", units::pixels(cx))?;
+            t.set("cy", units::pixels(cy))?;
             t.set("w", w)?;
             t.set("h", h)?;
             Ok(t)
@@ -770,8 +783,8 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
                 .map(|f| f())
                 .unwrap_or((0, 0, false));
             let t = lua.create_table()?;
-            t.set("x", x)?;
-            t.set("y", y)?;
+            t.set("x", units::pixels(x))?;
+            t.set("y", units::pixels(y))?;
             t.set("down", down)?;
             Ok(t)
         })
@@ -819,29 +832,30 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     world.set("turn_clock", turn_clock).map_err(|e| e.to_string())?;
-    // WA's gravity and wind, 16.16 speed per frame (Project X's
+    // WA's gravity and wind in Lua pixels/frame² (Project X's
     // Env->Gravity / Env->Wind): what WA adds to anything that takes them at
     // full strength. The wind changes each turn.
     let gravity = lua
         .create_function(|_, ()| {
-            Ok(crate::actor::native_forces().map(|f| f().0).unwrap_or(0))
+            Ok(units::pixels(crate::actor::native_forces().map(|f| f().0).unwrap_or(0)))
         })
         .map_err(|e| e.to_string())?;
     world.set("gravity", gravity).map_err(|e| e.to_string())?;
     let wind = lua
         .create_function(|_, ()| {
-            Ok(crate::actor::native_forces().map(|f| f().1).unwrap_or(0))
+            Ok(units::pixels(crate::actor::native_forces().map(|f| f().1).unwrap_or(0)))
         })
         .map_err(|e| e.to_string())?;
     world.set("wind", wind).map_err(|e| e.to_string())?;
     // Changing them is simulation: both peers must do it at the same point.
     let set_gravity = lua
-        .create_function(|_, v: i32| {
+        .create_function(|_, v: f64| {
             if !crate::sim_context::active() {
                 return Err(mlua::Error::external(
                     "world.set_gravity: only valid in simulation callbacks",
                 ));
             }
+            let v = units::native(v, "world.gravity")?;
             if let Some((g, _)) = crate::actor::native_set_forces() {
                 g(v);
             }
@@ -850,12 +864,13 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     world.set("set_gravity", set_gravity).map_err(|e| e.to_string())?;
     let set_wind = lua
-        .create_function(|_, v: i32| {
+        .create_function(|_, v: f64| {
             if !crate::sim_context::active() {
                 return Err(mlua::Error::external(
                     "world.set_wind: only valid in simulation callbacks",
                 ));
             }
+            let v = units::native(v, "world.wind")?;
             if let Some((_, w)) = crate::actor::native_set_forces() {
                 w(v);
             }
@@ -921,10 +936,10 @@ pub fn runtime_spawn(
         v => parse_handle(&v)?,
     };
     let (ix, iy, ivx, ivy) = inherit_pos(inherit);
-    let x = get_i32(&spec, "x")?.unwrap_or(ix);
-    let y = get_i32(&spec, "y")?.unwrap_or(iy);
-    let vx = get_i32(&spec, "vx")?.unwrap_or(ivx);
-    let vy = get_i32(&spec, "vy")?.unwrap_or(ivy);
+    let x = units::get(&spec, "x")?.unwrap_or(ix);
+    let y = units::get(&spec, "y")?.unwrap_or(iy);
+    let vx = units::get(&spec, "vx")?.unwrap_or(ivx);
+    let vy = units::get(&spec, "vy")?.unwrap_or(ivy);
     let (mut sprite, mut delta, mut w, mut h) = inherit_sprite(inherit);
     match spec.get::<Value>("sprite")? {
         Value::Nil => {}
@@ -1236,7 +1251,7 @@ fn apply_cluster_fields(
     if let Some(n) = get_i32(s, "spread")? {
         spec.spread = n;
     }
-    if let Some(n) = get_i32(s, "power")? {
+    if let Some(n) = units::get(s, "power")? {
         spec.power = n;
     }
     if let Some(b) = parse_bounce(s)? {
@@ -1385,13 +1400,13 @@ pub fn get_bool(table: &Table, key: &str) -> mlua::Result<Option<bool>> {
 }
 
 /// A `wa.world.trace` (`sweep`) or `wa.world.collides` table: positions
-/// 16.16, `radius` in pixels (0 to 64, default 0), `with` the kinds to test
+/// in pixels, `radius` in whole pixels (0 to 64, default 0), `with` the kinds to test
 /// (default terrain only), `ignore` objects to leave out.
 fn shape_query(spec: &Table, sweep: bool) -> mlua::Result<crate::actor::ShapeQuery> {
     let name = if sweep { "world.trace" } else { "world.collides" };
     let need = |key: &str| -> mlua::Result<i32> {
-        spec.get::<Option<i32>>(key)?
-            .ok_or_else(|| mlua::Error::external(format!("{name} needs {key} (16.16)")))
+        units::get(spec, key)?
+            .ok_or_else(|| mlua::Error::external(format!("{name} needs {key} (pixels)")))
     };
     let (x0, y0, x1, y1) = if sweep {
         (need("x0")?, need("y0")?, need("x1")?, need("y1")?)
