@@ -1,5 +1,6 @@
 //! Semantic acquisitions, independent of WA's materialized ammo rows.
-use mlua::{Lua, Table};
+use crate::units;
+use mlua::{Value, Lua, Table};
 use std::{cell::RefCell, sync::Mutex};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,10 +113,10 @@ fn notify(spec: Table, source: &str) -> mlua::Result<()> {
     let Some(mut origin) = origin_fn(handle) else {
         return Ok(());
     };
-    if let Some(x) = spec.get::<Option<i32>>("x")? {
+    if let Some(x) = units::get(&spec, "x")? {
         origin.x = x;
     }
-    if let Some(y) = spec.get::<Option<i32>>("y")? {
+    if let Some(y) = units::get(&spec, "y")? {
         origin.y = y;
     }
     queue_weapon_grant(WeaponGrant {
@@ -162,6 +163,7 @@ pub(crate) fn install(lua: &Lua, wa: &Table) -> Result<(), String> {
                 Ok(Some(t))
             })?,
         )?;
+        weapons.set("_grant_coordinate", lua.create_function(|_, (v, field): (Value, String)| { units::value(v, &field).map(|_| ()) })?)?;
         let world: Table = wa.get("world")?;
         world.set(
             "frame",
@@ -185,8 +187,8 @@ pub(crate) fn event(lua: &Lua, grant: WeaponGrant) -> Result<Table, String> {
     let make = || -> mlua::Result<Table> {
         let t = lua.create_table()?;
         t.set("worm_id", grant.origin.worm_id)?;
-        t.set("x", grant.origin.x)?;
-        t.set("y", grant.origin.y)?;
+        t.set("x", units::pixels(grant.origin.x))?;
+        t.set("y", units::pixels(grant.origin.y))?;
         t.set("alliance", grant.origin.alliance)?;
         t.set("frame", grant.origin.frame)?;
         t.set("source", grant.source)?;
@@ -312,12 +314,12 @@ mod tests {
             inv:set(a,'bazooka',4) -- only the positive delta
             inv:set(a,'bazooka',4)
             inv:remove(a,'bazooka',1)
-            for _, bad in ipairs({0.5, 'bad', 0x80000000, -0x80000001}) do
+            for _, bad in ipairs({0/0, 1/0, 'bad', 32768, -32769}) do
               assert(not pcall(inv.transfer,inv,a,b,{x=bad}))
               assert(not pcall(inv.transfer,inv,a,b,{y=bad}))
               assert(inv:get(a,'grenade')==3 and inv:get(b,'grenade')==0)
             end
-            inv:transfer(a,b,{mode='copy',amount=1,x=321*0x10000,y=-12*0x10000})
+            inv:transfer(a,b,{mode='copy',amount=1,x=321,y=-12})
             inv:transfer(a,b,{mode='move'}) -- one batch, three of each, not one usable shot
             inv:apply(b,{each=1})
             -- A failed silent write must not silence the inventory after it.
@@ -352,11 +354,11 @@ mod tests {
             assert(events[1].items[1].amount==2 and events[2].items[1].amount==2)
             local pickup=events[3]
             assert(pickup.source=='inventory' and pickup.worm_id==33 and pickup.alliance==4)
-            assert(pickup.x==321*0x10000 and pickup.y==-12*0x10000)
+            assert(pickup.x==321 and pickup.y==-12)
             assert(#pickup.items==2 and pickup.items[1].amount==1 and pickup.items[2].amount==1)
             local e=events[4]
             assert(e.source=='inventory' and e.worm_id==33 and e.frame==42 and e.alliance==4)
-            assert(e.x==100*0x10000 and e.y==200*0x10000)
+            assert(e.x==100 and e.y==200)
             assert(#e.items==2 and e.items[1].weapon=='grenade' and e.items[1].amount==3)
             assert(e.items[2].weapon=='bazooka' and e.items[2].amount==3)
             local after=events[5]

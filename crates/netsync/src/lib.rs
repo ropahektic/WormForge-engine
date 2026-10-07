@@ -379,7 +379,7 @@ mod tests {
     fn pack(root: &Path, folder: &str, id: &str, files: &[(&str, &[u8])]) -> LoadedMod {
         let dir = root.join(folder);
         fs::create_dir_all(&dir).unwrap();
-        let toml = format!("id = \"{id}\"\nversion = \"1.0\"\napi_version = 1\nentry = \"weapons.lua\"\n");
+        let toml = format!("id = \"{id}\"\nversion = \"1.0\"\napi_version = 2\nentry = \"weapons.lua\"\n");
         fs::write(dir.join("mod.toml"), &toml).unwrap();
         for (path, bytes) in files {
             let target = dir.join(path);
@@ -395,7 +395,7 @@ mod tests {
         let a = pack(&root, "a", "a.pack", &[("weapons.lua", b"-- a")]);
         let bundle = root.join("b");
         fs::create_dir_all(&bundle).unwrap();
-        fs::write(bundle.join("mod.toml"), "id = \"b.bundle\"\napi_version = 1\nformat_version = 2\n").unwrap();
+        fs::write(bundle.join("mod.toml"), "id = \"b.bundle\"\napi_version = 2\nformat_version = 2\n").unwrap();
         fs::write(bundle.join("w.lua"), "return {}").unwrap();
         let selection = root.join("stage").join(weapons::components::PROFILE_PACK);
         fs::create_dir_all(&selection).unwrap();

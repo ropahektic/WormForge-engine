@@ -26,7 +26,7 @@ pub use templates::{
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-pub const API_VERSION: u32 = 1;
+pub const API_VERSION: u32 = 2;
 
 /// What the pack primarily does. Weapons packs overlay stock slots; gameplay
 /// packs change match rules without claiming a panel weapon (Highlander, …).
@@ -561,6 +561,12 @@ pub fn filter_requirements(mods: &[LoadedMod]) -> (Vec<LoadedMod>, Vec<String>) 
 #[cfg(test)]
 mod tests {
     #[test]
+    fn api_v1_is_refused_after_the_pixel_migration() {
+        let err = parse_manifest("id = \"old.pack\"\napi_version = 1\n").unwrap_err();
+        assert!(err.contains("api_version 1 is not supported (need 2)"));
+    }
+
+    #[test]
     fn a_save_keeps_the_profile() {
         let root = std::env::temp_dir().join("wf-weapons-settings-profile");
         let _ = std::fs::remove_dir_all(&root);
@@ -586,8 +592,8 @@ mod tests {
         let root = std::env::temp_dir().join("wf-weapons-bundle-skip");
         let _ = std::fs::remove_dir_all(&root);
         for (folder, toml) in [
-            ("old", "id = \"old.pack\"\napi_version = 1\nentry = \"init.lua\"\n"),
-            ("new", "id = \"new.bundle\"\napi_version = 1\nformat_version = 2\n[[components]]\nid = \"a.b\"\ntype = \"feature\"\nentry = \"a.lua\"\n"),
+            ("old", "id = \"old.pack\"\napi_version = 2\nentry = \"init.lua\"\n"),
+            ("new", "id = \"new.bundle\"\napi_version = 2\nformat_version = 2\n[[components]]\nid = \"a.b\"\ntype = \"feature\"\nentry = \"a.lua\"\n"),
         ] {
             std::fs::create_dir_all(root.join(folder)).unwrap();
             std::fs::write(root.join(folder).join("mod.toml"), toml).unwrap();
@@ -605,7 +611,7 @@ mod tests {
     fn manifest_parses_overlay_slots() {
         let src = r#"
 id = "example.ice_bazooka"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 register = ["example.ice_bazooka"]
@@ -621,7 +627,7 @@ replace = ["bazooka"]
     fn manifest_parses_actor_kinds() {
         let src = r#"
 id = "example.boss"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [actors]
 register = ["example.boss.mole"]
@@ -635,7 +641,7 @@ register = ["example.boss.mole"]
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(
             root.join("mod.toml"),
-            format!("id = \"{id}\"\napi_version = 1\nentry = \"weapons.lua\"\n"),
+            format!("id = \"{id}\"\napi_version = 2\nentry = \"weapons.lua\"\n"),
         )
         .unwrap();
     }
@@ -701,7 +707,7 @@ register = ["example.boss.mole"]
             folder: id.to_string(),
             root: PathBuf::new(),
             manifest: parse_manifest(&format!(
-                "id = \"{id}\"\napi_version = 1\n[weapons]\nreplace = [{replace}]\n"
+                "id = \"{id}\"\napi_version = 2\n[weapons]\nreplace = [{replace}]\n"
             )),
             enabled,
         };
@@ -762,17 +768,17 @@ sha256 = "11"
     #[test]
     fn empty_claims_without_kind_are_gameplay() {
         let m = parse_manifest(
-            "id = \"example.highlander\"\napi_version = 1\nentry = \"rules.lua\"\n[weapons]\nregister = []\nreplace = []\n",
+            "id = \"example.highlander\"\napi_version = 2\nentry = \"rules.lua\"\n[weapons]\nregister = []\nreplace = []\n",
         )
         .unwrap();
         assert_eq!(m.kind, PackKind::Gameplay);
         let m = parse_manifest(
-            "id = \"example.keep\"\napi_version = 1\nkind = \"weapons\"\n[weapons]\nregister = []\n",
+            "id = \"example.keep\"\napi_version = 2\nkind = \"weapons\"\n[weapons]\nregister = []\n",
         )
         .unwrap();
         assert_eq!(m.kind, PackKind::Weapons);
         let m = parse_manifest(
-            "id = \"example.gun\"\napi_version = 1\n[weapons]\nreplace = [\"bazooka\"]\n",
+            "id = \"example.gun\"\napi_version = 2\n[weapons]\nreplace = [\"bazooka\"]\n",
         )
         .unwrap();
         assert_eq!(m.kind, PackKind::Weapons);

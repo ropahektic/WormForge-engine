@@ -417,7 +417,7 @@ mod tests {
             "t.mole",
             r#"
 id = "t.mole"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["donkey"]
@@ -449,7 +449,7 @@ wa.weapons.replace({
         let _ = std::fs::remove_dir_all(&root);
         let manifest = r#"
 id = "t.over"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["mortar"]
@@ -499,7 +499,7 @@ wa.weapons.replace({
             "t.mole",
             r#"
 id = "t.mole"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["donkey"]
@@ -537,7 +537,7 @@ wa.weapons.replace({
         api::install(&lua, &test_ctx()).unwrap();
         for src in [
             "wa.worms.all()[1]:take()",
-            "wa.worms.all()[1]:release(1, 2)",
+            "wa.worms.all()[1]:release(1.52587890625e-05, 3.0517578125e-05)",
             "wa.worms.all()[1]:jetpack_steer(true)",
         ] {
             assert!(lua.load(src).exec().is_err(), "{src} outside a simulation callback");
@@ -549,12 +549,12 @@ wa.weapons.replace({
                  w:take()
                  w:take{ hide = true, turn = 'freeze' }
                  w:take{ turn = 'run' }
-                 w:release(0x30000, -0x20000)
+                 w:release(3.0, -2.0)
                  w:release()
-                 w:release(1, 2, { tumble = true })
-                 w:release(3, 4, { suppress_auto_parachute = true })
+                 w:release(1.52587890625e-05, 3.0517578125e-05, { tumble = true })
+                 w:release(4.57763671875e-05, 6.103515625e-05, { suppress_auto_parachute = true })
                  assert(w.taken == true)
-                 assert(w:fits(1, 7) == true and w:fits(-1, 7) == false)
+                 assert(w:fits(1.52587890625e-05, 0.0001068115234375) == true and w:fits(-1.52587890625e-05, 0.0001068115234375) == false)
                  w:jetpack_steer(true)
                  w:jetpack_steer(false)",
             )
@@ -643,24 +643,24 @@ wa.weapons.replace({
         });
         let lua = sandbox::new_lua().unwrap();
         api::install(&lua, &test_ctx()).unwrap();
-        let bare = "return wa.fire.spawn{ owner = wa.worms.all()[1], x = 0x100000, y = 0x200000 }";
+        let bare = "return wa.fire.spawn{ owner = wa.worms.all()[1], x = 16.0, y = 32.0 }";
         assert!(lua.load(bare).exec().is_err(), "outside a simulation callback");
         let n: u32 = sim_context::with_sim(|| lua.load(bare).eval().unwrap());
         assert_eq!(n, 7);
         sim_context::with_sim(|| {
-            lua.load("wa.fire.spawn{ owner = wa.worms.all()[1], x = 1, y = 2, vx = 3, vy = 0, \
+            lua.load("wa.fire.spawn{ owner = wa.worms.all()[1], x = 1.52587890625e-05, y = 3.0517578125e-05, vx = 4.57763671875e-05, vy = 0.0, \
                       count = 0, duration = 6000, up_power = 0, damage = 0, \
                       damage_scale = 1.25, knock_scale = 2, tint = 0x4BE14B }")
                 .exec()
                 .unwrap();
             let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
-            assert!(err("wa.fire.spawn{ x = 0, y = 0 }").contains("needs owner"));
-            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0 }").contains("needs y"));
-            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, duration = 0 }")
+            assert!(err("wa.fire.spawn{ x = 0.0, y = 0.0 }").contains("needs owner"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0.0 }").contains("needs y"));
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0.0, y = 0.0, duration = 0 }")
                 .contains("duration"));
-            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, knock_scale = -1 }")
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0.0, y = 0.0, knock_scale = -1 }")
                 .contains("knock_scale"));
-            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0, y = 0, tint = 0x1000000 }")
+            assert!(err("wa.fire.spawn{ owner = wa.worms.all()[1], x = 0.0, y = 0.0, tint = 0x1000000 }")
                 .contains("tint"));
         });
         STARTED.with(|l| {
@@ -695,17 +695,17 @@ wa.weapons.replace({
         });
         let lua = sandbox::new_lua().unwrap();
         api::install(&lua, &test_ctx()).unwrap();
-        let one = "return wa.worms.spawn{ team = 2, x = 0x100000, y = 0x200000, name = 'Reinforcement', health = 200 }";
+        let one = "return wa.worms.spawn{ team = 2, x = 16.0, y = 32.0, name = 'Reinforcement', health = 200 }";
         assert!(lua.load(one).exec().is_err(), "outside a simulation callback");
         sim_context::with_sim(|| {
             let w: mlua::AnyUserData = lua.load(one).eval().unwrap();
             assert!(w.is::<actor::WormHandle>(), "a worm as wa.worms.all() gives one");
-            lua.load("wa.worms.spawn{ team = 1, x = 1, y = 2 }").exec().unwrap();
+            lua.load("wa.worms.spawn{ team = 1, x = 1.52587890625e-05, y = 3.0517578125e-05 }").exec().unwrap();
             let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
-            assert!(err("wa.worms.spawn{ x = 0, y = 0 }").contains("needs team"));
-            assert!(err("wa.worms.spawn{ team = 1, x = 0 }").contains("needs y"));
-            assert!(err("wa.worms.spawn{ team = 1, x = 0, y = 0, health = 0 }").contains("health"));
-            assert!(err("wa.worms.spawn{ team = 6, x = 0, y = 0 }").contains("already has 8"));
+            assert!(err("wa.worms.spawn{ x = 0.0, y = 0.0 }").contains("needs team"));
+            assert!(err("wa.worms.spawn{ team = 1, x = 0.0 }").contains("needs y"));
+            assert!(err("wa.worms.spawn{ team = 1, x = 0.0, y = 0.0, health = 0 }").contains("health"));
+            assert!(err("wa.worms.spawn{ team = 6, x = 0.0, y = 0.0 }").contains("already has 8"));
         });
         MADE.with(|l| assert_eq!(
             l.borrow().as_slice(),
@@ -742,17 +742,17 @@ wa.weapons.replace({
         let lua = sandbox::new_lua().unwrap();
         api::install(&lua, &test_ctx()).unwrap();
         lua.load(r#"
-            local h = wa.world.trace{ x0 = 1, y0 = 2, x1 = 5, y1 = 6, radius = 8,
+            local h = wa.world.trace{ x0 = 1.52587890625e-05, y0 = 3.0517578125e-05, x1 = 7.62939453125e-05, y1 = 9.1552734375e-05, radius = 8,
               with = { "terrain", "worms", "oil" }, ignore = { wa.worms.all()[1] } }
-            assert(h.hit and h.x == 10 and h.y == 20 and h.nx == 0.6 and h.ny == -0.8)
+            assert(h.hit and h.x == 0.000152587890625 and h.y == 0.00030517578125 and h.nx == 0.6 and h.ny == -0.8)
             assert(h.tx == 0.8 and h.ty == 0.6, "the tangent, the normal turned")
-            assert(h.starts_solid and h.left_x == 3 and h.left_y == 4 and h.obj == nil)
-            assert(wa.world.trace{ x0 = 1, y0 = 2, x1 = 0, y1 = 0 } == nil, "nothing touched")
-            assert(wa.world.collides{ x = 1, y = 2, radius = 4 } == true)
-            assert(wa.world.collides{ x = 2, y = 2 } == false)
-            assert(not pcall(wa.world.trace, { x0 = 0, y0 = 0, x1 = 0 }))
-            assert(not pcall(wa.world.collides, { x = 0, y = 0, radius = 65 }))
-            assert(not pcall(wa.world.collides, { x = 0, y = 0, with = { "clouds" } }))
+            assert(h.starts_solid and h.left_x == 4.57763671875e-05 and h.left_y == 6.103515625e-05 and h.obj == nil)
+            assert(wa.world.trace{ x0 = 1.52587890625e-05, y0 = 3.0517578125e-05, x1 = 0.0, y1 = 0.0 } == nil, "nothing touched")
+            assert(wa.world.collides{ x = 1.52587890625e-05, y = 3.0517578125e-05, radius = 4 } == true)
+            assert(wa.world.collides{ x = 3.0517578125e-05, y = 3.0517578125e-05 } == false)
+            assert(not pcall(wa.world.trace, { x0 = 0.0, y0 = 0.0, x1 = 0.0 }))
+            assert(not pcall(wa.world.collides, { x = 0.0, y = 0.0, radius = 65 }))
+            assert(not pcall(wa.world.collides, { x = 0.0, y = 0.0, with = { "clouds" } }))
         "#).exec().unwrap();
         ASKED.with(|a| {
             let a = a.borrow();
@@ -783,8 +783,8 @@ wa.weapons.replace({
             lua.load(r#"
                 local w = wa.worms.all()[1]
                 w:hurt(10)
-                w:hurt({ amount = 12, vx = 0x30000, vy = -0x50000 })
-                w:hurt({ vx = 0x10000 })
+                w:hurt({ amount = 12, vx = 3.0, vy = -5.0 })
+                w:hurt({ vx = 1.0 })
                 w:hurt({ amount = 0 })
                 w:hurt(-3)
             "#).exec().unwrap();
@@ -809,20 +809,20 @@ wa.weapons.replace({
         });
         let lua = sandbox::new_lua().unwrap();
         api::install(&lua, &test_ctx()).unwrap();
-        let one = "return wa.crates.spawn{ x = 0x100000, y = -0x320000, kind = 'weapon' }";
+        let one = "return wa.crates.spawn{ x = 16.0, y = -50.0, kind = 'weapon' }";
         assert!(lua.load(one).exec().is_err(), "outside a simulation callback");
         sim_context::with_sim(|| {
             let c: mlua::AnyUserData = lua.load(one).eval().unwrap();
             assert!(c.is::<actor::WorldHandle>(), "a crate as wa.crates.all() gives one");
-            lua.load("wa.crates.spawn{ x = 1, y = 2, kind = 'health', health = 60, drop = 'teleport' }; \
-                      wa.crates.spawn{ x = 3, y = 4, kind = 'utility', health = 99, drop = 'none' }")
+            lua.load("wa.crates.spawn{ x = 1.52587890625e-05, y = 3.0517578125e-05, kind = 'health', health = 60, drop = 'teleport' }; \
+                      wa.crates.spawn{ x = 4.57763671875e-05, y = 6.103515625e-05, kind = 'utility', health = 99, drop = 'none' }")
                 .exec()
                 .unwrap();
             let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
-            assert!(err("wa.crates.spawn{ x = 0, y = 0 }").contains("kind"));
-            assert!(err("wa.crates.spawn{ x = 0, kind = 'weapon' }").contains("needs y"));
-            assert!(err("wa.crates.spawn{ x = 0, y = 0, kind = 'health', health = 0 }").contains("health"));
-            assert!(err("wa.crates.spawn{ x = 0, y = 0, kind = 'weapon', drop = 'cannon' }").contains("drop"));
+            assert!(err("wa.crates.spawn{ x = 0.0, y = 0.0 }").contains("kind"));
+            assert!(err("wa.crates.spawn{ x = 0.0, kind = 'weapon' }").contains("needs y"));
+            assert!(err("wa.crates.spawn{ x = 0.0, y = 0.0, kind = 'health', health = 0 }").contains("health"));
+            assert!(err("wa.crates.spawn{ x = 0.0, y = 0.0, kind = 'weapon', drop = 'cannon' }").contains("drop"));
         });
         MADE.with(|l| assert_eq!(
             l.borrow().as_slice(),
@@ -876,7 +876,7 @@ wa.weapons.replace({
         let lua = sandbox::new_lua().unwrap();
         api::install(&lua, &test_ctx()).unwrap();
         let shot = "return wa.weapons.launch{ weapon = 'bazooka', owner = wa.worms.all()[1], \
-                    x = 0x100000, y = 0x200000, vx = 0x30000, vy = -0x20000, \
+                    x = 16.0, y = 32.0, vx = 3.0, vy = -2.0, \
                     damage = 40, sprite = 54, fuse = 5000 }";
         assert!(lua.load(shot).exec().is_err(), "outside a simulation callback");
         let id: u32 = sim_context::with_sim(|| lua.load(shot).eval().unwrap());
@@ -903,19 +903,19 @@ wa.weapons.replace({
         });
         sim_context::with_sim(|| {
             let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
-            assert!(err("wa.weapons.launch{ weapon = 'bazooka', x = 0, y = 0 }").contains("needs owner"));
-            assert!(err("wa.weapons.launch{ weapon = 'bazooka', owner = wa.worms.all()[1], y = 0 }")
+            assert!(err("wa.weapons.launch{ weapon = 'bazooka', x = 0.0, y = 0.0 }").contains("needs owner"));
+            assert!(err("wa.weapons.launch{ weapon = 'bazooka', owner = wa.worms.all()[1], y = 0.0 }")
                 .contains("needs x"));
-            assert!(err("wa.weapons.launch{ weapon = 'nope', owner = wa.worms.all()[1], x = 0, y = 0 }")
+            assert!(err("wa.weapons.launch{ weapon = 'nope', owner = wa.worms.all()[1], x = 0.0, y = 0.0 }")
                 .contains("nope"));
-            assert!(err("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0, y = 0, explode_into = 'confetti' }")
+            assert!(err("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0.0, y = 0.0, explode_into = 'confetti' }")
                 .contains("clustlets"));
-            lua.load("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0, y = 0, sound = 0, explode_into = 'clustlets' }")
+            lua.load("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0.0, y = 0.0, sound = 0, explode_into = 'clustlets' }")
                 .exec()
                 .unwrap();
-            assert!(err("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0, y = 0, explode_on_space = 'yes' }")
+            assert!(err("wa.weapons.launch{ weapon = 'mine', owner = wa.worms.all()[1], x = 0.0, y = 0.0, explode_on_space = 'yes' }")
                 .contains("true or false"));
-            lua.load("wa.weapons.launch{ weapon = 'super_banana', owner = wa.worms.all()[1], x = 0, y = 0, countdown = 0, explode_on_space = true }")
+            lua.load("wa.weapons.launch{ weapon = 'super_banana', owner = wa.worms.all()[1], x = 0.0, y = 0.0, countdown = 0, explode_on_space = true }")
                 .exec()
                 .unwrap();
         });
@@ -950,15 +950,15 @@ wa.weapons.replace({
         });
         let lua = sandbox::new_lua().unwrap();
         api::install(&lua, &test_ctx()).unwrap();
-        let cut = "wa.land.cut{ x = 0x12340000, y = 0x56780000, shape = 'torch', facing = 1, angle = 0 }";
-        let stamp = "wa.land.stamp{ sprite = 'sprites/javelin/stamp', frame = 31, x = -65536, y = 131072 }";
+        let cut = "wa.land.cut{ x = 4660.0, y = 22136.0, shape = 'torch', facing = 1, angle = 0 }";
+        let stamp = "wa.land.stamp{ sprite = 'sprites/javelin/stamp', frame = 31, x = -1.0, y = 2.0 }";
         assert!(lua.load(stamp).exec().is_err());
         assert!(lua.load(cut).exec().is_err());
         sim_context::with_sim(|| {
             lua.load(stamp).exec().unwrap();
             assert!(lua.load(stamp.replace("frame = 31", "frame = -1")).exec().is_err());
             lua.load(cut).exec().unwrap();
-            lua.load("wa.land.dig{ x = 0x10000, y = 0x20000, radius = 12 }").exec().unwrap();
+            lua.load("wa.land.dig{ x = 1.0, y = 2.0, radius = 12 }").exec().unwrap();
         });
         STAMP.with(|c| assert_eq!(c.get(), Some((10001, 31, -65536, 131072))));
         BURIED.with(|c| assert_eq!(c.get(), None, "no buried table: drawn over the land as before"));
@@ -1181,7 +1181,7 @@ wa.weapons.replace({
             "t.icon",
             r#"
 id = "t.icon"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["holy_grenade"]
@@ -1241,7 +1241,7 @@ replace = ["holy_grenade"]
             "t.teams",
             r#"
 id = "t.teams"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -1297,7 +1297,7 @@ wa.weapons.replace({ weapon = "bazooka", worm_sprites = { weaponlnk = seven } })
             "user.hello_world",
             r#"
 id = "user.hello_world"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["cluster_bomb"]
@@ -1337,7 +1337,7 @@ wa.weapons.replace({
             "t.cluster",
             r#"
 id = "t.cluster"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["cluster_bomb"]
@@ -1374,7 +1374,7 @@ wa.weapons.replace({
             pack(
                 &root.join(dir),
                 id,
-                &format!("id = \"{id}\"\napi_version = 1\nentry = \"weapons.lua\"\n[weapons]\nreplace = [\"cluster_bomb\"]\n"),
+                &format!("id = \"{id}\"\napi_version = 2\nentry = \"weapons.lua\"\n[weapons]\nreplace = [\"cluster_bomb\"]\n"),
                 &format!("wa.weapons.replace({{ weapon = \"cluster_bomb\", {params} }})"),
             )
         };
@@ -1396,7 +1396,7 @@ wa.weapons.replace({
             "t.plane",
             r#"
 id = "t.plane"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["mb_bomb"]
@@ -1422,7 +1422,7 @@ replace = ["mb_bomb"]
         let _ = std::fs::remove_dir_all(&root);
         let manifest = r#"
 id = "t.repeat"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["shotgun"]
@@ -1459,7 +1459,7 @@ replace = ["shotgun"]
         let _ = std::fs::remove_dir_all(&root);
         let manifest = r#"
 id = "t.patch"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -1532,7 +1532,7 @@ replace = ["bazooka"]
         let _ = std::fs::remove_dir_all(&root);
         let manifest = r#"
 id = "t.strike"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["air_strike"]
@@ -1567,7 +1567,7 @@ replace = ["air_strike"]
             "user.mine",
             r#"
 id = "user.mine"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -1603,7 +1603,7 @@ wa.weapons.replace({
             "user.mine_emit",
             r#"
 id = "user.mine_emit"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -1656,7 +1656,7 @@ wa.weapons.replace({
             "user.fire_emit",
             r#"
 id = "user.fire_emit"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -1703,7 +1703,7 @@ wa.weapons.replace({
             "user.cluster_mine",
             r#"
 id = "user.cluster_mine"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -1719,7 +1719,7 @@ wa.weapons.replace({
       trail = "smklt25",
       count = 5,
       spread = 45,
-      power = 0xA0000,
+      power = 10.0,
       impact = true,
       bounce = true,
       homing = "worm",
@@ -1749,7 +1749,7 @@ wa.weapons.replace({
             "user.cluster_fire",
             r#"
 id = "user.cluster_fire"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -1791,7 +1791,7 @@ wa.weapons.replace({
             "user.cluster_bounce",
             r#"
 id = "user.cluster_bounce"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -1838,7 +1838,7 @@ wa.weapons.replace({
 
     /// A pack whose entry is `entry` and whose other files are `files`.
     fn pack_with(dir: &std::path::Path, id: &str, entry: &str, files: &[(&str, &str)]) -> LoadedMod {
-        let toml = format!("id = \"{id}\"\napi_version = 1\nentry = \"weapons.lua\"\n");
+        let toml = format!("id = \"{id}\"\napi_version = 2\nentry = \"weapons.lua\"\n");
         let pack = pack(dir, id, &toml, entry);
         for (path, src) in files {
             let full = dir.join(path);
@@ -1868,7 +1868,7 @@ ENTRY_SAW = shared.answer
             &[
                 ("lib/shared.lua", "LEAKED = true\nlocal two = require('lib/two')\nreturn { answer = 40 + two, greeting = GREETING, wa_seen = wa ~= nil }"),
                 ("lib/two.lua", "LOADS = (LOADS or 0) + 1\nreturn 2"),
-                ("lib/silent.lua", "local x = 1"),
+                ("lib/silent.lua", "local x = 1.52587890625e-05"),
             ],
         );
         let scripts = run_mods(&[p]).unwrap();
@@ -1941,7 +1941,7 @@ ENTRY_SAW = shared.answer
 
     const CATALOG: &str = r#"
 id = "t.weapons"
-api_version = 1
+api_version = 2
 format_version = 2
 [[components]]
 id = "t.double_bazooka"
@@ -1957,7 +1957,7 @@ compatible_positions = [{ row = "F1", column = 2 }]
 
     const SCHEMES: &str = r#"
 id = "t.schemes"
-api_version = 1
+api_version = 2
 format_version = 2
 [[components]]
 id = "t.scheme"
@@ -2070,7 +2070,7 @@ label = "Fast"
             ("return { defaults = { crate = { type = \"gold\" } } }", ok_scheme, ok_feature, "", "defaults.crate.type = \"gold\": use weapon"),
             ("return { defaults = {}, extra = 1 }", ok_scheme, ok_feature, "", "returns extra: a weapon returns only defaults and install"),
             ("return {}", "return { weapons = { [\"t.double_bazooka\"] = 5 } }", ok_feature, "scheme t.scheme: ", "weapons.t.double_bazooka must be a table"),
-            ("return {}", ok_scheme, "local x = 1", "feature t.feature: ", "returns nothing"),
+            ("return {}", ok_scheme, "local x = 1.52587890625e-05", "feature t.feature: ", "returns nothing"),
         ];
         for (weapon, scheme, feature, prefix, expected) in cases {
             let (bundles, profile) = selection(scheme, weapon, feature);
@@ -2101,7 +2101,7 @@ label = "Fast"
             "a.ice",
             r#"
 id = "a.ice"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 register = ["a.ice.ice_bazooka"]
@@ -2121,7 +2121,7 @@ wa.weapons.register({
             "b.nuke",
             r#"
 id = "b.nuke"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka", "grenade"]
@@ -2159,6 +2159,50 @@ wa.weapons.replace({ weapon = "grenade", params = { damage = 9 } })
     }
 
     #[test]
+    fn pixel_fields_round_at_the_boundary_and_invalid_motion_errors_in_both_paths() {
+        let _host = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let mut body = vec![0u8; 0x1000];
+        let ptr = body.as_mut_ptr();
+        lua.globals().set("w", actor::WormHandle(ptr as u32)).unwrap();
+        sim_context::with_sim(|| lua.load(r#"
+            w.x = 5
+            w.y = -0.5 / 65536
+            w.vx = 0.3
+            w.fuel = 100
+            w.gravity = 1
+            w.wind = 0.2
+            assert(w.x == 5 and w.y == -1 / 65536)
+            assert(w.vx == 19661 / 65536 and w.fuel == 100 and w.gravity == 1)
+            for _, v in ipairs({0/0, 1/0, -1/0, 32768, -32769}) do
+                local ok, err = pcall(function() w.x = v end)
+                assert(not ok and tostring(err):find("x"))
+                assert(w.x == 5, "invalid writes leave memory alone")
+            end
+        "#).exec()).unwrap();
+        unsafe {
+            use game::entity::read_i32;
+            use game::offsets::*;
+            assert_eq!(read_i32(ptr, ENT_POS_X), 5 * 65536);
+            assert_eq!(read_i32(ptr, ENT_POS_Y), -1);
+            assert_eq!(read_i32(ptr, ENT_SPEED_X), 19661);
+            assert_eq!(read_i32(ptr, WORM_JET_FUEL), 100 * 65536);
+            assert_eq!(read_i32(ptr, ENT_GRAVITY_SCALE), 65536);
+        }
+        let root = std::env::temp_dir().join("wklua-pixel-invalid-motion");
+        let pack = filter_pack(&root, "wa.on.missile_frame(function(m) m.x = 0/0 end)");
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        for profile in [false, true] {
+            perf::enable(PerfFlags { counter: false, profile, packs: profile, spikes: false });
+            let (mut sprite, mut mask) = (48, 0);
+            assert!(missile_frame(sample_motion(), 2, "pre", Some(6), &mut sprite, &mut mask)
+                .unwrap_err().contains("x"));
+        }
+        perf::reset();
+    }
+
+    #[test]
     fn gravity_hooks_mutate_scales_and_velocity() {
         let _host = lock_host();
         let root = std::env::temp_dir().join("wklua-lua-host-gravity");
@@ -2168,14 +2212,14 @@ wa.weapons.replace({ weapon = "grenade", params = { damage = 9 } })
             "g.bounce",
             r#"
 id = "g.bounce"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["grenade"]
 "#,
             r#"
 wa.on.gravity_before(function(p)
-  p.wind_scale = 0x10000
+  p.wind_scale = 1
 end)
 wa.on.gravity_after(function(p)
   p.vx = p.vx + 1
@@ -2187,7 +2231,7 @@ end)
         let before = gravity_before(sample_motion()).unwrap();
         assert_eq!(before.wind_scale, 0x10000);
         let after = gravity_after(sample_motion()).unwrap();
-        assert_eq!(after.vx, 11);
+        assert_eq!(after.vx, 65546);
     }
 
     #[test]
@@ -2200,7 +2244,7 @@ end)
             "w.obs",
             r#"
 id = "w.obs"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = []
@@ -2226,7 +2270,7 @@ end)
             "w.filter",
             r#"
 id = "w.filter"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = []
@@ -2364,7 +2408,7 @@ wa.on.missile_frame(function(m)
   seen[#seen + 1] = m.phase .. ":" .. tostring(m.weapon) .. ":" .. m.msg
   if m.phase ~= "post" then return end
   m.x, m.vx, m.sprite, m.collision_mask = m.x + 7, -m.vx, 0, 0x400000
-  m.damp = "not a number"
+  m.damp = 1
 end)
 "#);
         park_lua(run_mods(&[pack]).unwrap().lua);
@@ -2385,7 +2429,7 @@ end)
         assert_eq!(fast, slow);
         let (pre, post, sprite, mask, seen) = fast;
         assert_eq!(pre, motion, "an untouched frame comes back as it went");
-        assert_eq!((post.x, post.vx, post.damp, post.y), (107, -5, 0x10000, 200));
+        assert_eq!((post.x, post.vx, post.damp, post.y), (100 + 7 * 65536, -5, 0x10000, 200));
         assert_eq!((sprite, mask), (0, 0x400000));
         assert_eq!(seen, ["pre:grenade:2", "post:grenade:2"]);
     }
@@ -2417,15 +2461,15 @@ end)
             "m.obs",
             r#"
 id = "m.obs"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = []
 "#,
             r#"
 wa.on.missile_frame(function(m)
-  if m.weapon == "longbow" then m.vx = 1
-  elseif m.weapon == nil then m.vx = 2 end
+  if m.weapon == "longbow" then m.vx = 1.52587890625e-05
+  elseif m.weapon == nil then m.vx = 3.0517578125e-05 end
   if m.weapon == "super_banana" and m.sprite == 51 then m.sprite = 0 end
   if m.weapon == "cluster_bomb" and m.collision_mask == 0x400000 then m.collision_mask = 0x40007C end
 end)
@@ -2463,7 +2507,7 @@ end)
             "d.draw",
             r#"
 id = "d.draw"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = []
@@ -2471,7 +2515,7 @@ replace = []
             r#"
 outside = pcall(wa.draw.quad, {})
 wa.on.draw(function()
-  local P = 0x10000
+  local P = 1
   wa.draw.quad({
     points = { { 10 * P, 10 * P }, { 110 * P, 10 * P }, { 110 * P, 12 * P }, { 10 * P, 12 * P } },
     colors = { 0xFFFF3030, 0xFFFF3030, 0x10FF3030, 0x10FF3030 },
@@ -2512,7 +2556,7 @@ end)
             "c.contact",
             r#"
 id = "c.contact"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = []
@@ -2529,8 +2573,8 @@ end)
         PARKED_LUA.with(|slot| {
             let guard = slot.borrow();
             let seen: mlua::Table = guard.as_ref().unwrap().globals().get("seen").unwrap();
-            assert_eq!(seen.get::<i32>("vx").unwrap(), 0x2_0000);
-            assert_eq!(seen.get::<i32>("vy").unwrap(), -0x1_0000);
+            assert_eq!(seen.get::<f64>("vx").unwrap(), 2.0);
+            assert_eq!(seen.get::<f64>("vy").unwrap(), -1.0);
             assert_eq!(seen.get::<u32>("flags").unwrap(), 3);
             assert_eq!(seen.get::<String>("kind").unwrap(), "none");
             assert!(seen.get::<bool>("worm").unwrap());
@@ -2547,7 +2591,7 @@ end)
             "h.hurt",
             r#"
 id = "h.hurt"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = []
@@ -2608,7 +2652,7 @@ end)
             "rules.events",
             r#"
 id = "rules.events"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = []
@@ -2719,21 +2763,21 @@ end)
         lua.globals().set("wf", actor::WormHandle(0x1234)).unwrap();
         lua.globals().set("o", actor::WorldHandle::new(0)).unwrap();
         lua.load(r#"
-            assert(not pcall(function() w:warp{x=123,y=456} end))
+            assert(not pcall(function() w:warp{x=0.0018768310546875,y=0.0069580078125} end))
             assert(not pcall(function() w:air_fire() end))
-            assert(o:fits(100,200) and not o:fits(200,100))
-            assert(wf:fits(200,100) and not wf:fits(100,200))
-            assert(wf:fits(100,200,"terrain") and not wf:fits(200,100,"terrain"))
-            assert(o:fits(100,200,"terrain"))
-            assert(not pcall(function() wf:fits(100,200,"bogus") end))
+            assert(o:fits(0.00152587890625, 0.0030517578125) and not o:fits(0.0030517578125, 0.00152587890625))
+            assert(wf:fits(0.0030517578125, 0.00152587890625) and not wf:fits(0.00152587890625, 0.0030517578125))
+            assert(wf:fits(0.00152587890625, 0.0030517578125,"terrain") and not wf:fits(0.0030517578125, 0.00152587890625,"terrain"))
+            assert(o:fits(0.00152587890625, 0.0030517578125,"terrain"))
+            assert(not pcall(function() wf:fits(0.00152587890625, 0.0030517578125,"bogus") end))
             assert(o.uid==7)
         "#).exec().unwrap();
         sim_context::with_sim(|| lua.load(r#"
-            assert(w:warp{x=123,y=456,vx=789,facing=-1})
-            assert(o:warp{x=123,y=456,vx=789})
+            assert(w:warp{x=0.0018768310546875,y=0.0069580078125,vx=0.0120391845703125,facing=-1})
+            assert(o:warp{x=0.0018768310546875,y=0.0069580078125,vx=0.0120391845703125})
             assert(w:air_fire() and not w:air_fire(false))
-            assert(not pcall(function() w:warp{x=1,y=2,foo=3} end))
-            assert(not pcall(function() w:warp{x=1,y=2,facing=0} end))
+            assert(not pcall(function() w:warp{x=1.52587890625e-05,y=3.0517578125e-05,foo=3} end))
+            assert(not pcall(function() w:warp{x=1.52587890625e-05,y=3.0517578125e-05,facing=0} end))
         "#).exec()).unwrap();
     }
 
@@ -2973,7 +3017,7 @@ end)
             "a.pack",
             r#"
 id = "a.pack"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [actors]
 register = ["a.pack.mole"]
@@ -2997,7 +3041,7 @@ wa.log(wa.actors.kind("mole"))
             "user.my_weapon",
             r#"
 id = "user.my_weapon"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["mine"]
@@ -3014,7 +3058,7 @@ wa.weapons.replace({
       sprite = "sprites/cweps_gfx__swormb.png",
       count = 5,
       spread = 45,
-      power = 655360,
+      power = 10,
       impact = true,
     },
   },
@@ -3052,7 +3096,7 @@ wa.weapons.replace({
             "c.circle",
             r#"
 id = "c.circle"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -3094,7 +3138,7 @@ wa.weapons.replace({
             "g.hormones",
             r#"
 id = "g.hormones"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["grenade"]
@@ -3153,7 +3197,7 @@ wa.weapons.replace({
             "m.mask",
             r#"
 id = "m.mask"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["prod"]
@@ -3209,7 +3253,7 @@ wa.weapons.replace({
             "g.hormones",
             r#"
 id = "g.hormones"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["grenade"]
@@ -3300,11 +3344,11 @@ wa.weapons.replace({
         lua.globals().set("A", lua.create_userdata(actor::ActorHandle(handle)).unwrap()).unwrap();
         sim_context::with_sim(|| {
             let x: i64 = lua.load("return A.x").eval().unwrap();
-            assert_eq!(x, 0x50000, "alive, it reads through");
+            assert_eq!(x, 5, "alive, it reads pixels");
             crate::actor_freed(handle);
             // WA reuses the memory: the handle must leave it alone.
             unsafe { write_i32(body.as_mut_ptr(), ENT_POS_X, 0x1234) };
-            lua.load("A.x = 0x70000; A.y = 0x80000; A.vx = 1").exec().unwrap();
+            lua.load("A.x = 7.0; A.y = 8.0; A.vx = 1.52587890625e-05").exec().unwrap();
             assert_eq!(lua.load("return A.x").eval::<i64>().unwrap(), 0, "freed, it reads nothing");
         });
         assert_eq!(unsafe { read_i32(body.as_mut_ptr(), ENT_POS_X) }, 0x1234, "and writes nothing");
@@ -3324,7 +3368,7 @@ wa.weapons.replace({
             "w.tp",
             r#"
 id = "w.tp"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = []
@@ -3332,8 +3376,8 @@ replace = []
             r#"
 wa.on.worm_message(function(worm, msg)
   if msg == wa.msg.JUMP then
-    worm.x = 0x12340000
-    worm.y = 0x00AB0000
+    worm.x = 4660.0
+    worm.y = 171.0
   end
 end)
 "#,
@@ -3362,7 +3406,7 @@ end)
             "i.ice",
             r#"
 id = "i.ice"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["bazooka"]
@@ -3402,7 +3446,7 @@ wa.weapons.replace({
             "g.hormones",
             r#"
 id = "g.hormones"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["grenade"]
@@ -3467,11 +3511,11 @@ wa.weapons.replace({
         crate::actor_spawned(0x5000, 0);
         let a = lua.create_userdata(crate::actor::ActorHandle(0x5000)).unwrap();
         lua.globals().set("A", a).unwrap();
-        assert!(lua.load("return A:fits(50, 7)").eval::<bool>().unwrap());
-        assert!(!lua.load("return A:fits(150, 7)").eval::<bool>().unwrap(), "land there");
+        assert!(lua.load("return A:fits(0.000762939453125, 0.0001068115234375)").eval::<bool>().unwrap());
+        assert!(!lua.load("return A:fits(0.002288818359375, 0.0001068115234375)").eval::<bool>().unwrap(), "land there");
         assert_eq!(ASKED.with(|c| c.get()), (0x5000, 150, 7), "WA's test, for this actor, at that place");
         crate::actor_freed(0x5000);
-        assert!(lua.load("return A:fits(150, 7)").eval::<bool>().unwrap(), "a freed actor touches nothing");
+        assert!(lua.load("return A:fits(0.002288818359375, 0.0001068115234375)").eval::<bool>().unwrap(), "a freed actor touches nothing");
     }
 
     #[test]
@@ -3503,16 +3547,16 @@ wa.weapons.replace({
         let handle = body.as_mut_ptr() as u32;
         let hit = crate::ActorHit { blast: false, kind: 1, x: 10, y: 20, vx: 0x8000, vy: -0x10000, damage: 7, team: 2 };
         crate::actor_hit(handle, with_hit, hit).unwrap();
-        let (kind, ints): (String, Vec<i64>) = PARKED_LUA.with(|slot| {
+        let (kind, ints): (String, Vec<f64>) = PARKED_LUA.with(|slot| {
             let guard = slot.borrow();
             let lua = guard.as_ref().unwrap();
             let got: mlua::Table = lua.globals().get("GOT").unwrap();
             let kind: String = got.get(1).unwrap();
-            let ints = (2..=8).map(|i| got.get::<i64>(i).unwrap()).collect();
+            let ints = (2..=8).map(|i| got.get::<f64>(i).unwrap()).collect();
             (kind, ints)
         });
         assert_eq!(kind, "hit");
-        assert_eq!(ints, vec![1, 10, 20, 0x8000, -0x10000, 7, 2], "a fire's hit, as WA sent it");
+        assert_eq!(ints, vec![1.0, 10.0 / 65536.0, 20.0 / 65536.0, 0.5, -1.0, 7.0, 2.0], "a fire's hit, as WA sent it");
         drop(body);
     }
 
@@ -3526,7 +3570,7 @@ wa.weapons.replace({
             "s.strike",
             r#"
 id = "s.strike"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["air_strike"]
@@ -3555,22 +3599,23 @@ wa.weapons.replace({
             },
             ..Default::default()
         });
-        let click = "wa.weapons.click{ weapon = 'air_strike', worm = wa.worms.all()[1], x = 0x100000, y = 0x200000, vx = -0x50000 }";
+        let click = "wa.weapons.click{ weapon = 'air_strike', worm = wa.worms.all()[1], x = 16.0, y = 32.0, vx = -5.0 }";
         assert!(lua.load(click).exec().is_err(), "outside a simulation callback");
         sim_context::with_sim(|| {
             lua.load("wa._mod = 'caller'").exec().unwrap();
             lua.load(click).exec().unwrap();
             let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
-            assert!(err("wa.weapons.click{ weapon = 'mail_strike', worm = wa.worms.all()[1], x = 0, y = 0 }")
+            assert!(err("wa.weapons.click{ weapon = 'mail_strike', worm = wa.worms.all()[1], x = 0.0, y = 0.0 }")
                 .contains("no pack claims mail_strike"));
-            assert!(err("wa.weapons.click{ weapon = 'air_strike', x = 0, y = 0 }").contains("needs worm"));
-            assert!(err("wa.weapons.click{ weapon = 'air_strike', worm = wa.worms.all()[1], x = 0 }").contains("needs y"));
+            assert!(err("wa.weapons.click{ weapon = 'air_strike', x = 0.0, y = 0.0 }").contains("needs worm"));
+            assert!(err("wa.weapons.click{ weapon = 'air_strike', worm = wa.worms.all()[1], x = 0.0 }").contains("needs y"));
         });
         let got: Vec<mlua::Value> = lua.load("return table.unpack(CLICKED)").eval::<mlua::MultiValue>().unwrap().into_vec();
         let int = |i: usize| got[i].as_i64().unwrap();
-        assert_eq!((int(0), int(1), int(2)), (0x100000, 0x200000, -0x00D0_0000), "the click and WA's sky");
+        let px = |i: usize| got[i].as_f64().unwrap();
+        assert_eq!((px(0), px(1), px(2)), (16.0, 32.0, -208.0), "the click and WA's sky");
         assert_eq!(int(3), weapons::StockWeapon::AirStrike.index() as i64);
-        assert_eq!((int(4), int(5)), (-0x50000, 0), "the shot's speed as given, vy 0 by default");
+        assert_eq!((px(4), px(5)), (-5.0, 0.0), "the shot's speed as given, vy 0 by default");
         assert_eq!(got[6].as_boolean(), Some(true), "for the worm given");
         assert_eq!(got[7].as_string().unwrap().to_str().unwrap(), "s.strike", "it runs as its own pack");
         assert_eq!(lua.load("return wa._mod").eval::<String>().unwrap(), "caller", "and the caller's comes back");
@@ -3586,7 +3631,7 @@ wa.weapons.replace({
             "f.magnet",
             r#"
 id = "f.magnet"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["baseball_bat"]
@@ -3614,22 +3659,23 @@ wa.weapons.replace({
             },
             ..Default::default()
         });
-        let fire = "wa.weapons.fire{ weapon = 'baseball_bat', worm = wa.worms.all()[1], x = 0x100000, y = 0x200000, \
-                    vx = 3, polarity = -1 }";
+        let fire = "wa.weapons.fire{ weapon = 'baseball_bat', worm = wa.worms.all()[1], x = 16.0, y = 32.0, \
+                    vx = 4.57763671875e-05, polarity = -1 }";
         assert!(lua.load(fire).exec().is_err(), "outside a simulation callback");
         sim_context::with_sim(|| {
             lua.load("wa._mod = 'caller'").exec().unwrap();
             lua.load(fire).exec().unwrap();
             let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
-            assert!(err("wa.weapons.fire{ weapon = 'mail_strike', worm = wa.worms.all()[1], x = 0, y = 0 }")
+            assert!(err("wa.weapons.fire{ weapon = 'mail_strike', worm = wa.worms.all()[1], x = 0.0, y = 0.0 }")
                 .contains("no pack claims mail_strike"));
-            assert!(err("wa.weapons.fire{ weapon = 'baseball_bat', x = 0, y = 0 }").contains("needs worm"));
-            assert!(err("wa.weapons.fire{ weapon = 'baseball_bat', worm = wa.worms.all()[1], x = 0 }")
+            assert!(err("wa.weapons.fire{ weapon = 'baseball_bat', x = 0.0, y = 0.0 }").contains("needs worm"));
+            assert!(err("wa.weapons.fire{ weapon = 'baseball_bat', worm = wa.worms.all()[1], x = 0.0 }")
                 .contains("needs y"));
         });
         let got: Vec<mlua::Value> = lua.load("return table.unpack(FIRED)").eval::<mlua::MultiValue>().unwrap().into_vec();
         let int = |i: usize| got[i].as_i64().unwrap();
-        assert_eq!((int(0), int(1), int(2), int(3)), (0x100000, 0x200000, 3, 0), "the shot, vy 0 by default");
+        let px = |i: usize| got[i].as_f64().unwrap();
+        assert_eq!((px(0), px(1), px(2), px(3)), (16.0, 32.0, 3.0 / 65536.0, 0.0), "the shot, vy 0 by default");
         assert_eq!(int(4), weapons::StockWeapon::BaseballBat.index() as i64);
         assert_eq!(int(5), -1, "the spec's other fields reach the handler");
         assert_eq!(got[6].as_boolean(), Some(true), "but not the slot's name");
@@ -3648,7 +3694,7 @@ wa.weapons.replace({
             "t.toss",
             r#"
 id = "t.toss"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["battle_axe"]
@@ -3702,7 +3748,7 @@ wa.weapons.replace({
             "n.burst",
             r#"
 id = "n.burst"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["grenade"]
@@ -3733,7 +3779,7 @@ wa.weapons.replace({ weapon = "grenade", on_explode = function() burst_ran_as = 
         let root = std::env::temp_dir().join("wklua-lua-host-perf");
         let _ = std::fs::remove_dir_all(&root);
         let manifest = |id: &str| {
-            format!("id = \"{id}\"\napi_version = 1\nentry = \"weapons.lua\"\n")
+            format!("id = \"{id}\"\napi_version = 2\nentry = \"weapons.lua\"\n")
         };
         let counter = pack(
             &root.join("c"),
@@ -3774,7 +3820,7 @@ wa.weapons.replace({ weapon = "grenade", on_explode = function() burst_ran_as = 
         api::install(&lua, &test_ctx()).unwrap();
         assert!(lua.load("wa.world.set_wind(0x1000)").exec().is_err(), "outside a simulation callback");
         sim_context::with_sim(|| {
-            lua.load("wa.world.set_gravity(0x3AE * 2); wa.world.set_wind(-0x81D)").exec().unwrap();
+            lua.load("wa.world.set_gravity(0.014373779296875 * 2); wa.world.set_wind(-0.0316925048828125)").exec().unwrap();
         });
         crate::bind_actor_native(crate::ActorNative::default());
         assert_eq!((GRAVITY.load(Ordering::SeqCst), WIND.load(Ordering::SeqCst)), (0x3AE * 2, -0x81D));
@@ -3793,7 +3839,7 @@ wa.weapons.replace({ weapon = "grenade", on_explode = function() burst_ran_as = 
             "r.render",
             r#"
 id = "r.render"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 "#,
             r#"
@@ -3827,18 +3873,18 @@ end)
             "f.forces",
             r#"
 id = "f.forces"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 "#,
             "GRAVITY, WIND, CLOCK = wa.world.gravity(), wa.world.wind(), wa.world.turn_clock()",
         );
         let scripts = run_mods(&[pack]).unwrap();
-        let g: i32 = scripts.lua.globals().get("GRAVITY").unwrap();
-        let w: i32 = scripts.lua.globals().get("WIND").unwrap();
+        let g: f64 = scripts.lua.globals().get("GRAVITY").unwrap();
+        let w: f64 = scripts.lua.globals().get("WIND").unwrap();
         let c: i32 = scripts.lua.globals().get("CLOCK").unwrap();
         park_lua(scripts.lua);
         crate::bind_actor_native(crate::ActorNative::default());
-        assert_eq!((g, w, c), (0x3AE, -0x120, 24200));
+        assert_eq!((g, w, c), (crate::units::pixels(0x3AE), crate::units::pixels(-0x120), 24200));
     }
 
     #[test]
@@ -3857,7 +3903,7 @@ entry = "weapons.lua"
             "s.spawn",
             r#"
 id = "s.spawn"
-api_version = 1
+api_version = 2
 entry = "weapons.lua"
 [weapons]
 replace = ["grenade"]
@@ -3868,7 +3914,7 @@ wa.weapons.replace({
   on_click = {
     spawn = {
       on = function(a)
-        a:spawn({ x = a.x, y = a.y, vx = 0, vy = 0x10000 })
+        a:spawn({ x = a.x, y = a.y, vx = 0.0, vy = 1.0 })
       end,
     },
   },

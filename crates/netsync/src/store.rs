@@ -94,7 +94,7 @@ mod tests {
     fn pack(root: &Path, id: &str, files: &[(&str, Vec<u8>)]) -> LoadedMod {
         let dir = root.join(id);
         std::fs::create_dir_all(&dir).unwrap();
-        let toml = format!("id = \"{id}\"\nversion = \"1\"\napi_version = 1\nentry = \"w.lua\"\n");
+        let toml = format!("id = \"{id}\"\nversion = \"1\"\napi_version = 2\nentry = \"w.lua\"\n");
         std::fs::write(dir.join("mod.toml"), &toml).unwrap();
         for (path, bytes) in files {
             let target = dir.join(path);

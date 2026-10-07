@@ -240,7 +240,7 @@ mod tests {
         let dir = root.join(folder);
         fs::create_dir_all(&dir).unwrap();
         let toml = format!(
-            "id = \"{id}\"\nversion = \"1\"\napi_version = 1\nentry = \"w.lua\"\n"
+            "id = \"{id}\"\nversion = \"1\"\napi_version = 2\nentry = \"w.lua\"\n"
         );
         fs::write(dir.join("mod.toml"), &toml).unwrap();
         for (path, bytes) in files {
