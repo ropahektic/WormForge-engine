@@ -482,10 +482,7 @@ pub fn round_packs() -> Round {
         let served = SERVED.lock().ok().and_then(|s| s.as_ref().map(|s| s.generation));
         let dir = SERVED_DIR.lock().ok().and_then(|d| d.clone());
         return match (generation, served == Some(generation), dir) {
-            (g, true, Some(dir)) if g != 0 => {
-                log_line(&format!("sync: round loads generation {g} from {}", dir.display()));
-                Round::Synced(dir.join(netsync::PACKS_DIR))
-            }
+            (g, true, Some(dir)) if g != 0 => synced_round(g, dir.join(netsync::PACKS_DIR)),
             (0, _, _) => Round::Plain("no packs were frozen for this round".into()),
             (g, _, _) => Round::Plain(format!("generation {g} was not frozen yet")),
         };
@@ -501,13 +498,30 @@ pub fn round_packs() -> Round {
     let offered = LAST_OFFER.lock().ok().and_then(|o| *o);
     let ready = READY.lock().ok().and_then(|r| r.clone());
     match (offered, ready) {
-        (Some((g, digest)), Some((have, dir))) if have == digest => {
-            log_line(&format!("sync: round loads the host's generation {g} from {}", dir.display()));
-            Round::Synced(dir.join(netsync::PACKS_DIR))
-        }
+        (Some((g, digest)), Some((have, dir))) if have == digest => synced_round(g, dir.join(netsync::PACKS_DIR)),
         (Some((g, _)), _) => Round::Plain(format!("the host's generation {g} did not arrive")),
         (None, _) => Round::Plain("the host offered no packs".into()),
     }
+}
+
+/// The round on generation `g`'s packs at `packs`, or plain WA when it has
+/// none. Every machine holds the same generation, so each decides the same:
+/// with nothing to run, nothing of WormForge's goes on the wire either, which
+/// a lobby with a player without WormForge needs (the Start gate lets a round
+/// with no packs start without waiting for every player's answer).
+fn synced_round(g: u32, packs: PathBuf) -> Round {
+    if !has_packs(&packs) {
+        return Round::Plain("this round has no packs".into());
+    }
+    log_line(&format!("sync: round loads generation {g} from {}", packs.display()));
+    Round::Synced(packs)
+}
+
+/// Whether a generation's pack folder holds any pack.
+fn has_packs(packs: &std::path::Path) -> bool {
+    std::fs::read_dir(packs)
+        .map(|entries| entries.flatten().any(|e| e.path().is_dir()))
+        .unwrap_or(false)
 }
 
 fn client_link_up() -> bool {
@@ -1582,6 +1596,19 @@ unsafe extern "thiscall" fn client_end_packet_hook(this: *mut u8, packet: *const
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_generation_without_packs_is_a_plain_round() {
+        let base = std::env::temp_dir().join(format!("wf-round-test-{}", std::process::id()));
+        let packs = base.join(netsync::PACKS_DIR);
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&packs).unwrap();
+        assert_eq!(synced_round(3, packs.clone()), Round::Plain("this round has no packs".into()));
+        assert_eq!(synced_round(3, base.join("missing")), Round::Plain("this round has no packs".into()));
+        std::fs::create_dir_all(packs.join("example.highlander")).unwrap();
+        assert_eq!(synced_round(3, packs.clone()), Round::Synced(packs));
+        let _ = std::fs::remove_dir_all(&base);
+    }
 
     #[test]
     fn a_chat_line_is_plain_chat_our_hooks_pass_on() {
