@@ -532,7 +532,7 @@ def build_pack(body: dict) -> tuple[str, bytes]:
                 f"id = {lua_string(mod_id)}",
                 'version = "0.1.0"',
                 'author = "weapon-creator"',
-                "api_version = 1",
+                "api_version = 2",
                 'entry = "weapons.lua"',
                 "",
                 "[weapons]",
