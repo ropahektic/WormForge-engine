@@ -102,15 +102,6 @@ pub(crate) fn machine_name(slot: i32) -> Option<String> {
     }
 }
 
-/// This machine's name in the lobby.
-pub(crate) fn local_name() -> Option<String> {
-    let players = PLAYERS.load(Ordering::Relaxed) as *mut u8;
-    if players.is_null() {
-        return None;
-    }
-    machine_name(unsafe { read_i32(players, LOCAL_SLOT) })
-}
-
 /// The generation being offered, or 0 when the host's bulb is out.
 pub(crate) fn current_generation() -> u32 {
     GENERATION.load(Ordering::SeqCst)
