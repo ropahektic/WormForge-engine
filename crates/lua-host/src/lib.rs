@@ -4,6 +4,7 @@
 //! `wa.*` is a dispatcher: named ids, first owner wins. Scripts do not
 //! override stock C++ methods. See docs/architecture.md.
 
+mod units;
 mod actor;
 mod grants;
 mod api;
