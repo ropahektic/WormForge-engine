@@ -17,30 +17,48 @@ fn fixed_to_wire_pixel(value: i32) -> i16 {
 /// in wire bit 13.
 pub const DIGIT_SHIFT: u32 = 8;
 pub const CTRL: u32 = 1 << 12;
+/// WA's plus key (top-row = or keypad +), sampled for polarity selection.
+pub const PLUS_KEY: u32 = 1 << 13;
+pub const MINUS_KEY: u32 = 1 << 14;
+pub const ALT: u32 = 1 << 15;
+pub const PAUSE_KEY: u32 = 1 << 16;
+const WIRE_MINUS_KEY: u32 = 1 << 15;
+const WIRE_ALT: u32 = 1 << 24;
+const WIRE_PAUSE_KEY: u32 = 1 << 25;
+const WIRE_EXTRA: u32 = WIRE_MINUS_KEY | WIRE_ALT | WIRE_PAUSE_KEY;
 const WIRE_DIGIT_SHIFT: u32 = 9;
 const WIRE_DIGIT_MASK: u32 = 0xf << WIRE_DIGIT_SHIFT;
 const WIRE_CTRL: u32 = 1 << 13;
+const WIRE_PLUS_KEY: u32 = 1 << 14;
 
 pub fn pack(sample: InputSample) -> (u32, u32) {
     let digit = (sample.keys >> DIGIT_SHIFT) & 0xf;
     let controls = (sample.keys & 0xff)
         | ((sample.down as u32) << 8)
         | (digit << WIRE_DIGIT_SHIFT)
-        | (if sample.keys & CTRL != 0 { WIRE_CTRL } else { 0 });
+        | (if sample.keys & CTRL != 0 { WIRE_CTRL } else { 0 })
+        | (if sample.keys & PLUS_KEY != 0 { WIRE_PLUS_KEY } else { 0 })
+        | (if sample.keys & MINUS_KEY != 0 { WIRE_MINUS_KEY } else { 0 })
+        | (if sample.keys & ALT != 0 { WIRE_ALT } else { 0 })
+        | (if sample.keys & PAUSE_KEY != 0 { WIRE_PAUSE_KEY } else { 0 });
     let x = fixed_to_wire_pixel(sample.px) as u16 as u32;
     let y = fixed_to_wire_pixel(sample.py) as u16 as u32;
     (controls, x | (y << 16))
 }
 
 pub fn unpack(controls: u32, packed_pointer: u32) -> Option<InputSample> {
-    if controls & !(0x1ff | WIRE_DIGIT_MASK | WIRE_CTRL) != 0 {
+    if controls & !(0x1ff | WIRE_DIGIT_MASK | WIRE_CTRL | WIRE_PLUS_KEY | WIRE_EXTRA) != 0 {
         return None;
     }
     let digit = (controls & WIRE_DIGIT_MASK) >> WIRE_DIGIT_SHIFT;
     Some(InputSample {
         keys: (controls & 0xff)
             | (digit << DIGIT_SHIFT)
-            | (if controls & WIRE_CTRL != 0 { CTRL } else { 0 }),
+            | (if controls & WIRE_CTRL != 0 { CTRL } else { 0 })
+            | (if controls & WIRE_PLUS_KEY != 0 { PLUS_KEY } else { 0 })
+            | (if controls & WIRE_MINUS_KEY != 0 { MINUS_KEY } else { 0 })
+            | (if controls & WIRE_ALT != 0 { ALT } else { 0 })
+            | (if controls & WIRE_PAUSE_KEY != 0 { PAUSE_KEY } else { 0 }),
         px: (packed_pointer as u16 as i16 as i32) << 16,
         py: ((packed_pointer >> 16) as u16 as i16 as i32) << 16,
         down: controls & 0x100 != 0,
@@ -62,7 +80,7 @@ pub fn pack_from(sample: InputSample, sender: u8) -> (u32, u32) {
 
 /// `unpack` for a stamped record: the sample, and the sender if it said.
 pub fn unpack_from(controls: u32, packed_pointer: u32) -> Option<(InputSample, Option<u8>)> {
-    if controls & !(0x1ff | WIRE_DIGIT_MASK | WIRE_CTRL | SENDER_MASK) != 0 {
+    if controls & !(0x1ff | WIRE_DIGIT_MASK | WIRE_CTRL | WIRE_PLUS_KEY | WIRE_EXTRA | SENDER_MASK) != 0 {
         return None;
     }
     let sender = (controls & SENDER_MASK) >> SENDER_SHIFT;
@@ -119,7 +137,7 @@ mod tests {
         let original = sample(0xa5, -123, 4567, true);
         let (controls, pointer) = pack(original);
         assert_eq!(unpack(controls, pointer), Some(original));
-        assert!(unpack(controls | 0x4000, pointer).is_none());
+        assert!(unpack(controls | 0x0400_0000, pointer).is_none());
     }
 
     #[test]
@@ -143,6 +161,29 @@ mod tests {
     }
 
     #[test]
+    fn plus_key_edge_is_synchronized() {
+        let plus = sample(PLUS_KEY, 1, 2, false);
+        let (controls, pointer) = pack_from(plus, 2);
+        assert_eq!(unpack_from(controls, pointer), Some((plus, Some(2))));
+        assert!(should_send(Some(sample(0, 1, 2, false)), plus, 2, 1, false));
+    }
+
+    #[test]
+    fn portal_controls_survive_sender_stamping_and_release() {
+        for keys in [MINUS_KEY, ALT, PAUSE_KEY, MINUS_KEY | ALT | PAUSE_KEY | CTRL | PLUS_KEY | 128] {
+            for sender in [0, 1, 5, 254] {
+                let pressed = sample(keys, -100, 200, false);
+                let (controls, pointer) = pack_from(pressed, sender);
+                assert_eq!(unpack_from(controls, pointer), Some((pressed, Some(sender))));
+                let release = sample(0, -100, 200, false);
+                assert!(should_send(Some(pressed), release, 2, 1, false));
+                let (controls, pointer) = pack_from(release, sender);
+                assert_eq!(unpack_from(controls, pointer), Some((release, Some(sender))));
+            }
+        }
+    }
+
+    #[test]
     fn records_say_which_machine_sent_them() {
         let shift = sample(0x20, 10, 20, false);
         for sender in [0u8, 1, 5] {
@@ -153,8 +194,8 @@ mod tests {
         let (controls, pointer) = pack(shift);
         assert_eq!(unpack_from(controls, pointer), Some((shift, None)));
         // Anything else set is still malformed.
-        assert!(unpack_from(controls | 0x4000, pointer).is_none());
-        assert!(unpack_from(controls | 0x0100_0000, pointer).is_none());
+        assert!(unpack_from(controls | 0x0400_0000, pointer).is_none());
+        assert!(unpack_from(controls | 0x0800_0000, pointer).is_none());
     }
 
     #[test]
@@ -168,7 +209,7 @@ mod tests {
         let (controls, pointer) = pack(original);
         assert_eq!(
             unpack(controls, pointer),
-            Some(sample(0x1fff, i16::MAX as i32, i16::MIN as i32, false))
+            Some(sample(0xffff, i16::MAX as i32, i16::MIN as i32, false))
         );
     }
 

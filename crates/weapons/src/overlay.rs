@@ -1,6 +1,14 @@
 use crate::stock::StockWeapon;
 
 /// What a weapon shows in the stock weapon panel.
+/// `worm_sprites_team_tint`: the overlay poses (stock id, team, path, as
+/// `worm_sprites`) and the six team colours, 0xRRGGBB, red to cyan.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WormTeamTint {
+    pub worm_sprites: Vec<(i32, Option<u8>, String)>,
+    pub colours: Vec<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PanelIcon {
     /// Borrow a stock weapon's icon (`panel_icon = "banana"`).
@@ -257,6 +265,15 @@ pub struct ActorSpawn {
     pub persist: bool,
     /// Die when the body is below the water line.
     pub drown: bool,
+    /// In WA's oil-drum collision layer (17) instead of the missiles' (15),
+    /// as Project X's `SetLayerOverride(LAYER_OILDRUM)`: WA's fires hit it,
+    /// and its guns, missiles and worms treat it as an object.
+    pub as_object: bool,
+    /// WA's missile collision shape (`shape = "missile"`) instead of the worm
+    /// shape an actor borrows: the one WA's missile constructor takes for the
+    /// Sheep's, Skunk's and most records (table entry 2), so `a:fits` tests
+    /// the actor as WA tests a Skunk.
+    pub missile_shape: bool,
     /// Draw the body. `false` / `sprite = false` uses the 1023 blit reject.
     pub visible: bool,
     /// Bake opaque silhouette(s) from the GIF/PNG. Sub-toggles below choose
@@ -300,6 +317,8 @@ impl Default for ActorSpawn {
             damage_worms: true,
             persist: false,
             drown: true,
+            as_object: false,
+            missile_shape: false,
             visible: true,
             mask: false,
             mask_worms: false,
@@ -403,6 +422,15 @@ pub struct OverlayParams {
     /// frame by frame, not aim-angle sheets. Default false = aim-wizard
     /// semantics (phase is the aim angle; draw poses hold or play).
     pub worm_sprites_animate: bool,
+    /// `worm_sprites_toggle = { key = "plus_key", worm_sprites = { ... } }`:
+    /// sheets drawn in place of `worm_sprites` while the worm's toggle is on,
+    /// which the synchronized + key flips while the turn's worm has the slot
+    /// selected (stock id, team, path, as `worm_sprites`).
+    pub worm_sprites_toggle: Vec<(i32, Option<u8>, String)>,
+    /// `worm_sprites_team_tint = { worm_sprites = { ... }, colours = { ... } }`:
+    /// per pose, an overlay drawn over the claim's sheet, multiplied by the
+    /// drawing worm's team colour (six, red to cyan).
+    pub worm_sprites_team_tint: Option<WormTeamTint>,
     /// Pack-relative WAV paths (`sounds = { ... }`) loaded into DSSound slot 451+.
     pub extra_sounds: Vec<(String, std::path::PathBuf)>,
     pub cluster_sprite_id: Option<i32>,
@@ -486,6 +514,8 @@ impl Default for OverlayParams {
             gpu_worm_sprites: true,
             truecolor: true,
             worm_sprites_animate: false,
+            worm_sprites_toggle: Vec::new(),
+            worm_sprites_team_tint: None,
             extra_sounds: Vec::new(),
             cluster_sprite_id: None,
             cluster_sprite_path: None,

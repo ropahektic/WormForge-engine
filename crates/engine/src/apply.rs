@@ -204,7 +204,10 @@ pub fn on_gfx_ready(world: *mut u8, display: *mut u8) {
                 // (as_weapon) must stay a real WA slot for MissileEntity.
                 let worm_sheet = !as_weapon
                     && claim.params.gpu_worm_sprites
-                    && claim.params.worm_sprites.iter().any(|(_, _, wp)| wp == p);
+                    && (claim.params.worm_sprites.iter().any(|(_, _, wp)| wp == p)
+                        || claim.params.worm_sprites_toggle.iter().any(|(_, _, wp)| wp == p)
+                        || claim.params.worm_sprites_team_tint.as_ref()
+                            .is_some_and(|t| t.worm_sprites.iter().any(|(_, _, wp)| wp == p)));
                 let hold_sheet = !as_weapon && claim.params.hold.as_ref().is_some_and(|hold| {
                     hold.sheet == *p || hold.hand.as_ref() == Some(p)
                         || hold.flash.as_ref().is_some_and(|flash| flash.sheet == *p)
@@ -455,6 +458,10 @@ pub fn after_init_weapon_table(runtime: *mut u8) -> Result<(), String> {
             &claim.params.worm_sprites,
             claim.params.worm_sprites_animate,
         );
+        crate::worm_sprite::claim_toggle(idx, &claim.mod_id, &claim.params.worm_sprites_toggle);
+        if let Some(tint) = &claim.params.worm_sprites_team_tint {
+            crate::worm_sprite::claim_team_tint(idx, &claim.mod_id, &tint.worm_sprites, &tint.colours);
+        }
         if let Some(hold) = &claim.params.hold {
             crate::worm_hold::claim(idx, &claim.mod_id, hold);
         }

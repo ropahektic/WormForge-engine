@@ -10,7 +10,13 @@ use game::offsets::{
     CLASS_LAND, CLASS_MISSILE, CLASS_OIL, CLASS_WORM, ENT_CLASS_TYPE, ENT_POS_X, ENT_POS_Y, ENT_SPEED_X,
     ENT_SPEED_Y, ENT_WORLD, ENT_WORM_TEAM, LUA_ACTOR_MAGIC, MAX_TEAMS, WORLD_TEAM_AMMO_GROUP,
     WORLD_TEAM_STRIDE,
-    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL, WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT, WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_DRILLING, WORM_STATE_FROZEN, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING, WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE, WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_TUMBLING, ENT_COLLISION_MASK,
+    ENT_GRAVITY_SCALE, ENT_WIND_SCALE, WORM_AIM_ANGLE, WORM_FACING, WORM_JET_FUEL,
+    WORM_SHOTS_FIRED, WORM_SHOTS_TO_FIRE, WORM_KEY_DOWN, WORM_KEY_LEFT, WORM_KEY_RIGHT,
+    WORM_KEY_UP, WORM_SELECTED_WEAPON, WORM_STATE, WORM_STATE_AIRBORNE, WORM_STATE_DRILLING,
+    WORM_STATE_FROZEN, WORM_STATE_JETPACKING, WORM_STATE_PARACHUTING, WORM_STATE_PREFIRING,
+    WORM_STATE_PUNCHING, WORM_STATE_STANDING, WORM_STATE_TELEPORTING, WORM_TURN_ACTIVE,
+    WORM_TURN_SIDE, WORM_STATE_BUNGEE, WORM_STATE_TUMBLING, ENT_COLLISION_MASK,
+    WORM_STATE_KAMIKAZE,
 };
 use mlua::{Function, Lua, Table, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::Cell;
@@ -61,6 +67,58 @@ pub const FIRE_DEFAULTS: FireArgs = FireArgs {
     owner: 0, x: 0, y: 0, vx: 0, vy: 0x4_0000, count: 8, duration: 4000, up_power: 100, damage: 20,
     damage_scale: 0x1_0000, knock_scale: 0x1_0000, tint: None,
 };
+
+/// What `wa.world.trace` / `wa.world.collides` test against (`with`).
+pub const SHAPE_TERRAIN: u32 = 1;
+pub const SHAPE_WORMS: u32 = 2;
+pub const SHAPE_CRATES: u32 = 4;
+pub const SHAPE_OIL: u32 = 8;
+pub const SHAPE_MINES: u32 = 16;
+pub const SHAPE_GRAVES: u32 = 32;
+
+/// A circle, swept from (x0, y0) to (x1, y1) or tested at (x0, y0): 16.16,
+/// radius in pixels, against the `with` bits, without `ignore`'s objects.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ShapeQuery {
+    pub x0: i32,
+    pub y0: i32,
+    pub x1: i32,
+    pub y1: i32,
+    pub radius: i32,
+    pub with: u32,
+    pub ignore: Vec<u32>,
+}
+
+/// A sweep's result. `hit`: it touched something on the way; (x, y) is the
+/// last free centre before, (nx, ny) the unit normal away from what it
+/// touched, `obj` that object (0 terrain). `starts_solid`: it overlapped at
+/// the start; `left` is where it first came free, if it did.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ShapeHit {
+    pub hit: bool,
+    pub x: i32,
+    pub y: i32,
+    pub nx: f64,
+    pub ny: f64,
+    pub obj: u32,
+    pub starts_solid: bool,
+    pub left: Option<(i32, i32)>,
+}
+
+/// `wa.crates.spawn`: one of WA's crates, its contents WA's own random pick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CrateArgs {
+    /// Where, 16.16.
+    pub x: i32,
+    pub y: i32,
+    /// WA's kind (PX's ECrateType): 1 weapon, 2 health, 4 utility.
+    pub kind: i32,
+    /// A health crate's health.
+    pub health: i32,
+    /// How it arrives (PX's EDropType): 0 where it is, 1 teleported in,
+    /// 2 on a parachute.
+    pub drop: i32,
+}
 
 /// `wa.weapons.launch`: a real WA missile, fired from a weapon slot's fire
 /// params, as `FireWeapon__CreateWeaponProjectile` fires one.
@@ -181,7 +239,19 @@ fn apply_gfx(
     Ok(())
 }
 
+/// Atomic transport; omitted speeds keep the body's current momentum.
+#[derive(Clone, Copy, Debug)]
+pub struct WarpArgs {
+    pub x: i32, pub y: i32,
+    pub vx: Option<i32>, pub vy: Option<i32>, pub facing: Option<i32>,
+}
+
 pub struct ActorNative {
+    pub warp: fn(u32, &WarpArgs) -> bool,
+    pub body_uid: fn(u32) -> u32,
+    pub body_live: fn(u32, u32) -> bool,
+    pub air_fire: fn(u32, bool) -> bool,
+    pub fire_power: fn(u32) -> i32,
     pub explode: fn(handle: u32, damage: i32, explosion_id: i32, below: bool),
     /// Hold the actor on one frame of its current sheet.
     pub set_frame: fn(handle: u32, frame: i32),
@@ -227,6 +297,8 @@ pub struct ActorNative {
     pub is_taken: fn(handle: u32) -> bool,
     /// `worm:fits(x, y)`: WA's own collision test of the worm there.
     pub fits: fn(handle: u32, x: i32, y: i32) -> bool,
+    /// `a:fits(x, y)`: the actor's own shape against the land.
+    pub actor_fits: fn(handle: u32, x: i32, y: i32) -> bool,
     /// `worm:jetpack_steer(on)`.
     pub jetpack_steer: fn(handle: u32, on: bool),
     /// `worm.windup = frames | nil`: frames left before the worm releases
@@ -235,7 +307,8 @@ pub struct ActorNative {
     pub windup: fn(handle: u32) -> Option<i32>,
     /// Switch this actor's installed sheet and reset the animation phase.
     pub look: fn(handle: u32, sprite: i32, delta: u32, w: i32, h: i32),
-    /// Keyboard bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint, 64 Q, 128 Space, 4096 Ctrl.
+    /// Keyboard bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint, 64 Q, 128 Space, 4096 Ctrl,
+    /// 8192 the + key.
     pub keys: fn() -> u32,
     /// True when peers exist. Packs reading local input need this to guard
     /// themselves: `keys()` and `pointer()` are local-only, so acting on them
@@ -258,6 +331,12 @@ pub struct ActorNative {
     pub heal: fn(handle: u32, amount: i32) -> i32,
     pub arm_mine: fn(handle: u32, fuse_ms: i32) -> bool,
     pub mine_fuse: fn(handle: u32) -> i32,
+    /// Add 16.16 velocity to a live stock mine or missile and wake it.
+    pub impulse_object: fn(handle: u32, dx: i32, dy: i32) -> bool,
+    /// The team (1-6) that fired a stock missile or laid a stock mine; 0 if none.
+    pub object_team: fn(handle: u32) -> i32,
+    /// Free a live stock missile or mine without it bursting.
+    pub remove_object: fn(handle: u32) -> bool,
     pub hit_object: fn(handle: u32, from: u32, damage: i32, vx: i32, vy: i32, projectile: bool) -> bool,
     /// Rebuild the dead worm associated by the pack with a live grave.
     pub revive_grave: fn(grave: u32, worm_id: u32, health: i32) -> u32,
@@ -277,8 +356,10 @@ pub struct ActorNative {
     pub set_gravity: fn(i32),
     /// Set WA's wind, 16.16, as WA's own wind change does: message 0x54.
     pub set_wind: fn(i32),
-    /// Stock SpecialImpact (msg 0x4B). No explosion. Pose restored so the worm does not move.
-    pub hurt: fn(target: u32, from: u32, amount: i32),
+    /// Stock SpecialImpact (msg 0x4B). No explosion. Without a knock (vx, vy,
+    /// 16.16) the pose is restored so the worm does not move; with one WA
+    /// throws it.
+    pub hurt: fn(target: u32, from: u32, amount: i32, vx: i32, vy: i32),
     /// Rewrite a stock weapon slot's body sprite (and optional cluster bit) on
     /// the live table. `cluster = 0` means leave the cluster sprite alone.
     pub retarget_weapon_sprites: fn(slot: u32, body: i32, cluster: i32) -> Result<(), String>,
@@ -290,6 +371,13 @@ pub struct ActorNative {
     /// `wa.worms.spawn{...}`: a new worm for a team (team, x, y, name,
     /// health). Returns its handle.
     pub spawn_worm: fn(u32, i32, i32, &str, i32) -> Result<u32, String>,
+    /// `wa.world.trace{...}`: a circle swept against terrain and objects.
+    pub shape_trace: fn(&ShapeQuery) -> ShapeHit,
+    /// `wa.world.collides{...}`: what a circle there overlaps: None nothing,
+    /// Some(0) terrain, Some(handle) an object.
+    pub shape_collides: fn(&ShapeQuery) -> Option<u32>,
+    /// `wa.crates.spawn{...}`: one of WA's crates. Returns its handle.
+    pub spawn_crate: fn(&CrateArgs) -> Result<u32, String>,
     /// WA's own WormEntity::SetState, so the state's setup runs.
     pub set_worm_state: fn(handle: u32, state: u32),
     /// Enter WA's frozen worm state when the worm is alive and eligible.
@@ -318,6 +406,11 @@ pub enum AmmoChange {
 impl Default for ActorNative {
     fn default() -> Self {
         Self {
+            warp: |_, _| false,
+            body_uid: |_| 0,
+            body_live: |_, _| false,
+            air_fire: |_, _| false,
+            fire_power: |_| 65536,
             explode: |_, _, _, _| {},
             despawn: |_| {},
             networked: || false,
@@ -356,6 +449,7 @@ impl Default for ActorNative {
             release: |_, _, _, _, _| {},
             is_taken: |_| false,
             fits: |_, _, _| true,
+            actor_fits: |_, _, _| true,
             jetpack_steer: |_, _| {},
             set_windup: |_, _| {},
             windup: |_| None,
@@ -370,6 +464,9 @@ impl Default for ActorNative {
             heal: |_, _| 0,
             arm_mine: |_, _| false,
             mine_fuse: |_| 0,
+            impulse_object: |_, _, _| false,
+            object_team: |_| 0,
+            remove_object: |_| false,
             hit_object: |_, _, _, _, _, _| false,
             revive_grave: |_, _, _| 0,
             grave_identity: |_| 0,
@@ -380,11 +477,14 @@ impl Default for ActorNative {
             forces: || (0, 0),
             set_gravity: |_| {},
             set_wind: |_| {},
-            hurt: |_, _, _| {},
+            hurt: |_, _, _, _, _| {},
             retarget_weapon_sprites: |_, _, _| Err("retarget not bound".into()),
             launch: |_| Err("launch not bound".into()),
             spawn_fire: |_| Err("fire.spawn not bound".into()),
             spawn_worm: |_, _, _, _, _| Err("worms.spawn not bound".into()),
+            shape_trace: |_| ShapeHit::default(),
+            shape_collides: |_| None,
+            spawn_crate: |_| Err("crates.spawn not bound".into()),
         }
     }
 }
@@ -432,8 +532,9 @@ pub fn register_brain(
     lua: &Lua,
     frame: Option<Function>,
     land: Option<Function>,
+    hit: Option<Function>,
 ) -> mlua::Result<u32> {
-    if frame.is_none() && land.is_none() {
+    if frame.is_none() && land.is_none() && hit.is_none() {
         return Ok(0);
     }
     let id = NEXT_BRAIN.fetch_add(1, Ordering::SeqCst).max(1);
@@ -447,6 +548,9 @@ pub fn register_brain(
     }
     if let Some(f) = land {
         spec.set("land", f)?;
+    }
+    if let Some(f) = hit {
+        spec.set("hit", f)?;
     }
     brains.set(id, spec)?;
     Ok(id)
@@ -500,33 +604,57 @@ pub fn weapon_fire(
     if fire_id == 0 {
         return Ok(());
     }
+    let power = NATIVE.lock().ok().and_then(|g| g.as_ref().map(|n| (n.fire_power)(worm))).unwrap_or(65536);
     with_lua("weapon_fire", |lua| {
-        let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
-        let fires: Table = wa.get("_fires").map_err(|e| e.to_string())?;
-        let spec = match fires.get::<Value>(fire_id).map_err(|e| e.to_string())? {
-            Value::Table(t) => t,
-            _ => return Err(format!("on_fire {fire_id} missing")),
-        };
-        let cb: Function = match spec.get::<Value>("on").map_err(|e| e.to_string())? {
-            Value::Function(f) => f,
-            _ => return Err(format!("on_fire {fire_id} has no function")),
-        };
-        let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
-        if let Ok(m) = spec.get::<String>("mod") {
-            let _ = wa.set("_mod", m);
-        }
-        let fire = lua.create_table().map_err(|e| e.to_string())?;
-        fire.set("x", x).map_err(|e| e.to_string())?;
-        fire.set("y", y).map_err(|e| e.to_string())?;
-        fire.set("vx", vx).map_err(|e| e.to_string())?;
-        fire.set("vy", vy).map_err(|e| e.to_string())?;
-        fire.set("slot", slot).map_err(|e| e.to_string())?;
-        fire.set("worm", WormHandle(worm))
-            .map_err(|e| e.to_string())?;
-        let result = with_spawn_owner(worm, || cb.call::<()>(fire).map_err(|e| e.to_string()));
-        let _ = wa.set("_mod", caller);
-        result
+        let extra = lua.create_table().map_err(|e| e.to_string())?;
+        extra.set("power", power as f64 / 65536.0).map_err(|e| e.to_string())?;
+        call_fire(lua, fire_id, worm, slot, (x, y, vx, vy), Some(&extra))
     })
+}
+
+/// Run on_fire `fire_id` with the event a shot gives it: (x, y, vx, vy), the
+/// slot and the worm, plus `extra`'s fields (power or airborne dispatch).
+/// The running pack (`wa._mod`) is the fire's while it
+/// runs, and the caller's again after.
+pub(crate) fn call_fire(
+    lua: &Lua,
+    fire_id: u32,
+    worm: u32,
+    slot: i32,
+    (x, y, vx, vy): (i32, i32, i32, i32),
+    extra: Option<&Table>,
+) -> Result<(), String> {
+    let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
+    let fires: Table = wa.get("_fires").map_err(|e| e.to_string())?;
+    let spec = match fires.get::<Value>(fire_id).map_err(|e| e.to_string())? {
+        Value::Table(t) => t,
+        _ => return Err(format!("on_fire {fire_id} missing")),
+    };
+    let cb: Function = match spec.get::<Value>("on").map_err(|e| e.to_string())? {
+        Value::Function(f) => f,
+        _ => return Err(format!("on_fire {fire_id} has no function")),
+    };
+    let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
+    if let Ok(m) = spec.get::<String>("mod") {
+        let _ = wa.set("_mod", m);
+    }
+    let fire = lua.create_table().map_err(|e| e.to_string())?;
+    if let Some(extra) = extra {
+        for pair in extra.pairs::<Value, Value>() {
+            let (k, v) = pair.map_err(|e| e.to_string())?;
+            fire.set(k, v).map_err(|e| e.to_string())?;
+        }
+    }
+    fire.set("x", x).map_err(|e| e.to_string())?;
+    fire.set("y", y).map_err(|e| e.to_string())?;
+    fire.set("vx", vx).map_err(|e| e.to_string())?;
+    fire.set("vy", vy).map_err(|e| e.to_string())?;
+    fire.set("slot", slot).map_err(|e| e.to_string())?;
+    fire.set("worm", WormHandle(worm))
+        .map_err(|e| e.to_string())?;
+    let result = with_spawn_owner(worm, || cb.call::<()>(fire).map_err(|e| e.to_string()));
+    let _ = wa.set("_mod", caller);
+    result
 }
 
 /// An `on_click`: the click at (x, y), and `speed`, the shot's speed in WA's
@@ -683,6 +811,87 @@ pub fn actor_freed(handle: u32) {
     }
 }
 
+/// What hit a LuaActor whose brain has a `hit` handler: WA's blast (0x1C)
+/// or hit (0x4B, Project X's M_GUNEXP), which the engine then leaves to the
+/// handler instead of applying to the actor's speed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ActorHit {
+    /// A blast, else a hit.
+    pub blast: bool,
+    /// A hit's kind, WA's first field: 1 is a fire's.
+    pub kind: i32,
+    /// Where it came from, 16.16.
+    pub x: i32,
+    pub y: i32,
+    /// The push WA would have given the actor, 16.16 speed.
+    pub vx: i32,
+    pub vy: i32,
+    pub damage: i32,
+    pub team: i32,
+}
+
+/// Whether brain `brain_id` takes its hits itself (`on = { hit = fn }`).
+pub fn actor_takes_hits(brain_id: u32) -> bool {
+    if brain_id == 0 {
+        return false;
+    }
+    PARKED_LUA.with(|slot| {
+        let guard = slot.borrow();
+        let Some(lua) = guard.as_ref() else { return false };
+        (|| -> mlua::Result<bool> {
+            let wa: Table = lua.globals().get("wa")?;
+            let brains: Table = wa.get("_brains")?;
+            Ok(match brains.get::<Value>(brain_id)? {
+                Value::Table(spec) => matches!(spec.get::<Value>("hit")?, Value::Function(_)),
+                _ => false,
+            })
+        })()
+        .unwrap_or(false)
+    })
+}
+
+/// Run brain `brain_id`'s `hit` handler: `hit(actor, { kind = "blast" |
+/// "hit", hit_kind, x, y, vx, vy, damage, team })`.
+pub fn actor_hit(handle: u32, brain_id: u32, hit: ActorHit) -> Result<(), String> {
+    if handle == 0 || brain_id == 0 {
+        return Ok(());
+    }
+    with_lua("actor hit", |lua| {
+        let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
+        let brains: Table = wa.get("_brains").map_err(|e| e.to_string())?;
+        let spec = match brains.get::<Value>(brain_id).map_err(|e| e.to_string())? {
+            Value::Table(t) => t,
+            _ => return Ok(()),
+        };
+        let f = match spec.get::<Value>("hit").map_err(|e| e.to_string())? {
+            Value::Function(f) => f,
+            _ => return Ok(()),
+        };
+        let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
+        if let Ok(m) = spec.get::<String>("mod") {
+            let _ = wa.set("_mod", m);
+        }
+        let t = lua.create_table().map_err(|e| e.to_string())?;
+        (|| -> mlua::Result<()> {
+            t.set("kind", if hit.blast { "blast" } else { "hit" })?;
+            t.set("hit_kind", hit.kind)?;
+            t.set("x", hit.x)?;
+            t.set("y", hit.y)?;
+            t.set("vx", hit.vx)?;
+            t.set("vy", hit.vy)?;
+            t.set("damage", hit.damage)?;
+            t.set("team", hit.team)?;
+            Ok(())
+        })()
+        .map_err(|e| e.to_string())?;
+        let actor = lua.create_userdata(ActorHandle(handle)).map_err(|e| e.to_string())?;
+        let owner = read_handle(handle, ACTOR_OWNER) as u32;
+        let result = with_spawn_owner(owner, || f.call::<()>((actor, t)).map_err(|e| e.to_string()));
+        let _ = wa.set("_mod", caller);
+        result
+    })
+}
+
 pub fn actor_frame(handle: u32, brain_id: u32, ev: ActorEvent) -> Result<(), String> {
     if handle == 0 || brain_id == 0 {
         return Ok(());
@@ -786,6 +995,14 @@ impl UserData for ActorHandle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("warp", |_, this, spec: Table| {
+            crate::sim_context::require("a:warp")?;
+            let args = warp_args(&spec)?;
+            let h = this.0;
+            if !actor_live(h) { return Ok(false); }
+            let warp = NATIVE.lock().ok().and_then(|g| g.as_ref().map(|n| n.warp));
+            Ok(warp.map(|f| f(h, &args)).unwrap_or(false))
+        });
         methods.add_method("dig", |_, this, spec: Table| {
             if live(this.0) == 0 || actor_dead(live(this.0)) {
                 return Ok(());
@@ -796,6 +1013,16 @@ impl UserData for ActorHandle {
                 read_handle(live(this.0), ENT_POS_Y),
                 radius,
             )
+        });
+        // `a:fits(x, y)`: whether the actor's collision shape at (x, y),
+        // 16.16, touches no land, by WA's own test. A read.
+        methods.add_method("fits", |_, this, (x, y, mode): (i32, i32, Option<String>)| {
+            fits_terrain_mode(mode.as_deref())?;
+            let h = live(this.0);
+            if h == 0 {
+                return Ok(true);
+            }
+            Ok(native_actor_fits().map(|f| f(h, x, y)).unwrap_or(true))
         });
         methods.add_method("explode", |_, this, opts: Option<Table>| {
             crate::sim_context::require("actor:explode")?;
@@ -976,6 +1203,7 @@ impl UserData for WormHandle {
         // Facing: WA's turn side (+0x1A8), and its copy (+0x3DC) so the
         // worm's sprite follows at once rather than at the next aim update.
         fields.add_field_method_set("facing", |_, this, v: i32| {
+            crate::sim_context::require("worm.facing (write)")?;
             if this.0 != 0 {
                 let side = if v < 0 { -1 } else { 1 };
                 unsafe {
@@ -1220,6 +1448,17 @@ impl UserData for WormHandle {
             crate::sim_context::require("worm:freeze")?;
             Ok(native_freeze_worm().map(|freeze| freeze(this.0)).unwrap_or(false))
         });
+        methods.add_method("warp", |_, this, spec: Table| {
+            crate::sim_context::require("worm:warp")?;
+            let args = warp_args(&spec)?;
+            let warp = NATIVE.lock().ok().and_then(|g| g.as_ref().map(|n| n.warp));
+            Ok(warp.map(|f| f(this.0, &args)).unwrap_or(false))
+        });
+        methods.add_method("air_fire", |_, this, on: Option<bool>| {
+            crate::sim_context::require("worm:air_fire")?;
+            let air_fire = NATIVE.lock().ok().and_then(|g| g.as_ref().map(|n| n.air_fire));
+            Ok(air_fire.map(|f| f(this.0, on.unwrap_or(true))).unwrap_or(false))
+        });
         // `worm:set_state(...)`, through WA's own SetState. A debugging tool
         // on its way out: only for a pack whose mod.toml declares
         // `debug_worm_state = true`, every call logged. A lockstep write:
@@ -1355,12 +1594,15 @@ impl UserData for WormHandle {
         );
         // `worm:fits(x, y)`: whether the worm would touch nothing at (x, y),
         // 16.16, by WA's own collision test and the worm's own shape (for a
-        // taken worm, with the mask it had before it was taken). A read.
-        methods.add_method("fits", |_, this, (x, y): (i32, i32)| {
+        // taken worm, with the mask it had before it was taken). The optional
+        // "terrain" mode checks land alone. A read.
+        methods.add_method("fits", |_, this, (x, y, mode): (i32, i32, Option<String>)| {
+            let terrain = fits_terrain_mode(mode.as_deref())?;
             if this.0 == 0 {
                 return Ok(true);
             }
-            Ok(native_fits().map(|f| f(this.0, x, y)).unwrap_or(true))
+            let fits = if terrain { native_actor_fits() } else { native_fits() };
+            Ok(fits.map(|f| f(this.0, x, y)).unwrap_or(true))
         });
         // `worm:jetpack_steer(on)`: while WA's jet pack runs, the pack steers
         // it (speed, fuel) and WA neither thrusts nor burns fuel from the keys;
@@ -1404,21 +1646,25 @@ impl UserData for WormHandle {
             if this.0 == 0 {
                 return Ok(());
             }
-            let amount = match arg {
-                Value::Integer(n) => n as i32,
-                Value::Number(n) => n as i32,
-                Value::Table(t) => t.get::<Option<i32>>("amount")?.unwrap_or(0),
+            let (amount, vx, vy) = match arg {
+                Value::Integer(n) => (n as i32, 0, 0),
+                Value::Number(n) => (n as i32, 0, 0),
+                Value::Table(t) => (
+                    t.get::<Option<i32>>("amount")?.unwrap_or(0),
+                    t.get::<Option<i32>>("vx")?.unwrap_or(0),
+                    t.get::<Option<i32>>("vy")?.unwrap_or(0),
+                ),
                 other => {
                     return Err(mlua::Error::external(format!(
-                        "hurt expects a number or {{ amount = n }}, got {other:?}"
+                        "hurt expects a number or {{ amount = n, vx, vy }}, got {other:?}"
                     )))
                 }
             };
-            if amount <= 0 {
+            if amount < 0 || (amount == 0 && vx == 0 && vy == 0) {
                 return Ok(());
             }
             if let Some(hurt) = native_hurt() {
-                hurt(this.0, spawn_owner(), amount);
+                hurt(this.0, spawn_owner(), amount, vx, vy);
             }
             Ok(())
         });
@@ -1433,11 +1679,20 @@ impl UserData for WormHandle {
 
 /// Stock world object (crate / mine / missile / oil). Pos only — no CTask offsets.
 #[derive(Clone, Copy)]
-pub struct WorldHandle(pub u32);
+pub struct WorldHandle(pub u32, pub u32);
+impl WorldHandle {
+    pub(crate) fn new(handle: u32) -> Self {
+        Self(handle, NATIVE.lock().ok().and_then(|g| g.as_ref().map(|n| (n.body_uid)(handle))).unwrap_or(0))
+    }
+    fn live(self) -> bool {
+        NATIVE.lock().ok().and_then(|g| g.as_ref().map(|n| (n.body_live)(self.0, self.1))).unwrap_or(false)
+    }
+}
 
 impl UserData for WorldHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, this| Ok(this.0));
+        fields.add_field_method_get("uid", |_, this| Ok(this.1));
         fields.add_field_method_get("kind", |_, this| Ok(kind_name(this.0)));
         fields.add_field_method_get("worm_id", |_, this| {
             Ok(native_grave_identity().map(|f| f(this.0)).unwrap_or(0))
@@ -1445,15 +1700,47 @@ impl UserData for WorldHandle {
         fields.add_field_method_get("fuse", |_, this| {
             Ok(native_mine_fuse().map(|f| f(this.0)).unwrap_or(0))
         });
+        // A stock missile's or mine's team (1-6, 0 none) and its colour, as
+        // `worm.alliance` (nil without a team).
+        fields.add_field_method_get("team", |_, this| {
+            Ok(native_object_team().map(|f| f(this.0)).unwrap_or(0))
+        });
+        fields.add_field_method_get("alliance", |_, this| {
+            let team = native_object_team().map(|f| f(this.0)).unwrap_or(0);
+            if team == 0 {
+                return Ok(None);
+            }
+            Ok(unsafe { game::team::entity_team_colour(this.0 as *mut u8, team) }.map(|c| c as i32))
+        });
         bind_pos_fields(fields, |h| h.0);
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("warp", |_, this, spec: Table| {
+            crate::sim_context::require("object:warp")?;
+            let args = warp_args(&spec)?;
+            if !this.live() { return Ok(false); }
+            let warp = NATIVE.lock().ok().and_then(|g| g.as_ref().map(|n| n.warp));
+            Ok(warp.map(|f| f(this.0, &args)).unwrap_or(false))
+        });
+        methods.add_method("fits", |_, this, (x, y, mode): (i32, i32, Option<String>)| {
+            fits_terrain_mode(mode.as_deref())?;
+            if !this.live() { return Ok(false); }
+            Ok(native_actor_fits().map(|f| f(this.0, x, y)).unwrap_or(false))
+        });
         methods.add_method("arm", |_, this, fuse_ms: i32| {
             if !crate::sim_context::active() {
                 return Err(mlua::Error::external("mine:arm: only from a simulation callback"));
             }
             Ok(native_arm_mine().map(|f| f(this.0, fuse_ms)).unwrap_or(false))
+        });
+        methods.add_method("impulse", |_, this, (dx, dy): (i32, i32)| {
+            crate::sim_context::require("object:impulse")?;
+            Ok(native_impulse_object().map(|f| f(this.0, dx, dy)).unwrap_or(false))
+        });
+        methods.add_method("remove", |_, this, ()| {
+            crate::sim_context::require("object:remove")?;
+            Ok(native_remove_object().map(|f| f(this.0)).unwrap_or(false))
         });
         methods.add_method("hit", |_, this, (damage, vx, vy, kind): (i32, i32, i32, Option<String>)| {
             if !crate::sim_context::active() {
@@ -1484,7 +1771,7 @@ pub(crate) fn entity_value(lua: &Lua, handle: u32) -> Result<Value, String> {
     } else if handle != 0 && unsafe { read_i32(handle as *mut u8, ACTOR_MAGIC) } as u32 == LUA_ACTOR_MAGIC {
         Value::UserData(lua.create_userdata(ActorHandle(handle)).map_err(|e| e.to_string())?)
     } else {
-        Value::UserData(lua.create_userdata(WorldHandle(handle)).map_err(|e| e.to_string())?)
+        Value::UserData(lua.create_userdata(WorldHandle::new(handle)).map_err(|e| e.to_string())?)
     };
     Ok(v)
 }
@@ -1501,6 +1788,7 @@ fn kind_name(handle: u32) -> &'static str {
         CLASS_OIL => "oil",
         game::offsets::CLASS_GRAVE => "grave",
         CLASS_LAND => "land",
+        game::offsets::CLASS_ARROW => "arrow",
         _ => "object",
     }
 }
@@ -1616,6 +1904,10 @@ fn native_take() -> Option<fn(u32, bool, bool)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.take)
 }
 
+fn native_actor_fits() -> Option<fn(u32, i32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.actor_fits)
+}
+
 fn native_fits() -> Option<fn(u32, i32, i32) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.fits)
 }
@@ -1669,6 +1961,7 @@ pub(crate) fn worm_state_name(state: u32) -> Option<&'static str> {
         WORM_STATE_PREFIRING => "prefiring",
         WORM_STATE_PUNCHING => "punching",
         WORM_STATE_DRILLING => "drilling",
+        WORM_STATE_KAMIKAZE => "kamikaze",
         WORM_STATE_TELEPORTING => "teleporting",
         WORM_STATE_JETPACKING => "jetpacking",
         WORM_STATE_PARACHUTING => "parachuting",
@@ -1792,6 +2085,18 @@ fn native_mine_fuse() -> Option<fn(u32) -> i32> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.mine_fuse)
 }
 
+fn native_impulse_object() -> Option<fn(u32, i32, i32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.impulse_object)
+}
+
+fn native_object_team() -> Option<fn(u32) -> i32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.object_team)
+}
+
+fn native_remove_object() -> Option<fn(u32) -> bool> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.remove_object)
+}
+
 fn native_hit_object() -> Option<fn(u32, u32, i32, i32, i32, bool) -> bool> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hit_object)
 }
@@ -1865,7 +2170,7 @@ fn ammo_change(v: Value) -> mlua::Result<Option<AmmoChange>> {
     }
 }
 
-fn native_hurt() -> Option<fn(u32, u32, i32)> {
+fn native_hurt() -> Option<fn(u32, u32, i32, i32, i32)> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.hurt)
 }
 
@@ -1875,6 +2180,14 @@ pub(crate) fn native_spawn_fire() -> Option<fn(&FireArgs) -> Result<u32, String>
 
 pub(crate) fn native_spawn_worm() -> Option<fn(u32, i32, i32, &str, i32) -> Result<u32, String>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.spawn_worm)
+}
+
+pub(crate) fn native_shape() -> Option<(fn(&ShapeQuery) -> ShapeHit, fn(&ShapeQuery) -> Option<u32>)> {
+    NATIVE.lock().ok()?.as_ref().map(|n| (n.shape_trace, n.shape_collides))
+}
+
+pub(crate) fn native_spawn_crate() -> Option<fn(&CrateArgs) -> Result<u32, String>> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.spawn_crate)
 }
 
 pub(crate) fn native_launch() -> Option<fn(&LaunchArgs) -> Result<u32, String>> {
@@ -2047,6 +2360,7 @@ mod tests {
         assert_eq!(worm_state_name(0x69), Some("prefiring"));
         assert_eq!(worm_state_name(0x7D), Some("parachuting"));
         assert_eq!(worm_state_name(0x86), Some("frozen"));
+        assert_eq!(worm_state_name(0x6D), Some("kamikaze"));
         // Not guessed: 0x7B's setup is Batroping, whatever it was called.
         assert_eq!(worm_state_name(0x7B), None);
         assert_eq!(settable_worm_state("sliding"), Some(0x7E));
@@ -2166,4 +2480,34 @@ pub struct StampBuried {
 
 pub fn native_land_stamp() -> Option<fn(i32, u32, i32, i32, Option<StampBuried>) -> Result<(), String>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.land_stamp)
+}
+
+fn fits_terrain_mode(mode: Option<&str>) -> mlua::Result<bool> {
+    match mode {
+        None => Ok(false),
+        Some("terrain") => Ok(true),
+        _ => Err(mlua::Error::external("fits: mode must be terrain or omitted")),
+    }
+}
+
+fn warp_args(spec: &Table) -> mlua::Result<WarpArgs> {
+    for key in spec.clone().pairs::<String, Value>() {
+        let (key, _) = key?;
+        if !matches!(key.as_str(), "x" | "y" | "vx" | "vy" | "facing") {
+            return Err(mlua::Error::external(format!("warp: unknown field {key}")));
+        }
+    }
+    let facing = spec.get::<Option<i32>>("facing")?;
+    if facing.is_some_and(|v| v != -1 && v != 1) {
+        return Err(mlua::Error::external("warp: facing must be -1 or 1"));
+    }
+    Ok(WarpArgs { x: spec.get("x")?, y: spec.get("y")?, vx: spec.get("vx")?, vy: spec.get("vy")?, facing })
+}
+
+pub fn weapon_air_fire(fire_id: u32, worm: u32, slot: i32, x: i32, y: i32) -> Result<(), String> {
+    with_lua("weapon_air_fire", |lua| {
+        let extra = lua.create_table().map_err(|e| e.to_string())?;
+        extra.set("airborne", true).map_err(|e| e.to_string())?;
+        call_fire(lua, fire_id, worm, slot, (x, y, 0, 0), Some(&extra))
+    })
 }

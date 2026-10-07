@@ -43,6 +43,20 @@ pub unsafe fn worm_team_colour(worm: *mut u8) -> Option<u8> {
     unsafe { colour_from_game_info(info, team) }
 }
 
+/// The colour of `team` (1-6) in the match `entity` belongs to: for objects
+/// that carry a team number rather than being a worm of it.
+pub unsafe fn entity_team_colour(entity: *mut u8, team: i32) -> Option<u8> {
+    if entity.is_null() {
+        return None;
+    }
+    let world = unsafe { read_i32(entity, ENT_WORLD) } as *mut u8;
+    if world.is_null() {
+        return None;
+    }
+    let info = unsafe { read_i32(world, GAME_WORLD_GAME_INFO) } as *const u8;
+    unsafe { colour_from_game_info(info, team) }
+}
+
 unsafe fn colour_from_game_info(info: *const u8, team: i32) -> Option<u8> {
     if info.is_null() || !(1..=MAX_TEAMS as i32).contains(&team) {
         return None;

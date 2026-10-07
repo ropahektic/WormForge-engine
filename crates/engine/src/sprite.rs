@@ -1021,6 +1021,24 @@ pub fn install_virtual(strip: &gfx::SpriteStrip, rects: Vec<render::SheetRect>) 
     id
 }
 
+/// A stand-in for GPU sheet `base`: a new id drawing `base`'s frames from
+/// the same atlas rectangles, so it costs no atlas space. The engine can then
+/// tell draws of the stand-in apart from draws of `base` (a team-tinted worm
+/// pose, `worm_sprite::claim_team_tint`). None when `base` is no GPU sheet.
+pub fn install_standin(base: i32) -> Option<i32> {
+    let mut sheets = GPU_SHEETS.lock().ok()?;
+    let sheet = sheets.iter().find(|s| s.id == base)?;
+    let (frames, looping) = (sheet.frames.clone(), sheet.looping);
+    let id = {
+        let mut next = NEXT_VIRTUAL.lock().ok()?;
+        let id = *next;
+        *next += 1;
+        id
+    };
+    sheets.push(GpuSheet { id, frames, looping });
+    Some(id)
+}
+
 /// Drop every GPU sheet. Called with the rest of the per-match sprite state.
 pub fn clear_gpu_sheets() {
     if let Ok(mut g) = GPU_SHEETS.lock() {
@@ -1046,6 +1064,30 @@ pub fn slots_used() -> usize {
 pub fn set_force_layer(_layer: Option<u32>) {}
 
 pub fn set_reserve_colours(_on: bool) {}
+
+#[cfg(test)]
+mod standin_tests {
+    use super::*;
+
+    #[test]
+    fn a_stand_in_draws_its_base_from_the_same_atlas_rects() {
+        let rect = |x| render::SheetRect { x, y: 0, w: 8, h: 8, atlas_w: 64, atlas_h: 64, ox: 0, oy: 0, cw: 8, ch: 8 };
+        let base = 0x0177_0000;
+        if let Ok(mut g) = GPU_SHEETS.lock() {
+            g.push(GpuSheet { id: base, frames: vec![rect(0), rect(8)], looping: false });
+        }
+        let standin = install_standin(base).expect("a GPU sheet's stand-in");
+        assert_ne!(standin, base);
+        assert!(is_virtual(standin) && is_gpu_sheet(standin as u32));
+        let (frame, count, looping) = gpu_frame(standin as u32).unwrap();
+        assert_eq!((count, looping), (2, false));
+        assert_eq!(frame(1), Some(rect(8)), "the base's rects: no new atlas space");
+        assert_eq!(install_standin(0x0177_0001), None, "no stand-in for what is no GPU sheet");
+        if let Ok(mut g) = GPU_SHEETS.lock() {
+            g.retain(|s| s.id != base && s.id != standin);
+        }
+    }
+}
 
 #[cfg(test)]
 mod sheet_id_tests {

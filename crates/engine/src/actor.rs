@@ -152,6 +152,13 @@ pub fn install() -> Result<(), String> {
     ORIG_TEAM_MSG.store(team_tr, Ordering::SeqCst);
 
     lua_host::bind_actor_native(lua_host::ActorNative {
+        warp: crate::body::warp,
+        body_uid: crate::body::uid,
+        body_live: crate::body::live,
+        air_fire: crate::air_fire::enable,
+        fire_power: |h| if crate::body::uid(h) == 0 { 65536 } else {
+            unsafe { read_i32(h as *mut u8, WORM_FIRE_POWER).clamp(0, 65536) }
+        },
         explode: native_explode,
         despawn: native_despawn,
         in_water: native_in_water,
@@ -183,6 +190,7 @@ pub fn install() -> Result<(), String> {
         release: crate::physics::release,
         is_taken: crate::physics::taken,
         fits: crate::physics::fits,
+        actor_fits: crate::physics::actor_fits,
         jetpack_steer: crate::physics::jetpack_steer,
         set_windup: crate::windup::set,
         windup: crate::windup::get,
@@ -200,6 +208,9 @@ pub fn install() -> Result<(), String> {
         heal: crate::world::heal_worm,
         arm_mine: crate::world::arm_mine,
         mine_fuse: crate::world::mine_fuse,
+        impulse_object: crate::world::impulse_object,
+        object_team: crate::world::object_team,
+        remove_object: crate::world::remove_object,
         hit_object: crate::world::hit_object,
         revive_grave: crate::world::revive_grave,
         grave_identity: crate::world::grave_identity,
@@ -218,6 +229,9 @@ pub fn install() -> Result<(), String> {
         launch: crate::missile_boom::launch,
         spawn_fire: crate::fire::spawn,
         spawn_worm: crate::world::spawn_worm,
+        shape_trace: crate::shape::trace,
+        shape_collides: crate::shape::collides,
+        spawn_crate: crate::crate_drop::spawn,
         retarget_weapon_sprites: |slot, body, cluster| {
             crate::apply::retarget_sprites(
                 slot as usize,
@@ -440,6 +454,11 @@ pub fn clear_claims() {
 
 fn drop_for_slot(slot: usize) -> Option<DropClaim> {
     DROPS.lock().ok()?.iter().cloned().find(|c| c.slot == slot)
+}
+
+/// Selected claim's Lua fire handler; shared by airborne fire dispatch.
+pub fn slot_fire(slot: u32) -> u32 {
+    fire_for_slot(slot as usize).map(|c| c.fire_id).unwrap_or(0)
 }
 
 fn fire_for_slot(slot: usize) -> Option<FireClaim> {
@@ -926,7 +945,12 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
 
     let parent = physics_parent(owner).unwrap_or(owner);
     let ctor: WorldCtorFn = std::mem::transmute(crate::wa::address("WORLD_ENTITY_CTOR") as usize);
-    ctor(this, parent, COLLISION_LAYER_MISSILE, 0);
+    let layer = if spawn.as_object { COLLISION_LAYER_OBJECT } else { COLLISION_LAYER_MISSILE };
+    // The constructor's last argument picks the collision shape from the
+    // world's table (0x4FEED5); WA's missile constructor passes its record's
+    // first fire param, 2 for the Sheep's and Skunk's.
+    let shape = if spawn.missile_shape { COLLISION_SHAPE_MISSILE } else { 0 };
+    ctor(this, parent, layer, shape);
 
     let vt = VTABLE.get().ok_or("vtable missing")?;
     *(this as *mut u32) = vt.as_ptr() as u32;
@@ -1208,10 +1232,15 @@ unsafe extern "thiscall" fn actor_message(
         if read_i32(this, ACTOR_DEAD) != 0 {
             return;
         }
+        let brain = read_i32(this, ACTOR_BRAIN) as u32;
         match msg {
             MSG_FRAME_FINISH => tick(this),
             MSG_RENDER_SCENE => blit(this),
+            MSG_EXPLOSION if !data.is_null() && lua_host::actor_takes_hits(brain) => {
+                blast_to_lua(this, brain, data)
+            }
             MSG_EXPLOSION => apply_explosion_knock(this, data),
+            MSG_HIT if !data.is_null() && lua_host::actor_takes_hits(brain) => hit_to_lua(this, brain, data),
             MSG_IMPACT => {}
             _ => forward_message(this, sender, msg, size, data),
         }
@@ -1838,6 +1867,52 @@ fn bit_vel(i: i32, n: i32, emit: &AttachedSpawn, cluster: &ClusterSpec) -> (i32,
     let vx = (power as f32 * rad.cos()).round() as i32;
     let vy = -(power as f32 * rad.sin()).round() as i32;
     (vx, vy)
+}
+
+/// A blast on an actor whose brain takes its hits: WA's own knock is worked
+/// out (its falloff and the actor's mass) and handed to the brain as the
+/// push, and the actor's speed is left as it was, for the brain to apply.
+unsafe fn blast_to_lua(this: *mut u8, brain: u32, data: *mut u8) {
+    let (vx, vy) = (read_i32(this, ENT_SPEED_X), read_i32(this, ENT_SPEED_Y));
+    let damage0 = read_i32(this, ENT_DAMAGE_ACCUM);
+    apply_explosion_knock(this, data);
+    let hit = lua_host::ActorHit {
+        blast: true,
+        kind: 0,
+        x: read_i32(data, 4),
+        y: read_i32(data, 8),
+        vx: read_i32(this, ENT_SPEED_X).wrapping_sub(vx),
+        vy: read_i32(this, ENT_SPEED_Y).wrapping_sub(vy),
+        damage: read_i32(this, ENT_DAMAGE_ACCUM).wrapping_sub(damage0).max(0),
+        team: -1,
+    };
+    write_i32(this, ENT_SPEED_X, vx);
+    write_i32(this, ENT_SPEED_Y, vy);
+    if hit.vx == 0 && hit.vy == 0 && hit.damage == 0 {
+        return;
+    }
+    if let Err(e) = lua_host::actor_hit(this as u32, brain, hit) {
+        log_error(&format!("LuaActor hit: {e}"));
+    }
+}
+
+/// A hit (0x4B, Project X's M_GUNEXP) on an actor whose brain takes its
+/// hits: a fire's, a gun's or a pack's. WA's base handler would add its push
+/// to the actor's speed; the brain gets it instead.
+unsafe fn hit_to_lua(this: *mut u8, brain: u32, data: *mut u8) {
+    let hit = lua_host::ActorHit {
+        blast: false,
+        kind: read_i32(data, HIT_FLAG),
+        x: read_i32(data, 4),
+        y: read_i32(data, 8),
+        vx: read_i32(data, HIT_KNOCK_X),
+        vy: read_i32(data, HIT_KNOCK_Y),
+        damage: read_i32(data, HIT_AMOUNT),
+        team: read_i32(data, HIT_TEAM),
+    };
+    if let Err(e) = lua_host::actor_hit(this as u32, brain, hit) {
+        log_error(&format!("LuaActor hit: {e}"));
+    }
 }
 
 unsafe fn apply_explosion_knock(this: *mut u8, data: *mut u8) {

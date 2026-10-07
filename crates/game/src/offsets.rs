@@ -67,6 +67,10 @@ pub const WORM_ACTIVE_WEAPON: usize = 0x36C;
 pub const WORM_STATE: usize = 0x44;
 /// WA 3.8.1 SetState dispatch case that enters WormEntity__setup_Drilling.
 pub const WORM_STATE_DRILLING: u32 = 0x6E;
+/// WA's Kamikaze flight (setup 0x518A50, frame 0x518C10): the worm flies
+/// along its aim, digging, while worm+0x278 (the record's +0x38, less 20 a
+/// frame) lasts; after that, land or leaving the map sets it off.
+pub const WORM_STATE_KAMIKAZE: u32 = 0x6D;
 /// Worm states by the setup each `SetState` case calls (jump table 0x50F484,
 /// base 0x64): 0x65 setup_Standing, 0x69 setup_PreFiring, 0x6C
 /// setup_Punching, 0x6F setup_Teleporting, 0x78 setup_JetPacking. The full
@@ -261,6 +265,9 @@ pub const MISSILE_TYPE: usize = 0x1C4;
 /// bit.
 pub const MISSILE_SHOOT_DESC: usize = 0x130;
 pub const MISSILE_SHOOT_PELLET: usize = MISSILE_SHOOT_DESC + 0x20;
+/// MineEntity's copy of its shoot description, just before the fire params
+/// it copies to +0x170; its explosion credits the team in it (0x507110).
+pub const MINE_SHOOT_DESC: usize = 0x144;
 /// `MissileEntity__CreateClusters` (0x5096A0): usercall, the missile in ESI,
 /// (x, y) on the stack, `ret 8`. Makes the record's cluster pellets.
 pub const MISSILE_CREATE_CLUSTERS: u32 = 0x0050_96A0;
@@ -325,6 +332,10 @@ pub const WORM_TURN_SIDE: usize = 0x1A8;
 pub const WORM_SHOW_CURSOR: usize = 0x268;
 /// WormEntity rendered aim sweep (+0x270).
 pub const WORM_AIM_ANGLE: usize = 0x270;
+/// Charging power, 16.16, 0..65536. WA 3.8.1 handle_Charging at
+/// 0x5177C4 increments it by 0x369 and caps it at 65536 (0x5177DE);
+/// release_weapon at 0x51C4EF/0x51C540 uses it to build the shot speeds.
+pub const WORM_FIRE_POWER: usize = 0x248;
 /// WorldRootEntity: non-zero pauses the HUD turn clock (grenade-in-flight).
 pub const WORLD_ROOT_WORM_ACTIVE: usize = 0x108;
 pub const WORLD_ROOT_TURN_TIMER_DISPLAY: usize = 0x188;
@@ -526,20 +537,32 @@ pub const BLAST_AMOUNT: usize = 0x10;
 pub const BLAST_TEAM: usize = 0x18;
 pub const HIT_AMOUNT: usize = 0x14;
 pub const HIT_TEAM: usize = 0x18;
+/// The hit's knockback, 16.16 (Project X's fparams[3] and [4]).
+pub const HIT_KNOCK_X: usize = 0x0C;
+pub const HIT_KNOCK_Y: usize = 0x10;
 /// SpecialImpact `flag`. `10` = percent of current HP (battle axe).
 pub const HIT_FLAG: usize = 0x00;
 /// A fire's hit on a worm carries kind 1 (Project X's M_GUNEXP check).
 pub const HIT_KIND_FIRE: i32 = 1;
-/// The hit's knockback, 16.16 (Project X's fparams[3] and [4]).
-pub const HIT_KNOCK_X: usize = 0x0C;
-pub const HIT_KNOCK_Y: usize = 0x10;
 pub const HIT_PERCENT: i32 = 10;
 pub const WORLD_TEAM_STRIDE: usize = 0x51C;
 pub const ARENA_WORM_STRIDE: usize = 0x9C;
 pub const MAX_TEAMS: u32 = 6;
 pub const MAX_WORMS_PER_TEAM: u32 = 8;
 pub const GAME_RUNTIME_WORLD_ROOT: usize = 0x8;
+/// The land's collision layer: its entity (class 0x1C, constructed at
+/// 0x50546A with layer 1 and shape 1) tests a shape against the terrain
+/// bitmap. WA's collision test (0x4FB9D0) walks the layers whose bits are in
+/// the mask it is given, so bit 1 (mask 2) is "the land".
+pub const COLLISION_LAYER_LAND: u32 = 1;
 pub const COLLISION_LAYER_MISSILE: u32 = 0xF;
+/// The oil drums' collision layer (OilDrumEntity's constructor, 0x504B17).
+/// WA's fire hits what is in layers 2..=5 and 17 (mask 0x2003C at 0x54FB6A).
+pub const COLLISION_LAYER_OBJECT: u32 = 0x11;
+/// The collision shape WA's missile constructor (0x507D3E) gives the
+/// Sheep's, Skunk's and most records: WorldEntity's constructor takes it from
+/// the world's shape table by this index (0x4FEED5).
+pub const COLLISION_SHAPE_MISSILE: u32 = 2;
 pub const DROP_SKY_Y: i32 = -0x00D0_0000;
 pub const LUA_ACTOR_MAGIC: u32 = 0x774B_4C41;
 /// Grown to include presentation state and the stable actor sequence id.
@@ -760,6 +783,38 @@ pub const SPRITE_MAX_FRAMES: usize = 0x16;
 /// DisplayGfx vtable slot 33: GetSpriteFrameForBlit, thiscall (display,
 /// sprite, anim, &w, &h, &left, &top, &right, &bottom, &frac) -> BitGrid*.
 pub const DISPLAY_SLOT_GET_SPRITE_FRAME: usize = 33;
+/// CrateEntity: WA allocates this much and zeroes the first CRATE_ENTITY_ZEROED
+/// bytes before its constructor, as its turn drop (0x561AD2) does.
+pub const CRATE_ENTITY_SIZE: usize = 0x4DC;
+pub const CRATE_ENTITY_ZEROED: usize = 0x4BC;
+/// The crate description the constructor copies (0xE5 dwords, PX's
+/// CCrateDesc): position (16.16), kind, a health crate's health, and how
+/// its contents are chosen.
+pub const CRATE_DESC_SIZE: usize = 0x394;
+pub const CRATE_DESC_X: usize = 0x04;
+pub const CRATE_DESC_Y: usize = 0x08;
+/// PX's ECrateType: 1 weapon, 2 health, 4 utility.
+pub const CRATE_DESC_KIND: usize = 0x14;
+pub const CRATE_DESC_HEALTH: usize = 0x13C;
+/// PX's EWCrateType: 2 is random, WA picking the contents itself (the
+/// constructor files such a crate in GameWorld+0x51C, 0x5027D5).
+pub const CRATE_DESC_CONTENTS: usize = 0x154;
+pub const CRATE_CONTENTS_RANDOM: i32 = 2;
+/// Contents given: a health crate's health is all it holds.
+pub const CRATE_CONTENTS_DEFINED: i32 = 0;
+/// The match's crate deck, built at its start (0x527F2B: every weapon 1-70
+/// WA allows in the match, once). A random crate draws from it when
+/// collected (CrateEntity vmethod 19, 0x503FD0), moving each draw to the
+/// drawn list until the deck is empty and refilled from it, and draws again
+/// until the weapon's kind is the crate's (0x504094): weapons 0x3E-0x46 are
+/// a utility crate's, the rest a weapon crate's. A random crate of a kind
+/// the deck lacks, a health crate among them, draws for ever.
+pub const GAME_WORLD_CRATE_DECK: usize = 0x3C5C;
+pub const GAME_WORLD_CRATE_DECK_COUNT: usize = 0x3DEC;
+pub const GAME_WORLD_CRATE_DRAWN: usize = 0x3DF0;
+pub const GAME_WORLD_CRATE_DRAWN_COUNT: usize = 0x3F80;
+pub const CRATE_UTILITY_FIRST: i32 = 0x3E;
+pub const CRATE_UTILITY_LAST: i32 = 0x46;
 pub const CLASS_OIL: i32 = 30;
 /// WA CrossEntity, the gravestone left by a dead worm.
 pub const CLASS_GRAVE: i32 = 21;

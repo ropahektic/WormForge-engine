@@ -54,6 +54,12 @@ plate_comment = "Partial. HandleMessage Jump/JumpUp already replicate. SetState 
   type = "void *"
   plate_comment = "Read by setup_Drilling to initialize the timer from entry +0x44."
 
+  [[struct.field]]
+  offset = 0x248
+  name = "fire_power"
+  type = "Fixed"
+  plate_comment = "WA 3.8.1 disassembly: handle_Charging (517790) increments this by 0x369 at 5177C4, caps it at 65536 at 5177DE; StartFiring clears it at 51B93B. release_weapon reads it at 51C4EF and 51C540 to form the shot's vx/vy. on_fire.power exposes it divided by 65536."
+
 [[function]]
 va = 0x005186A0
 name = "WormEntity__setup_Drilling"
@@ -77,3 +83,12 @@ va = 0x0051C060
 name = "Weapon__hold_sheet"
 calling_convention = "__usercall"
 plate_comment = "WA 3.8.1: EAX = weapon entry, stack = worm, RET 4. Returns the sheet the worm aims or holds the weapon with, or 0 for none WA knows. Projectiles switch on +0x34 (1-12); placed weapons with fire method 2 map their flight sprite (+0x60): 74 vase, 78 dynamite, 153 sheep, 162/163 old woman, 164 cow, 166 mole, 173 skunk. Five callers in WormEntity."
+
+# Transport does not use PX's 3.6.31 state numbers. Ground states 65/66/67
+# are known in game/worm_state.rs. SetState's old-state dispatch at 50EC1C
+# tests 7B (rope) and 7C (bungee); its 7B path clears rope data +2D8 at
+# 50ECFE..50ED04. warp transitions these through WA's SetState(7E), the same
+# handoff as physics::release. Airborne, hit/tumble and frozen states keep
+# their native state. Facing uses existing +1A8 and its draw copy +3DC.
+# air_fire changes none of these fields or speed: it eats only native Space
+# messages while airborne and dispatches on_fire on synchronized Space edges.

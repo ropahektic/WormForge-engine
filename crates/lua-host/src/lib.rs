@@ -19,12 +19,14 @@ pub use bundles::ComponentPlan;
 pub use grants::{bind_grant_native, queue_weapon_grant, flush_weapon_grants, GrantNative, GrantOrigin, GrantItem, WeaponGrant, WeaponVisual};
 pub use perf::{perf_flags, take_lua_breakdown, take_lua_spikes, take_lua_time, LuaBreakdown, PerfFlags, Spike};
 pub use actor::{
-    gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click, weapon_emit,
-    weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs, LaunchArgs, SpawnArgs, FIRE_DEFAULTS,
-    StampBuried,
+    gfx_field, actor_frame, actor_freed, actor_spawned, bind_actor_native, weapon_click,
+    weapon_emit, weapon_fire, weapon_select, ActorEvent, ActorNative, AmmoChange, FireArgs,
+    LaunchArgs, SpawnArgs, FIRE_DEFAULTS, ShapeHit, ShapeQuery, SHAPE_CRATES, SHAPE_GRAVES,
+    SHAPE_MINES, SHAPE_OIL, SHAPE_TERRAIN, SHAPE_WORMS, actor_hit, actor_takes_hits, ActorHit,
+    StampBuried, CrateArgs, weapon_air_fire, WarpArgs,
 };
 pub use dispatch::{
-    contact, Contact,
+    body_move, body_move_wanted, contact, Contact,
     death, drawing, gravity_after, gravity_before, hurt, missile_frame, run_draw, run_hud,
     turn_cleanup, turn_end, turn_retreat, turn_start, worm_message,
     Death, DrawQuad, Hurt,
@@ -46,6 +48,7 @@ thread_local! {
 }
 
 pub fn park_lua(lua: Lua) {
+    dispatch::body_move_rebuild(&lua);
     dispatch::worm_message_rebuild(&lua);
     dispatch::fast_rebuild(&lua);
     PARKED_LUA.with(|slot| {
@@ -232,6 +235,30 @@ mod tests {
         // An inverted range is a pack bug; say so rather than returning
         // something arbitrary.
         assert!(lua.load("return wa.random(5, 2)").eval::<i64>().is_err());
+    }
+
+    /// `wa.math` is WA's own sine table and a portable atan, with
+    /// `math.sin`'s signature: radians in, the same bits on every machine out.
+    #[test]
+    fn wa_math_is_was_sine_table_and_a_portable_atan() {
+        let _guard = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        lua.load(r#"
+            local m = wa.math
+            assert(m.sin(0) == 0 and m.cos(0) == 1)
+            assert(m.sin(math.pi / 2) == 1 and m.sin(-math.pi / 2) == -1 and m.cos(math.pi) == -1)
+            assert(m.sin(math.pi / 4) == 46340 / 65536, "WA's table, not the C runtime's")
+            for i = -50, 50 do
+              local x = i * 0.137
+              assert(math.abs(m.sin(x) - math.sin(x)) < 1e-4, x)
+              assert(math.abs(m.cos(x) - math.cos(x)) < 1e-4, x)
+              assert(m.sin(x) * 65536 == math.floor(m.sin(x) * 65536), "a whole 16.16 value")
+              assert(math.abs(m.atan(x, 1.5) - math.atan(x, 1.5)) < 1e-14, x)
+            end
+            assert(m.atan(1) == m.atan(1, 1), "x defaults to 1, as math.atan")
+            assert(not pcall(m.sin, 0 / 0) and not pcall(m.cos, math.huge) and not pcall(m.atan, 1, -math.huge))
+        "#).exec().unwrap();
     }
 
     /// With no RNG available the call must fail loudly. Returning nil would
@@ -691,6 +718,150 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn world_trace_and_collides_pass_the_query_and_shape_the_answer() {
+        let _guard = lock_host();
+        thread_local! {
+            static ASKED: std::cell::RefCell<Vec<actor::ShapeQuery>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            shape_trace: |q| {
+                ASKED.with(|a| a.borrow_mut().push(q.clone()));
+                if q.x1 == 0 {
+                    return actor::ShapeHit::default();
+                }
+                actor::ShapeHit { hit: true, x: 10, y: 20, nx: 0.6, ny: -0.8, obj: 0, starts_solid: true, left: Some((3, 4)) }
+            },
+            shape_collides: |q| {
+                ASKED.with(|a| a.borrow_mut().push(q.clone()));
+                (q.x0 == 1).then_some(0)
+            },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        lua.load(r#"
+            local h = wa.world.trace{ x0 = 1, y0 = 2, x1 = 5, y1 = 6, radius = 8,
+              with = { "terrain", "worms", "oil" }, ignore = { wa.worms.all()[1] } }
+            assert(h.hit and h.x == 10 and h.y == 20 and h.nx == 0.6 and h.ny == -0.8)
+            assert(h.tx == 0.8 and h.ty == 0.6, "the tangent, the normal turned")
+            assert(h.starts_solid and h.left_x == 3 and h.left_y == 4 and h.obj == nil)
+            assert(wa.world.trace{ x0 = 1, y0 = 2, x1 = 0, y1 = 0 } == nil, "nothing touched")
+            assert(wa.world.collides{ x = 1, y = 2, radius = 4 } == true)
+            assert(wa.world.collides{ x = 2, y = 2 } == false)
+            assert(not pcall(wa.world.trace, { x0 = 0, y0 = 0, x1 = 0 }))
+            assert(not pcall(wa.world.collides, { x = 0, y = 0, radius = 65 }))
+            assert(not pcall(wa.world.collides, { x = 0, y = 0, with = { "clouds" } }))
+        "#).exec().unwrap();
+        ASKED.with(|a| {
+            let a = a.borrow();
+            assert_eq!(a[0], actor::ShapeQuery {
+                x0: 1, y0: 2, x1: 5, y1: 6, radius: 8,
+                with: actor::SHAPE_TERRAIN | actor::SHAPE_WORMS | actor::SHAPE_OIL, ignore: vec![0x1234],
+            });
+            assert_eq!(a[2], actor::ShapeQuery { x0: 1, y0: 2, x1: 1, y1: 2, radius: 4, with: actor::SHAPE_TERRAIN, ignore: vec![] },
+                "a point test, terrain by default");
+        });
+    }
+
+    #[test]
+    fn worm_hurt_carries_a_knock() {
+        let _guard = lock_host();
+        thread_local! {
+            static HITS: std::cell::RefCell<Vec<(u32, i32, i32, i32)>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_worms: |_| vec![0x1234],
+            hurt: |w, _, amount, vx, vy| HITS.with(|l| l.borrow_mut().push((w, amount, vx, vy))),
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        assert!(lua.load("wa.worms.all()[1]:hurt(5)").exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            lua.load(r#"
+                local w = wa.worms.all()[1]
+                w:hurt(10)
+                w:hurt({ amount = 12, vx = 0x30000, vy = -0x50000 })
+                w:hurt({ vx = 0x10000 })
+                w:hurt({ amount = 0 })
+                w:hurt(-3)
+            "#).exec().unwrap();
+            assert!(lua.load("wa.worms.all()[1]:hurt('x')").exec().is_err());
+        });
+        HITS.with(|l| assert_eq!(
+            l.borrow().as_slice(),
+            &[(0x1234, 10, 0, 0), (0x1234, 12, 0x30000, -0x50000), (0x1234, 0, 0x10000, 0)],
+            "a number hurts in place; a table may knock, and with a knock no damage is a push"
+        ));
+    }
+
+    #[test]
+    fn crates_spawn_reaches_native_only_during_simulation() {
+        let _guard = lock_host();
+        thread_local! {
+            static MADE: std::cell::RefCell<Vec<actor::CrateArgs>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            spawn_crate: |a| { MADE.with(|l| l.borrow_mut().push(*a)); Ok(0xC4A7E) },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let one = "return wa.crates.spawn{ x = 0x100000, y = -0x320000, kind = 'weapon' }";
+        assert!(lua.load(one).exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            let c: mlua::AnyUserData = lua.load(one).eval().unwrap();
+            assert!(c.is::<actor::WorldHandle>(), "a crate as wa.crates.all() gives one");
+            lua.load("wa.crates.spawn{ x = 1, y = 2, kind = 'health', health = 60, drop = 'teleport' }; \
+                      wa.crates.spawn{ x = 3, y = 4, kind = 'utility', health = 99, drop = 'none' }")
+                .exec()
+                .unwrap();
+            let err = |src: &str| lua.load(src).exec().unwrap_err().to_string();
+            assert!(err("wa.crates.spawn{ x = 0, y = 0 }").contains("kind"));
+            assert!(err("wa.crates.spawn{ x = 0, kind = 'weapon' }").contains("needs y"));
+            assert!(err("wa.crates.spawn{ x = 0, y = 0, kind = 'health', health = 0 }").contains("health"));
+            assert!(err("wa.crates.spawn{ x = 0, y = 0, kind = 'weapon', drop = 'cannon' }").contains("drop"));
+        });
+        MADE.with(|l| assert_eq!(
+            l.borrow().as_slice(),
+            &[
+                actor::CrateArgs { x: 0x100000, y: -0x320000, kind: 1, health: 0, drop: 2 },
+                actor::CrateArgs { x: 1, y: 2, kind: 2, health: 60, drop: 1 },
+                actor::CrateArgs { x: 3, y: 4, kind: 4, health: 0, drop: 0 },
+            ],
+            "WA's kinds, health for a health crate only, a parachute by default"
+        ));
+    }
+
+    #[test]
+    fn a_missiles_team_and_its_removal_reach_native() {
+        let _guard = lock_host();
+        thread_local! {
+            static REMOVED: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        actor::bind_actor_native(actor::ActorNative {
+            list_kind: |class, _| if class == game::offsets::CLASS_MISSILE { vec![0xA1, 0xA2] } else { Vec::new() },
+            object_team: |h| if h == 0xA1 { 4 } else { 0 },
+            remove_object: |h| { REMOVED.with(|l| l.borrow_mut().push(h)); true },
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let teams: (i32, i32, Option<i32>) = lua
+            .load("local m = wa.missiles.all(); return m[1].team, m[2].team, m[2].alliance")
+            .eval()
+            .unwrap();
+        assert_eq!(teams, (4, 0, None), "a team, none, and no colour without one");
+        let remove = "return wa.missiles.all()[2]:remove()";
+        assert!(lua.load(remove).exec().is_err(), "outside a simulation callback");
+        sim_context::with_sim(|| {
+            assert!(lua.load(remove).eval::<bool>().unwrap());
+        });
+        REMOVED.with(|l| assert_eq!(l.borrow().as_slice(), &[0xA2]));
+    }
+
+    #[test]
     fn launch_reaches_native_only_during_simulation() {
         let _guard = lock_host();
         thread_local! {
@@ -864,7 +1035,7 @@ wa.weapons.replace({
         };
         let scripts = run_mods(&[pack]).unwrap();
         let applied = &scripts.resolved.applied;
-        assert_eq!(applied.len(), 58);
+        assert_eq!(applied.len(), 67);
         let claim = |slot| applied.iter().find(|c| c.slot == slot).expect("claimed");
         let skip_go = claim(StockWeapon::SkipGo);
         assert_eq!(skip_go.params.name.as_deref(), Some("Skip Go/Surrender"));
@@ -880,12 +1051,34 @@ wa.weapons.replace({
         let reinforcement = claim(StockWeapon::NuclearTest);
         assert_eq!(reinforcement.params.name.as_deref(), Some("Reinforcement"));
         assert!(reinforcement.params.on_click_id != 0, "a click claim");
+        let ferret = claim(StockWeapon::SalvationArmy);
+        assert_eq!(ferret.params.name.as_deref(), Some("Ferret"));
+        assert!(ferret.params.on_fire_id != 0, "thrown through on_fire");
+        let portal = claim(StockWeapon::ScalesOfJustice);
+        assert_eq!(portal.params.name.as_deref(), Some("Portal Gun"));
+        assert!(portal.params.wep.is_some());
+        assert!(portal.params.on_fire_id != 0);
+        let magnet = claim(StockWeapon::BaseballBat);
+        assert_eq!(magnet.params.name.as_deref(), Some("Electromagnet"));
+        assert!(magnet.params.wep.is_some());
+        assert!(magnet.params.on_fire_id != 0);
+        let crate_strike = claim(StockWeapon::Donkey);
+        assert_eq!(crate_strike.params.name.as_deref(), Some("Crate Strike"));
+        assert!(crate_strike.params.on_click_id != 0, "a click claim");
+        let sentry = claim(StockWeapon::Kamikaze);
+        assert_eq!(sentry.params.name.as_deref(), Some("Sentry Gun"));
+        assert!(sentry.params.on_fire_id != 0, "placed through on_fire");
+        assert_eq!(sentry.params.worm_sprites_team_tint.as_ref().map(|t| t.colours.len()), Some(6));
+        let laser = claim(StockWeapon::DragonBall);
+        assert_eq!(laser.params.name.as_deref(), Some("Sentry Laser"));
+        assert!(laser.params.on_fire_id != 0, "placed through on_fire");
+        assert_eq!(laser.params.worm_sprites_team_tint.as_ref().map(|t| t.colours.len()), Some(6));
         let javelin = claim(StockWeapon::Prod);
         assert_eq!(javelin.params.name.as_deref(), Some("Javelin"));
         assert!(javelin.params.wep.is_some());
         assert!(javelin.params.on_explode_id != 0);
         let held: Vec<_> = applied.iter().filter(|c| c.params.hold.is_some()).collect();
-        assert_eq!(held.len(), 9, "each PX hold is a replacement claim");
+        assert_eq!(held.len(), 10, "each PX hold is a replacement claim");
         let rifle = claim(StockWeapon::Handgun).params.hold.as_ref().unwrap();
         assert_eq!(rifle.sheet, "sprites/px_hold/sniper_rifle");
         assert!(rifle.hand.is_none());
@@ -2501,6 +2694,205 @@ end)
     }
 
     #[test]
+    fn transport_verbs_validate_specs_and_require_simulation() {
+        let _guard = lock_host();
+        actor::bind_actor_native(ActorNative {
+            warp: |_, spec| {
+                // Native calls may reenter Lua: the binding must have released
+                // NATIVE before calling the engine callback.
+                let _keys = actor::native_keys().unwrap()();
+                assert_eq!(spec.x, 123); assert_eq!(spec.y, 456);
+                assert_eq!(spec.vx, Some(789)); assert_eq!(spec.vy, None);
+                true
+            },
+            air_fire: |_, on| on,
+            body_uid: |_| 7,
+            body_live: |_, id| id == 7,
+            actor_fits: |_, x, y| x == 100 && y == 200,
+            fits: |_, x, y| x == 200 && y == 100,
+            ..Default::default()
+        });
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        lua.globals().set("w", actor::WormHandle(0)).unwrap();
+        lua.globals().set("wf", actor::WormHandle(0x1234)).unwrap();
+        lua.globals().set("o", actor::WorldHandle::new(0)).unwrap();
+        lua.load(r#"
+            assert(not pcall(function() w:warp{x=123,y=456} end))
+            assert(not pcall(function() w:air_fire() end))
+            assert(o:fits(100,200) and not o:fits(200,100))
+            assert(wf:fits(200,100) and not wf:fits(100,200))
+            assert(wf:fits(100,200,"terrain") and not wf:fits(200,100,"terrain"))
+            assert(o:fits(100,200,"terrain"))
+            assert(not pcall(function() wf:fits(100,200,"bogus") end))
+            assert(o.uid==7)
+        "#).exec().unwrap();
+        sim_context::with_sim(|| lua.load(r#"
+            assert(w:warp{x=123,y=456,vx=789,facing=-1})
+            assert(o:warp{x=123,y=456,vx=789})
+            assert(w:air_fire() and not w:air_fire(false))
+            assert(not pcall(function() w:warp{x=1,y=2,foo=3} end))
+            assert(not pcall(function() w:warp{x=1,y=2,facing=0} end))
+        "#).exec()).unwrap();
+    }
+
+    #[test]
+    fn body_move_filters_keep_registration_order_and_pack_context() {
+        let _guard = lock_host();
+        let root = std::env::temp_dir().join("wklua-lua-host-body-move");
+        let pack = filter_pack(&root, r#"
+          seen = {}
+          wa._mod = "first"
+          wa.on.body_move(function(b) seen[#seen+1] = wa._mod .. ":" .. b.kind end, {kinds={"mine"}})
+          wa._mod = "second"
+          wa.on.body_move(function(b) seen[#seen+1] = wa._mod .. ":" .. b.kind end, {kinds={"arrow", "mine"}})
+          assert(not pcall(function() wa.on.body_move(function() end, {kinds={"bogus"}}) end))
+        "#);
+        park_lua(run_mods(&[pack]).unwrap().lua);
+        assert!(body_move_wanted(game::offsets::CLASS_MINE));
+        assert!(!body_move_wanted(game::offsets::CLASS_WORM));
+        let other = filter_pack(&root.join("other"), "-- no hooks");
+        let _second = run_mods(&[other]).unwrap();
+        assert!(body_move_wanted(game::offsets::CLASS_MINE), "unparked Lua must not replace the running filters");
+        let mut raw = vec![0i32; 0x200 / 4];
+        let p = raw.as_mut_ptr() as *mut u8;
+        unsafe { game::entity::write_i32(p, game::offsets::ENT_CLASS_TYPE, game::offsets::CLASS_MINE) };
+        body_move(p as u32, game::offsets::CLASS_MINE).unwrap();
+        PARKED_LUA.with(|slot| {
+            let lua = slot.borrow(); let lua = lua.as_ref().unwrap();
+            let seen: mlua::Table = lua.globals().get("seen").unwrap();
+            assert_eq!(seen.get::<String>(1).unwrap(), "first:mine");
+            assert_eq!(seen.get::<String>(2).unwrap(), "second:mine");
+        });
+    }
+
+    #[test]
+    fn highlander_portals_cover_transport_controls_and_air_firing() {
+        let lua = Lua::new();
+        lua.globals().set("HIGHLANDER_ROOT", concat!(env!("CARGO_MANIFEST_DIR"), "/../../mods/examples/highlander/")).unwrap();
+        lua.load(include_str!("../../../mods/examples/highlander/test_portals.lua"))
+            .set_name("highlander/test_portals.lua").exec().unwrap();
+    }
+
+    #[test]
+    fn portal_shot_moves_hits_and_draws_through_real_bindings() {
+        let _host = lock_host();
+        use game::{entity::{read_i32, write_i32}, offsets::*};
+        use std::cell::{Cell, RefCell};
+        const P: i32 = 0x10000;
+        thread_local! {
+            static BODIES: RefCell<Vec<(Vec<u8>, u32)>> = const { RefCell::new(Vec::new()) };
+            static WORM: Cell<u32> = const { Cell::new(0) };
+            static SOUNDS: Cell<usize> = const { Cell::new(0) };
+        }
+        BODIES.with(|v| v.borrow_mut().clear());
+        SOUNDS.with(|v| v.set(0));
+        let mut worm = vec![0u8; 0x1000];
+        let h = worm.as_mut_ptr() as u32;
+        unsafe {
+            for (off, value) in [(ENT_POS_X, 100*P), (ENT_POS_Y, 100*P),
+                (WORM_TURN_SIDE, 1), (WORM_AIM_ANGLE, 0x7fff),
+                (WORM_SELECTED_WEAPON, weapons::StockWeapon::ScalesOfJustice.index() as i32),
+                (WORM_STATE, 0x67), (WORM_TURN_ACTIVE, 1)] {
+                write_i32(worm.as_mut_ptr(), off, value);
+            }
+        }
+        WORM.with(|v| v.set(h));
+        actor::bind_actor_native(ActorNative {
+            map_size: || (2000, 1000),
+            water_y: || 1000*P,
+            list_worms: |_| WORM.with(|v| vec![v.get()]),
+            resolve_sprite: |_| Some((10001, 0, 100, 100)),
+            resolve_sound: |_| 7,
+            fire_power: |_| P,
+            ammo: |_, _, _| 3,
+            play_sound: |target, id, _| {
+                WORM.with(|v| assert_eq!(target, v.get()));
+                assert_eq!(id, 7);
+                SOUNDS.with(|v| v.set(v.get()+1));
+            },
+            spawn: |args| BODIES.with(|v| {
+                let mut bodies = v.borrow_mut();
+                let mut body = vec![0u8; LUA_ACTOR_SIZE];
+                let h = body.as_mut_ptr() as u32;
+                unsafe {
+                    for (off, value) in [(ACTOR_MAGIC, LUA_ACTOR_MAGIC as i32),
+                        (ACTOR_SEQ, bodies.len() as i32+1), (ACTOR_OWNER, args.owner as i32),
+                        (ENT_POS_X, args.x), (ENT_POS_Y, args.y)] {
+                        write_i32(body.as_mut_ptr(), off, value);
+                    }
+                }
+                actor::actor_spawned(h, args.spawn.brain_id);
+                bodies.push((body, args.spawn.brain_id));
+                Ok(h)
+            }),
+            despawn: |h| unsafe { write_i32(h as *mut u8, ACTOR_DEAD, 1) },
+            land_trace: |x, y, _, _| Some((x, y)),
+            shape_trace: |q| {
+                assert_eq!(q.with, actor::SHAPE_TERRAIN);
+                assert_eq!(q.radius, 0);
+                if q.x0 < 200*P && q.x1 >= 200*P {
+                    actor::ShapeHit { hit: true, x: 199*P, y: q.y1, nx: -1.0,
+                        ..Default::default() }
+                } else { actor::ShapeHit::default() }
+            },
+            ..Default::default()
+        });
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/examples/highlander");
+        let pack = LoadedMod {
+            manifest: parse_manifest(&std::fs::read_to_string(root.join("mod.toml")).unwrap()).unwrap(),
+            root,
+        };
+        let scripts = run_mods(&[pack]).unwrap();
+        let fire = scripts.resolved.applied.iter()
+            .find(|c| c.slot == weapons::StockWeapon::ScalesOfJustice).unwrap().params.on_fire_id;
+        park_lua(scripts.lua);
+        actor::weapon_fire(fire, h, weapons::StockWeapon::ScalesOfJustice.index() as i32,
+            100*P, 100*P, 0, 0).unwrap();
+        let (bolt, brain) = BODIES.with(|v| {
+            let mut bodies = v.borrow_mut();
+            assert_eq!(bodies.len(), 2, "manager and visible bolt");
+            (bodies[1].0.as_mut_ptr() as u32, bodies[1].1)
+        });
+        let initial_x = unsafe { read_i32(bolt as *mut u8, ENT_POS_X) };
+        actor::actor_frame(bolt, brain, ActorEvent::default()).unwrap();
+        let moved_x = unsafe { read_i32(bolt as *mut u8, ENT_POS_X) };
+        assert!((moved_x-initial_x-35*P).abs() < 10, "bolt advances at full power");
+        actor::actor_frame(bolt, brain, ActorEvent::default()).unwrap();
+        actor::actor_frame(bolt, brain, ActorEvent::default()).unwrap();
+        assert_eq!(unsafe { read_i32(bolt as *mut u8, ACTOR_DEAD) }, 1, "terrain impact removes bolt");
+        SOUNDS.with(|v| assert_eq!(v.get(), 2, "shot and successful portal impact"));
+        let quads = run_draw().unwrap();
+        let endpoint = |quads: &[dispatch::DrawQuad]| quads.iter().any(|q| {
+            let x = q.corners.iter().map(|p| p.0).sum::<f32>() / 4.0;
+            let y = q.corners.iter().map(|p| p.1).sum::<f32>() / 4.0;
+            q.colours == [0xFFFFFFFF; 4] && q.additive
+                && (x-199.0).abs() < 0.01 && (y-100.0).abs() < 0.01
+        });
+        assert!(endpoint(&quads), "first endpoint is bright at the impact before a partner exists");
+        for q in quads {
+            for (x, y) in q.corners {
+                assert!(x.abs() < 2000.0 && y.abs() < 1000.0, "all effects stay on the map");
+            }
+        }
+        unsafe { write_i32(worm.as_mut_ptr(), WORM_TURN_ACTIVE, 0) };
+        turn_end(h).unwrap();
+        let (manager, manager_brain) = BODIES.with(|v| {
+            let mut bodies = v.borrow_mut();
+            (bodies[0].0.as_mut_ptr() as u32, bodies[0].1)
+        });
+        for _ in 0..160 {
+            actor::actor_frame(manager, manager_brain, ActorEvent::default()).unwrap();
+        }
+        assert!(endpoint(&run_draw().unwrap()), "endpoint still draws after retreat and effect expiry");
+        actor::reset();
+        actor::bind_actor_native(ActorNative::default());
+        PARKED_LUA.with(|slot| *slot.borrow_mut() = None);
+        WORM.with(|v| v.set(0));
+        BODIES.with(|v| v.borrow_mut().clear());
+    }
+
+    #[test]
     fn highlander_uses_public_inventory_and_rule_events() {
         let lua = Lua::new();
         let rules = include_str!("../../../mods/examples/highlander/rules.lua");
@@ -3049,6 +3441,78 @@ wa.weapons.replace({
         });
         crate::weapon_click(p.on_click_id, 0x11, 5, 1, 2, -0x00D0_0000, (-0x5_0000, 0)).unwrap();
         assert_eq!(OWNER.with(|c| c.get()), 0x11);
+    }
+
+    #[test]
+    fn an_actor_takes_the_missile_shape_and_fits_by_it() {
+        let _host = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let spec = |src: &str| -> mlua::Table { lua.load(src).eval().unwrap() };
+        assert!(crate::spawn::parse_spawn(&lua, &spec("return { shape = 'missile' }")).unwrap().missile_shape);
+        assert!(!crate::spawn::parse_spawn(&lua, &spec("return {}")).unwrap().missile_shape, "a worm's by default");
+        assert!(crate::spawn::parse_spawn(&lua, &spec("return { shape = 'cube' }")).is_err());
+        use std::cell::Cell;
+        thread_local! {
+            static ASKED: Cell<(u32, i32, i32)> = const { Cell::new((0, 0, 0)) };
+        }
+        crate::bind_actor_native(crate::ActorNative {
+            actor_fits: |h, x, y| {
+                ASKED.with(|c| c.set((h, x, y)));
+                x < 100
+            },
+            ..Default::default()
+        });
+        crate::actor_spawned(0x5000, 0);
+        let a = lua.create_userdata(crate::actor::ActorHandle(0x5000)).unwrap();
+        lua.globals().set("A", a).unwrap();
+        assert!(lua.load("return A:fits(50, 7)").eval::<bool>().unwrap());
+        assert!(!lua.load("return A:fits(150, 7)").eval::<bool>().unwrap(), "land there");
+        assert_eq!(ASKED.with(|c| c.get()), (0x5000, 150, 7), "WA's test, for this actor, at that place");
+        crate::actor_freed(0x5000);
+        assert!(lua.load("return A:fits(150, 7)").eval::<bool>().unwrap(), "a freed actor touches nothing");
+    }
+
+    #[test]
+    fn an_actor_brain_takes_its_hits() {
+        let _host = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        let spec: mlua::Table = lua
+            .load(r#"return { on = {
+                frame = function() end,
+                hit = function(a, hit)
+                    GOT = { hit.kind, hit.hit_kind, hit.x, hit.y, hit.vx, hit.vy, hit.damage, hit.team }
+                end,
+            } }"#)
+            .eval()
+            .unwrap();
+        let with_hit = crate::spawn::parse_brain(&lua, &spec).unwrap();
+        let plain: mlua::Table = lua.load("return { on = function() end }").eval().unwrap();
+        let without = crate::spawn::parse_brain(&lua, &plain).unwrap();
+        let as_object: mlua::Table = lua.load("return { as_object = true }").eval().unwrap();
+        assert!(crate::spawn::parse_spawn(&lua, &as_object).unwrap().as_object);
+        assert!(!crate::spawn::parse_spawn(&lua, &plain).unwrap().as_object, "missiles' layer by default");
+        crate::park_lua(lua);
+        assert!(crate::actor_takes_hits(with_hit));
+        assert!(!crate::actor_takes_hits(without), "a brain without hit leaves hits to WA");
+        assert!(!crate::actor_takes_hits(0));
+        // A fake actor: the handler reads its owner field.
+        let mut body = vec![0u8; 0x400];
+        let handle = body.as_mut_ptr() as u32;
+        let hit = crate::ActorHit { blast: false, kind: 1, x: 10, y: 20, vx: 0x8000, vy: -0x10000, damage: 7, team: 2 };
+        crate::actor_hit(handle, with_hit, hit).unwrap();
+        let (kind, ints): (String, Vec<i64>) = PARKED_LUA.with(|slot| {
+            let guard = slot.borrow();
+            let lua = guard.as_ref().unwrap();
+            let got: mlua::Table = lua.globals().get("GOT").unwrap();
+            let kind: String = got.get(1).unwrap();
+            let ints = (2..=8).map(|i| got.get::<i64>(i).unwrap()).collect();
+            (kind, ints)
+        });
+        assert_eq!(kind, "hit");
+        assert_eq!(ints, vec![1, 10, 20, 0x8000, -0x10000, 7, 2], "a fire's hit, as WA sent it");
+        drop(body);
     }
 
     #[test]

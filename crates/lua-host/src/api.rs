@@ -210,6 +210,21 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())?;
     worms.set("spawn", spawn_worm).map_err(|e| e.to_string())?;
+    // `wa.crates.spawn{ x, y, kind, health, drop }`: one of WA's crates,
+    // its contents WA's random pick, as its turn drop makes them.
+    let crates: Table = wa.get("crates").map_err(|e| e.to_string())?;
+    let spawn_crate = lua
+        .create_function(|_, spec: Table| {
+            let args = crate_args(&spec)?;
+            if !crate::sim_context::active() {
+                return Err(mlua::Error::external("crates.spawn: only valid in simulation callbacks"));
+            }
+            let spawn = crate::actor::native_spawn_crate()
+                .ok_or_else(|| mlua::Error::external("crates.spawn: native not bound"))?;
+            spawn(&args).map(crate::actor::WorldHandle::new).map_err(mlua::Error::external)
+        })
+        .map_err(|e| e.to_string())?;
+    crates.set("spawn", spawn_crate).map_err(|e| e.to_string())?;
     crate::grants::install(lua, &wa)?;
     Ok(())
 }
@@ -371,6 +386,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
         "draw",
         "contact",
         "weapon_grant",
+        "body_move",
     ] {
         hooks
             .set(name, lua.create_table().map_err(|e| e.to_string())?)
@@ -407,6 +423,7 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     bind_on(lua, &on, "draw")?;
     bind_on(lua, &on, "contact")?;
     bind_on(lua, &on, "weapon_grant")?;
+    bind_on(lua, &on, "body_move")?;
     wa.set("on", on).map_err(|e| e.to_string())?;
 
     let draw = lua.create_table().map_err(|e| e.to_string())?;
@@ -725,7 +742,11 @@ end
 fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
     let f = lua
         .create_function(move |lua, (cb, opts): (Function, Option<Table>)| {
+            let body_kinds = if name == "body_move" {
+                Some(crate::dispatch::body_kinds(opts.as_ref())?)
+            } else { None };
             let msgs = match (name, opts) {
+                ("body_move", _) => None,
                 (_, None) => None,
                 ("worm_message", Some(opts)) => Some(worm_message_msgs(&opts)?),
                 (_, Some(_)) => {
@@ -751,7 +772,12 @@ fn bind_on(lua: &Lua, on: &Table, name: &'static str) -> Result<(), String> {
                 return crate::dispatch::register_worm_message(lua, &hooks, wrapped, msgs);
             }
             let n = list.len()?;
-            list.set(n + 1, wrapped)?;
+            if let Some(kinds) = body_kinds {
+                let spec = lua.create_table()?;
+                spec.set("kinds", kinds)?;
+                spec.set("on", wrapped)?;
+                list.set(n + 1, spec)?;
+            } else { list.set(n + 1, wrapped)?; }
             Ok(())
         })
         .map_err(|e| e.to_string())?;
@@ -862,6 +888,30 @@ fn spec_slot(spec: &Table) -> mlua::Result<StockWeapon> {
 
 /// WA's coalition colours: alliance 0 (red) to 5 (cyan).
 const WORM_SPRITE_TEAMS: usize = 6;
+
+/// `wa.crates.spawn`'s table: x, y (16.16), kind, health (health crates,
+/// 25 if left out), drop ("chute" if left out).
+fn crate_args(spec: &Table) -> mlua::Result<crate::CrateArgs> {
+    let bad = |why: String| mlua::Error::external(format!("crates.spawn: {why}"));
+    let need = |key: &str| get_i32(spec, key)?.ok_or_else(|| bad(format!("needs {key} (16.16)")));
+    let kind = match spec.get::<Option<String>>("kind")?.as_deref() {
+        Some("weapon") => 1,
+        Some("health") => 2,
+        Some("utility") => 4,
+        other => return Err(bad(format!("kind is \"weapon\", \"utility\" or \"health\", got {other:?}"))),
+    };
+    let health = get_i32(spec, "health")?.unwrap_or(25);
+    if kind == 2 && !(1..=1000).contains(&health) {
+        return Err(bad(format!("health is 1 to 1000, got {health}")));
+    }
+    let drop = match spec.get::<Option<String>>("drop")?.as_deref() {
+        None | Some("chute") => 2,
+        Some("teleport") => 1,
+        Some("none") => 0,
+        Some(other) => return Err(bad(format!("drop is \"chute\", \"teleport\" or \"none\", got {other:?}"))),
+    };
+    Ok(crate::CrateArgs { x: need("x")?, y: need("y")?, kind, health: if kind == 2 { health } else { 0 }, drop })
+}
 
 /// `wa.weapons.launch{ weapon, owner, x, y, vx, vy, damage, sprite, fuse,
 /// sound, explode_into, countdown, explode_on_space }`.
@@ -985,6 +1035,44 @@ fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
             }
         },
     })
+}
+
+/// A `worm_sprites` table: `weaponlnk = "sprites/equip"`, or one sheet per
+/// team colour (`weaponlnk = { red, blue, ... }`, by alliance + 1), as
+/// (stock pose, team, path). `label` names the table in errors.
+fn parse_worm_sprites(poses: &Table, label: &str) -> mlua::Result<Vec<(i32, Option<u8>, String)>> {
+    let mut out = Vec::new();
+    for pair in poses.pairs::<String, Value>() {
+        let (name, value) = pair?;
+        let id = gfx::stock_worm_sprite_id(&name).ok_or_else(|| {
+            mlua::Error::external(format!("unknown stock worm sprite '{name}'"))
+        })?;
+        match value {
+            Value::String(path) => {
+                out.push((id, None, path.to_str()?.replace('\\', "/")));
+            }
+            Value::Table(teams) => {
+                let n = teams.raw_len();
+                if n == 0 || n > WORM_SPRITE_TEAMS {
+                    return Err(mlua::Error::external(format!(
+                        "{label}.{name}: a team list holds 1 to {WORM_SPRITE_TEAMS} \
+                         paths, one per team colour; got {n}"
+                    )));
+                }
+                for i in 1..=n {
+                    let path: String = teams.get(i)?;
+                    out.push((id, Some((i - 1) as u8), path.replace('\\', "/")));
+                }
+            }
+            other => {
+                return Err(mlua::Error::external(format!(
+                    "{label}.{name} must be a path or a list of paths, got {other:?}"
+                )))
+            }
+        }
+    }
+    out.sort_by_key(|(id, team, _)| (*id, *team));
+    Ok(out)
 }
 
 fn table_to_claim(
@@ -1280,36 +1368,7 @@ fn table_to_claim(
     // alliance + 1 like the rest of the Lua surface.
     let mut worm_sprites = Vec::new();
     if let Some(poses) = spec.get::<Option<Table>>("worm_sprites")? {
-        for pair in poses.pairs::<String, Value>() {
-            let (name, value) = pair?;
-            let id = gfx::stock_worm_sprite_id(&name).ok_or_else(|| {
-                mlua::Error::external(format!("unknown stock worm sprite '{name}'"))
-            })?;
-            match value {
-                Value::String(path) => {
-                    worm_sprites.push((id, None, path.to_str()?.replace('\\', "/")));
-                }
-                Value::Table(teams) => {
-                    let n = teams.raw_len();
-                    if n == 0 || n > WORM_SPRITE_TEAMS {
-                        return Err(mlua::Error::external(format!(
-                            "worm_sprites.{name}: a team list holds 1 to {WORM_SPRITE_TEAMS} \
-                             paths, one per team colour; got {n}"
-                        )));
-                    }
-                    for i in 1..=n {
-                        let path: String = teams.get(i)?;
-                        worm_sprites.push((id, Some((i - 1) as u8), path.replace('\\', "/")));
-                    }
-                }
-                other => {
-                    return Err(mlua::Error::external(format!(
-                        "worm_sprites.{name} must be a path or a list of paths, got {other:?}"
-                    )))
-                }
-            }
-        }
-        worm_sprites.sort_by_key(|(id, team, _)| (*id, *team));
+        worm_sprites = parse_worm_sprites(&poses, "worm_sprites")?;
         for (_, _, path) in &worm_sprites {
             if extra_sheets.iter().any(|(existing, _)| existing == path) {
                 continue;
@@ -1319,6 +1378,62 @@ fn table_to_claim(
             extra_sheets.push((path, sheet));
         }
     }
+    // `worm_sprites_toggle = { key = "plus_key", worm_sprites = { ... } }`:
+    // sheets drawn instead of `worm_sprites` while the worm's toggle is on,
+    // which the synchronized + key flips while the turn's worm has the slot
+    // selected (Project X's Electromagnet: red attracting, blue repelling).
+    let mut worm_sprites_toggle = Vec::new();
+    if let Some(toggle) = spec.get::<Option<Table>>("worm_sprites_toggle")? {
+        let key: String = toggle.get("key")?;
+        if key != "plus_key" {
+            return Err(mlua::Error::external("worm_sprites_toggle.key must be \"plus_key\""));
+        }
+        let poses: Table = toggle.get("worm_sprites").map_err(|_| {
+            mlua::Error::external("worm_sprites_toggle needs worm_sprites = { pose = path, ... }")
+        })?;
+        worm_sprites_toggle = parse_worm_sprites(&poses, "worm_sprites_toggle.worm_sprites")?;
+        for (_, _, path) in &worm_sprites_toggle {
+            if extra_sheets.iter().any(|(existing, _)| existing == path) {
+                continue;
+            }
+            let (path, mut sheet) = load_pack_sheet(root, path, 1)?;
+            sheet.looping = false;
+            extra_sheets.push((path, sheet));
+        }
+    }
+    // `worm_sprites_team_tint = { worm_sprites = { ... }, colours = { six } }`:
+    // per pose, an overlay (the tintable part only) drawn over the claim's
+    // sheet, multiplied by the drawing worm's team colour, red to cyan. One
+    // sheet and one overlay stand for six team-coloured copies.
+    let worm_sprites_team_tint = match spec.get::<Option<Table>>("worm_sprites_team_tint")? {
+        None => None,
+        Some(tint) => {
+            let poses: Table = tint.get("worm_sprites").map_err(|_| {
+                mlua::Error::external("worm_sprites_team_tint needs worm_sprites = { pose = path, ... }")
+            })?;
+            let overlays = parse_worm_sprites(&poses, "worm_sprites_team_tint.worm_sprites")?;
+            if overlays.iter().any(|(_, team, _)| team.is_some()) {
+                return Err(mlua::Error::external(
+                    "worm_sprites_team_tint.worm_sprites: one overlay per pose, not a team list",
+                ));
+            }
+            let colours: Vec<u32> = tint.get::<Option<Vec<u32>>>("colours")?.unwrap_or_default();
+            if colours.len() != WORM_SPRITE_TEAMS || colours.iter().any(|c| *c > 0xFF_FFFF) {
+                return Err(mlua::Error::external(format!(
+                    "worm_sprites_team_tint.colours: {WORM_SPRITE_TEAMS} colours 0xRRGGBB, red to cyan"
+                )));
+            }
+            for (_, _, path) in &overlays {
+                if extra_sheets.iter().any(|(existing, _)| existing == path) {
+                    continue;
+                }
+                let (path, mut sheet) = load_pack_sheet(root, path, 1)?;
+                sheet.looping = false;
+                extra_sheets.push((path, sheet));
+            }
+            Some(weapons::WormTeamTint { worm_sprites: overlays, colours })
+        }
+    };
 
     // Held sheets are presentation-only. Always pack them into the GPU atlas;
     // they never consume WA's finite sprite slots.
@@ -1581,6 +1696,8 @@ fn table_to_claim(
             gpu_worm_sprites,
             truecolor,
             worm_sprites_animate,
+            worm_sprites_toggle,
+            worm_sprites_team_tint,
             extra_sounds,
             cluster_sprite_id,
             cluster_sprite_path,
@@ -1995,6 +2112,48 @@ mod tests {
             bad,
         )
         .is_err());
+    }
+
+    #[test]
+    fn worm_sprites_toggle_takes_the_plus_key_and_known_poses() {
+        let lua = Lua::new();
+        let claim = |src: &str| {
+            let spec: Table = lua.load(src).eval().unwrap();
+            table_to_claim(&lua, "test", std::path::Path::new("."), StockWeapon::BaseballBat, spec)
+        };
+        let err = |src: &str| claim(src).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(err(r#"{ weapon = "baseball_bat", worm_sprites_toggle = { key = "ctrl", worm_sprites = {} } }"#)
+            .contains("plus_key"));
+        assert!(err(r#"{ weapon = "baseball_bat", worm_sprites_toggle = { key = "plus_key" } }"#)
+            .contains("needs worm_sprites"));
+        assert!(err(r#"{ weapon = "baseball_bat", worm_sprites_toggle = { key = "plus_key",
+            worm_sprites = { wnotapose = "x.png" } } }"#)
+            .contains("unknown stock worm sprite"));
+        let none = claim(r#"{ weapon = "baseball_bat", worm_sprites_toggle = { key = "plus_key", worm_sprites = {} } }"#)
+            .unwrap();
+        assert!(none.params.worm_sprites_toggle.is_empty());
+    }
+
+    #[test]
+    fn worm_sprites_team_tint_takes_six_colours_and_one_overlay_per_pose() {
+        let lua = Lua::new();
+        let claim = |src: &str| {
+            let spec: Table = lua.load(src).eval().unwrap();
+            table_to_claim(&lua, "test", std::path::Path::new("."), StockWeapon::Kamikaze, spec)
+        };
+        let err = |src: &str| claim(src).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(err(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { colours = {} } }"#).contains("needs worm_sprites"));
+        assert!(err(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { worm_sprites = {}, colours = { 1, 2, 3 } } }"#)
+            .contains("6 colours"));
+        assert!(err(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { worm_sprites = {},
+            colours = { 1, 2, 3, 4, 5, 0x1000000 } } }"#).contains("6 colours"));
+        assert!(err(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { worm_sprites = { weaponlnk = { "a", "b" } },
+            colours = { 1, 2, 3, 4, 5, 6 } } }"#).contains("not a team list"));
+        let ok = claim(r#"{ weapon = "kamikaze", worm_sprites_team_tint = { worm_sprites = {},
+            colours = { 0xFF6447, 0x4764FF, 0x47FF64, 0xE6E647, 0xE647E6, 0x47E6E6 } } }"#).unwrap();
+        assert_eq!(ok.params.worm_sprites_team_tint.unwrap().colours[1], 0x4764FF);
+        let none = claim(r#"{ weapon = "kamikaze" }"#).unwrap();
+        assert!(none.params.worm_sprites_team_tint.is_none());
     }
 
     /// Gap 7: hooks that no weapon dispatcher drives (`hud` here, and the same

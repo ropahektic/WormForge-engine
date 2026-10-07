@@ -55,6 +55,16 @@ pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
     spawn.damage_worms = get_bool(s, "damage_worms")?.unwrap_or(explode_on);
     spawn.persist = get_bool(s, "persist")?.unwrap_or(explode_on && auto && spawn.visible);
     spawn.drown = get_bool(s, "drown")?.unwrap_or(auto && spawn.visible);
+    spawn.as_object = get_bool(s, "as_object")?.unwrap_or(false);
+    spawn.missile_shape = match get_string(s, "shape")?.as_deref() {
+        None | Some("worm") => false,
+        Some("missile") => true,
+        Some(other) => {
+            return Err(mlua::Error::external(format!(
+                "spawn: shape is \"missile\" or \"worm\", got {other:?}"
+            )))
+        }
+    };
     spawn.mask = get_bool(s, "mask")?.unwrap_or(false);
     let mask_default = spawn.mask;
     spawn.mask_worms = get_bool(s, "mask_worms")?.unwrap_or(mask_default);
@@ -87,11 +97,12 @@ pub fn parse_spawn(lua: &Lua, s: &Table) -> mlua::Result<ActorSpawn> {
 pub fn parse_brain(lua: &Lua, s: &Table) -> mlua::Result<u32> {
     match s.get::<Value>("on")? {
         Value::Nil => Ok(0),
-        Value::Function(frame) => crate::actor::register_brain(lua, Some(frame), None),
+        Value::Function(frame) => crate::actor::register_brain(lua, Some(frame), None, None),
         Value::Table(on) => {
             let frame = get_fn(&on, "frame")?;
             let land = get_fn(&on, "land")?;
-            crate::actor::register_brain(lua, frame, land)
+            let hit = get_fn(&on, "hit")?;
+            crate::actor::register_brain(lua, frame, land, hit)
         }
         other => Err(mlua::Error::external(format!(
             "spawn.on must be a function or table, got {other:?}"
@@ -350,6 +361,7 @@ pub fn bind_world(lua: &Lua, actors: &Table, wa: &Table) -> Result<(), String> {
     bind_kind_list(lua, wa, "missiles", CLASS_MISSILE)?;
     bind_kind_list(lua, wa, "oil", CLASS_OIL)?;
     bind_kind_list(lua, wa, "graves", CLASS_GRAVE)?;
+    bind_kind_list(lua, wa, "arrows", game::offsets::CLASS_ARROW)?;
     bind_land(lua, wa)?;
     bind_world_info(lua, wa)?;
     bind_sound(lua, wa)?;
@@ -566,6 +578,44 @@ mod terrain_tests {
 ///
 /// Errors rather than returns nil when the draw is unavailable. A pack that
 /// silently got `nil` here would fail somewhere later and further away.
+fn finite(name: &str, v: f64) -> mlua::Result<f64> {
+    if v.is_finite() {
+        Ok(v)
+    } else {
+        Err(mlua::Error::external(format!("wa.math.{name}: needs a finite number, got {v}")))
+    }
+}
+
+/// `wa.math.sin(x)` / `cos(x)` / `atan(y [, x])`: as Lua's, in radians, but
+/// the same bits on every machine (`game::trig`: WA's own sine table, and an
+/// atan from + - * / alone), for code whose result reaches the simulation.
+/// Lua's `math.sin` goes to each machine's C runtime, which may differ in the
+/// last bit. They read and change nothing, so they work anywhere.
+fn math_table(lua: &Lua) -> Result<Table, String> {
+    let t = lua.create_table().map_err(|e| e.to_string())?;
+    let sin = lua
+        .create_function(|_, x: f64| {
+            let a = game::trig::angle_from_radians(finite("sin", x)?);
+            Ok(game::trig::sin(a) as f64 / 65536.0)
+        })
+        .map_err(|e| e.to_string())?;
+    let cos = lua
+        .create_function(|_, x: f64| {
+            let a = game::trig::angle_from_radians(finite("cos", x)?);
+            Ok(game::trig::cos(a) as f64 / 65536.0)
+        })
+        .map_err(|e| e.to_string())?;
+    let atan = lua
+        .create_function(|_, (y, x): (f64, Option<f64>)| {
+            Ok(game::trig::atan2(finite("atan", y)?, finite("atan", x.unwrap_or(1.0))?))
+        })
+        .map_err(|e| e.to_string())?;
+    t.set("sin", sin).map_err(|e| e.to_string())?;
+    t.set("cos", cos).map_err(|e| e.to_string())?;
+    t.set("atan", atan).map_err(|e| e.to_string())?;
+    Ok(t)
+}
+
 fn random_fn(lua: &Lua) -> Result<Function, String> {
     lua.create_function(|_, (a, b): (Option<i64>, Option<i64>)| {
         if crate::dispatch::rendering() {
@@ -636,6 +686,49 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         Ok(Some(out))
     }).map_err(|e| e.to_string())?;
     world.set("electrical_trace", trace).map_err(|e| e.to_string())?;
+    // `wa.world.trace{ x0, y0, x1, y1, radius, with, ignore }`: a circle swept
+    // against WA's terrain and objects (Project X's TraceMaskEx).
+    let shape_trace = lua.create_function(|lua, spec: Table| {
+        let q = shape_query(&spec, true)?;
+        let Some((trace, _)) = crate::actor::native_shape() else { return Ok(None::<Table>) };
+        let hit = trace(&q);
+        if !hit.hit && !hit.starts_solid {
+            return Ok(None);
+        }
+        let out = lua.create_table()?;
+        out.set("hit", hit.hit)?;
+        out.set("starts_solid", hit.starts_solid)?;
+        if let Some((x, y)) = hit.left {
+            out.set("left_x", x)?;
+            out.set("left_y", y)?;
+        }
+        if hit.hit {
+            out.set("x", hit.x)?;
+            out.set("y", hit.y)?;
+            out.set("nx", hit.nx)?;
+            out.set("ny", hit.ny)?;
+            out.set("tx", -hit.ny)?;
+            out.set("ty", hit.nx)?;
+            if hit.obj != 0 {
+                out.set("obj", crate::actor::entity_value(lua, hit.obj).map_err(mlua::Error::external)?)?;
+            }
+        }
+        Ok(Some(out))
+    }).map_err(|e| e.to_string())?;
+    world.set("trace", shape_trace).map_err(|e| e.to_string())?;
+    // `wa.world.collides{ x, y, radius, with, ignore }`: whether a circle
+    // there overlaps terrain or an object (Project X's CheckCollisionEx), and
+    // which object.
+    let shape_collides = lua.create_function(|lua, spec: Table| {
+        let q = shape_query(&spec, false)?;
+        let Some((_, collides)) = crate::actor::native_shape() else { return Ok((false, Value::Nil)) };
+        match collides(&q) {
+            None => Ok((false, Value::Nil)),
+            Some(0) => Ok((true, Value::Nil)),
+            Some(h) => Ok((true, crate::actor::entity_value(lua, h).map_err(mlua::Error::external)?)),
+        }
+    }).map_err(|e| e.to_string())?;
+    world.set("collides", shape_collides).map_err(|e| e.to_string())?;
     world
         .set("sky", game::offsets::DROP_SKY_Y)
         .map_err(|e| e.to_string())?;
@@ -697,6 +790,10 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
             t.set("q", m & 64 != 0)?;
             t.set("space", m & 128 != 0)?;
             t.set("ctrl", m & game::sync_input::CTRL != 0)?;
+            t.set("plus_key", m & game::sync_input::PLUS_KEY != 0)?;
+            t.set("minus_key", m & game::sync_input::MINUS_KEY != 0)?;
+            t.set("alt", m & game::sync_input::ALT != 0)?;
+            t.set("pause_key", m & game::sync_input::PAUSE_KEY != 0)?;
             // The digit key held, 0..9 (top row or keypad), or nil.
             let digit = (m >> game::sync_input::DIGIT_SHIFT) & 0xf;
             if digit != 0 {
@@ -778,6 +875,7 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     world.set("networked", networked).map_err(|e| e.to_string())?;
     wa.set("random", random_fn(lua)?).map_err(|e| e.to_string())?;
+    wa.set("math", math_table(lua)?).map_err(|e| e.to_string())?;
     wa.set("world", world).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -973,7 +1071,7 @@ fn handles_table(lua: &Lua, ids: Vec<u32>, actors: bool) -> mlua::Result<Table> 
 fn objects_table(lua: &Lua, ids: Vec<u32>) -> mlua::Result<Table> {
     let t = lua.create_table()?;
     for (i, id) in ids.into_iter().enumerate() {
-        t.set(i + 1, WorldHandle(id))?;
+        t.set(i + 1, WorldHandle::new(id))?;
     }
     Ok(t)
 }
@@ -1284,4 +1382,55 @@ pub fn get_bool(table: &Table, key: &str) -> mlua::Result<Option<bool>> {
             "{key} must be a boolean, got {other:?}"
         ))),
     }
+}
+
+/// A `wa.world.trace` (`sweep`) or `wa.world.collides` table: positions
+/// 16.16, `radius` in pixels (0 to 64, default 0), `with` the kinds to test
+/// (default terrain only), `ignore` objects to leave out.
+fn shape_query(spec: &Table, sweep: bool) -> mlua::Result<crate::actor::ShapeQuery> {
+    let name = if sweep { "world.trace" } else { "world.collides" };
+    let need = |key: &str| -> mlua::Result<i32> {
+        spec.get::<Option<i32>>(key)?
+            .ok_or_else(|| mlua::Error::external(format!("{name} needs {key} (16.16)")))
+    };
+    let (x0, y0, x1, y1) = if sweep {
+        (need("x0")?, need("y0")?, need("x1")?, need("y1")?)
+    } else {
+        let (x, y) = (need("x")?, need("y")?);
+        (x, y, x, y)
+    };
+    let radius = spec.get::<Option<i32>>("radius")?.unwrap_or(0);
+    if !(0..=64).contains(&radius) {
+        return Err(mlua::Error::external(format!("{name}: radius is 0 to 64 pixels, got {radius}")));
+    }
+    use crate::actor::{SHAPE_CRATES, SHAPE_GRAVES, SHAPE_MINES, SHAPE_OIL, SHAPE_TERRAIN, SHAPE_WORMS};
+    let with = match spec.get::<Option<Table>>("with")? {
+        None => SHAPE_TERRAIN,
+        Some(t) => {
+            let mut bits = 0;
+            for v in t.sequence_values::<String>() {
+                bits |= match v?.as_str() {
+                    "terrain" => SHAPE_TERRAIN,
+                    "worms" => SHAPE_WORMS,
+                    "crates" => SHAPE_CRATES,
+                    "oil" => SHAPE_OIL,
+                    "mines" => SHAPE_MINES,
+                    "graves" => SHAPE_GRAVES,
+                    other => {
+                        return Err(mlua::Error::external(format!(
+                            "{name}: with takes terrain, worms, crates, oil, mines, graves; got {other:?}"
+                        )))
+                    }
+                };
+            }
+            bits
+        }
+    };
+    let mut ignore = Vec::new();
+    if let Some(t) = spec.get::<Option<Table>>("ignore")? {
+        for v in t.sequence_values::<Value>() {
+            ignore.push(parse_handle(&v?)?);
+        }
+    }
+    Ok(crate::actor::ShapeQuery { x0, y0, x1, y1, radius, with, ignore })
 }

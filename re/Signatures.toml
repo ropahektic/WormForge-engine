@@ -666,6 +666,20 @@ derive = "match"
 target_section = ".text"
 
 [[locator]]
+# CrateEntity::Constructor: stdcall (this, parent, desc, drop), RET 0x10,
+# returns this. desc is 0xE5 dwords (PX's CCrateDesc), copied to +0x110;
+# drop is PX's EDropType (0 none, 1 teleport, 2 chute). WA's own callers
+# allocate 0x4DC bytes and zero 0x4BC first: the turn's crate drop
+# (0x561AD2, chute) and the dead worm's crate (0x5137E5, teleport).
+name = "CRATE_ENTITY_CTOR"
+required = false
+reference_va = 0x00502490
+section = ".text"
+pattern = "6A FF 64 A1 00 00 00 00 68 ?? ?? ?? ?? 50 8B 44 24 14 64 89 25 00 00 00 00 53 8B 5C 24 14 55 8B 6C 24 20 56 57 6A 06 6A 0B 50 53"
+derive = "match"
+target_section = ".text"
+
+[[locator]]
 name = "WORM_ENTITY_CTOR"
 reference_va = 0x0050bfb0
 section = ".text"
@@ -893,5 +907,24 @@ name = "CRATE_GET_DESCRIPTION"
 reference_va = 0x00503F70
 section = ".text"
 pattern = "81 7C 24 04 D8 07 00 00 74 05 33 C0 C2 0C 00 56 57 8B 7C 24 14 8D B1 10 01 00 00"
+derive = "match"
+target_section = ".text"
+
+# Portal transport: WA 3.8.1 base destructor removes the body from both CM
+# lists (4FEF98..4FEFAA). Base ctor registers all subclasses. No vtable edits.
+[[locator]]
+name = "WORLD_ENTITY_DTOR"
+reference_va = 0x004fef30
+section = ".text"
+pattern = "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 56 57 8B F9 89 7C 24 08 C7 07"
+derive = "match"
+target_section = ".text"
+
+# stdcall(cm, body, index), RET 12; no register-only arguments.
+[[locator]]
+name = "COLLISION_BODY_UPDATE"
+reference_va = 0x004fcdf0
+section = ".text"
+pattern = "83 EC 08 53 8B 5C 24 14 83 7B 3C 00 55 56 57 0F 84 ?? ?? ?? ?? 83 7B 48 00 0F 85 ?? ?? ?? ?? 83 BB AC 00 00 00 00"
 derive = "match"
 target_section = ".text"
