@@ -458,7 +458,6 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     spawn::bind_world(lua, &wa.get("actors").map_err(|e| e.to_string())?, &wa)?;
 
     globals.set("wa", wa.clone()).map_err(|e| e.to_string())?;
-    crate::grants::install(lua, &wa)?;
     install_inventory(lua, &wa)?;
     Ok(wa)
 }
