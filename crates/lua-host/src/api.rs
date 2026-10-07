@@ -130,6 +130,92 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
             })
             .map_err(|e| e.to_string())?;
         weapons.set("launch", f).map_err(|e| e.to_string())?;
+
+        // `wa.weapons.click{ weapon, worm, x, y, vx = 0, vy = 0 }`: the
+        // on_click of whichever pack claims that slot, run with the event a
+        // click there gives it. Only the pack's handler runs: WA's own fire
+        // does not (no wind-up, no ammo, the turn goes on).
+        let f = lua
+            .create_function(|lua, spec: Table| {
+                if !crate::sim_context::active() {
+                    return Err(mlua::Error::external(
+                        "weapons.click: only valid in simulation callbacks",
+                    ));
+                }
+                let name: String = spec
+                    .get("weapon")
+                    .map_err(|_| mlua::Error::external("weapons.click needs weapon = \"air_strike\""))?;
+                let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
+                let worm = match spec.get::<Value>("worm")? {
+                    Value::UserData(ud) => ud.borrow::<crate::actor::WormHandle>().map(|w| w.0).ok(),
+                    _ => None,
+                }
+                .filter(|w| *w != 0)
+                .ok_or_else(|| mlua::Error::external("weapons.click needs worm = the worm it clicks for"))?;
+                let at = |key: &str| -> mlua::Result<i32> {
+                    spec.get::<Option<i32>>(key)?
+                        .ok_or_else(|| mlua::Error::external(format!("weapons.click needs {key} (16.16)")))
+                };
+                let (x, y) = (at("x")?, at("y")?);
+                let vx = spec.get::<Option<i32>>("vx")?.unwrap_or(0);
+                let vy = spec.get::<Option<i32>>("vy")?.unwrap_or(0);
+                let id = crate::actor::native_slot_click().map(|f| f(slot.index() as u32)).unwrap_or(0);
+                if id == 0 {
+                    return Err(mlua::Error::external(format!(
+                        "weapons.click: no pack claims {name} with an on_click function"
+                    )));
+                }
+                crate::actor::call_click(lua, id, worm, slot.index() as i32, x, y, game::offsets::DROP_SKY_Y, (vx, vy))
+                    .map_err(mlua::Error::external)
+            })
+            .map_err(|e| e.to_string())?;
+        weapons.set("click", f).map_err(|e| e.to_string())?;
+
+        // `wa.weapons.fire{ weapon, worm, x, y, vx = 0, vy = 0, ... }`: the
+        // on_fire of whichever pack claims that slot, run with the event a
+        // shot there gives it; the spec's other fields go into the event too,
+        // for a handler that reads them. Only the pack's handler runs, as for
+        // wa.weapons.click.
+        let f = lua
+            .create_function(|lua, spec: Table| {
+                if !crate::sim_context::active() {
+                    return Err(mlua::Error::external("weapons.fire: only valid in simulation callbacks"));
+                }
+                let name: String = spec
+                    .get("weapon")
+                    .map_err(|_| mlua::Error::external("weapons.fire needs weapon = \"baseball_bat\""))?;
+                let slot = parse_stock_weapon(&name).map_err(mlua::Error::external)?;
+                let worm = match spec.get::<Value>("worm")? {
+                    Value::UserData(ud) => ud.borrow::<crate::actor::WormHandle>().map(|w| w.0).ok(),
+                    _ => None,
+                }
+                .filter(|w| *w != 0)
+                .ok_or_else(|| mlua::Error::external("weapons.fire needs worm = the worm it fires for"))?;
+                let at = |key: &str| -> mlua::Result<i32> {
+                    spec.get::<Option<i32>>(key)?
+                        .ok_or_else(|| mlua::Error::external(format!("weapons.fire needs {key} (16.16)")))
+                };
+                let (x, y) = (at("x")?, at("y")?);
+                let vx = spec.get::<Option<i32>>("vx")?.unwrap_or(0);
+                let vy = spec.get::<Option<i32>>("vy")?.unwrap_or(0);
+                let id = crate::actor::native_slot_fire().map(|f| f(slot.index() as u32)).unwrap_or(0);
+                if id == 0 {
+                    return Err(mlua::Error::external(format!(
+                        "weapons.fire: no pack claims {name} with an on_fire function"
+                    )));
+                }
+                let extra = lua.create_table()?;
+                for pair in spec.pairs::<Value, Value>() {
+                    let (k, v) = pair?;
+                    if !matches!(k.as_str().as_deref(), Some("weapon")) {
+                        extra.set(k, v)?;
+                    }
+                }
+                crate::actor::call_fire(lua, id, worm, slot.index() as i32, (x, y, vx, vy), Some(&extra))
+                    .map_err(mlua::Error::external)
+            })
+            .map_err(|e| e.to_string())?;
+        weapons.set("fire", f).map_err(|e| e.to_string())?;
     }
 
     {

@@ -373,6 +373,12 @@ pub struct ActorNative {
     pub spawn_worm: fn(u32, i32, i32, &str, i32) -> Result<u32, String>,
     /// `wa.world.trace{...}`: a circle swept against terrain and objects.
     pub shape_trace: fn(&ShapeQuery) -> ShapeHit,
+    /// The click handler (`wa._clicks` id) of the pack claim on a stock
+    /// slot, 0 for none: what `wa.weapons.click` runs.
+    pub slot_click: fn(u32) -> u32,
+    /// The fire handler (`wa._fires` id) of the pack claim on a stock slot,
+    /// 0 for none: what `wa.weapons.fire` runs.
+    pub slot_fire: fn(u32) -> u32,
     /// `wa.world.collides{...}`: what a circle there overlaps: None nothing,
     /// Some(0) terrain, Some(handle) an object.
     pub shape_collides: fn(&ShapeQuery) -> Option<u32>,
@@ -483,6 +489,8 @@ impl Default for ActorNative {
             spawn_fire: |_| Err("fire.spawn not bound".into()),
             spawn_worm: |_, _, _, _, _| Err("worms.spawn not bound".into()),
             shape_trace: |_| ShapeHit::default(),
+            slot_click: |_| 0,
+            slot_fire: |_| 0,
             shape_collides: |_| None,
             spawn_crate: |_| Err("crates.spawn not bound".into()),
         }
@@ -672,33 +680,50 @@ pub fn weapon_click(
     if click_id == 0 {
         return Ok(());
     }
-    with_lua("weapon_click", |lua| {
-        let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
-        let clicks: Table = wa.get("_clicks").map_err(|e| e.to_string())?;
-        let spec = match clicks.get::<Value>(click_id).map_err(|e| e.to_string())? {
-            Value::Table(t) => t,
-            _ => return Err(format!("on_click {click_id} missing")),
-        };
-        let cb: Function = match spec.get::<Value>("on").map_err(|e| e.to_string())? {
-            Value::Function(f) => f,
-            _ => return Err(format!("on_click {click_id} has no function")),
-        };
-        if let Ok(m) = spec.get::<String>("mod") {
-            let _ = wa.set("_mod", m);
-        }
-        let click = lua.create_table().map_err(|e| e.to_string())?;
-        click.set("x", x).map_err(|e| e.to_string())?;
-        click.set("y", y).map_err(|e| e.to_string())?;
-        click.set("sky", sky).map_err(|e| e.to_string())?;
-        click.set("slot", slot).map_err(|e| e.to_string())?;
-        click.set("vx", speed.0).map_err(|e| e.to_string())?;
-        click.set("vy", speed.1).map_err(|e| e.to_string())?;
-        click
-            .set("worm", WormHandle(worm))
-            .map_err(|e| e.to_string())?;
-        with_spawn_owner(worm, || cb.call::<()>(click).map_err(|e| e.to_string()))?;
-        Ok(())
-    })
+    with_lua("weapon_click", |lua| call_click(lua, click_id, worm, slot, x, y, sky, speed))
+}
+
+/// Run on_click `click_id` with the event a click gives it. The running
+/// pack (`wa._mod`) is the click's while it runs, and the caller's again
+/// after: `wa.weapons.click` runs one from inside another pack's callback.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn call_click(
+    lua: &Lua,
+    click_id: u32,
+    worm: u32,
+    slot: i32,
+    x: i32,
+    y: i32,
+    sky: i32,
+    speed: (i32, i32),
+) -> Result<(), String> {
+    let wa: Table = lua.globals().get("wa").map_err(|e| e.to_string())?;
+    let clicks: Table = wa.get("_clicks").map_err(|e| e.to_string())?;
+    let spec = match clicks.get::<Value>(click_id).map_err(|e| e.to_string())? {
+        Value::Table(t) => t,
+        _ => return Err(format!("on_click {click_id} missing")),
+    };
+    let cb: Function = match spec.get::<Value>("on").map_err(|e| e.to_string())? {
+        Value::Function(f) => f,
+        _ => return Err(format!("on_click {click_id} has no function")),
+    };
+    let caller: Value = wa.get("_mod").map_err(|e| e.to_string())?;
+    if let Ok(m) = spec.get::<String>("mod") {
+        let _ = wa.set("_mod", m);
+    }
+    let click = lua.create_table().map_err(|e| e.to_string())?;
+    click.set("x", x).map_err(|e| e.to_string())?;
+    click.set("y", y).map_err(|e| e.to_string())?;
+    click.set("sky", sky).map_err(|e| e.to_string())?;
+    click.set("slot", slot).map_err(|e| e.to_string())?;
+    click.set("vx", speed.0).map_err(|e| e.to_string())?;
+    click.set("vy", speed.1).map_err(|e| e.to_string())?;
+    click
+        .set("worm", WormHandle(worm))
+        .map_err(|e| e.to_string())?;
+    let result = with_spawn_owner(worm, || cb.call::<()>(click).map_err(|e| e.to_string()));
+    let _ = wa.set("_mod", caller);
+    result
 }
 
 pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String> {
@@ -2180,6 +2205,14 @@ pub(crate) fn native_spawn_fire() -> Option<fn(&FireArgs) -> Result<u32, String>
 
 pub(crate) fn native_spawn_worm() -> Option<fn(u32, i32, i32, &str, i32) -> Result<u32, String>> {
     NATIVE.lock().ok()?.as_ref().map(|n| n.spawn_worm)
+}
+
+pub(crate) fn native_slot_click() -> Option<fn(u32) -> u32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.slot_click)
+}
+
+pub(crate) fn native_slot_fire() -> Option<fn(u32) -> u32> {
+    NATIVE.lock().ok()?.as_ref().map(|n| n.slot_fire)
 }
 
 pub(crate) fn native_shape() -> Option<(fn(&ShapeQuery) -> ShapeHit, fn(&ShapeQuery) -> Option<u32>)> {
