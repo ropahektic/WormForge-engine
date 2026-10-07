@@ -290,6 +290,13 @@ pub fn spawn(args: &lua_host::FireArgs) -> Result<u32, String> {
 mod tests {
     use super::*;
 
+    /// The fire tests share the registries: one at a time.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn the_setup_is_pxs_fire_desc_in_order() {
         let args = lua_host::FireArgs {
@@ -312,6 +319,7 @@ mod tests {
 
     #[test]
     fn a_tinted_fires_flame_draws_its_copy_and_freeing_forgets_it() {
+        let _serial = serial();
         clear();
         TINTED.lock().unwrap().push((0x5000, 9, 0xFF4B_E14B));
         COPIES.lock().unwrap().push((121, 0x0100_0042));
@@ -328,6 +336,7 @@ mod tests {
 
     #[test]
     fn a_scaled_fires_hit_is_scaled_and_others_are_not() {
+        let _serial = serial();
         clear();
         // A fake fire: its pool slot is all the hit check reads of it.
         let mut fire = vec![0u8; FIRE_ENTITY_SIZE];
