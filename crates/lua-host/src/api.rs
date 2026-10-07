@@ -473,16 +473,16 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
 fn install_inventory(lua: &Lua, wa: &Table) -> Result<(), String> {
     wa.set("inventory", lua.create_table().map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
-    wa.set(
-        "_inventory_stores",
-        lua.create_table().map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
+    // The stores and the grant report are the chunk's locals, not fields of
+    // `wa`: one pack cannot reach another's stores, nor report a grant the
+    // inventory did not make. (The sandbox has no `debug` to reach upvalues.)
+    let grant = crate::grants::inventory_grant(lua).map_err(|e| e.to_string())?;
 
     lua.load(
         r#"
+local report_grant = ...
 local inventory_api = wa.inventory
-local stores = wa._inventory_stores
+local stores = {}
 
 local function whole_nonnegative(n, what)
   if type(n) ~= "number" or n < 0 or n % 1 ~= 0 then
@@ -554,7 +554,7 @@ function inventory_api.create(spec)
   local values = {}
   local quiet = 0
   local function granted(worm, items, x, y)
-    if quiet == 0 and #items > 0 then wa._inventory_grant({ worm = worm, items = items, x = x, y = y }) end
+    if quiet == 0 and #items > 0 then report_grant({ worm = worm, items = items, x = x, y = y }) end
   end
   local inv = { id = id, owner = owner }
 
@@ -703,7 +703,7 @@ end
 "#,
     )
     .set_name("wa.inventory")
-    .exec()
+    .call::<()>(grant)
     .map_err(|e| e.to_string())
 }
 

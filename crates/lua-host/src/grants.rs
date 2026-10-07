@@ -125,23 +125,25 @@ fn notify(spec: Table, source: &str) -> mlua::Result<()> {
     });
     Ok(())
 }
+/// The inventory's own report of a grant. Handed to the inventory code as a
+/// local only, never put in `wa`, so no pack can report one in its name: an
+/// "inventory" grant is always a real inventory change.
+pub(crate) fn inventory_grant(lua: &Lua) -> mlua::Result<mlua::Function> {
+    lua.create_function(|_, spec: Table| {
+        if crate::sim_context::active() {
+            notify(spec, "inventory")
+        } else {
+            Ok(())
+        }
+    })
+}
+
 pub(crate) fn install(lua: &Lua, wa: &Table) -> Result<(), String> {
     let result = (|| -> mlua::Result<()> {
         let weapons: Table = wa.get("weapons")?;
         weapons.set(
             "notify_grant",
             lua.create_function(|_, spec: Table| notify(spec, "script"))?,
-        )?;
-        // Inventory owns the source, so callers cannot impersonate a crate.
-        wa.set(
-            "_inventory_grant",
-            lua.create_function(|_, spec: Table| {
-                if crate::sim_context::active() {
-                    notify(spec, "inventory")
-                } else {
-                    Ok(())
-                }
-            })?,
         )?;
         weapons.set(
             "visual",
@@ -297,6 +299,8 @@ mod tests {
             assert(wa.world.frame()==42)
             wa.random=function(lo,hi) return lo end
             inv=wa.inventory.create{id='loot',slots={'grenade','bazooka'}}
+            -- The inventory's stores and its grant report are its own locals.
+            assert(wa._inventory_grant==nil and wa._inventory_stores==nil)
         "#).exec().unwrap();
         crate::sim_context::with_sim(|| {
             lua.load(
