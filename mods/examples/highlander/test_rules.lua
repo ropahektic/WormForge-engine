@@ -281,7 +281,7 @@ local function new_match(opts)
       gravity = function() return M.gravity or 0 end,
       wind = function() return M.wind or 0 end,
       keys = function()
-        return { sprint = M.shift or false, digit = M.digit, plus_key = M.plus_key or false,
+        return { shift = M.shift or false, digit = M.digit, plus_key = M.plus_key or false,
           ctrl = M.ctrl or false, left = M.left or false, right = M.right or false }
       end,
       set_gravity = function(v) M.gravity = v end,

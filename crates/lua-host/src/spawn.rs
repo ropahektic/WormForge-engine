@@ -786,6 +786,9 @@ fn bind_world_info(lua: &Lua, wa: &Table) -> Result<(), String> {
             t.set("up", m & 4 != 0)?;
             t.set("down", m & 8 != 0)?;
             t.set("jump", m & 16 != 0)?;
+            t.set("shift", m & 32 != 0)?;
+            // The old name of `shift`, kept so packs written for it still
+            // work; it goes with the next api_version.
             t.set("sprint", m & 32 != 0)?;
             t.set("q", m & 64 != 0)?;
             t.set("space", m & 128 != 0)?;

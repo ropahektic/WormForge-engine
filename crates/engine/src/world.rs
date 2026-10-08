@@ -809,7 +809,7 @@ pub fn clear_input_latch() {
     POINTER_SYNC_UNTIL.store(0, Ordering::Relaxed);
 }
 
-/// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 sprint (shift), 64 Q, 128 Space, 4096 Ctrl,
+/// Bits: 1 left, 2 right, 4 up, 8 down, 16 W, 32 Shift, 64 Q, 128 Space, 4096 Ctrl,
 /// 8192 the + key.
 pub fn keys() -> u32 {
     keys_latched()
