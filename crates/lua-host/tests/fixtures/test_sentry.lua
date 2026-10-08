@@ -23,6 +23,7 @@ return function(load_pack)
   local draw_at = 0
   local DRAWS = { 7, 23, 41, 4, 88, 15, 62, 30, 51, 9, 77, 36 }
   wa = {
+    math = { sin = math.sin, cos = math.cos, atan = math.atan },
     random = function(a, b)
       draw_at = draw_at + 1
       local d = DRAWS[((draw_at - 1) % #DRAWS) + 1]
