@@ -299,6 +299,11 @@ pub const WORM_SET_STATE: u32 = 0x0050_E850;
 /// a worm walking off a ledge. SetState into it with a speed gives the worm
 /// to WA's own flight and landing (`worm:drop`, the Lua `"sliding"`).
 pub const WORM_STATE_AIRBORNE: u32 = 0x7E;
+/// The jump key's states: 0x77 getting ready, 0x79 in the air, 0x7A coming
+/// down (`game::worm_state`; named from traces).
+pub const WORM_STATE_JUMP_PREPARE: u32 = 0x77;
+pub const WORM_STATE_JUMPING: u32 = 0x79;
+pub const WORM_STATE_JUMP_FALLING: u32 = 0x7A;
 /// WormEntity__DrawSprite_Maybe — usercall EAX=this. Body sprite blit.
 pub const WORM_DRAW_SPRITE: u32 = 0x0050_FCD0;
 /// WormEntity__DrawWormName_Maybe — usercall ESI=this.

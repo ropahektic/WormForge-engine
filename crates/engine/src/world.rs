@@ -886,7 +886,7 @@ fn local_pointer_latched() -> (i32, i32, bool) {
 /// True while Space is held, as sampled for this frame. `pump_space_fire` and
 /// a pack reading `keys().space` therefore always agree.
 fn space_held() -> bool {
-    keys_latched() & 128 != 0
+    keys_latched() & game::sync_input::SPACE != 0
 }
 
 fn poll_keys() -> u32 {
