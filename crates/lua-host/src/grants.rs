@@ -52,7 +52,7 @@ pub fn queue_weapon_grant(mut grant: WeaponGrant) {
     });
     if !grant.items.is_empty() {
         trace(&format!(
-            "collect_viewer grant queued: source={} origin={:?} items={:?}",
+            "weapon grant queued: source={} origin={:?} items={:?}",
             grant.source, grant.origin, grant.items
         ));
         PENDING.with(|q| q.borrow_mut().push(grant));
@@ -67,7 +67,7 @@ pub fn flush_weapon_grants() -> Result<(), String> {
     let mut error = None;
     for grant in grants {
         trace(&format!(
-            "collect_viewer grant dispatch: source={} worm={} coalition={:?} frame={} items={:?}",
+            "weapon grant dispatch: source={} worm={} coalition={:?} frame={} items={:?}",
             grant.source,
             grant.origin.worm_id,
             grant.origin.alliance,

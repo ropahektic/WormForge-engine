@@ -43,7 +43,7 @@ pub fn install() -> Result<(), String> {
             Ordering::SeqCst,
         );
     }
-    crate::log_line("collect_viewer grant: crate collection, description and ammo hooks installed");
+    crate::log_line("weapon grant: crate collection, description and ammo hooks installed");
     Ok(())
 }
 pub fn clear() {
@@ -115,7 +115,7 @@ pub fn local_alliance(alliance: u8) -> bool {
         let mut s = s.borrow_mut();
         let decision = (online, active, result);
         if s[alliance as usize] != Some(decision) {
-            crate::log_line(&format!("collect_viewer visibility: coalition={alliance} active={active:?} online={online} local_machine={local} teams={records:?} visible={result}"));
+            crate::log_line(&format!("weapon grant visibility: coalition={alliance} active={active:?} online={online} local_machine={local} teams={records:?} visible={result}"));
             s[alliance as usize] = Some(decision);
         }
     });
@@ -156,7 +156,7 @@ unsafe extern "stdcall" fn pickup(worm: *mut u8, team: u32, index: u32, flag: *m
     };
     let first = PICKUP_LOGGED.with(|s| !s.replace(true));
     if first {
-        crate::log_line(&format!("collect_viewer pickup: first call collector={worm:p} team={team} index={index} origin={snapshot:?}"));
+        crate::log_line(&format!("weapon grant pickup: first call collector={worm:p} team={team} index={index} origin={snapshot:?}"));
     }
     SCOPES.with(|s| {
         s.borrow_mut().push(Pickup {
@@ -168,7 +168,7 @@ unsafe extern "stdcall" fn pickup(worm: *mut u8, team: u32, index: u32, flag: *m
     let result = unsafe { f(worm, team, index, flag) };
     let scope = SCOPES.with(|s| s.borrow_mut().pop()).unwrap();
     if first || result != 0 || !scope.crates.is_empty() {
-        crate::log_line(&format!("collect_viewer pickup: result={result} team={team} index={index} origin={:?} crates={:?}", scope.origin, scope.crates));
+        crate::log_line(&format!("weapon grant pickup: result={result} team={team} index={index} origin={:?} crates={:?}", scope.origin, scope.crates));
     }
     if let Some(origin) = scope.origin {
         for (x, y, items) in scope.crates {
@@ -195,7 +195,7 @@ unsafe extern "thiscall" fn describe(this: *mut u8, msg: u32, size: u32, out: *m
     let f: DescribeFn = unsafe { std::mem::transmute(DESCRIBE.load(Ordering::SeqCst)) };
     let result = unsafe { f(this, msg, size, out) };
     if SCOPES.with(|s| !s.borrow().is_empty()) {
-        crate::log_line(&format!("collect_viewer description: crate={this:p} msg=0x{msg:x} size=0x{size:x} result={result} position={position:?}"));
+        crate::log_line(&format!("weapon grant crate description: crate={this:p} msg=0x{msg:x} size=0x{size:x} result={result} position={position:?}"));
     }
     if result != 0 && msg == 0x7D8 && size == 0x394 {
         if let Some((x, y)) = position {
@@ -214,7 +214,7 @@ extern "C" fn award(team: u32, amount: i32, slot: u32) {
     }
     SCOPES.with(|s| {
         if let Some(scope) = s.borrow_mut().last_mut() {
-            crate::log_line(&format!("collect_viewer award: team={team} weapon={slot} amount={amount} recipient={:?} described_crates={}", scope.origin.as_ref().map(|o| o.worm_id), scope.crates.len()));
+            crate::log_line(&format!("weapon grant award: team={team} weapon={slot} amount={amount} recipient={:?} described_crates={}", scope.origin.as_ref().map(|o| o.worm_id), scope.crates.len()));
             if scope
                 .origin
                 .as_ref()

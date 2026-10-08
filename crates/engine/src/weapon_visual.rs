@@ -82,7 +82,7 @@ pub unsafe fn prepare(
     clear();
     if world.is_null() || display.is_null() {
         crate::log_line(&format!(
-            "collect_viewer preview: unavailable world={world:p} display={display:p}"
+            "weapon visual: unavailable world={world:p} display={display:p}"
         ));
         return Vec::new();
     }
@@ -136,7 +136,7 @@ pub unsafe fn prepare(
     }
     let visuals = VISUALS.lock().unwrap();
     crate::log_line(&format!(
-        "collect_viewer preview: prepared={} icons missing={} black_threshold={ICON_BLACK_THRESHOLD} world={world:p} display={display:p}",
+        "weapon visual: prepared={} icons missing={} black_threshold={ICON_BLACK_THRESHOLD} world={world:p} display={display:p}",
         visuals.len(),
         STOCK_WEAPON_COUNT - 1 - visuals.len(),
     ));
