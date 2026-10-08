@@ -3230,6 +3230,24 @@ do
   for name in pairs(have) do if ammo[0][name] ~= 1 then restored = false end end
   check("the original Highlander hand is restored", restored)
 
+  -- A revive the engine refuses (a living worm holds the place, a full
+  -- team) plays Reinforcement's error sound at the grave.
+  new_match()
+  by_slot = {}
+  for _, spec in ipairs(replaced) do by_slot[spec.weapon] = spec end
+  owner = worm(16)
+  owner.x, owner.y = 100 * P, 100 * P
+  for _, w in ipairs(worms) do if w ~= owner then w.x, w.y = 1000 * P, 1000 * P end end
+  local full = { id=703, kind="grave", worm_id=17, x=140*P, y=100*P }
+  function full:revive() return nil end
+  M.graves = { full }
+  M.sounds, M.sound_targets = {}, {}
+  by_slot.napalm_strike.on_click({ worm=owner, x=140*P, y=100*P })
+  effect = M.spawned[#M.spawned]
+  for _ = 1, 166 do effect.on(effect) end
+  check("a refused revive plays the error sound at the grave",
+    M.sounds[#M.sounds] == "sounds/gravity_control/error.wav" and M.sound_targets[#M.sound_targets] == full)
+
   new_match()
   by_slot = {}
   for _, spec in ipairs(replaced) do by_slot[spec.weapon] = spec end
