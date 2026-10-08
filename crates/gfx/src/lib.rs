@@ -278,17 +278,12 @@ impl OpaqueMask {
                 }
             }
         }
-        let mut mask = Self {
+        // Keep the authored silhouette without adding invisible collision padding.
+        Self {
             width: w,
             height: h,
             bits,
-        };
-        // Thin features / AA fringes (ears, hair, antennae) need a fatter solid
-        // so worm feet and hitscan catch them. Three steps covers ~3px tips.
-        mask.dilate_once();
-        mask.dilate_once();
-        mask.dilate_once();
-        mask
+        }
     }
 
     pub fn from_strip(strip: &SpriteStrip) -> Option<Self> {
@@ -302,37 +297,6 @@ impl OpaqueMask {
         }
         let i = (y as usize) * (self.width as usize) + (x as usize);
         (self.bits[i / 8] & (1 << (i % 8))) != 0
-    }
-
-    fn set_bit(&mut self, x: i32, y: i32) {
-        if x < 0 || y < 0 || x as u32 >= self.width || y as u32 >= self.height {
-            return;
-        }
-        let i = (y as usize) * (self.width as usize) + (x as usize);
-        self.bits[i / 8] |= 1 << (i % 8);
-    }
-
-    fn dilate_once(&mut self) {
-        let w = self.width as i32;
-        let h = self.height as i32;
-        let mut add: Vec<(i32, i32)> = Vec::new();
-        for y in 0..h {
-            for x in 0..w {
-                if !self.test(x, y) {
-                    continue;
-                }
-                for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                    let nx = x + dx;
-                    let ny = y + dy;
-                    if !self.test(nx, ny) {
-                        add.push((nx, ny));
-                    }
-                }
-            }
-        }
-        for (x, y) in add {
-            self.set_bit(x, y);
-        }
     }
 
     /// Any opaque bit in the rectangle [x0,x1]×[y0,y1] (inclusive).
@@ -1001,10 +965,7 @@ mod tests {
     }
 
     #[test]
-    fn opaque_mask_from_first_frame() {
-        // One opaque pixel in the middle of a 16x16 frame. The mask is
-        // dilated three times (4-neighbourhood), so bits within Manhattan
-        // distance 3 are solid and anything further is not.
+    fn opaque_mask_keeps_a_single_pixel_without_padding() {
         let w = 16usize;
         let mut rgba = vec![0u8; w * w * 4];
         let o = (8 * w + 8) * 4;
@@ -1015,13 +976,42 @@ mod tests {
             height: w as u32,
             rgba,
         });
-        assert!(mask.test(8, 8));
-        assert!(mask.test(8, 11));
-        assert!(mask.test(5, 8));
-        assert!(!mask.test(8, 12));
-        assert!(!mask.test(4, 8));
-        assert!(!mask.test(0, 0));
-        assert!(!mask.test(-1, 0));
+        for y in 0..w as i32 {
+            for x in 0..w as i32 {
+                assert_eq!(mask.test(x, y), x == 8 && y == 8);
+            }
+        }
+        assert!(!mask.test(-1, 8));
+        assert!(!mask.test(16, 8));
+    }
+
+    #[test]
+    fn opaque_mask_preserves_thin_outline_and_holes() {
+        let w = 7usize;
+        let mut rgba = vec![0u8; w * w * 4];
+        // A one-pixel square outline, with an empty middle and outer margin.
+        for y in 1..6 {
+            for x in 1..6 {
+                if x == 1 || x == 5 || y == 1 || y == 5 {
+                    let o = (y * w + x) * 4;
+                    rgba[o] = 255;
+                    rgba[o + 3] = 255;
+                }
+            }
+        }
+        let mask = OpaqueMask::from_frame(&RgbaFrame {
+            width: w as u32,
+            height: w as u32,
+            rgba,
+        });
+        for y in 0..w as i32 {
+            for x in 0..w as i32 {
+                let outline = (1..=5).contains(&x)
+                    && (1..=5).contains(&y)
+                    && (x == 1 || x == 5 || y == 1 || y == 5);
+                assert_eq!(mask.test(x, y), outline, "source silhouette at ({x},{y})");
+            }
+        }
     }
 
     #[test]
