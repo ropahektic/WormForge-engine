@@ -12,6 +12,7 @@ use crate::sprite;
 use game::entity::{read_i32, write_i32};
 use game::offsets::*;
 use gfx::OpaqueMask;
+use std::collections::HashSet;
 use std::sync::Mutex;
 
 /// Pixels we forced solid; `was_solid` is the bit before our stamp.
@@ -22,6 +23,24 @@ struct StampPixel {
 }
 
 static STAMPS: Mutex<Vec<StampPixel>> = Mutex::new(Vec::new());
+
+/// Presentation-only snapshot of collision bits introduced by actors. Real
+/// dirt beneath a silhouette was already solid and is not in this set.
+/// Build the lookup once per render pass, never lock or scan STAMPS per pixel.
+pub fn temporary_collision_pixels() -> HashSet<(i32, i32)> {
+    STAMPS
+        .lock()
+        .map(|stamps| temporary_pixels(&stamps))
+        .unwrap_or_default()
+}
+
+fn temporary_pixels(stamps: &[StampPixel]) -> HashSet<(i32, i32)> {
+    stamps
+        .iter()
+        .filter(|p| !p.was_solid)
+        .map(|p| (p.x, p.y))
+        .collect()
+}
 
 /// Call at the start of FRAME_FINISH (before stock physics) so worms / hitscan
 /// / stock missile bounce see the silhouette as landscape.
@@ -156,6 +175,25 @@ fn stamp_mask(mask: &OpaqueMask, geom: &SpriteGeom) {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod occlusion_tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_excludes_only_actor_introduced_pixels() {
+        let stamps = [
+            StampPixel { x: 4, y: 5, was_solid: false },
+            StampPixel { x: 4, y: 5, was_solid: false }, // overlapping actors
+            StampPixel { x: 6, y: 5, was_solid: true },  // real dirt stays visible
+        ];
+        let snapshot = temporary_pixels(&stamps);
+        assert_eq!(snapshot.len(), 1);
+        assert!(snapshot.contains(&(4, 5)));
+        assert!(!snapshot.contains(&(6, 5)));
+        assert!(temporary_pixels(&[]).is_empty());
     }
 }
 

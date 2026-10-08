@@ -361,7 +361,7 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
     // The HUD is a real separate draw, so a framebuffer diff identifies it
     // exactly. Terrain is not: it and the soil arrive as one tiled_terrain
     // command, so the collision mask decides that instead -- see
-    // world::solid_sampler.
+    // world::terrain_occlusion_sampler, which excludes actor collision stamps.
     let mut covered = 0usize;
     for i in 0..frame.mask.len() {
         let hud_here = frame.hud[i] != frame.front[i];
@@ -376,10 +376,12 @@ pub unsafe fn capture(q: &Queue, display: usize, clip: usize) -> bool {
     }
 
     // Solid ground occludes the back band, sampled only inside the pixels our
-    // sprites actually cover. A full-surface sweep would be a million lookups
-    // a frame to answer a question about a few thousand pixels.
+    // sprites actually cover. Temporary actor silhouettes in the walk grid
+    // are not terrain: otherwise a masked actor hides its own rear sprite.
+    // A full-surface sweep would be a million lookups a frame to answer a
+    // question about a few thousand pixels.
     let mut solid_px = 0usize;
-    if let Some(solid) = crate::world::solid_sampler() {
+    if let Some(solid) = crate::world::terrain_occlusion_sampler() {
         let clip_x = *(clip as *const i32) >> 16;
         let clip_y = *((clip + 4) as *const i32) >> 16;
         let cam_x = *((display + 0x3560) as *const i32);

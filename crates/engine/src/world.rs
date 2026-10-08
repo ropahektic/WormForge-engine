@@ -2296,3 +2296,58 @@ pub fn solid_sampler() -> Option<impl Fn(i32, i32) -> bool> {
     let grid = live_grid()?;
     Some(move |x: i32, y: i32| grid.solid_px(x, y))
 }
+
+/// GPU terrain occlusion must see dirt, not temporary actor silhouettes in
+/// the shared walk grid. Reading this snapshot never changes collision bits.
+pub fn terrain_occlusion_sampler() -> Option<impl Fn(i32, i32) -> bool> {
+    Some(without_actor_stamps(
+        solid_sampler()?,
+        crate::mask_collide::temporary_collision_pixels(),
+    ))
+}
+
+fn without_actor_stamps(
+    solid: impl Fn(i32, i32) -> bool,
+    stamps: std::collections::HashSet<(i32, i32)>,
+) -> impl Fn(i32, i32) -> bool {
+    move |x, y| solid(x, y) && !stamps.contains(&(x, y))
+}
+
+#[cfg(test)]
+mod occlusion_tests {
+    use super::*;
+
+    #[test]
+    fn rendering_keeps_real_terrain_and_leaves_physics_grid_unchanged() {
+        // Real dirt at x=0; an actor introduced x=1; x=2 is empty air.
+        // Exercise both collision plane formats through the actual sampler.
+        for bpp in [1, 8] {
+            let mut bits = [0u8; 3];
+            let grid = GridView {
+                bits: bits.as_mut_ptr(), stride: 3, width: 3, height: 1, bpp,
+            };
+            assert_eq!(grid.set_solid_px(0, 0, true), Some(false));
+            assert_eq!(grid.set_solid_px(1, 0, true), Some(false));
+            let before = bits;
+            let render = without_actor_stamps(
+                move |x, y| grid.solid_px(x, y), [(1, 0)].into_iter().collect(),
+            );
+            assert!(render(0, 0), "real dirt, including under an actor, still occludes");
+            assert!(!render(1, 0), "the actor must not hide itself or another rear sprite");
+            assert!(!render(2, 0));
+            assert!(!render(-1, 0));
+            assert!(!render(3, 0));
+            assert_eq!(bits, before, "presentation must not clear any collision bits");
+            let physics = GridView {
+                bits: bits.as_mut_ptr(), stride: 3, width: 3, height: 1, bpp,
+            };
+            assert!(physics.solid_px(1, 0), "the actor still collides in physics");
+            // Once the stamp is gone, dirt newly at the same coordinate must
+            // occlude again; the presentation snapshot is not persistent.
+            let render_next = without_actor_stamps(
+                move |x, y| physics.solid_px(x, y), Default::default(),
+            );
+            assert!(render_next(1, 0));
+        }
+    }
+}
