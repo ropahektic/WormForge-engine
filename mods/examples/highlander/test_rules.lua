@@ -945,16 +945,20 @@ do
   M.missile(bazooka)
   check("the Hellish Hand-Grenade is damped in a field", hellish.vx == math.floor(1000 * p * 0.985)
     and bazooka.vx == 1000 * p)
-  -- 300 frames after the turn ended, missiles are let go; mines are not.
+  -- 300 frames after the turn ended, missiles and mines are let go (a dud
+  -- mine held against a magnet would never rest, and the turn never end).
   M.turn_end({ worm = w })
-  for _ = 1, 301 do attract.on(attract) end
+  for _ = 1, 299 do attract.on(attract) end
   missile.dx, mine.dx = 0, 0
   attract.on(attract)
-  check("missiles are let go 300 frames after the turn ends", missile.dx == 0 and mine.dx ~= 0)
-  M.turn_start({ worm = other, active = other })
-  missile.dx = 0
+  check("still held 300 frames after the turn ends", missile.dx ~= 0 and mine.dx ~= 0)
+  missile.dx, mine.dx = 0, 0
   attract.on(attract)
-  check("and caught again from the next turn", missile.dx ~= 0)
+  check("missiles and mines are let go after that", missile.dx == 0 and mine.dx == 0)
+  M.turn_start({ worm = other, active = other })
+  missile.dx, mine.dx = 0, 0
+  attract.on(attract)
+  check("and caught again from the next turn", missile.dx ~= 0 and mine.dx ~= 0)
   -- A blast hurts it less the further off (PX's TakeExplosionDamage).
   local function blast(m, damage, dist)
     m.hit(m, { kind = "blast", damage = damage, x = m.x + dist * p, y = m.y, vx = 0, vy = 0 })
