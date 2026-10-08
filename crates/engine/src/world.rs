@@ -1359,6 +1359,18 @@ fn fill_setup(setup: &mut [u8; 0x28], template: &[u8; 0x28], name: &str, health:
 /// record gains the worm (its count, GameInfo team record +0xBB4, which WA
 /// reads during the match, e.g. counting living worms at 0x55C06F) and the
 /// arena its health. An error when the team already has 8 worms.
+/// The place (1-8) for a new worm, as Project X's GetFreeWormIndex: the first
+/// of the team's `states.len()` places whose worm is dead (its team-arena
+/// state WORM_STATE_DEAD) and that no living worm holds, else the next unused
+/// place while the team has fewer than eight, else none. A dead worm keeps its
+/// place, so a team that started with eight could otherwise never grow.
+fn free_worm_place(states: &[u32], living: &[u32]) -> Option<u32> {
+    let dead = states.iter().zip(1..).find(|&(&state, i)| state == WORM_STATE_DEAD && !living.contains(&i));
+    if let Some((_, i)) = dead { return Some(i); }
+    let count = states.len() as u32;
+    (count < MAX_WORMS_PER_TEAM).then_some(count + 1)
+}
+
 pub fn spawn_worm(team: u32, x: i32, y: i32, name: &str, health: i32) -> Result<u32, String> {
     if !(1..=MAX_TEAMS).contains(&team) { return Err(format!("no team {team}")); }
     if !(1..=1000).contains(&health) { return Err(format!("health is 1 to 1000, got {health}")); }
@@ -1371,22 +1383,29 @@ pub fn spawn_worm(team: u32, x: i32, y: i32, name: &str, health: i32) -> Result<
         if info.is_null() { return Err("no match".into()); }
         let record = info.add(0x450 + (team as usize - 1) * 0xBB8);
         let count = *record.add(0xBB4) as u32;
-        if count >= MAX_WORMS_PER_TEAM {
-            return Err(format!("team {team} already has {MAX_WORMS_PER_TEAM} worms"));
-        }
         if count == 0 { return Err(format!("team {team} has no worms")); }
-        let index = count + 1;
-        let setup = record.add(0xA74 + count as usize * 0x28);
+        let states: Vec<u32> = (1..=count)
+            .map(|i| read_i32(world, ARENA_WORM_STATE + team as usize * WORLD_TEAM_STRIDE + i as usize * ARENA_WORM_STRIDE) as u32)
+            .collect();
+        let living: Vec<u32> = crate::actor::live_worms().into_iter()
+            .filter(|&w| read_i32(w as *mut u8, ENT_WORM_TEAM) as u32 == team)
+            .map(|w| read_i32(w as *mut u8, WORM_INDEX) as u32)
+            .collect();
+        let Some(index) = free_worm_place(&states, &living) else {
+            return Err(format!("team {team} already has {MAX_WORMS_PER_TEAM} living worms"));
+        };
+        let appended = index > count;
+        let setup = record.add(0xA74 + (index as usize - 1) * 0x28);
         let template = *(record.add(0xA74) as *const [u8; 0x28]);
         let mut filled = [0u8; 0x28];
         fill_setup(&mut filled, &template, name, health, x >> 16, y >> 16);
         std::ptr::copy_nonoverlapping(filled.as_ptr(), setup, 0x28);
-        *record.add(0xBB4) = index as u8;
+        if appended { *record.add(0xBB4) = index as u8; }
         // Its health before the constructor, which writes the label from it.
         let hp = ARENA_WORM_HP + team as usize * WORLD_TEAM_STRIDE + index as usize * ARENA_WORM_STRIDE;
         write_i32(world, hp, health);
         let Some(worm) = construct_worm(parent, team, index, setup) else {
-            *record.add(0xBB4) = count as u8;
+            if appended { *record.add(0xBB4) = count as u8; }
             write_i32(world, hp, 0);
             return Err("WA's worm constructor refused".into());
         };
@@ -2184,6 +2203,23 @@ unsafe fn show_health(worm: *mut u8, health: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_worm_takes_a_dead_worms_place_before_a_new_one() {
+        const LIVE: u32 = 0x65;
+        // Eight places, the third and sixth dead: the first dead place.
+        let eight = [LIVE, LIVE, WORM_STATE_DEAD, LIVE, LIVE, WORM_STATE_DEAD, LIVE, LIVE];
+        assert_eq!(free_worm_place(&eight, &[1, 2, 4, 5, 7, 8]), Some(3));
+        // A dead place a living worm holds again (revived) is not free.
+        assert_eq!(free_worm_place(&eight, &[1, 2, 3, 4, 5, 7, 8]), Some(6));
+        // Eight living: none.
+        assert_eq!(free_worm_place(&[LIVE; 8], &[1, 2, 3, 4, 5, 6, 7, 8]), None);
+        // Six places, all alive: the seventh, as before.
+        assert_eq!(free_worm_place(&[LIVE; 6], &[1, 2, 3, 4, 5, 6]), Some(7));
+        // Six places, one dead: its place, not a seventh.
+        let six = [LIVE, WORM_STATE_DEAD, LIVE, LIVE, LIVE, LIVE];
+        assert_eq!(free_worm_place(&six, &[1, 3, 4, 5, 6]), Some(2));
+    }
 
     #[test]
     fn a_new_worms_setup_is_its_teams_with_its_name_health_and_place() {
