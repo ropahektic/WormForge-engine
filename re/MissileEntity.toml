@@ -73,3 +73,13 @@ plate_comment = "Partial motion slice used by Lua projectile handles."
   offset = 0x94
   name = "speed_y"
   type = "Fixed"
+
+[[struct]]
+name = "MissileEntity"
+plate_comment = "Partial. Class type 11."
+
+  [[struct.field]]
+  offset = 0x130
+  name = "team"
+  type = "int"
+  comment = "Start of the shoot description the ctor copies (team first); +0x150 is its pellet index, non-zero for a cluster bit. Lua object.team."
