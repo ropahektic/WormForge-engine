@@ -21,6 +21,8 @@ jobs:
         # lua-host stores game handles as u32 (WA is 32-bit); its tests segfault
         # when pointers are truncated on x86_64, so they run on the Windows job.
         run: cargo test --workspace --exclude wk-lua --exclude engine --exclude lua-host --target x86_64-unknown-linux-gnu --verbose
+      - name: Check deterministic pack simulation maths
+        run: python3 tools/test_check_sim_math.py
 
   dll:
     name: 32-bit Windows DLL

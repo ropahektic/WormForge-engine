@@ -12,6 +12,7 @@ mod dispatch;
 mod modules;
 mod perf;
 mod sandbox;
+mod float_env;
 mod sim_context;
 mod spawn;
 
