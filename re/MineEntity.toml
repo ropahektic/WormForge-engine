@@ -84,3 +84,9 @@ plate_comment = "Class type 8. Bounce scales hardcoded 0x9999 at +0x6C/+0x70."
   name = "blast"
   type = "int"
   comment = "WeaponEntry+0x54. Second CreateExplosion arg (id/radius), not HP damage."
+
+  [[struct.field]]
+  offset = 0x144
+  name = "team"
+  type = "int"
+  comment = "Start of the shoot description the ctor copies (team first), just before fire_params at +0x170. explode (0x507110) credits this team; 0 for a map mine. Lua object.team."

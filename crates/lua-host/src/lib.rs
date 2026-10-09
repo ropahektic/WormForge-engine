@@ -3445,6 +3445,19 @@ wa.weapons.replace({
     }
 
     #[test]
+    fn keys_name_shift_and_keep_its_old_name() {
+        let _host = lock_host();
+        let lua = sandbox::new_lua().unwrap();
+        api::install(&lua, &test_ctx()).unwrap();
+        crate::bind_actor_native(crate::ActorNative { keys: || 32 | 128, ..Default::default() });
+        let (shift, sprint, space, q): (bool, bool, bool, bool) = lua
+            .load("local k = wa.world.keys() return k.shift, k.sprint, k.space, k.q")
+            .eval()
+            .unwrap();
+        assert!(shift && sprint && space && !q, "Shift is bit 5; sprint is its old name");
+    }
+
+    #[test]
     fn an_actor_takes_the_missile_shape_and_fits_by_it() {
         let _host = lock_host();
         let lua = sandbox::new_lua().unwrap();

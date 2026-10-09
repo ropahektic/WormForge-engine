@@ -12,6 +12,8 @@ fn fixed_to_wire_pixel(value: i32) -> i16 {
     (value >> 16).clamp(i16::MIN as i32, i16::MAX as i32) as i16
 }
 
+/// `keys` bit 7: Space (bits 0..6 are left, right, up, down, W, Shift, Q).
+pub const SPACE: u32 = 1 << 7;
 /// `keys` bits 8..11: the digit key held (0 none, 1..10 for 0..9), which the
 /// wire carries in bits 9..12 of the controls word. Bit 12 is Ctrl, carried
 /// in wire bit 13.

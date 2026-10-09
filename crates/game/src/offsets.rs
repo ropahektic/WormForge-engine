@@ -299,6 +299,13 @@ pub const WORM_SET_STATE: u32 = 0x0050_E850;
 /// a worm walking off a ledge. SetState into it with a speed gives the worm
 /// to WA's own flight and landing (`worm:drop`, the Lua `"sliding"`).
 pub const WORM_STATE_AIRBORNE: u32 = 0x7E;
+/// Dead: the state a dead worm's team-arena record keeps (ARENA_WORM_STATE).
+pub const WORM_STATE_DEAD: u32 = 0x87;
+/// The jump key's states: 0x77 getting ready, 0x79 in the air, 0x7A coming
+/// down (`game::worm_state`; named from traces).
+pub const WORM_STATE_JUMP_PREPARE: u32 = 0x77;
+pub const WORM_STATE_JUMPING: u32 = 0x79;
+pub const WORM_STATE_JUMP_FALLING: u32 = 0x7A;
 /// WormEntity__DrawSprite_Maybe — usercall EAX=this. Body sprite blit.
 pub const WORM_DRAW_SPRITE: u32 = 0x0050_FCD0;
 /// WormEntity__DrawWormName_Maybe — usercall ESI=this.
@@ -512,6 +519,13 @@ pub const SHARED_KEY_WORM: u32 = 0x02;
 pub const WORM_INDEX: usize = 0x100;
 /// Per-tick poison amount. ApplyPoison (msg 0x3E) subtracts this, floor 1 HP.
 pub const WORM_POISON: usize = 0x148;
+/// A worm's record in the team arena starts here (+ team * WORLD_TEAM_STRIDE
+/// + index * ARENA_WORM_STRIDE): OpenWA's WormEntry, `arena + team * 0x51C +
+/// worm * 0x9C - 0x598` with the arena at world + 0x4628. Its first field is
+/// the worm's state, which stays WORM_STATE_DEAD once the worm has died
+/// (Project X's `Info.Teams[t].Worms[w].State == 135`); its health is +0x5C,
+/// ARENA_WORM_HP.
+pub const ARENA_WORM_STATE: usize = 0x4090;
 pub const ARENA_WORM_HP: usize = 0x40EC;
 /// The health a worm's label shows, 16.16, and the value it counts towards
 /// (0x5147C0, each frame): it moves a tenth of the way a frame and, while

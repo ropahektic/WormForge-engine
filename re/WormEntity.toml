@@ -43,6 +43,12 @@ plate_comment = "Partial. HandleMessage Jump/JumpUp already replicate. SetState 
   plate_comment = "WormEntity__calc_sprite adds +1 to supported base sprites when negative and +2 when positive; used to select uphill/downhill custom-weapon poses."
 
   [[struct.field]]
+  offset = 0x278
+  name = "kamikaze_timer"
+  type = "int"
+  plate_comment = "WA 3.8.1 setup_Kamikaze copies the weapon record's +0x38 here; handle_Kamikaze subtracts 20 a frame. While it lasts the worm flies and digs; after it, land or leaving the map sets it off."
+
+  [[struct.field]]
   offset = 0x27C
   name = "drill_timer"
   type = "int"
@@ -71,6 +77,18 @@ va = 0x00518770
 name = "WormEntity__handle_Drilling"
 calling_convention = "__thiscall"
 plate_comment = "WA 3.8.1; decrements drill_timer by 20 at 0x518795, calls stock landscape mask(2) with random jitter at 0x518770..0x518882, and transitions to state 0x65 when timer <= 0 at 0x518A26..0x518A38."
+
+[[function]]
+va = 0x00518A50
+name = "WormEntity__setup_Kamikaze"
+calling_convention = "__thiscall"
+plate_comment = "WA 3.8.1 SetState 0x6D's setup (calling convention as setup_Drilling's, not checked separately). Copies the record's +0x38 to kamikaze_timer (+0x278). Lua worm.state 'kamikaze'."
+
+[[function]]
+va = 0x00518C10
+name = "WormEntity__handle_Kamikaze"
+calling_convention = "__thiscall"
+plate_comment = "WA 3.8.1 state 0x6D's frame: takes 20 off kamikaze_timer, digs while it lasts, moves the worm 16 px along its aim snapped to 8 directions and hits what it passes (0x5193D0, with the record's fire params). Once it runs out: CreateExplosion 100 / the record's +0x3C on land or off the map; in water SetState 0x85."
 
 [[function]]
 va = 0x00512E80

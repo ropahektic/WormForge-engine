@@ -143,6 +143,13 @@ pub struct LoadedMod {
 /// Why a component bundle's folder is listed but not loaded, for now.
 pub const BUNDLE_NOT_LOADED: &str = "this is a component bundle (format_version 2); bundles are not loaded yet";
 
+/// A manifest's `id` alone, when the TOML parses even if the rest of the
+/// manifest is refused.
+fn manifest_id(src: &str) -> Option<String> {
+    let table: toml::Table = toml::from_str(src).ok()?;
+    table.get("id")?.as_str().map(str::to_owned)
+}
+
 pub fn parse_manifest(src: &str) -> Result<ModManifest, String> {
     // A component bundle would otherwise read as a pack with no claims and
     // the default entry, and be run as one.
@@ -433,15 +440,27 @@ pub fn conflict_text(conflicts: &[SlotConflict], id: &str) -> String {
 
 /// Discover `Mods/*/mod.toml`, drop packs disabled in `wormforge.toml`, then
 /// sort by mod id (not directory order). A broken manifest is still an error
-/// here: a pack the player left enabled must not vanish silently.
+/// here: a pack the player left enabled must not vanish silently. One the
+/// player disabled is skipped, though, when its id can still be read (say,
+/// a pack for another api_version): it was never going to run.
 pub fn discover_mods(mods_dir: &Path) -> Result<Vec<LoadedMod>, String> {
+    let settings = LoaderSettings::load(mods_dir);
     let mut mods = Vec::new();
     for entry in list_mods(mods_dir)? {
         let manifest = match entry.manifest {
             Ok(m) => m,
             // Listed for the loader to show; not a pack the match runs.
             Err(e) if e == BUNDLE_NOT_LOADED => continue,
-            Err(e) => return Err(e),
+            Err(e) => {
+                let disabled = std::fs::read_to_string(entry.root.join("mod.toml"))
+                    .ok()
+                    .and_then(|src| manifest_id(&src))
+                    .is_some_and(|id| settings.is_disabled(&id));
+                if disabled {
+                    continue;
+                }
+                return Err(e);
+            }
         };
         if !entry.enabled {
             continue;
@@ -692,6 +711,26 @@ register = ["example.boss.mole"]
         settings.set_enabled("x.beta", true);
         settings.save(&dir).unwrap();
         assert_eq!(discover_mods(&dir).unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_disabled_pack_with_a_refused_manifest_does_not_stop_discovery() {
+        let dir = temp_mods_dir("refused");
+        write_pack(&dir, "alpha", "x.alpha");
+        let newer = dir.join("newer");
+        std::fs::create_dir_all(&newer).unwrap();
+        std::fs::write(newer.join("mod.toml"), "id = \"x.newer\"\napi_version = 99\nentry = \"init.lua\"\n")
+            .unwrap();
+        // Enabled, it still stops discovery, naming why.
+        let err = discover_mods(&dir).unwrap_err();
+        assert!(err.contains("x.newer") && err.contains("api_version 99"), "{err}");
+        // Disabled, it is skipped and the others load.
+        let mut settings = LoaderSettings::load(&dir);
+        settings.set_enabled("x.newer", false);
+        settings.save(&dir).unwrap();
+        let ids: Vec<_> = discover_mods(&dir).unwrap().into_iter().map(|m| m.manifest.id).collect();
+        assert_eq!(ids, vec!["x.alpha"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

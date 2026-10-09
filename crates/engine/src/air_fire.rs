@@ -19,7 +19,10 @@ pub fn enable(h: u32, on: bool) -> bool {
     }
     true
 }
-fn airborne(state: u32) -> bool { matches!(state, 0x77 | 0x79 | 0x7A | 0x7E | 0x7F | 0x80 | 0x81) }
+fn airborne(state: u32) -> bool {
+    matches!(state, WORM_STATE_JUMP_PREPARE | WORM_STATE_JUMPING | WORM_STATE_JUMP_FALLING
+        | WORM_STATE_AIRBORNE | WORM_STATE_TUMBLING | WORM_STATE_HIT | WORM_STATE_BLASTED)
+}
 pub fn message(worm: *mut u8, msg: u32) -> bool {
     if worm.is_null() { return false; }
     let h = worm as u32;
@@ -33,7 +36,7 @@ pub fn message(worm: *mut u8, msg: u32) -> bool {
     // usual charging/release, ammo and retreat path.
     if matches!(msg, MSG_FIRE_WEAPON | MSG_RELEASE_WEAPON) && airborne(state) { return true; }
     if msg != MSG_FRAME_FINISH { return false; }
-    let pressed = crate::world::keys() & 128 != 0;
+    let pressed = crate::world::keys() & game::sync_input::SPACE != 0;
     let fire = pressed && !armed.held && airborne(state) && crate::world::ammo(h, slot, None) != 0;
     armed.held = pressed;
     if let Ok(mut g) = ARMED.lock() { if let Some(g) = g.as_mut() { g.insert(h, armed); } }
