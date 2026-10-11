@@ -2,6 +2,7 @@
 //! lockstep pump wkGolf uses for fuse freeze, idle-arm, and worm teleports.
 //! HUD must not call these verbs.
 
+use crate::units;
 use game::entity::{read_i32, write_i32};
 use game::offsets::{
     ACTOR_BOOM_ID, ACTOR_DAMAGE, ACTOR_DEAD, ACTOR_DELTA, ACTOR_FLAG_MIRROR_X, ACTOR_FLAGS,
@@ -615,7 +616,7 @@ pub fn weapon_fire(
     let power = NATIVE.lock().ok().and_then(|g| g.as_ref().map(|n| (n.fire_power)(worm))).unwrap_or(65536);
     with_lua("weapon_fire", |lua| {
         let extra = lua.create_table().map_err(|e| e.to_string())?;
-        extra.set("power", power as f64 / 65536.0).map_err(|e| e.to_string())?;
+        extra.set("power", units::pixels(power)).map_err(|e| e.to_string())?;
         call_fire(lua, fire_id, worm, slot, (x, y, vx, vy), Some(&extra))
     })
 }
@@ -653,10 +654,10 @@ pub(crate) fn call_fire(
             fire.set(k, v).map_err(|e| e.to_string())?;
         }
     }
-    fire.set("x", x).map_err(|e| e.to_string())?;
-    fire.set("y", y).map_err(|e| e.to_string())?;
-    fire.set("vx", vx).map_err(|e| e.to_string())?;
-    fire.set("vy", vy).map_err(|e| e.to_string())?;
+    fire.set("x", units::pixels(x)).map_err(|e| e.to_string())?;
+    fire.set("y", units::pixels(y)).map_err(|e| e.to_string())?;
+    fire.set("vx", units::pixels(vx)).map_err(|e| e.to_string())?;
+    fire.set("vy", units::pixels(vy)).map_err(|e| e.to_string())?;
     fire.set("slot", slot).map_err(|e| e.to_string())?;
     fire.set("worm", WormHandle(worm))
         .map_err(|e| e.to_string())?;
@@ -712,12 +713,12 @@ pub(crate) fn call_click(
         let _ = wa.set("_mod", m);
     }
     let click = lua.create_table().map_err(|e| e.to_string())?;
-    click.set("x", x).map_err(|e| e.to_string())?;
-    click.set("y", y).map_err(|e| e.to_string())?;
-    click.set("sky", sky).map_err(|e| e.to_string())?;
+    click.set("x", units::pixels(x)).map_err(|e| e.to_string())?;
+    click.set("y", units::pixels(y)).map_err(|e| e.to_string())?;
+    click.set("sky", units::pixels(sky)).map_err(|e| e.to_string())?;
     click.set("slot", slot).map_err(|e| e.to_string())?;
-    click.set("vx", speed.0).map_err(|e| e.to_string())?;
-    click.set("vy", speed.1).map_err(|e| e.to_string())?;
+    click.set("vx", units::pixels(speed.0)).map_err(|e| e.to_string())?;
+    click.set("vy", units::pixels(speed.1)).map_err(|e| e.to_string())?;
     click
         .set("worm", WormHandle(worm))
         .map_err(|e| e.to_string())?;
@@ -747,8 +748,8 @@ pub fn weapon_select(select_id: u32, worm: u32, slot: i32) -> Result<(), String>
             let _ = wa.set("_mod", m);
         }
         let sel = lua.create_table().map_err(|e| e.to_string())?;
-        sel.set("x", x).map_err(|e| e.to_string())?;
-        sel.set("y", y).map_err(|e| e.to_string())?;
+        sel.set("x", units::pixels(x)).map_err(|e| e.to_string())?;
+        sel.set("y", units::pixels(y)).map_err(|e| e.to_string())?;
         sel.set("slot", slot).map_err(|e| e.to_string())?;
         sel.set("worm", WormHandle(worm))
             .map_err(|e| e.to_string())?;
@@ -792,8 +793,8 @@ pub fn weapon_emit(
             let _ = wa.set("_mod", m);
         }
         let ev = lua.create_table().map_err(|e| e.to_string())?;
-        ev.set("x", x).map_err(|e| e.to_string())?;
-        ev.set("y", y).map_err(|e| e.to_string())?;
+        ev.set("x", units::pixels(x)).map_err(|e| e.to_string())?;
+        ev.set("y", units::pixels(y)).map_err(|e| e.to_string())?;
         ev.set("slot", slot).map_err(|e| e.to_string())?;
         if missile != 0 {
             ev.set("missile", missile).map_err(|e| e.to_string())?;
@@ -900,10 +901,10 @@ pub fn actor_hit(handle: u32, brain_id: u32, hit: ActorHit) -> Result<(), String
         (|| -> mlua::Result<()> {
             t.set("kind", if hit.blast { "blast" } else { "hit" })?;
             t.set("hit_kind", hit.kind)?;
-            t.set("x", hit.x)?;
-            t.set("y", hit.y)?;
-            t.set("vx", hit.vx)?;
-            t.set("vy", hit.vy)?;
+            t.set("x", units::pixels(hit.x))?;
+            t.set("y", units::pixels(hit.y))?;
+            t.set("vx", units::pixels(hit.vx))?;
+            t.set("vy", units::pixels(hit.vy))?;
             t.set("damage", hit.damage)?;
             t.set("team", hit.team)?;
             Ok(())
@@ -1040,8 +1041,10 @@ impl UserData for ActorHandle {
             )
         });
         // `a:fits(x, y)`: whether the actor's collision shape at (x, y),
-        // 16.16, touches no land, by WA's own test. A read.
-        methods.add_method("fits", |_, this, (x, y, mode): (i32, i32, Option<String>)| {
+        // in pixels, touches no land, by WA's own test. A read.
+        methods.add_method("fits", |_, this, (x, y, mode): (f64, f64, Option<String>)| {
+            let x = units::native(x, "fits.x")?;
+            let y = units::native(y, "fits.y")?;
             fits_terrain_mode(mode.as_deref())?;
             let h = live(this.0);
             if h == 0 {
@@ -1259,25 +1262,27 @@ impl UserData for WormHandle {
                 Ok(())
             });
         }
-        // Jet pack fuel, 16.16 (Project X's JetFuel); 0 is unlimited.
+        // Jet pack fuel as a plain number; stored natively in 16.16. 0 is unlimited.
         fields.add_field_method_get("fuel", |_, this| {
-            Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, WORM_JET_FUEL) } })
+            Ok(units::pixels(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, WORM_JET_FUEL) } }))
         });
-        fields.add_field_method_set("fuel", |_, this, v: i32| {
+        fields.add_field_method_set("fuel", |_, this, v: f64| {
             crate::sim_context::require("worm.fuel (write)")?;
+            let v = units::native(v, "worm.fuel")?;
             if this.0 != 0 {
                 unsafe { write_i32(this.0 as *mut u8, WORM_JET_FUEL, v) };
             }
             Ok(())
         });
-        // How strongly gravity and wind act on the worm, 16.16 (1.0 = 65536;
+        // Plain gravity/wind factors in Lua (1 is normal), stored in 16.16 (
         // Project X's GravityFactor / WindFactor).
         for (name, off) in [("gravity", ENT_GRAVITY_SCALE), ("wind", ENT_WIND_SCALE)] {
             fields.add_field_method_get(name, move |_, this| {
-                Ok(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, off) } })
+                Ok(units::pixels(if this.0 == 0 { 0 } else { unsafe { read_i32(this.0 as *mut u8, off) } }))
             });
-            fields.add_field_method_set(name, move |_, this, v: i32| {
+            fields.add_field_method_set(name, move |_, this, v: f64| {
                 crate::sim_context::require(&format!("worm.{name} (write)"))?;
+                let v = units::native(v, &format!("worm.{name}"))?;
                 if this.0 != 0 {
                     unsafe { write_i32(this.0 as *mut u8, off, v) };
                 }
@@ -1538,7 +1543,9 @@ impl UserData for WormHandle {
             }
             Ok(())
         });
-        methods.add_method("carry", |_, this, (x, y): (i32, i32)| {
+        methods.add_method("carry", |_, this, (x, y): (f64, f64)| {
+            let x = units::native(x, "carry.x")?;
+            let y = units::native(y, "carry.y")?;
             crate::sim_context::require("worm:carry")?;
             if this.0 == 0 {
                 return Ok(());
@@ -1591,7 +1598,7 @@ impl UserData for WormHandle {
             Ok(())
         });
         // `worm:release(vx, vy, { tumble })`: give the worm back to WA moving
-        // at (vx, vy), 16.16. A held worm is shown again and let go; any worm
+        // at (vx, vy), pixels/frame. A held worm is shown again and let go; any worm
         // then falls under WA's control (as from a closed parachute), and WA
         // flies and lands it with its own states. `tumble = true`: out of
         // control instead, as after a hit; in water WA drowns it. A hard
@@ -1599,7 +1606,9 @@ impl UserData for WormHandle {
         // WA moves the worm out of the falling or tumbling state.
         methods.add_method(
             "release",
-            |_, this, (vx, vy, opts): (Option<i32>, Option<i32>, Option<Table>)| {
+            |_, this, (vx, vy, opts): (Option<f64>, Option<f64>, Option<Table>)| {
+                let vx = units::native(vx.unwrap_or(0.0), "release.vx")?;
+                let vy = units::native(vy.unwrap_or(0.0), "release.vy")?;
                 crate::sim_context::require("worm:release")?;
                 let tumble = match &opts {
                     Some(t) => t.get::<Option<bool>>("tumble")?.unwrap_or(false),
@@ -1611,17 +1620,19 @@ impl UserData for WormHandle {
                 };
                 if this.0 != 0 {
                     if let Some(release) = native_release() {
-                        release(this.0, vx.unwrap_or(0), vy.unwrap_or(0), tumble, suppress_auto_parachute);
+                        release(this.0, vx, vy, tumble, suppress_auto_parachute);
                     }
                 }
                 Ok(())
             },
         );
         // `worm:fits(x, y)`: whether the worm would touch nothing at (x, y),
-        // 16.16, by WA's own collision test and the worm's own shape (for a
+        // in pixels, by WA's own collision test and the worm's own shape (for a
         // taken worm, with the mask it had before it was taken). The optional
         // "terrain" mode checks land alone. A read.
-        methods.add_method("fits", |_, this, (x, y, mode): (i32, i32, Option<String>)| {
+        methods.add_method("fits", |_, this, (x, y, mode): (f64, f64, Option<String>)| {
+            let x = units::native(x, "fits.x")?;
+            let y = units::native(y, "fits.y")?;
             let terrain = fits_terrain_mode(mode.as_deref())?;
             if this.0 == 0 {
                 return Ok(true);
@@ -1676,8 +1687,8 @@ impl UserData for WormHandle {
                 Value::Number(n) => (n as i32, 0, 0),
                 Value::Table(t) => (
                     t.get::<Option<i32>>("amount")?.unwrap_or(0),
-                    t.get::<Option<i32>>("vx")?.unwrap_or(0),
-                    t.get::<Option<i32>>("vy")?.unwrap_or(0),
+                    units::get(&t, "vx")?.unwrap_or(0),
+                    units::get(&t, "vy")?.unwrap_or(0),
                 ),
                 other => {
                     return Err(mlua::Error::external(format!(
@@ -1748,7 +1759,9 @@ impl UserData for WorldHandle {
             let warp = NATIVE.lock().ok().and_then(|g| g.as_ref().map(|n| n.warp));
             Ok(warp.map(|f| f(this.0, &args)).unwrap_or(false))
         });
-        methods.add_method("fits", |_, this, (x, y, mode): (i32, i32, Option<String>)| {
+        methods.add_method("fits", |_, this, (x, y, mode): (f64, f64, Option<String>)| {
+            let x = units::native(x, "fits.x")?;
+            let y = units::native(y, "fits.y")?;
             fits_terrain_mode(mode.as_deref())?;
             if !this.live() { return Ok(false); }
             Ok(native_actor_fits().map(|f| f(this.0, x, y)).unwrap_or(false))
@@ -1759,7 +1772,9 @@ impl UserData for WorldHandle {
             }
             Ok(native_arm_mine().map(|f| f(this.0, fuse_ms)).unwrap_or(false))
         });
-        methods.add_method("impulse", |_, this, (dx, dy): (i32, i32)| {
+        methods.add_method("impulse", |_, this, (dx, dy): (f64, f64)| {
+            let dx = units::native(dx, "impulse.dx")?;
+            let dy = units::native(dy, "impulse.dy")?;
             crate::sim_context::require("object:impulse")?;
             Ok(native_impulse_object().map(|f| f(this.0, dx, dy)).unwrap_or(false))
         });
@@ -1767,7 +1782,9 @@ impl UserData for WorldHandle {
             crate::sim_context::require("object:remove")?;
             Ok(native_remove_object().map(|f| f(this.0)).unwrap_or(false))
         });
-        methods.add_method("hit", |_, this, (damage, vx, vy, kind): (i32, i32, i32, Option<String>)| {
+        methods.add_method("hit", |_, this, (damage, vx, vy, kind): (i32, f64, f64, Option<String>)| {
+            let vx = units::native(vx, "hit.vx")?;
+            let vy = units::native(vy, "hit.vy")?;
             if !crate::sim_context::active() {
                 return Err(mlua::Error::external("object:hit: only from a simulation callback"));
             }
@@ -1823,32 +1840,32 @@ where
     T: Copy + 'static,
     F: UserDataFields<T>,
 {
-    fields.add_field_method_get("x", move |_, this| Ok(read_handle(handle(this), ENT_POS_X)));
-    fields.add_field_method_set("x", move |_, this, v: i32| {
+    fields.add_field_method_get("x", move |_, this| Ok(units::pixels(read_handle(handle(this), ENT_POS_X))));
+    fields.add_field_method_set("x", move |_, this, v: f64| {
         crate::sim_context::require("x (write)")?;
-        write_handle(handle(this), ENT_POS_X, v);
+        write_handle(handle(this), ENT_POS_X, units::native(v, "x")?);
         Ok(())
     });
-    fields.add_field_method_get("y", move |_, this| Ok(read_handle(handle(this), ENT_POS_Y)));
-    fields.add_field_method_set("y", move |_, this, v: i32| {
+    fields.add_field_method_get("y", move |_, this| Ok(units::pixels(read_handle(handle(this), ENT_POS_Y))));
+    fields.add_field_method_set("y", move |_, this, v: f64| {
         crate::sim_context::require("y (write)")?;
-        write_handle(handle(this), ENT_POS_Y, v);
+        write_handle(handle(this), ENT_POS_Y, units::native(v, "y")?);
         Ok(())
     });
     fields.add_field_method_get("vx", move |_, this| {
-        Ok(read_handle(handle(this), ENT_SPEED_X))
+        Ok(units::pixels(read_handle(handle(this), ENT_SPEED_X)))
     });
-    fields.add_field_method_set("vx", move |_, this, v: i32| {
+    fields.add_field_method_set("vx", move |_, this, v: f64| {
         crate::sim_context::require("vx (write)")?;
-        write_handle(handle(this), ENT_SPEED_X, v);
+        write_handle(handle(this), ENT_SPEED_X, units::native(v, "vx")?);
         Ok(())
     });
     fields.add_field_method_get("vy", move |_, this| {
-        Ok(read_handle(handle(this), ENT_SPEED_Y))
+        Ok(units::pixels(read_handle(handle(this), ENT_SPEED_Y)))
     });
-    fields.add_field_method_set("vy", move |_, this, v: i32| {
+    fields.add_field_method_set("vy", move |_, this, v: f64| {
         crate::sim_context::require("vy (write)")?;
-        write_handle(handle(this), ENT_SPEED_Y, v);
+        write_handle(handle(this), ENT_SPEED_Y, units::native(v, "vy")?);
         Ok(())
     });
 }
@@ -2534,7 +2551,7 @@ fn warp_args(spec: &Table) -> mlua::Result<WarpArgs> {
     if facing.is_some_and(|v| v != -1 && v != 1) {
         return Err(mlua::Error::external("warp: facing must be -1 or 1"));
     }
-    Ok(WarpArgs { x: spec.get("x")?, y: spec.get("y")?, vx: spec.get("vx")?, vy: spec.get("vy")?, facing })
+    Ok(WarpArgs { x: units::require(spec, "x")?, y: units::require(spec, "y")?, vx: units::get(spec, "vx")?, vy: units::get(spec, "vy")?, facing })
 }
 
 pub fn weapon_air_fire(fire_id: u32, worm: u32, slot: i32, x: i32, y: i32) -> Result<(), String> {

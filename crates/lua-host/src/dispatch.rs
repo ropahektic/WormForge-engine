@@ -4,6 +4,7 @@
 //! target is per-weapon dispatch once fire wrap tags a missile with its
 //! owner. Do not add a second global FireFinal-style chain here.
 
+use crate::units;
 use game::entity::Motion;
 use mlua::{AnyUserData, Function, Lua, Table, Value};
 use std::cell::{Cell, RefCell};
@@ -100,8 +101,8 @@ pub fn contact(c: Contact) -> Result<(), String> {
         let worm = crate::actor::worm_userdata(lua, c.worm)?;
         let other = crate::actor::entity_value(lua, c.other)?;
         let t = lua.create_table().map_err(|e| e.to_string())?;
-        t.set("vx", c.vx).map_err(|e| e.to_string())?;
-        t.set("vy", c.vy).map_err(|e| e.to_string())?;
+        t.set("vx", units::pixels(c.vx)).map_err(|e| e.to_string())?;
+        t.set("vy", units::pixels(c.vy)).map_err(|e| e.to_string())?;
         t.set("flags", c.flags).map_err(|e| e.to_string())?;
         call_each(lua, &list, (worm, other, t))
     })
@@ -324,21 +325,21 @@ pub fn motion_to_table(lua: &Lua, m: &Motion) -> Result<Table, String> {
     t.set("id", m.id).map_err(|e| e.to_string())?;
     t.set("class_type", m.class_type)
         .map_err(|e| e.to_string())?;
-    t.set("damp", m.damp).map_err(|e| e.to_string())?;
-    t.set("wind_scale", m.wind_scale)
+    t.set("damp", units::pixels(m.damp)).map_err(|e| e.to_string())?;
+    t.set("wind_scale", units::pixels(m.wind_scale))
         .map_err(|e| e.to_string())?;
-    t.set("gravity_scale", m.gravity_scale)
+    t.set("gravity_scale", units::pixels(m.gravity_scale))
         .map_err(|e| e.to_string())?;
     t.set("moved", m.moved).map_err(|e| e.to_string())?;
-    t.set("x", m.x).map_err(|e| e.to_string())?;
-    t.set("y", m.y).map_err(|e| e.to_string())?;
-    t.set("vx", m.vx).map_err(|e| e.to_string())?;
-    t.set("vy", m.vy).map_err(|e| e.to_string())?;
+    t.set("x", units::pixels(m.x)).map_err(|e| e.to_string())?;
+    t.set("y", units::pixels(m.y)).map_err(|e| e.to_string())?;
+    t.set("vx", units::pixels(m.vx)).map_err(|e| e.to_string())?;
+    t.set("vy", units::pixels(m.vy)).map_err(|e| e.to_string())?;
     // CollisionManager globals this tick. Writing these in Lua does not
     // change the manager — use wind_scale / gravity_scale instead.
-    t.set("cm_gravity", m.cm_gravity)
+    t.set("cm_gravity", units::pixels(m.cm_gravity))
         .map_err(|e| e.to_string())?;
-    t.set("cm_wind", m.cm_wind).map_err(|e| e.to_string())?;
+    t.set("cm_wind", units::pixels(m.cm_wind)).map_err(|e| e.to_string())?;
     Ok(t)
 }
 
@@ -346,14 +347,14 @@ pub fn table_to_motion(t: &Table, base: Motion) -> Result<Motion, String> {
     Ok(Motion {
         id: base.id,
         class_type: base.class_type,
-        damp: t.get("damp").unwrap_or(base.damp),
-        wind_scale: t.get("wind_scale").unwrap_or(base.wind_scale),
-        gravity_scale: t.get("gravity_scale").unwrap_or(base.gravity_scale),
+        damp: units::get(t, "damp").map_err(|e| e.to_string())?.unwrap_or(base.damp),
+        wind_scale: units::get(t, "wind_scale").map_err(|e| e.to_string())?.unwrap_or(base.wind_scale),
+        gravity_scale: units::get(t, "gravity_scale").map_err(|e| e.to_string())?.unwrap_or(base.gravity_scale),
         moved: t.get("moved").unwrap_or(base.moved),
-        x: t.get("x").unwrap_or(base.x),
-        y: t.get("y").unwrap_or(base.y),
-        vx: t.get("vx").unwrap_or(base.vx),
-        vy: t.get("vy").unwrap_or(base.vy),
+        x: units::get(t, "x").map_err(|e| e.to_string())?.unwrap_or(base.x),
+        y: units::get(t, "y").map_err(|e| e.to_string())?.unwrap_or(base.y),
+        vx: units::get(t, "vx").map_err(|e| e.to_string())?.unwrap_or(base.vx),
+        vy: units::get(t, "vy").map_err(|e| e.to_string())?.unwrap_or(base.vy),
         cm_gravity: base.cm_gravity,
         cm_wind: base.cm_wind,
     })
@@ -442,12 +443,13 @@ fn missile_frame_fast(
     mask: &mut i32,
 ) -> Result<Motion, String> {
     let int = |v: i64| Value::Integer(v as mlua::Integer);
+    let px = |v: i32| Value::Number(units::pixels(v));
     let args = mlua::MultiValue::from_vec(vec![
         Value::Table(list),
-        int(motion.id as i64), int(motion.class_type as i64), int(motion.damp as i64),
-        int(motion.wind_scale as i64), int(motion.gravity_scale as i64), int(motion.moved as i64),
-        int(motion.x as i64), int(motion.y as i64), int(motion.vx as i64), int(motion.vy as i64),
-        int(motion.cm_gravity as i64), int(motion.cm_wind as i64), int(msg as i64), Value::Boolean(post),
+        int(motion.id as i64), int(motion.class_type as i64), px(motion.damp),
+        px(motion.wind_scale), px(motion.gravity_scale), int(motion.moved as i64),
+        px(motion.x), px(motion.y), px(motion.vx), px(motion.vy),
+        px(motion.cm_gravity), px(motion.cm_wind), int(msg as i64), Value::Boolean(post),
         slot.filter(|s| StockWeapon::from_index(*s as u32).is_some()).map_or(Value::Nil, |s| int(s as i64)),
         int(*sprite as i64), int(*mask as u32 as i64),
     ]);
@@ -458,14 +460,14 @@ fn missile_frame_fast(
     *sprite = i32_or(s, *sprite);
     *mask = <i64 as mlua::FromLua>::from_lua(m, lua).map(|v| v as u32 as i32).unwrap_or(*mask);
     Ok(Motion {
-        damp: i32_or(damp, motion.damp),
-        wind_scale: i32_or(wind_scale, motion.wind_scale),
-        gravity_scale: i32_or(gravity_scale, motion.gravity_scale),
+        damp: if damp.is_nil() { motion.damp } else { units::value(damp, "damp").map_err(|e| e.to_string())? },
+        wind_scale: if wind_scale.is_nil() { motion.wind_scale } else { units::value(wind_scale, "wind_scale").map_err(|e| e.to_string())? },
+        gravity_scale: if gravity_scale.is_nil() { motion.gravity_scale } else { units::value(gravity_scale, "gravity_scale").map_err(|e| e.to_string())? },
         moved: i32_or(moved, motion.moved),
-        x: i32_or(x, motion.x),
-        y: i32_or(y, motion.y),
-        vx: i32_or(vx, motion.vx),
-        vy: i32_or(vy, motion.vy),
+        x: if x.is_nil() { motion.x } else { units::value(x, "x").map_err(|e| e.to_string())? },
+        y: if y.is_nil() { motion.y } else { units::value(y, "y").map_err(|e| e.to_string())? },
+        vx: if vx.is_nil() { motion.vx } else { units::value(vx, "vx").map_err(|e| e.to_string())? },
+        vy: if vy.is_nil() { motion.vy } else { units::value(vy, "vy").map_err(|e| e.to_string())? },
         ..motion
     })
 }

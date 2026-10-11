@@ -1021,7 +1021,7 @@ mod archive_tests {
         let _ = std::fs::remove_dir_all(&root);
         let pack = root.join("a");
         std::fs::create_dir_all(&pack).unwrap();
-        let toml = "id = \"a.pack\"\napi_version = 1\nentry = \"init.lua\"\n";
+        let toml = "id = \"a.pack\"\napi_version = 2\nentry = \"init.lua\"\n";
         std::fs::write(pack.join("mod.toml"), toml).unwrap();
         std::fs::write(pack.join("init.lua"), "-- a").unwrap();
         let selection = root.join("stage").join("wormforge.profile");

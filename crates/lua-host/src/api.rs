@@ -1,3 +1,4 @@
+use crate::units;
 use crate::dispatch::{self, HudLine};
 use crate::spawn::{self, get_bool, get_i32, get_string};
 use actors::kind_id;
@@ -153,12 +154,12 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
                 .filter(|w| *w != 0)
                 .ok_or_else(|| mlua::Error::external("weapons.click needs worm = the worm it clicks for"))?;
                 let at = |key: &str| -> mlua::Result<i32> {
-                    spec.get::<Option<i32>>(key)?
-                        .ok_or_else(|| mlua::Error::external(format!("weapons.click needs {key} (16.16)")))
+                    units::get(&spec, key)?
+                        .ok_or_else(|| mlua::Error::external(format!("weapons.click needs {key} (pixels)")))
                 };
                 let (x, y) = (at("x")?, at("y")?);
-                let vx = spec.get::<Option<i32>>("vx")?.unwrap_or(0);
-                let vy = spec.get::<Option<i32>>("vy")?.unwrap_or(0);
+                let vx = units::get(&spec, "vx")?.unwrap_or(0);
+                let vy = units::get(&spec, "vy")?.unwrap_or(0);
                 let id = crate::actor::native_slot_click().map(|f| f(slot.index() as u32)).unwrap_or(0);
                 if id == 0 {
                     return Err(mlua::Error::external(format!(
@@ -192,12 +193,12 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
                 .filter(|w| *w != 0)
                 .ok_or_else(|| mlua::Error::external("weapons.fire needs worm = the worm it fires for"))?;
                 let at = |key: &str| -> mlua::Result<i32> {
-                    spec.get::<Option<i32>>(key)?
-                        .ok_or_else(|| mlua::Error::external(format!("weapons.fire needs {key} (16.16)")))
+                    units::get(&spec, key)?
+                        .ok_or_else(|| mlua::Error::external(format!("weapons.fire needs {key} (pixels)")))
                 };
                 let (x, y) = (at("x")?, at("y")?);
-                let vx = spec.get::<Option<i32>>("vx")?.unwrap_or(0);
-                let vy = spec.get::<Option<i32>>("vy")?.unwrap_or(0);
+                let vx = units::get(&spec, "vx")?.unwrap_or(0);
+                let vy = units::get(&spec, "vy")?.unwrap_or(0);
                 let id = crate::actor::native_slot_fire().map(|f| f(slot.index() as u32)).unwrap_or(0);
                 if id == 0 {
                     return Err(mlua::Error::external(format!(
@@ -281,7 +282,7 @@ pub fn install(lua: &Lua, ctx: &BindContext) -> Result<(), String> {
         .create_function(|_, spec: Table| {
             let bad = |why: String| mlua::Error::external(format!("worms.spawn: {why}"));
             let team = spec.get::<Option<u32>>("team")?.ok_or_else(|| bad("needs team = worm.team".into()))?;
-            let need = |key: &str| get_i32(&spec, key)?.ok_or_else(|| bad(format!("needs {key} (16.16)")));
+            let need = |key: &str| units::get(&spec, key)?.ok_or_else(|| bad(format!("needs {key} (pixels)")));
             let (x, y) = (need("x")?, need("y")?);
             let name = spec.get::<Option<String>>("name")?.unwrap_or_else(|| "Worm".into());
             let health = get_i32(&spec, "health")?.unwrap_or(100);
@@ -406,6 +407,15 @@ fn ensure_wa(lua: &Lua) -> Result<Table, String> {
     msg.set("HIT", 0x4B).map_err(|e| e.to_string())?;
     msg.set("IMPACT", 0x76).map_err(|e| e.to_string())?;
     wa.set("msg", msg).map_err(|e| e.to_string())?;
+    // Lower numbers draw nearer. Plain numbers permit band +/- 1.
+    let depth = lua.create_table().map_err(|e| e.to_string())?;
+    for (name, band) in [("FRONT", 0x10000), ("EFFECTS", 0xC0000), ("WORMS", 0xD0000),
+                         ("OBJECTS", 0xE0000), ("TERRAIN", 0x180000),
+                         ("BEHIND_TERRAIN", 0x190000)] {
+        depth.set(name, band).map_err(|e| e.to_string())?;
+    }
+    wa.set("depth", depth).map_err(|e| e.to_string())?;
+
 
     // `wa.perf.enable{ counter = true, profile = true, packs = true,
     // spikes = true }`: this machine's FPS counter and profiler; `packs` also
@@ -754,9 +764,7 @@ function inventory_api.create(spec)
     -- Optional acquisition position, captured before changing either inventory.
     local x, y = opts.x, opts.y
     local function coordinate(n, axis)
-      if n ~= nil and (type(n) ~= "number" or n % 1 ~= 0 or n < -0x80000000 or n > 0x7fffffff) then
-        error("transfer " .. axis .. " must be a signed 16.16 integer", 3)
-      end
+      if n ~= nil then wa.weapons._grant_coordinate(n, "transfer." .. axis) end
     end
     coordinate(x, "x")
     coordinate(y, "y")
@@ -975,11 +983,11 @@ fn spec_slot(spec: &Table) -> mlua::Result<StockWeapon> {
 /// WA's coalition colours: alliance 0 (red) to 5 (cyan).
 const WORM_SPRITE_TEAMS: usize = 6;
 
-/// `wa.crates.spawn`'s table: x, y (16.16), kind, health (health crates,
+/// `wa.crates.spawn`'s table: x, y (pixels), kind, health (health crates,
 /// 25 if left out), drop ("chute" if left out).
 fn crate_args(spec: &Table) -> mlua::Result<crate::CrateArgs> {
     let bad = |why: String| mlua::Error::external(format!("crates.spawn: {why}"));
-    let need = |key: &str| get_i32(spec, key)?.ok_or_else(|| bad(format!("needs {key} (16.16)")));
+    let need = |key: &str| units::get(spec, key)?.ok_or_else(|| bad(format!("needs {key} (pixels)")));
     let kind = match spec.get::<Option<String>>("kind")?.as_deref() {
         Some("weapon") => 1,
         Some("health") => 2,
@@ -1010,7 +1018,7 @@ fn scale(spec: &Table, key: &str) -> mlua::Result<Option<i32>> {
     if !(0.0..=1000.0).contains(&v) {
         return Err(mlua::Error::external(format!("fire.spawn: {key} is 0 to 1000, got {v}")));
     }
-    Ok(Some((v * 65536.0).round() as i32))
+    units::native(v, key).map(Some)
 }
 
 /// `wa.fire.spawn`'s table: owner, x and y required, the rest WA's Petrol
@@ -1022,14 +1030,14 @@ fn fire_args(spec: &Table) -> mlua::Result<crate::FireArgs> {
     }
     let d = crate::actor::FIRE_DEFAULTS;
     let need = |key: &str| {
-        get_i32(spec, key)?.ok_or_else(|| mlua::Error::external(format!("fire.spawn needs {key} (16.16)")))
+        units::get(spec, key)?.ok_or_else(|| mlua::Error::external(format!("fire.spawn needs {key} (pixels)")))
     };
     let args = crate::FireArgs {
         owner,
         x: need("x")?,
         y: need("y")?,
-        vx: get_i32(spec, "vx")?.unwrap_or(d.vx),
-        vy: get_i32(spec, "vy")?.unwrap_or(d.vy),
+        vx: units::get(spec, "vx")?.unwrap_or(d.vx),
+        vy: units::get(spec, "vy")?.unwrap_or(d.vy),
         count: get_i32(spec, "count")?.unwrap_or(d.count),
         duration: get_i32(spec, "duration")?.unwrap_or(d.duration),
         up_power: get_i32(spec, "up_power")?.unwrap_or(d.up_power),
@@ -1062,8 +1070,8 @@ fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
         return Err(mlua::Error::external("weapons.launch needs owner = the worm it is fired for"));
     }
     let need = |key: &str| {
-        get_i32(spec, key)?
-            .ok_or_else(|| mlua::Error::external(format!("weapons.launch needs {key} (16.16)")))
+        units::get(spec, key)?
+            .ok_or_else(|| mlua::Error::external(format!("weapons.launch needs {key} (pixels)")))
     };
     let sprite = match spec.get::<Value>("sprite")? {
         Value::Nil => None,
@@ -1086,8 +1094,8 @@ fn launch_args(spec: &Table) -> mlua::Result<crate::LaunchArgs> {
         owner,
         x: need("x")?,
         y: need("y")?,
-        vx: get_i32(spec, "vx")?.unwrap_or(0),
-        vy: get_i32(spec, "vy")?.unwrap_or(0),
+        vx: units::get(spec, "vx")?.unwrap_or(0),
+        vy: units::get(spec, "vy")?.unwrap_or(0),
         damage: get_i32(spec, "damage")?,
         sprite,
         fuse: get_i32(spec, "fuse")?,
@@ -1948,7 +1956,7 @@ fn load_sprite_field(
 }
 
 /// `wa.draw.quad{ points, color | colors, sprite, frame, blend, depth }`,
-/// only inside `wa.on.draw`. `points` are four `{ x, y }` in 16.16 world
+/// only inside `wa.on.draw`. `points` are four `{ x, y }` in pixel world
 /// coordinates, clockwise from the one that takes the sheet's top-left;
 /// colours are 0xAARRGGBB, one for all corners or four; `blend` is "alpha"
 /// (default) or "add"; `depth` defaults to 0x10000, in front of terrain.
@@ -1967,7 +1975,7 @@ fn draw_quad_fn(lua: &Lua) -> Result<Function, String> {
             })?;
             let x: f64 = p.get(1).or_else(|_| p.get("x"))?;
             let y: f64 = p.get(2).or_else(|_| p.get("y"))?;
-            *c = ((x / 65536.0) as f32, (y / 65536.0) as f32);
+            *c = (units::pixels(units::native(x, "quad.x")?) as f32, units::pixels(units::native(y, "quad.y")?) as f32);
         }
         let colours = match spec.get::<Option<Table>>("colors")? {
             Some(t) => {
@@ -2005,7 +2013,7 @@ fn draw_quad_fn(lua: &Lua) -> Result<Function, String> {
 }
 
 /// `wa.draw.ribbon{ points = { {x,y,width,color,u}, ... }, sprite, blend, depth }`.
-/// Coordinates are 16.16; width is in pixels. Each adjacent pair forms a
+/// Coordinates and width are pixels. Each adjacent pair forms a
 /// textured quad. The caller supplies u=0..1 along the whole beam, so the
 /// beam texture does not restart at every bend. This is presentation only.
 fn draw_ribbon_fn(lua: &Lua) -> Result<Function, String> {
@@ -2029,8 +2037,8 @@ fn draw_ribbon_fn(lua: &Lua) -> Result<Function, String> {
         let mut data = Vec::with_capacity(count);
         for i in 1..=count {
             let p: Table = points.get(i)?;
-            let x = p.get::<f64>("x")? / 65536.0;
-            let y = p.get::<f64>("y")? / 65536.0;
+            let x = units::pixels(units::require(&p, "x")?);
+            let y = units::pixels(units::require(&p, "y")?);
             let width = p.get::<f64>("width")?;
             let u = p.get::<f64>("u")?;
             if !x.is_finite() || !y.is_finite() || !width.is_finite() || !u.is_finite()

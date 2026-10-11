@@ -763,7 +763,7 @@ mod tests {
 
     const WEAPONS: &str = r#"
 id = "catalog.weapons"
-api_version = 1
+api_version = 2
 format_version = 2
 
 [[components]]
@@ -787,7 +787,7 @@ compatible_positions = [{ row = "F1", column = 3 }, { row = "F1", column = 1 }]
 
     const SCHEMES: &str = r#"
 id = "catalog.schemes"
-api_version = 1
+api_version = 2
 format_version = 2
 
 [[components]]
@@ -803,7 +803,7 @@ preset = "highlander"
 
     const FEATURES: &str = r#"
 id = "catalog.features"
-api_version = 1
+api_version = 2
 format_version = 2
 
 [[components]]
@@ -855,7 +855,7 @@ requires = ["hl.highlander"]
         assert_eq!(b[1].presets["highlander"].weapons.len(), 2);
         assert_eq!(b[2].components[0].options[2].kind.default_value(), OptionValue::Choice("weapons".into()));
         assert!(declares_components(WEAPONS));
-        assert!(!declares_components("id = \"old\"\napi_version = 1\n"));
+        assert!(!declares_components("id = \"old\"\napi_version = 2\n"));
     }
 
     #[test]
@@ -999,8 +999,8 @@ always_fast_walk = true
         for (folder, src) in [
             ("weapons", WEAPONS),
             ("schemes", SCHEMES),
-            ("broken", "id = \"broken\"\napi_version = 1\nformat_version = 2\n"),
-            ("old", "id = \"old.pack\"\napi_version = 1\n"),
+            ("broken", "id = \"broken\"\napi_version = 2\nformat_version = 2\n"),
+            ("old", "id = \"old.pack\"\napi_version = 2\n"),
         ] {
             std::fs::create_dir_all(root.join(folder)).unwrap();
             std::fs::write(root.join(folder).join("mod.toml"), src).unwrap();
@@ -1038,7 +1038,7 @@ always_fast_walk = true
     fn bad_bundles_list_every_mistake() {
         let src = r#"
 id = "bad"
-api_version = 1
+api_version = 2
 format_version = 2
 
 [[components]]
@@ -1094,11 +1094,11 @@ label = "C"
         ] {
             assert!(err.contains(e), "missing {e:?} in\n{err}");
         }
-        assert!(parse_bundle("id = \"x\"\napi_version = 1\nformat_version = 2\nentry = \"init.lua\"\n").is_err(),
+        assert!(parse_bundle("id = \"x\"\napi_version = 2\nformat_version = 2\nentry = \"init.lua\"\n").is_err(),
             "a v1 field in a bundle is refused, not ignored");
         let option = |body: &str| {
             parse_bundle(&format!(
-                "id = \"o\"\napi_version = 1\nformat_version = 2\n[[components]]\nid = \"f\"\ntype = \"feature\"\nentry = \"f.lua\"\n[[components.options]]\nkey = \"k\"\nlabel = \"K\"\n{body}"
+                "id = \"o\"\napi_version = 2\nformat_version = 2\n[[components]]\nid = \"f\"\ntype = \"feature\"\nentry = \"f.lua\"\n[[components.options]]\nkey = \"k\"\nlabel = \"K\"\n{body}"
             ))
         };
         assert!(option("type = \"bool\"\ndefault = true\n").is_ok());

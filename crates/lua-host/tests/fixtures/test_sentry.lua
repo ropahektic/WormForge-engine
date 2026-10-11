@@ -1,6 +1,6 @@
 -- Executed by the Lua 5.4 host tests, with the real pack as load_pack.
 return function(load_pack)
-  local PX = 0x10000
+  local PX = 1
   local spec, turn, bodies, rounds = nil, nil, {}, 0
   local guns, flares = {}, {}
   -- A blue team in roster slot 1: team and colour disagree, as they do
@@ -23,6 +23,7 @@ return function(load_pack)
   local draw_at = 0
   local DRAWS = { 7, 23, 41, 4, 88, 15, 62, 30, 51, 9, 77, 36 }
   wa = {
+    depth = { FRONT = 0x10000, BEHIND_TERRAIN = 0x190000 },
     math = { sin = math.sin, cos = math.cos, atan = math.atan },
     random = function(a, b)
       draw_at = draw_at + 1
@@ -104,7 +105,7 @@ return function(load_pack)
   local a = bodies[1]
   assert(a.x == owner.x + 5 * PX and a.y == owner.y,
          "planted a little in front of the worm, not on it")
-  assert(a.vx == 19661 and a.vy == -9830 and a.loop == false)
+  assert(a.vx == 0.3000030517578125 and a.vy == -0.149993896484375 and a.loop == false)
   local gun, flare = guns[1], flares[1]
   assert(gun, "the turret spawns its rotating gun")
   assert(flare, "and a separate additive muzzle flash")
@@ -142,7 +143,7 @@ return function(load_pack)
   owner.facing = -1
   spec.on_fire({ worm = owner, vx = 80 * PX, vy = -80 * PX })
   local left = bodies[2]
-  assert(left.vx == -19661, "left placement")
+  assert(left.vx == -0.3000030517578125, "left placement")
   assert(left.x == owner.x - 5 * PX, "in front of a worm facing left is to its left")
   assert(guns[2].angle == 180, "facing left is a half turn")
   left.water = true
