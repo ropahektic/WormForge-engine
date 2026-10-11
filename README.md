@@ -35,7 +35,7 @@ Wrap a stock **3.8.1** function, bind a handle API, document it, show it in one 
 - **71 stock panel slots.** Overlays / `register` occupy a stock `based_on` slot. Do not grow the weapon table in a drive-by PR.
 - **One truecolor path.** Do not add OpenGL or a second full renderer. Use the existing D3D9 atlas (see matrix: Truecolor & GPU).
 - **No vendoring** wa-engine.js, collisionmanager.rs, wkaim.dll, external `re` dumps, or GPL game-replacement sources (`REsources/` → gitignore).
-- Positions / speeds stay WA **16.16** integers. Stock messages use `wa.msg.*`, not magic numbers.
+- Lua speaks **pixels**: positions and sizes in pixels, speeds in pixels per frame, with fractions. The engine converts to WA's 16.16 once (`lua-host::units`); never in verbs or packs. Stock messages use `wa.msg.*`, not magic numbers.
 - Methods are short English verbs on handles (`a:move`, `worm:equip`). PRs that only rename for consistency are useful; PRs that expose a new C++ layout “for completeness” are not.
 
 ## Layout
