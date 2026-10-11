@@ -991,7 +991,15 @@ unsafe fn spawn_lua_actor(body: SpawnBody) -> Result<u32, String> {
         // moving missile against each entity's +0xDC (0x4FBD4B); a null one
         // crashes it. An owner without one (an exploding missile, say) lends
         // none, so take a live worm's: they all share the same.
-        let mut helper = read_i32(owner, ENT_HELPER);
+        // Only a body WA still holds lends its own: an owner freed since (a
+        // worm that died) is freed memory, which gave 0x17 on one machine and
+        // a real helper on another, and WA then called through 0x17 in its
+        // collision test (0x4FB809). `body::uid` is 0 once WA has freed it.
+        let mut helper = if crate::body::uid(owner as u32) != 0 {
+            read_i32(owner, ENT_HELPER)
+        } else {
+            0
+        };
         if helper == 0 {
             helper = list_worms_pub(0)
                 .into_iter()
